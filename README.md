@@ -1,6 +1,6 @@
 <p align="center">
     <a href="https://github.com/remix-bot">
-      <img src="https://imgur.com/a/fwHuKXm" alt="Logo" width="80" height="80">
+      <img src="https://i.imgur.com/8hD1Jur.png" alt="Logo" width="80" height="80">
     </a>
     <h2 align="center">Remix</h2>
     <p align="center">
