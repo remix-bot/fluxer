@@ -4,7 +4,7 @@
     </a>
     <h2 align="center">Remix</h2>
     <p align="center">
-    The best high quality Stoat music bot.
+    The best high quality Fluxer music bot.
     <br>
     <a href="https://web.fluxer.app/oauth2/authorize?client_id=1478084469635211806&scope=bot&permissions=3206208">Invite to your server</a>
       ·
