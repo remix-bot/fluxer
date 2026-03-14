@@ -14,6 +14,10 @@
   </p>
 </p>
 
+## About The Project
+
+Remix is a free and open source music bot for Fluxer built on [fluxerjs](https://github.com/fluxerjs/core). All commands on Remix are free and will always be free to use.
+
 ## Commands  
 
 Below is a table of all of Remix's commands.
@@ -43,9 +47,50 @@ Below is a table of all of Remix's commands.
 
 ## Getting Started
 
-Firstly, you have to [invite Remix](https://stoat.chat/bot/01FVB28WQ9JHMWK8K7RD0F0VCW). Then use the `%help` command to get a list of commands that you can use through the bot.
+Firstly, you have to [invite Remix](https://web.fluxer.app/oauth2/authorize?client_id=1478084469635211806&scope=bot&permissions=3206208). Then use the `%help` command to get a list of commands that you can use through the bot.
 
 <!-- TODO: more extensive tutorial -->
+
+## Hosting The Bot
+
+If you're self-hosting Remix, please make it clear that it is **not the main instance** (or **change the name**) but give credit by **linking to this repo** (for example, in the bot's profile - something like `This bot <is based on/is an instance of> [Remix](https://github.com/remix-bot/fluxer)` will suffice).
+
+-   Clone this repo (`git clone https://github.com/remix-bot/fluxer.git)`)
+-   Install the dependencies (`npm install`)
+-   Set up a `config.json` file
+    - Rename the `config.example.json` file and fill out the missing values. You can generate spotify credentials [here](https://developer.spotify.com/)
+    - Important: since [
+6cedcb9](https://github.com/remix-bot/fluxer), a MySQL database is required.
+      For setup instructions see [DB Setup](#setup-database).
+-   Run the bot (`node index.mjs`; for node versions >21.1: `node --no-experimental-global-navigator index.mjs`)
+
+> [!WARNING]
+> For Node versions 21.1.X+ it is important to disable the navigator API. Unless the API is disabled, joining a voice channel will result in a "device not supported" error. It can be disabled with the `--no-experimental-global-navigator` flag when starting the node process. This is hopefully a temporary fix until the dependency is updated.
+
+## Setup Database
+
+1. The main thing you'll need is a MySQL database accessible to your server, either publicly or locally.
+2. Create a separate database. This way none of your other data collides with Remix.
+3. Enter the connection details into the respective fields in the `config.json` file.
+4. Run the following SQL commands, to create all the necessary tables:
+  ```SQL
+  CREATE TABLE `settings` (
+    `id` varchar(70) NOT NULL,
+    `data` json NOT NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
+  ```
+5. You're good to go! If you've used the old settings system and want to migrate your data,
+check the README in the `settings` folder.
+
+## Updating YTDL-Core
+
+Remix uses ytdl-core to download the music from YouTube. Since the original js package receives updates rarely,
+we're using a more frequently updated/fixed fork by [DisTube](https://github.com/distubejs/ytdl-core).
+That means if there are errors during playback, you can try to update ytdl using the following command:
+
+```js
+npm i ytdl-core@npm:@distube/ytdl-core@latest
+```
 
 ## Contact
 
