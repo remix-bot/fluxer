@@ -41,6 +41,12 @@ Below is a table of all of Remix's commands.
 |thumbnail|Request the thumbnail of the currently playing song.|%thumbnail|thumbnail, thumb|
 |volume|Change the current volume.|%volume 'volume: number'|volume, v|
 
+## Getting Started
+
+Firstly, you have to [invite Remix](https://stoat.chat/bot/01FVB28WQ9JHMWK8K7RD0F0VCW). Then use the `%help` command to get a list of commands that you can use through the bot.
+
+<!-- TODO: more extensive tutorial -->
+
 ## Contact
 
 If you have any questions or would like to talk with other Remix users you can join our Fluxer server <a href="https://fluxer.gg/RjaSi6XL">here</a>.
