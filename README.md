@@ -14,9 +14,32 @@
   </p>
 </p>
 
-## Fluxer
+## Commands  
 
-Coming soon...
+Below is a table of all of Remix's commands.
+
+|Name|Description|Format|Alias|
+|---|---|---|---|
+|clear|Remove all songs from the queue.|%clear|clear, c|
+|join|Make the bot join a specific voice channel.|%join 'Channel ID: channel'|join|
+|leave|Make the bot leave your current voice channel|%leave|leave, l|
+|list|List the queue in your current voice channel.|%list|list, queue|
+|loop|Toggle the looping of your queue/song.|%loop <queue \| song>|loop|
+|np|Request the name and URL of the currently playing song.|%np|np, current, nowplaying|
+|pause|Pause the playback in your voice channel|%pause|pause|
+|play|Play a YouTube video from URL/query or a playlist by URL.|%play 'query: text'|play, p|
+|player|Create an emoji player control for your voice channel|%player|player|
+|playnext|Play a YouTube video from url/query or a playlist by URL. The result will be added to the top of the queue.|%playnext 'query: text'|playnext, pn|
+|remove|Remove a specific song from the queue.|%remove 'index: number'|remove|
+|resume|Resume the playback in your voice channel|%resume|resume|
+|search|Display the search results for a given query|%search 'query: text'|search|
+|settings|Change/Get settings in the current server.|%settings <set \| get>|settings, s|
+|shuffle|Re-orders the queue randomly.|%shuffle|shuffle|
+|skip|Skip the current playing song.|%skip|skip|
+|stats|Display stats about the bot like the uptime.|%stats|stats, info|
+|test|A test command used for various purposes.|%test 'number: number'|test|
+|thumbnail|Request the thumbnail of the currently playing song.|%thumbnail|thumbnail, thumb|
+|volume|Change the current volume.|%volume 'volume: number'|volume, v|
 
 ## Contact
 
