@@ -7,7 +7,7 @@ import scdlDefault from "soundcloud-downloader";
 const scdl = scdlDefault.default ?? scdlDefault;
 import { Soundcloud } from "soundcloud.ts";
 import YoutubeMusicApi from "youtube-music-api-fix";
-import meta from "./src/probe.mjs";
+import meta from "./probe.mjs";
 import { Innertube, Platform } from "youtubei.js";
 import https from "https";
 

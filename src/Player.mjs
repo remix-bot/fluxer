@@ -127,7 +127,7 @@ export default class Player extends EventEmitter {
 
   workerJob(jobId, data, onMessage = null, msg = null) {
     return new Promise((res, rej) => {
-      const worker = new Worker('./worker.mjs', { workerData: { jobId, data } });
+      const worker = new Worker('./src/worker.mjs', { workerData: { jobId, data } });
       worker.on("message", (data) => {
         data = JSON.parse(data);
         if (data.event === "error") {
