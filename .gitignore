@@ -1,0 +1,15 @@
+node_modules/
+storage/data
+config.json
+settings.json
+remix-settings.json
+cmdUsage.md
+bot.js
+bin/
+test_data/
+*.code-workspace
+*old.js
+.ytcache/
+.yt_auth.json
+yt_auth.json
+visitor_data.json

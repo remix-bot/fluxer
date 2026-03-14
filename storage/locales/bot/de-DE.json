@@ -1,0 +1,118 @@
+{
+  "cmdBuilder" : {
+    "requirement" : {
+      "permission" : "Du hast nicht die notwendigen Berechtigungen, dieses Kommando hier auszuführen."
+    },
+    "subcommand" : {
+      "invalid" : "Ungültiger Unterbefehl. Versuche es bitte mit einer dieser Optionen `$previousCmd <$cmdlist>`"
+    }
+  },
+  "cmdHandler" : {
+    "command" : {
+      "invalid" : "Unbekanntes Kommando {{command}}!",
+      "suggestion" : "Meintest du {{command}}? (Nutze {{acceptCommand}}, um dies auszuführen)"
+    },
+    "help" : {
+      "pageStructure" : "Verfügbare Kommandos (page $currPage/$maxPage): $content Nutze das Kommando `$prefix$helpCmd <command>` um mehr zu erfahren. Du kannst auch zusätzliche Unterbefehle nutzen, wie zum Beispiel: `$prefix$helpCmd command subcommandName` Noch ein Tip: Nutze die Pfeile unter dieser Nachricht, um Seiten umzublättern, oder gib eine gewünschte Seitenzahl mit `$prefix$helpCmd <page number>` an!"
+    },
+    "invalidFlag" : "Ungültige Flag `$invalidFlag`. Sie stimmt mit keiner der Optionen im Kommando überein. `$previousCmd $invalidFlag`",
+    "page" : {
+      "invalid" : "{{number}} ist keine gültige Seiten-Nummer!"
+    },
+    "permissions" : {
+      "message" : "Bitte erteile mir die {{permission}}-Berechtigung in {{channel}} oder informiere einen Server-Admin. Ich habe in diesem Zustand keinen Zugriff, um zu arbeiten."
+    }
+  },
+  "commands" : {
+    "clear" : "Entferne alle Songs aus der Warteschlange.",
+    "join" : "Lasse den Bot einem bestimmten Sprachkanal beitreten",
+    "leave" : "Lasse den Bot deinen aktuellen Sprachkanal verlassen",
+    "list" : "Listet die Songs in der Warteschlange deines Kanals auf.",
+    "login" : "Bestätige die Anmeldung deines Kontos auf der Webseite",
+    "loop" : "Aktiviere/Deaktiviere die Schleife des aktuellen Songs oder der Warteschlange.",
+    "lyrics" : "Rufe den Songtext des aktuellen Liedes auf. Bitte beachte, dass dieser vom tatsächlichen Text abweichen kann, da Genius nicht immer den richtigen Song findet.",
+    "np" : "Rufe den Namen und die URL des Songs ab, der gerade abgespielt wird.",
+    "pause" : "Pausiere die Wiedergabe in deinem Sprachkanal",
+    "ping" : "Mein Präfix in diesem Server ist: {{prefix}}\n\nFühre {{helpCmd}} aus, um loszulegen!",
+    "play" : "Spiele ein YouTube-Video mithilfe einer URL/einem Suchbegriff, oder eine Playlist von einer URL. Einige andere Dienste sind auch unterstützt. \nSuchen werden standardmäßig über `Youtube Music` ausgeführt. Um `Youtube` zu verwenden, muss das mit der Option `-u yt` explizit angegeben werden.",
+    "player" : "Erstellen eine Emoji-Steuerung für deinen Sprachkanal",
+    "playnext" : "Siehe %play. Die gefundenen Songs werden am Anfang der Warteschlange eingefügt.",
+    "remove" : "Entferne einen bestimmten Song von der Warteschlange.",
+    "resume" : "Setze die Wiedergabe in deinem Sprachkanal fort",
+    "search" : "Listet die Suchergebnisse für eine bestimmte Suchanfrage auf",
+    "settings" : "Rufe die Einstellungen eines Servers ab, oder ändere diese.",
+    "shuffle" : "Ordnet die Warteschlange zufällig an.",
+    "skip" : "Überspringe den aktuellen Song.",
+    "stats" : "Rufe Statistiken über den Bot ab.",
+    "support" : "Der Support-Server für Remix. Zögere nicht, um Hilfe zu bitten, Bugs zu melden oder einfach zu chatten :)",
+    "thumbnail" : "Rufe das Thumbnail des aktuellen Songs ab.",
+    "volume" : "Ändere die aktuelle Lautstärke."
+  },
+  "options" : {
+    "join" : {
+      "channel" : "Gebe den Kanal an, dem der Bot beitreten soll. Dies ist aufgrund Revolt-Einschränkungen notwendig."
+    },
+    "login" : {
+      "id" : "Die ID, die du beim Einloggen auf dem Dashboard erhalten hast."
+    },
+    "loop" : {
+      "type" : "Gibt an, welcher Schleifentyp gesetzt werden soll."
+    },
+    "play" : {
+      "query" : "Eine YouTube-Suchanfrage/URL, Playlist-URL oder ein Link zu einem Song auf Spotify, SoundCloud oder YouTube Music."
+    },
+    "playnext" : {
+      "query" : "Eine YouTube-Suchanfrage/URL, Playlist-URL oder ein Link zu einem Song auf Spotify, SoundCloud oder YouTube Music."
+    },
+    "remove" : {
+      "index" : "Die Position des Liedes in der Warteschlange. Die Position aller Lieder kann mit dem `list` Befehl aufgerufen werden."
+    },
+    "search" : {
+      "provider" : "Der Anbieter der Suchergebnisse (YouTube oder YouTube Music). Standard: YouTube Music",
+      "query" : "Der Such-Text, nach dem gesucht werden soll."
+    },
+    "settings" : {
+      "get" : {
+        "setting" : "Rufe den Wert einer bestimmten Einstellung ab."
+      },
+      "set" : {
+        "setting" : "Der Name der Einstellung, die bearbeitet werden soll.",
+        "value" : "Der neue Wert der Einstellung."
+      }
+    },
+    "volume" : {
+      "volume" : "Die neue Lautstärke in Prozent (z.B.: `30` oder `100`). Werte über 100 % können Qualitätsverluste verursachen."
+    }
+  },
+  "pagination" : {
+    "embed" : {
+      "sclosedContent" : "{{content}}\nSitzung geschlossen - Das Umblättern funktioniert ab jetzt **nicht mehr**.",
+      "sclosedTitle" : "Sitzung geschlossen"
+    },
+    "error" : {
+      "perms" : {
+        "messages" : "Ich kann keine Nachrichten in {{channel}} senden. Bitte wende dich an einen Serveradministrator und erteile mir die Berechtigung \"SendMessage\"",
+        "reactions" : "Ich brauche die Berechtigung, auf Nachrichten zu reagieren. Bitte wende dich an einen Serveradministrator, um dies zu klären."
+      }
+    }
+  },
+  "subcommands" : {
+    "settings" : {
+      "get" : "Rufe den Wert einer bestimmten Einstellung oder eine Liste der Einstellungen des gesamten Servers auf.",
+      "set" : "Lege den Wert einer bestimmten Einstellung fest."
+    }
+  },
+  "voice" : {
+    "join" : {
+      "cancelled" : "Abgebrochen!",
+      "error" : {
+        "dc" : "Es scheint, als wären wir nicht im selben Sprachkanal.",
+        "invalid" : "Ungültiger Sprachkanal. Bitte versuche es erneut und überprüfe deine Eingabe auf Groß- und Kleinschreibung! (`x` zum Abbrechen)",
+        "perms" : "Etwas ist schiefgelaufen. Ich kann {{channel}} nicht betreten. Habe ich die nötigen Berechtigungen?"
+      },
+      "warning" : {
+        "nc" : "Es scheint, als wärst du nicht mit {{channel}} verbunden. Hast du vergessen, dort beizutreten?"
+      }
+    }
+  }
+}
