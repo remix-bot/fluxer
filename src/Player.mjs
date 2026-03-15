@@ -424,7 +424,8 @@ export default class Player extends EventEmitter {
           // We confirmed session.oauth has: oauth2_tokens, client_id, etc.
           this.innertube = await Innertube.create({
             generate_session_locally: true,
-            ...(cached.visitorData ? { visitor_data: cached.visitorData } : {}),
+            device_category: 'MOBILE', // Ensure mobile category
+            client_type: 'ANDROID'      // Default to Android
           });
 
           // Inject tokens using the confirmed oauth2_tokens key from session inspection
@@ -463,7 +464,7 @@ export default class Player extends EventEmitter {
 
       // TV client crashes with nFunction bug — excluded
       // Authenticated sessions work best with WEB_EMBEDDED or YTMUSIC first
-      const clients = ["WEB_EMBEDDED", "YTMUSIC", "IOS", "TV_EMBEDDED", "ANDROID", "WEB"];
+      const clients = ["ANDROID", "IOS", "YTMUSIC", "WEB_EMBEDDED", "TV_EMBEDDED"];
       let webStream = null;
       let lastErr = null;
 

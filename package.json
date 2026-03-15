@@ -34,7 +34,7 @@
     "youtube-dl-exec": "^3.1.1",
     "youtube-music-api-fix": "^1.0.61",
     "youtube-po-token-generator": "^0.6.0",
-    "youtubei.js": "^16.0.1",
+    "youtubei.js": "github:LuanRT/YouTube.js",
     "yt-dlp-wrap-extended": "^2.3.15",
     "yt-search": "^2.10.4",
     "ytdl-core": "npm:@distube/ytdl-core@^4.16.12"

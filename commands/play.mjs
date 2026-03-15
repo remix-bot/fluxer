@@ -22,7 +22,7 @@ export const command = new CommandBuilder()
       .setDescription("The search result provider (YouTube, YouTube Music or SoundCloud). Default: YouTube Music", "options.search.provider")
       .addFlagAliases("p", "u", "use")
       .addChoices("ytm", "yt", "scld")
-      .setDefault("ytm")
+      .setDefault("yt")
   , true)
   .addAlias("p");
 

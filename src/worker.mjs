@@ -10,14 +10,11 @@ import YoutubeMusicApi from "youtube-music-api-fix";
 import meta from "./probe.mjs";
 import { Innertube, Platform } from "youtubei.js";
 import https from "https";
+import vm from 'node:vm';
 
 // Tell youtubei.js how to evaluate YouTube's obfuscated JS for URL deciphering.
 Platform.shim.eval = async (data, env) => {
-  const properties = [];
-  if (env.n)   properties.push(`n: exportedVars.nFunction("${env.n}")`);
-  if (env.sig) properties.push(`sig: exportedVars.sigFunction("${env.sig}")`);
-  const code = `${data.output}\nreturn { ${properties.join(', ')} }`;
-  return new Function(code)();
+  return vm.runInNewContext(`${data.output}\n({ ${Object.keys(env).map(k => `${k}: exportedVars.${k === 'sig' ? 'sigFunction' : 'nFunction'}("${env[k]}")`).join(', ')} })`);
 };
 
 class YTUtils extends EventEmitter {
@@ -50,9 +47,11 @@ class YTUtils extends EventEmitter {
 
   async innertube() {
     if (this._innertube) return this._innertube;
-    this._innertube = Innertube.create({
+    this._innertube = await Innertube.create({
       retrieve_player: true,
       generate_session_locally: true,
+      device_category: 'MOBILE', // Force mobile for better extraction
+      client_type: 'ANDROID'
     });
     return this._innertube;
   }
@@ -269,7 +268,7 @@ class YTUtils extends EventEmitter {
     let video;
     try {
       const innertube = await this.innertube();
-      const info = await innertube.getBasicInfo(parsedId, "WEB");
+      const info = await innertube.getBasicInfo(parsedId, "ANDROID");
       const d = info.basic_info;
       video = {
         videoId: parsedId,
@@ -417,7 +416,7 @@ class YTUtils extends EventEmitter {
     if (id) {
       try {
         const innertube = await this.innertube();
-        const info = await innertube.getBasicInfo(string, "WEB");
+        const info = await innertube.getBasicInfo(string, "ANDROID");
         const d = info.basic_info;
         return {
           videoId: string,
