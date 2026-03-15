@@ -7,6 +7,8 @@ import { Worker } from "node:worker_threads";
 import { spawn } from "node:child_process";
 import { PassThrough } from "node:stream";
 import https from "node:https";
+import { readFileSync } from "node:fs";
+import vm from "node:vm";
 import ffmpegStatic from "ffmpeg-static";
 
 export class Queue extends EventEmitter {
@@ -404,6 +406,20 @@ export default class Player extends EventEmitter {
     }
   }
 
+  parseNetscape(raw) {
+    const authList = ['HSID', 'SSID', 'APISID', 'SAPISID', 'SID', 'LOGIN_INFO', 'VISITOR_INFO1_LIVE', '__Secure-3PSID', '__Secure-3PAPISID', '__Secure-1PSIDTS'];
+    return raw.split('\n')
+      .filter(line => line.trim() && !line.startsWith('#'))
+      .map(line => {
+        const parts = line.split('\t');
+        if (parts.length < 7) return null;
+        const name = parts[5].trim();
+        const value = parts[6].trim();
+        return (authList.includes(name) || name.startsWith('__Secure')) ? `${name}=${value}` : null;
+      })
+      .filter(Boolean).join('; ');
+  }
+
   /**
    * Refreshes the Innertube instance if the session is stale (older than TTL).
    * Authenticates using OAuth tokens from /root/fluxer/.ytcache/yt_auth.json.
@@ -422,10 +438,20 @@ export default class Player extends EventEmitter {
         if (cached) {
           // Build an OAuth-authenticated Innertube session.
           // We confirmed session.oauth has: oauth2_tokens, client_id, etc.
+          const cookiePath = "./cookies.txt";
+          let cookieString = "";
+          try {
+            const raw = readFileSync(cookiePath, "utf-8");
+            cookieString = this.parseNetscape(raw);
+          } catch (e) {
+            console.warn("[Player] Could not load cookies, using guest session.");
+          }
+
           this.innertube = await Innertube.create({
             generate_session_locally: true,
-            device_category: 'MOBILE', // Ensure mobile category
-            client_type: 'ANDROID'      // Default to Android
+            cookie: cookieString,
+            evaluate: (code) => vm.runInNewContext(code),
+            cache: new UniversalCache(false)
           });
 
           // Inject tokens using the confirmed oauth2_tokens key from session inspection
@@ -451,6 +477,11 @@ export default class Player extends EventEmitter {
       } catch (e) {
         console.error("[Player] Failed to refresh Innertube session:", e.message);
       }
+      // THE FIX: Reset visitor data to bypass VPS 400 errors
+      if (this.innertube.session.context.client) {
+        this.innertube.session.context.client.visitorData = '';
+      }
+      delete this.innertube.session.visitor_data;
     }
   }
 
@@ -515,6 +546,8 @@ export default class Player extends EventEmitter {
     return new Promise(async (res) => {
       let rawStream;
       const ytdlpPath = (typeof this.ytdlp === "string") ? this.ytdlp : (this.ytdlp?.binaryPath || "yt-dlp");
+      // Define cookie path once for consistency
+      const cookiePath = "/root/fluxer/cookies.txt";
 
       if (songData.type === "soundcloud") {
         const proc = spawn(ytdlpPath, ["-f", "bestaudio/best", "--no-playlist", "-o", "-", "--quiet", songData.url]);
@@ -530,21 +563,16 @@ export default class Player extends EventEmitter {
         ));
 
         if (this.ytdlp) {
-          // Always pipe yt-dlp through ffmpeg — handles any format (opus, aac, etc.)
-          // and produces a clean WebM/Opus stream for connection.play()
           const passThrough = new PassThrough();
           passThrough.on("error", (err) => {
             console.error("[Player] Stream pipeline error:", err.message);
           });
 
           const proc = spawn(ytdlpPath, [
-            "--cookies", "/root/fluxer/cookies.txt",
+            "--cookies", cookiePath, // Use the defined cookie path
             "--js-runtimes", "node",
-            "--remote-components", "ejs:github",
-            // Match Firefox UA — reduces bot detection from datacenter IPs
             "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0",
             "-f", "251/250/249/140/bestaudio[ext=webm]/bestaudio[protocol=m3u8_native]/bestaudio/best",
-            "--hls-prefer-native",
             "--no-playlist", "-o", "-", "--force-ipv4",
             "--cache-dir", "/root/fluxer/.ytcache/yt-dlp",
             "https://www.youtube.com/watch?v=" + videoId
@@ -552,20 +580,16 @@ export default class Player extends EventEmitter {
 
           this._currentYtdlpProc = proc;
 
-          // Always transcode through ffmpeg so connection.play() always gets clean WebM/Opus
-          // regardless of whether yt-dlp picked opus, aac, or anything else
           const ffmpegProc = spawn(ffmpegStatic, [
             "-i", "pipe:0", "-vn", "-c:a", "libopus", "-b:a", "128k",
             "-flush_packets", "1", "-f", "webm", "pipe:1"
           ], { stdio: ["pipe", "pipe", "pipe"] });
+
           proc.stdout.pipe(ffmpegProc.stdin);
-          ffmpegProc.stdin.on("error", () => {});
-          ffmpegProc.stderr.on("data", () => {});
+          ffmpegProc.stdin.on("error", () => { });
+          ffmpegProc.stderr.on("data", () => { });
           ffmpegProc.stdout.pipe(passThrough, { end: false });
           ffmpegProc.stdout.on("end", () => passThrough.end());
-          ffmpegProc.stdout.on("error", (err) => {
-            console.error("[Player] ffmpeg stdout error:", err.message);
-          });
 
           res({ buffer: passThrough, ffmpeg: ffmpegProc });
 
@@ -574,35 +598,31 @@ export default class Player extends EventEmitter {
           proc.stderr.on("data", async (d) => {
             if (fallbackTriggered) return;
             const msg = d.toString();
-            // Only log actual ERRORs — suppress all info/progress/status lines
             if (msg.includes("ERROR:")) {
               console.warn("[yt-dlp]", msg.trim());
             }
+
             const isBlocked =
               msg.includes("Sign in") ||
               msg.includes("bot") ||
-              msg.includes("HTTP Error 400") ||
-              msg.includes("HTTP Error 403") ||
-              msg.includes("HTTP Error 429") ||
-              msg.includes("Precondition") ||
-              msg.includes("This video is not available") ||
-              msg.includes("blocked") ||
-              msg.includes("login") ||
-              msg.includes("Private video") ||
-              msg.includes("Video unavailable");
+              msg.includes("400") ||
+              msg.includes("403") ||
+              msg.includes("429") ||
+              msg.includes("unavailable");
 
             if (isBlocked) {
               fallbackTriggered = true;
               proc.stdout.unpipe(ffmpegProc.stdin);
-              try { proc.kill(); } catch(_) {}
-              try { ffmpegProc.kill(); } catch(_) {}
-              console.warn("[Player] yt-dlp blocked, falling back to youtubei.js for:", videoId);
+              try { proc.kill(); } catch (_) { }
+              try { ffmpegProc.kill(); } catch (_) { }
+
+              console.warn("[Player] yt-dlp blocked, falling back to youtubei.js (Android Client) for:", videoId);
+
+              // getYoutubeiStream should be updated to use readFileSync(cookiePath) inside its Innertube.create
               const raw = await this.getYoutubeiStream(videoId);
               if (raw) {
-                const fb = spawn(ffmpegStatic, ["-i","pipe:0","-vn","-c:a","libopus","-b:a","128k","-flush_packets","1","-f","webm","pipe:1"], { stdio: ["pipe","pipe","pipe"] });
+                const fb = spawn(ffmpegStatic, ["-i", "pipe:0", "-vn", "-c:a", "libopus", "-b:a", "128k", "-flush_packets", "1", "-f", "webm", "pipe:1"], { stdio: ["pipe", "pipe", "pipe"] });
                 raw.pipe(fb.stdin);
-                fb.stdin.on("error", () => {});
-                fb.stderr.on("data", () => {});
                 fb.stdout.pipe(passThrough, { end: false });
                 fb.stdout.on("end", () => passThrough.end());
               } else {
@@ -615,21 +635,17 @@ export default class Player extends EventEmitter {
             if (fallbackTriggered) return;
             if (code !== 0 && !passThrough.destroyed) {
               fallbackTriggered = true;
-              try { ffmpegProc.kill(); } catch(_) {}
-              console.warn("[Player] yt-dlp exited with code", code, "— falling back to youtubei.js for:", videoId);
+              try { ffmpegProc.kill(); } catch (_) { }
               const raw = await this.getYoutubeiStream(videoId);
               if (raw) {
-                const fb = spawn(ffmpegStatic, ["-i","pipe:0","-vn","-c:a","libopus","-b:a","128k","-flush_packets","1","-f","webm","pipe:1"], { stdio: ["pipe","pipe","pipe"] });
+                const fb = spawn(ffmpegStatic, ["-i", "pipe:0", "-vn", "-c:a", "libopus", "-b:a", "128k", "-flush_packets", "1", "-f", "webm", "pipe:1"], { stdio: ["pipe", "pipe", "pipe"] });
                 raw.pipe(fb.stdin);
-                fb.stdin.on("error", () => {});
-                fb.stderr.on("data", () => {});
                 fb.stdout.pipe(passThrough, { end: false });
                 fb.stdout.on("end", () => passThrough.end());
               } else {
                 passThrough.destroy(new Error("Both yt-dlp and youtubei.js failed"));
               }
             }
-            // ffmpegProc handles passThrough ending via its own stdout "end" event
           });
         } else {
           const raw = await this.getYoutubeiStream(videoId);
@@ -637,24 +653,13 @@ export default class Player extends EventEmitter {
         }
       }
 
-      if (!rawStream) return res(null);
+      if (!rawStream) return;
 
-      // For radio/external/soundcloud/youtubei fallback: encode to WebM/Opus via ffmpeg
       const ffmpeg = spawn(ffmpegStatic, [
-        "-i", "pipe:0",
-        "-vn",
-        "-c:a", "libopus",
-        "-b:a", "128k",
-        "-f", "webm",
-        "-flush_packets", "1",
-        "pipe:1"
+        "-i", "pipe:0", "-vn", "-c:a", "libopus", "-b:a", "128k", "-f", "webm", "-flush_packets", "1", "pipe:1"
       ], { stdio: ["pipe", "pipe", "pipe"] });
+
       rawStream.pipe(ffmpeg.stdin);
-      ffmpeg.stdin.on("error", () => {});
-      ffmpeg.stderr.on("data", () => {});
-      ffmpeg.stdout.on("error", (err) => {
-        console.error("[Player] ffmpeg stdout error:", err.message);
-      });
       res({ buffer: ffmpeg.stdout, ffmpeg });
     });
   }

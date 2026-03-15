@@ -48,11 +48,14 @@ class YTUtils extends EventEmitter {
   async innertube() {
     if (this._innertube) return this._innertube;
     this._innertube = await Innertube.create({
-      retrieve_player: true,
       generate_session_locally: true,
-      device_category: 'MOBILE', // Force mobile for better extraction
-      client_type: 'ANDROID'
+      evaluate: (code) => vm.runInNewContext(code)
     });
+    if (this._innertube.session.context.client) {
+      this._innertube.session.context.client.visitorData = '';
+    }
+    delete this._innertube.session.visitor_data;
+
     return this._innertube;
   }
 
