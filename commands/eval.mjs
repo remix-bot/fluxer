@@ -45,7 +45,7 @@ async function runEval(expression) {
 export const command = new CommandBuilder()
   .setName("eval")
   .setDescription("eval() function; dev only")
-  .addRequirement(r => r.setOwnerOnly(true))
+  .setRequirement(r => r.setOwnerOnly(true))
   .addTextOption(o =>
     o.setName("expression")
       .setDescription("The expression to execute")

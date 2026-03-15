@@ -110,6 +110,10 @@ export default class Player extends EventEmitter {
   preferredVolume = 1;
   _paused = false;
 
+  // Innertube session tracking for auto-refresh
+  _innertubeCreatedAt = null;
+  _INNERTUBE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
   /**
    * @param {string} token
    * @param {Object} opts
@@ -121,6 +125,7 @@ export default class Player extends EventEmitter {
     this.queue = new Queue();
     this.client = opts.client;
     this.innertube = opts.innertube;
+    this._innertubeCreatedAt = opts.innertube ? Date.now() : null;
     this.ytdlp = opts.ytdlp;
     this.spotifyConfig = opts.spotify;
   }
@@ -178,6 +183,10 @@ export default class Player extends EventEmitter {
     if (this._endCheckInterval) {
       clearInterval(this._endCheckInterval);
       this._endCheckInterval = null;
+    }
+    if (this._currentYtdlpProc) {
+      try { this._currentYtdlpProc.kill("SIGKILL"); } catch (_) {}
+      this._currentYtdlpProc = null;
     }
     if (this._currentFfmpeg) {
       try { this._currentFfmpeg.kill("SIGKILL"); } catch (_) {}
@@ -354,12 +363,110 @@ export default class Player extends EventEmitter {
     return response.data;
   }
 
+  /**
+   * Reads OAuth credentials from /root/fluxer/.ytcache/yt_auth.json and
+   * visitorData from visitor_data.json.
+   * Returns { accessToken, refreshToken, visitorData } or null on failure.
+   */
+  async _readCachedAuth() {
+    try {
+      const { readFile } = await import("node:fs/promises");
+      const CACHE_DIR = "/root/fluxer/.ytcache";
+
+      const [vdRaw, authRaw] = await Promise.all([
+        readFile(`${CACHE_DIR}/visitor_data.json`, "utf8"),
+        readFile(`${CACHE_DIR}/yt_auth.json`, "utf8"),
+      ]);
+
+      const vd = JSON.parse(vdRaw);
+      const auth = JSON.parse(authRaw);
+
+      const visitorData = vd.visitorData || vd.visitor_data;
+      const accessToken = auth.access_token;
+      const refreshToken = auth.refresh_token;
+      const expiryDate = auth.expiry_date ? new Date(auth.expiry_date) : null;
+
+      if (!accessToken || !refreshToken) {
+        console.warn("[Player] yt_auth.json missing access_token or refresh_token.");
+        return null;
+      }
+
+      // Warn if token is expired but still try — youtubei.js may auto-refresh
+      if (expiryDate && expiryDate < new Date()) {
+        console.warn("[Player] OAuth access token appears expired:", expiryDate.toISOString());
+      }
+
+      console.log("[Player] Loaded OAuth credentials from .ytcache.");
+      return { accessToken, refreshToken, visitorData };
+    } catch (e) {
+      console.warn("[Player] Could not read .ytcache:", e.message);
+      return null;
+    }
+  }
+
+  /**
+   * Refreshes the Innertube instance if the session is stale (older than TTL).
+   * Authenticates using OAuth tokens from /root/fluxer/.ytcache/yt_auth.json.
+   */
+  async _ensureFreshInnertube() {
+    const needsRefresh = !this.innertube ||
+      !this._innertubeCreatedAt ||
+      (Date.now() - this._innertubeCreatedAt > this._INNERTUBE_TTL_MS);
+
+    if (needsRefresh) {
+      try {
+        const { Innertube, UniversalCache } = await import("youtubei.js");
+
+        const cached = await this._readCachedAuth();
+
+        if (cached) {
+          // Build an OAuth-authenticated Innertube session.
+          // We confirmed session.oauth has: oauth2_tokens, client_id, etc.
+          this.innertube = await Innertube.create({
+            generate_session_locally: true,
+            ...(cached.visitorData ? { visitor_data: cached.visitorData } : {}),
+          });
+
+          // Inject tokens using the confirmed oauth2_tokens key from session inspection
+          try {
+            this.innertube.session.oauth.oauth2_tokens = {
+              access_token: cached.accessToken,
+              refresh_token: cached.refreshToken,
+              token_type: "Bearer",
+              expiry_date: cached.expiryDate || new Date(Date.now() + 3600 * 1000).toISOString(),
+            };
+            // Set logged_in flag so requests include Authorization header
+            this.innertube.session.logged_in = true;
+            console.log("[Player] Innertube session created with OAuth credentials.");
+          } catch (oauthErr) {
+            console.warn("[Player] OAuth injection failed:", oauthErr.message, "— continuing without auth.");
+          }
+        } else {
+          this.innertube = await Innertube.create({ generate_session_locally: true });
+          console.warn("[Player] Innertube session created WITHOUT auth — some videos may fail.");
+        }
+
+        this._innertubeCreatedAt = Date.now();
+      } catch (e) {
+        console.error("[Player] Failed to refresh Innertube session:", e.message);
+      }
+    }
+  }
+
   async getYoutubeiStream(videoId) {
     try {
+      // Ensure session is fresh/authenticated before attempting download
+      await this._ensureFreshInnertube();
+
       const innertube = this.innertube;
-      const clients = ["TV", "ANDROID", "YTMUSIC", "WEB"];
+      if (!innertube) throw new Error("Innertube instance unavailable");
+
+      // TV client crashes with nFunction bug — excluded
+      // Authenticated sessions work best with WEB_EMBEDDED or YTMUSIC first
+      const clients = ["WEB_EMBEDDED", "YTMUSIC", "IOS", "TV_EMBEDDED", "ANDROID", "WEB"];
       let webStream = null;
       let lastErr = null;
+
       for (const client of clients) {
         try {
           webStream = await innertube.download(videoId, { type: "audio", quality: "best", client });
@@ -370,8 +477,15 @@ export default class Player extends EventEmitter {
           lastErr = e;
         }
       }
+
       if (!webStream) throw lastErr;
+
       const passThrough = new PassThrough();
+      // Swallow errors on the passthrough so they don't become uncaught exceptions
+      passThrough.on("error", (err) => {
+        console.error("[Player] youtubei passThrough error:", err.message);
+      });
+
       const reader = webStream.getReader();
       (async () => {
         try {
@@ -380,8 +494,12 @@ export default class Player extends EventEmitter {
             if (done) { passThrough.end(); break; }
             passThrough.write(value);
           }
-        } catch (e) { passThrough.destroy(e); }
+        } catch (e) {
+          console.error("[Player] youtubei reader error:", e.message);
+          passThrough.destroy(e);
+        }
       })();
+
       return passThrough;
     } catch (err) {
       console.error("[Player] youtubei.js fallback failed:", err.message);
@@ -411,36 +529,106 @@ export default class Player extends EventEmitter {
         ));
 
         if (this.ytdlp) {
+          // Always pipe yt-dlp through ffmpeg — handles any format (opus, aac, etc.)
+          // and produces a clean WebM/Opus stream for connection.play()
+          const passThrough = new PassThrough();
+          passThrough.on("error", (err) => {
+            console.error("[Player] Stream pipeline error:", err.message);
+          });
+
           const proc = spawn(ytdlpPath, [
-            "-f", "251/250/249/bestaudio",
-            "--no-playlist", "-o", "-", "--quiet", "--no-cache-dir", "--force-ipv4",
+            "--cookies", "/root/fluxer/cookies.txt",
+            "--js-runtimes", "node",
+            "--remote-components", "ejs:github",
+            // Match Firefox UA — reduces bot detection from datacenter IPs
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0",
+            "-f", "251/250/249/140/bestaudio[ext=webm]/bestaudio[protocol=m3u8_native]/bestaudio/best",
+            "--hls-prefer-native",
+            "--no-playlist", "-o", "-", "--force-ipv4",
+            "--cache-dir", "/root/fluxer/.ytcache/yt-dlp",
             "https://www.youtube.com/watch?v=" + videoId
           ]);
-          const passThrough = new PassThrough();
-          rawStream = passThrough;
+
+          this._currentYtdlpProc = proc;
+
+          // Always transcode through ffmpeg so connection.play() always gets clean WebM/Opus
+          // regardless of whether yt-dlp picked opus, aac, or anything else
+          const ffmpegProc = spawn(ffmpegStatic, [
+            "-i", "pipe:0", "-vn", "-c:a", "libopus", "-b:a", "128k",
+            "-flush_packets", "1", "-f", "webm", "pipe:1"
+          ], { stdio: ["pipe", "pipe", "pipe"] });
+          proc.stdout.pipe(ffmpegProc.stdin);
+          ffmpegProc.stdin.on("error", () => {});
+          ffmpegProc.stderr.on("data", () => {});
+          ffmpegProc.stdout.pipe(passThrough, { end: false });
+          ffmpegProc.stdout.on("end", () => passThrough.end());
+          ffmpegProc.stdout.on("error", (err) => {
+            console.error("[Player] ffmpeg stdout error:", err.message);
+          });
+
+          res({ buffer: passThrough, ffmpeg: ffmpegProc });
+
           let fallbackTriggered = false;
-          proc.stdout.pipe(passThrough);
+
           proc.stderr.on("data", async (d) => {
             if (fallbackTriggered) return;
             const msg = d.toString();
-            const isBlocked = msg.includes("Sign in") || msg.includes("bot") || msg.includes("HTTP Error 403") || msg.includes("HTTP Error 429") || msg.includes("Precondition") || msg.includes("This video is not available") || msg.includes("blocked") || msg.includes("login") || msg.includes("Private video") || msg.includes("Video unavailable");
+            // Only log actual ERRORs — suppress all info/progress/status lines
+            if (msg.includes("ERROR:")) {
+              console.warn("[yt-dlp]", msg.trim());
+            }
+            const isBlocked =
+              msg.includes("Sign in") ||
+              msg.includes("bot") ||
+              msg.includes("HTTP Error 400") ||
+              msg.includes("HTTP Error 403") ||
+              msg.includes("HTTP Error 429") ||
+              msg.includes("Precondition") ||
+              msg.includes("This video is not available") ||
+              msg.includes("blocked") ||
+              msg.includes("login") ||
+              msg.includes("Private video") ||
+              msg.includes("Video unavailable");
+
             if (isBlocked) {
               fallbackTriggered = true;
-              proc.stdout.unpipe(passThrough);
-              proc.kill();
+              proc.stdout.unpipe(ffmpegProc.stdin);
+              try { proc.kill(); } catch(_) {}
+              try { ffmpegProc.kill(); } catch(_) {}
+              console.warn("[Player] yt-dlp blocked, falling back to youtubei.js for:", videoId);
               const raw = await this.getYoutubeiStream(videoId);
-              if (raw) { const fb = spawn(ffmpegStatic, ["-i","pipe:0","-vn","-c:a","libopus","-b:a","128k","-f","webm","pipe:1"],{stdio:["pipe","pipe","pipe"]}); raw.pipe(fb.stdin); fb.stdin.on("error",()=>{}); fb.stderr.on("data",()=>{}); fb.stdout.pipe(passThrough); }
-              else passThrough.destroy(new Error("Both yt-dlp and youtubei.js failed"));
+              if (raw) {
+                const fb = spawn(ffmpegStatic, ["-i","pipe:0","-vn","-c:a","libopus","-b:a","128k","-flush_packets","1","-f","webm","pipe:1"], { stdio: ["pipe","pipe","pipe"] });
+                raw.pipe(fb.stdin);
+                fb.stdin.on("error", () => {});
+                fb.stderr.on("data", () => {});
+                fb.stdout.pipe(passThrough, { end: false });
+                fb.stdout.on("end", () => passThrough.end());
+              } else {
+                passThrough.destroy(new Error("Both yt-dlp and youtubei.js failed"));
+              }
             }
           });
+
           proc.on("close", async (code) => {
             if (fallbackTriggered) return;
             if (code !== 0 && !passThrough.destroyed) {
               fallbackTriggered = true;
+              try { ffmpegProc.kill(); } catch(_) {}
+              console.warn("[Player] yt-dlp exited with code", code, "— falling back to youtubei.js for:", videoId);
               const raw = await this.getYoutubeiStream(videoId);
-              if (raw) { const fb = spawn(ffmpegStatic, ["-i","pipe:0","-vn","-c:a","libopus","-b:a","128k","-f","webm","pipe:1"],{stdio:["pipe","pipe","pipe"]}); raw.pipe(fb.stdin); fb.stdin.on("error",()=>{}); fb.stderr.on("data",()=>{}); fb.stdout.pipe(passThrough); }
-              else passThrough.destroy(new Error("Both yt-dlp and youtubei.js failed"));
+              if (raw) {
+                const fb = spawn(ffmpegStatic, ["-i","pipe:0","-vn","-c:a","libopus","-b:a","128k","-flush_packets","1","-f","webm","pipe:1"], { stdio: ["pipe","pipe","pipe"] });
+                raw.pipe(fb.stdin);
+                fb.stdin.on("error", () => {});
+                fb.stderr.on("data", () => {});
+                fb.stdout.pipe(passThrough, { end: false });
+                fb.stdout.on("end", () => passThrough.end());
+              } else {
+                passThrough.destroy(new Error("Both yt-dlp and youtubei.js failed"));
+              }
             }
+            // ffmpegProc handles passThrough ending via its own stdout "end" event
           });
         } else {
           const raw = await this.getYoutubeiStream(videoId);
@@ -450,15 +638,23 @@ export default class Player extends EventEmitter {
 
       if (!rawStream) return res(null);
 
-      const buffer = new PassThrough({ highWaterMark: 64 * 1024 * 1024 });
+      // For radio/external/soundcloud/youtubei fallback: encode to WebM/Opus via ffmpeg
       const ffmpeg = spawn(ffmpegStatic, [
-        "-i", "pipe:0", "-vn", "-c:a", "libopus", "-b:a", "128k", "-f", "webm", "pipe:1"
+        "-i", "pipe:0",
+        "-vn",
+        "-c:a", "libopus",
+        "-b:a", "128k",
+        "-f", "webm",
+        "-flush_packets", "1",
+        "pipe:1"
       ], { stdio: ["pipe", "pipe", "pipe"] });
       rawStream.pipe(ffmpeg.stdin);
       ffmpeg.stdin.on("error", () => {});
       ffmpeg.stderr.on("data", () => {});
-      ffmpeg.stdout.pipe(buffer);
-      res({ buffer, ffmpeg });
+      ffmpeg.stdout.on("error", (err) => {
+        console.error("[Player] ffmpeg stdout error:", err.message);
+      });
+      res({ buffer: ffmpeg.stdout, ffmpeg });
     });
   }
 
@@ -497,7 +693,14 @@ export default class Player extends EventEmitter {
     // Use prefetched buffer if available for this song
     if (this._prefetchData?.songData === songData) {
       console.log("[Player] Using prefetched buffer for:", songData.title);
-      const result = await this._prefetchData.promise;
+      // FIX 2: Wrap prefetch resolution in try/catch
+      let result = null;
+      try {
+        result = await this._prefetchData.promise;
+      } catch (err) {
+        console.error("[Player] Prefetch buffer failed:", err.message);
+        result = null;
+      }
       this._prefetchData = null;
       if (result && !this.leaving && this.connection) {
         buffer = result.buffer;
@@ -511,19 +714,33 @@ export default class Player extends EventEmitter {
 
     // Build fresh if no prefetch
     if (!buffer) {
-      const result = await this._buildSongBuffer(songData);
+      // FIX 2: Wrap _buildSongBuffer in try/catch so stream errors don't crash the process
+      let result = null;
+      try {
+        result = await this._buildSongBuffer(songData);
+      } catch (err) {
+        console.error("[Player] Buffer build failed for:", songData.title, "—", err.message);
+        result = null;
+      }
       if (!result || !this.connection || this.leaving) {
         if (result) try { result.ffmpeg?.kill("SIGKILL"); } catch(_) {}
+        if (!this.connection || this.leaving) return false;
+        // Both extraction methods failed — notify user and skip to next
+        console.error("[Player] Failed to stream:", songData.title);
+        this.emit("message", `:x: Could not play **${songData.title}** — YouTube is blocking requests. Skipping...`);
+        // Try to continue with the next song rather than stopping entirely
+        setTimeout(() => this.playNext(), 500);
         return false;
       }
       buffer = result.buffer;
       ffmpeg = result.ffmpeg;
     }
 
-    this._currentFfmpeg = ffmpeg;
+    if (ffmpeg) this._currentFfmpeg = ffmpeg;
 
-    // Detect song end: poll _playing after ffmpeg finishes encoding
-    ffmpeg.on("close", () => {
+    // Detect song end via ffmpeg "close" (radio/external) or buffer "end" (yt-dlp direct)
+    const endSource = ffmpeg || buffer;
+    endSource.on(ffmpeg ? "close" : "end", () => {
       if (this.leaving || this._paused) return;
       this._endCheckInterval = setInterval(() => {
         if (!this.connection || this.leaving || this._paused) {
@@ -554,9 +771,8 @@ export default class Player extends EventEmitter {
     this.announceSong(songData);
     this.emit("startplay", songData);
 
-    // Start prefetching the next song after a short delay
-    // so the current play() call completes first without competition
-    setTimeout(() => this._prefetchNext(), 2000);
+    // Delay prefetch slightly to avoid two simultaneous yt-dlp processes hitting YouTube
+    setTimeout(() => this._prefetchNext(), 5000);
   }
 
   /**

@@ -7,7 +7,7 @@ export const command = new CommandBuilder()
   .setName("update")
   .setDescription("Update the youtube-dlp binaries", "commands.update")
   .addAliases("uy", "u")
-  .addRequirement(r => r.setOwnerOnly(true));
+  .setRequirement(r => r.setOwnerOnly(true));
 
 export async function run(message) {
   if (!this.ytdlp || typeof this.ytdlp.binaryPath !== "string") {

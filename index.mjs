@@ -34,6 +34,7 @@ class Remix {
     this.handler = commands;
 
     commands.setPrefixManager(new PrefixManager(settings));
+    //commands.owners = config.owners ?? [];
     commands.onPing = (msg) => {
       msg.replyEmbed(this.handler.format("My prefix in this server is `$prefix`\n\nRun `$prefix$helpCmd` to get started!", msg.message.guildId), false, {
         icon_url: (msg.channel.channel.guild?.iconURL?.() ?? null),
@@ -42,7 +43,7 @@ class Remix {
     };
 
     client.on(Events.Ready, () => {
-      console.log("Logged in as " + client.user.tag);
+      console.log("Logged in as " + (client.user?.username ?? "bot"));
       // Initialize VoiceManager immediately so it starts tracking VOICE_STATE_UPDATE
       // events from the start. Without this, checkVoiceChannels() returns null until
       // the bot has already joined a channel once.

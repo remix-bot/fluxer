@@ -61,7 +61,7 @@ export class MessageHandler {
   checkPermissions(permissions, channel) {
     if (!channel?.guild) return []; // DMs — no guild perms
     const me = channel.guild.members.me;
-    if (!me) return permissions; // can't verify, assume missing
+    if (!me) return []; // ← change: can't verify, assume OK instead of blocking
     const perms = channel.permissionsFor(me);
     return permissions.filter(p => !perms.has(p));
   }

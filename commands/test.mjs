@@ -3,7 +3,7 @@ import { CommandBuilder } from "../src/CommandHandler.mjs";
 export const command = new CommandBuilder()
   .setName("test")
   .setDescription("A test command used for various purposes.")
-  .addRequirement(r => r.setOwnerOnly(true))
+  .setRequirement(r => r.setOwnerOnly(true))
   .addUserOption(o =>
     o.setName("user")
       .setDescription("A user")

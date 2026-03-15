@@ -10,7 +10,7 @@ export const command = new CommandBuilder()
       .setDescription("The name of the root command that should be reloaded.")
       .setRequired(true)
   )
-  .addRequirement(r => r.setOwnerOnly(true));
+  .setRequirement(r => r.setOwnerOnly(true));
 
 export async function run(msg, data) {
   const com = data.get("command").value;

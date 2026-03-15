@@ -2,7 +2,7 @@ import { pathToFileURL } from "node:url";
 import { Utils } from "./Utils.mjs";
 import { EventEmitter } from "node:events";
 import { Message, MessageHandler, PageBuilder } from "./MessageHandler.mjs";
-import { Client } from "@fluxerjs/core";
+import { Client, PermissionFlags } from "@fluxerjs/core";
 import { SettingsManager } from "./Settings.mjs";
 import path from "node:path";
 import * as fs from "node:fs";
@@ -412,10 +412,9 @@ export class CommandHandler extends EventEmitter {
 
   messageHandler(msg) {
     if (!msg || !msg.content) return;
-    if (msg.message.mentions?.users?.has(this.client.user?.id)) {
-      if (msg.content.trim() === `<@${this.client.user.id}>` || msg.content.trim() === `<@!${this.client.user.id}>`) {
-        return this.onPing?.(msg);
-      }
+    const trimmed = msg.content.trim();
+    if (/^<@!?\d+>$/.test(trimmed)) {
+      return this.onPing?.(msg);
     }
     const guildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
     const prefix = this.getPrefix(guildId);
@@ -425,6 +424,8 @@ export class CommandHandler extends EventEmitter {
 
     const len = msg.content.startsWith(prefix) ? prefix.length : (msg.content.startsWith(pingBang) ? pingBang.length : ping.length);
     const args = msg.content.slice(len).replace(/\u00A0/gi, " ").trim().split(" ").map(e => e.trim());
+    
+    if (!args[0]) return; 
 
     if (args[0] === this.helpCommand) {
       if (!args[1]) {
@@ -598,16 +599,35 @@ export class CommandHandler extends EventEmitter {
    * Checks requirements using fluxerjs (discord.js-like) permission API.
    */
   assertRequirements(cmd, msg) {
-    const guild = msg.message?.guild;
-    const member = msg.member ?? msg.message?.member;
+    const authorId = msg.message?.author?.id;
+    const isOwner = this.owners.includes(authorId);
+
     for (let i = 0; i < cmd.requirements.length; i++) {
       let req = cmd.requirements[i];
-      if (req.ownerOnly && !this.owners.includes(msg.author?.id)) return false;
-      for (let j = 0; j < req.permissions.length; j++) {
-        let p = req.permissions[j];
-        // Use discord.js-like permission checking
-        if (!member?.permissions?.has(p) && !this.owners.includes(msg.author?.id)) {
-          this.replyHandler(req.permissionError, msg);
+      if (req.ownerOnly && !isOwner) return false;
+      if (req.permissions.length > 0 && !isOwner) {
+        const guild = msg.message?.guild ?? null;
+        if (!guild) continue;
+
+        const member = guild.members.get(authorId) ?? null;
+        if (member?.permissions) {
+          // cached — check directly
+          const missing = req.permissions.filter(p => !member.permissions.has(PermissionFlags[p] ?? p));
+          if (missing.length > 0) {
+            this.replyHandler(req.permissionError, msg);
+            return false;
+          }
+        } else {
+          // not cached — fetch async and re-run
+          guild.fetchMember(authorId).then(member => {
+            const missing = req.permissions.filter(p => !member.permissions.has(PermissionFlags[p] ?? p));
+            if (missing.length > 0) {
+              this.replyHandler(req.permissionError, msg);
+            } else {
+              const args = msg.message.content.trim().split(" ");
+              this.processCommand(cmd, args, msg);
+            }
+          }).catch(() => this.replyHandler(req.permissionError, msg));
           return false;
         }
       }

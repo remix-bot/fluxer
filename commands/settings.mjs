@@ -8,7 +8,7 @@ export const command = function() {
     .addAliases("s")
     .addExamples("$prefixsettings get", "$prefixsettings get locale", "$prefixsettings set locale de-DE")
     .setCategory("util")
-    .addRequirement(e => e.addPermission("ManageGuild"))
+    .setRequirement(e => e.addPermission("ManageGuild"))
     .addSubcommand(cmd =>
       cmd.setName("set")
         .setId("setSettings")

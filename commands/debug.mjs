@@ -3,7 +3,7 @@ import { CommandBuilder } from "../src/CommandHandler.mjs";
 export const command = new CommandBuilder()
   .setName("debug")
   .setDescription("A debug command for various purposes.")
-  .addRequirement(r => r.setOwnerOnly(true))
+  .setRequirement(r => r.setOwnerOnly(true))  // ← fixed
   .addChoiceOption(o =>
     o.setName("target")
       .setDescription("The target that should be examined.")

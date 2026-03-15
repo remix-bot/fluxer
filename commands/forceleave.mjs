@@ -4,7 +4,7 @@ export const command = new CommandBuilder()
   .setName("forceleave")
   .addAlias("fl")
   .setDescription("Make Remix leave a channel even if you're not in it.")
-  .addRequirement(r => r.addPermission("ManageChannels"))
+  .setRequirement(r => r.addPermission("ManageChannels"))
   .addChannelOption(o =>
     o.setName("channelId")
       .setDescription("The channel that should be left.")
