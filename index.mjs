@@ -122,7 +122,7 @@ class Remix {
     // initInnertube runs async and sets this.playerContext.innertube when ready
     this.initInnertube();
 
-    this.comLink = (this.comHashLong) ? "https://github.com/remix-bot/fluxer/tree/" + this.comHashLong : "https://github.com/remix-bot/fluxer";
+    this.comLink = "https://github.com/remix-bot/fluxer/commit/" + this.comHashLong ?? "https://github.com/remix-bot/fluxer";
     this.playerMap = new Map();
     this.currPort = -1;
     this.channels = [];
