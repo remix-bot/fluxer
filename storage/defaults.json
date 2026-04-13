@@ -1,0 +1,20 @@
+{
+  "values": {
+    "songAnnouncements": true,
+    "prefix": "%",
+    "pfp": "default",
+    "locale": "en",
+    "stay_247": "none",
+    "stay_247_mode": "off",
+    "volume": 100
+  },
+  "descriptions": {
+    "songAnnouncements": "Whether the bot should announce every song in a new message when it starts playing. Set to `true` or `1` to enable.",
+    "prefix": "The prefix used to trigger commands.",
+    "pfp": "What profile picture the bot should use. Presets: `default | dark | light | mono | <custom url>`.",
+    "locale": "The preferred language of your server.",
+    "stay_247": "24/7 mode channels. Managed automatically by %247 — do not edit manually.",
+    "stay_247_mode": "Controls 247 behaviour. Set via %247 off/on/auto. off = disabled, on = stay but no rejoin on force-kick, auto = stay and always rejoin.",
+    "volume": "The default playback volume for this server (1-200). Saved automatically when you use %volume. Restored every time the bot joins a channel."
+  }
+}

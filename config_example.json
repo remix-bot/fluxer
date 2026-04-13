@@ -1,0 +1,98 @@
+{
+  "token": "your bot token",
+  "fluxer.js": {
+    "Comment": "Configuration data for @fluxerjs/core Client options. See: https://github.com/fluxerjs/core"
+  },
+  "fluxer-api": {
+    "Comment": "Configuration options for a fluxer REST client if self-hosting. See: https://docs.fluxer.app"
+  },
+  "prefix": "your desired prefix (such as %)",
+  "presenceInterval": null,
+  "presenceContents": [],
+  "spotify": {
+    "clientId": "your spotify client id",
+    "clientSecret": "your spotify client secret"
+  },
+  "nodelink": {
+    "host": "localhost",
+    "port": 3000,
+    "password": "youshallnotpass"
+  },
+  "comment-radio": {
+    "message": "If you have radio stations you'd like to connect, add them to the array below. Radio stations must be rendered like following:",
+    "station": {
+      "name": "zamrock",
+      "detailedName": "ᘔᗩᗰᘔᗩᗰᖴOᖴᒪIᖴE",
+      "thumbnail": "https://zamrock.net/wp-content/uploads/2024/06/Zamrock_rd_logo_0004-1.gif",
+      "url": "url to stream from; this will be kept private",
+      "description": "Genre: Zamrock, provided by [Zamrock.net](https://zamrock.net/)",
+      "author": {
+        "name": "Zamrock",
+        "url": "https://zamrock.net"
+      },
+      "keyWords": ["radio", "zamrock", "psychedelic", "blues", "rock"]
+    }
+  },
+  "radio": [],
+  "cache": {
+    "guilds": {
+      "enabled": true,
+      "max": 5000
+    },
+    "members": {
+      "enabled": true,
+      "max": 10000
+    }
+  },
+  "helpCatalog": true,
+  "helpPagination": true,
+  "mysql": {
+    "host": "your-mysql-host.com",
+    "port": 3306,
+    "user": "youruser",
+    "password": "password of your user",
+    "database": "name of the target database"
+  },
+  "webPort": 80,
+  "dashboardUrl": "The url the dashboard is accessible with.",
+  "ssl": {
+    "private": "path-to-private-key.pem",
+    "cert": "path-to-certificate.pem",
+    "useSSL": false,
+    "httpPort": 80
+  },
+  "sessionSecret": "secret for the expressjs session middleware; https://www.npmjs.com/package/express-session#user-content-secret",
+  "geniusToken": "Genius access token (Used for lyrics); optional",
+  "owners": ["user id for owner-only commands", "another user id"],
+  "playerAFKTimeout": 60000,
+  "Comment": "The above specifies the time in ms after which a player goes inactive; Optional.",
+  "customStatsFooter": "Text shown in the footer of the %stats embed; optional.",
+  "embedColor": "0xe9196c",
+  "logging": {
+    "Comment": "Control which log categories appear in the console. Set 'enabled' to false to silence everything except errors. Set any category to false to silence just that group.",
+    "enabled": true,
+    "player":      true,
+    "inactivity":  true,
+    "voiceState":  true,
+    "voice247":    true,
+    "mediaplayer": true,
+    "commands":    true,
+    "guild":       true,
+    "recovery":    true,
+    "settings":    true,
+    "worker":      true,
+    "moonlink":    true
+  },
+  "timers": {
+    "Comment": "All timing values in milliseconds (ms). 1000ms = 1 second, 60000ms = 1 minute.",
+    "inactivityTimeout":    180000,
+    "aloneCheckInterval":    30000,
+    "aloneCheckDebounce":      500,
+    "rejoin247Delay":         3000,
+    "leave247RejoinDelay":    5000,
+    "playerUpdateInterval":   5000,
+    "searchSessionTimeout":  30000,
+    "playerSessionTimeout":  300000,
+    "intentionalLeaveTTL":   10000
+  }
+}

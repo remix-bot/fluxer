@@ -1,0 +1,12 @@
+[
+  {
+    "name": "wb-dashboard",
+    "index": "./dashboard/index.js",
+    "enabled": false
+  },
+  {
+    "name": "rbl-stats",
+    "index": "./rbl.js",
+    "enabled": false
+  }
+]
