@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project version="4">
-  <component name="SshConfigs">
-    <configs>
-      <sshConfig host="82.153.138.108" id="158bf229-0d96-4477-902c-3d462f3eaa31" keyPath="C:\Users\Ari Tech\.ssh\id_ed25519" port="22" nameFormat="DESCRIPTIVE" username="root" useOpenSSHConfig="true" />
-    </configs>
-  </component>
-</project>
