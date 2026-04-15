@@ -1,91 +1,142 @@
 <p align="center">
-    <a href="https://github.com/remix-bot">
-      <img src="https://i.imgur.com/8hD1Jur.png" alt="Logo" width="80" height="80">
-    </a>
-    <h2 align="center">Remix</h2>
-    <p align="center">
-    The best high quality Fluxer music bot.
-    <br>
-    <a href="https://web.fluxer.app/oauth2/authorize?client_id=1478084469635211806&scope=bot&permissions=3206208">Invite to your server</a>
-      ·
-    <a href="https://fluxer.gg/Remix">Report bug</a>
-      ·
-    <a href="https://fluxer.gg/Remix">Request Feature</a>
-  </p>
+  <a href="https://github.com/remix-bot">
+    <img src="https://i.imgur.com/8hD1Jur.png" alt="Remix Logo" width="100" height="100">
+  </a>
 </p>
 
-## About The Project
+<h1 align="center">Remix</h1>
 
-Remix is a free and open source music bot for Fluxer built on [fluxerjs](https://github.com/fluxerjs/core). All commands on Remix are free and will always be free to use.
+<p align="center">
+  <strong>A premium, high-quality, and open-source music bot for Fluxer.</strong>
+</p>
 
-## Commands
+<p align="center">
+  <a href="https://web.fluxer.app/oauth2/authorize?client_id=1478084469635211806&scope=bot&permissions=3206208">Invite to Server</a> · 
+  <a href="https://fluxer.gg/Remix">Report a Bug</a> · 
+  <a href="https://fluxer.gg/Remix">Request a Feature</a>
+</p>
 
-Below is a table of all of Remix's commands.
-
-| Name      | Description                                                                                        | Format                      | Alias                   |
-|-----------|----------------------------------------------------------------------------------------------------|-----------------------------|-------------------------|
-| clear     | Remove all songs from the queue.                                                                   | %clear                      | clear, c                |
-| join      | Make the bot join a specific voice channel.                                                        | %join 'Channel ID: channel' | join                    |
-| leave     | Make the bot leave your current voice channel                                                      | %leave                      | leave, l                |
-| list      | List the queue in your current voice channel.                                                      | %list                       | list, queue             |
-| loop      | Toggle the looping of your queue/song.                                                             | %loop <queue \| song>       | loop                    |
-| np        | Request the name and URL of the currently playing song.                                            | %np                         | np, current, nowplaying |
-| pause     | Pause the playback in your voice channel                                                           | %pause                      | pause                   |
-| play      | Play a song from URL/query or a playlist by URL.                                                   | %play 'query: text'         | play, p                 |
-| player    | Create an emoji player control for your voice channel                                              | %player                     | player                  |
-| playnext  | Play a song from URL/query or a playlist by URL. The result will be added to the top of the queue. | %playnext 'query: text'     | playnext, pn            |
-| remove    | Remove a specific song from the queue.                                                             | %remove 'index: number'     | remove                  |
-| resume    | Resume the playback in your voice channel                                                          | %resume                     | resume                  |
-| search    | Display the search results for a given query                                                       | %search 'query: text'       | search                  |
-| settings  | Change/Get settings in the current server.                                                         | %settings <set \| get>      | settings, s             |
-| shuffle   | Re-orders the queue randomly.                                                                      | %shuffle                    | shuffle                 |
-| skip      | Skip the current playing song.                                                                     | %skip                       | skip                    |
-| stats     | Display stats about the bot like the uptime.                                                       | %stats                      | stats, info             |
-| test      | A test command used for various purposes.                                                          | %test 'number: number'      | test                    |
-| thumbnail | Request the thumbnail of the currently playing song.                                               | %thumbnail                  | thumbnail, thumb        |
-| volume    | Change the current volume.                                                                         | %volume 'volume: number'    | volume, v               |
-
-## Getting Started
-
-Firstly, you have to [invite Remix](https://web.fluxer.app/oauth2/authorize?client_id=1478084469635211806&scope=bot&permissions=3206208). Then use the `%help` command to get a list of commands that you can use through the bot.
-
-## Hosting The Bot
-
-If you're self-hosting Remix, please make it clear that it is **not the main instance** (or **change the name**) but give credit by **linking to this repo** (for example, in the bot's profile - something like `This bot <is based on/is an instance of> [Remix](https://github.com/remix-bot/fluxer)` will suffice).
-
--   Clone this repo (`git clone https://github.com/remix-bot/fluxer.git`)
--   Install the dependencies (`npm install`)
--   Set up a `config.json` file
-    - Rename the `config.example.json` file and fill out the missing values. You can generate Spotify credentials [here](https://developer.spotify.com/)
-    - A MySQL database is required. For setup instructions see [DB Setup](#setup-database).
--   Set up a [NodeLink](https://github.com/PerformanC/NodeLink) instance and configure the `nodelink` section in `config.json`:
-```json
-    "nodelink": {
-"host": "localhost",
-"port": 3000,
-"password": "youshallnotpass"
-}
-```
--   Run the bot (`node index.mjs`)
-
-## Setup Database
-
-1. The main thing you'll need is a MySQL database accessible to your server, either publicly or locally.
-2. Create a separate database. This way none of your other data collides with Remix.
-3. Enter the connection details into the respective fields in the `config.json` file.
-4. Run the following SQL commands to create all the necessary tables:
-```sql
-    CREATE TABLE `settings` (
-      `id` varchar(70) NOT NULL,
-      `data` json NOT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
-```
-5. You're good to go! If you've used the old settings system and want to migrate your data, check the README in the `settings` folder.
-
-## Contact
-
-If you have any questions or would like to talk with other Remix users you can join our Fluxer server <a href="https://fluxer.gg/Remix">here</a>.
+<p align="center">
+  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
+  <img src="https://img.shields.io/badge/Fluxer-Bot-7289DA.svg" alt="Fluxer Bot">
+  <img src="https://img.shields.io/badge/Audio-revoice.js-orange.svg" alt="revoice.js">
+  <img src="https://img.shields.io/badge/Maintained%3F-Yes-green.svg" alt="Maintained">
+</p>
 
 ---
 
-&copy; 2026 Remix. Code licensed under [MIT](LICENSE). The Remix name and branding are proprietary and may not be reused.
+## 🎵 About The Project
+
+Remix is a free and open-source music bot for Fluxer, built using [fluxerjs](https://github.com/fluxerjs/core) and powered by [revoice.js](https://github.com/ShadowLp174/revoice.js) for seamless, high-quality audio playback. We believe music features shouldn't be locked behind paywalls—**all commands on Remix are 100% free and always will be.**
+
+## 🚀 Getting Started
+
+Want to use Remix in your server right away? 
+
+1. **[Invite Remix](https://web.fluxer.app/oauth2/authorize?client_id=1478084469635211806&scope=bot&permissions=3206208)** to your Fluxer server.
+2. Join a voice channel.
+3. Use the `%help` command to see everything the bot can do, or jump straight in with `%play <song name>`.
+
+---
+
+## 📜 Commands
+
+Below is a complete list of Remix's commands. The default prefix is `%`.
+
+| Command | Description | Usage Example | Aliases |
+| :--- | :--- | :--- | :--- |
+| `play` | Play a song from a URL/query, or a playlist. | `%play Never Gonna Give You Up` | `p` |
+| `playnext` | Play a song/playlist, adding it to the *top* of the queue. | `%playnext 'query: text'` | `pn` |
+| `pause` | Pause the current playback. | `%pause` | |
+| `resume` | Resume the paused playback. | `%resume` | |
+| `skip` | Skip the currently playing song. | `%skip` | |
+| `list` | View the upcoming queue for your voice channel. | `%list` | `queue` |
+| `np` | See the name and URL of the currently playing song. | `%np` | `current`, `nowplaying` |
+| `loop` | Toggle looping for the current song or the whole queue. | `%loop queue` | |
+| `shuffle` | Re-orders the queue randomly. | `%shuffle` | |
+| `remove` | Remove a specific song from the queue by its index number. | `%remove 3` | |
+| `clear` | Remove all songs from the queue. | `%clear` | `c` |
+| `volume` | Change the volume of the bot. | `%volume 50` | `v` |
+| `join` | Make the bot join a specific voice channel. | `%join 123456789` | |
+| `leave` | Make the bot leave your current voice channel. | `%leave` | `l` |
+| `player` | Create an interactive emoji player control panel. | `%player` | |
+| `search` | Display search results for a given query to choose from. | `%search 'query'` | |
+| `settings`| Change or view bot settings for the current server. | `%settings set` | `s` |
+| `stats` | Display bot statistics, like uptime and ping. | `%stats` | `info` |
+| `thumbnail`| Get the thumbnail image of the currently playing song. | `%thumbnail` | `thumb` |
+| `test` | A developer testing command. | `%test 1` | |
+
+---
+
+## 🛠️ Self-Hosting The Bot
+
+If you prefer to host Remix yourself, please note: **You must make it clear that your bot is an instance of Remix.** Please change the bot's name and give credit in the bot's profile (e.g., *"Powered by [Remix](https://github.com/remix-bot/fluxer)"*).
+
+### Prerequisites
+- Node.js installed
+- A MySQL Database
+- A [NodeLink](https://github.com/PerformanC/NodeLink) instance
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/remix-bot/fluxer.git
+   cd fluxer
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Configure the bot:**
+   - Rename `config.example.json` to `config.json`.
+   - Fill out the missing values (Bot Token, DB credentials, etc.).
+   - *Note: You can generate Spotify credentials [here](https://developer.spotify.com/).*
+   - Configure your NodeLink instance inside the `config.json` file:
+     ```json
+     "nodelink": {
+       "host": "localhost",
+       "port": 3000,
+       "password": "youshallnotpass"
+     }
+     ```
+
+4. **Setup the Database:** *(See instructions below)*
+
+5. **Start the bot:**
+   ```bash
+   node index.mjs
+   ```
+
+### 🗄️ Database Setup
+
+Remix requires a MySQL database to function properly.
+
+1. Create a dedicated database for Remix to prevent data collisions with other apps.
+2. Enter your MySQL connection details into `config.json`.
+3. Run the following SQL query to create the necessary tables:
+
+   ```sql
+   CREATE TABLE `settings` (
+     `id` varchar(70) NOT NULL,
+     `data` json NOT NULL
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
+   ```
+*(Note: If you used the legacy settings system and want to migrate your data, please check the README inside the `settings` folder).*
+
+---
+
+## 💬 Contact & Support
+
+If you have any questions, need help setting up, or just want to hang out with other Remix users, join our official Fluxer server:
+
+👉 **[Join the Remix Support Server](https://fluxer.gg/Remix)**
+
+---
+
+<p align="center">
+  &copy; 2026 Remix. Code licensed under the <a href="LICENSE">MIT License</a>.<br>
+  <em>The Remix name, logo, and branding are proprietary and may not be reused.</em>
+</p>
