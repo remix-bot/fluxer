@@ -99,13 +99,21 @@ export class MoonlinkManager extends EventEmitter {
   }
 
   /**
-   * Send voice payload to Discord via Fluxer's WebSocket
+   * Send voice payload to Fluxer's WebSocket
    * @param {string} guildId
    * @param {{ op: number, d: object }} payload
    * @private
    */
   _sendPayload(guildId, payload) {
     try {
+      // Prefer the public ws.send(shardId, payload) API — shards is a private field
+      // in @fluxerjs/ws and accessing it directly risks breaking on internal refactors.
+      if (typeof this._client?.ws?.send === "function") {
+        this._client.ws.send(0, payload);
+        return;
+      }
+
+      // Fallback: access shard directly only if the public API is unavailable
       const shard = this._client?.ws?.shards?.get?.(0);
       if (!shard) {
         logger.warn("[MoonlinkManager] No WebSocket shard available");
@@ -132,7 +140,6 @@ export class MoonlinkManager extends EventEmitter {
   _setupVoiceForwarding(client) {
     // @fluxerjs/core emits VoiceStateUpdate with a SINGLE argument:
     // (data: GatewayVoiceStateUpdateDispatchData) — raw gateway snake_case fields.
-    // This is NOT discord.js style (oldState, newState).
     client.on(Events.VoiceStateUpdate, (data) => {
       try {
         // data is the raw GatewayVoiceStateUpdateDispatchData — always snake_case
@@ -174,6 +181,10 @@ export class MoonlinkManager extends EventEmitter {
     // on gateway reconnects. Without this, each reconnect stacks another handler on the socket.
     const attachRawWs = () => {
       try {
+        // NOTE: client.ws.shards is private in @fluxerjs/ws. There is no public API for
+        // attaching a raw inbound message listener — ws.send() only covers outbound.
+        // This access is intentional. If @fluxerjs/core exposes a public onRawMessage()
+        // hook in a future release, replace shard0/wsObj extraction with that API.
         const shard0 = client.ws?.shards?.get?.(0);
         const wsObj  = shard0?.ws ?? null;
         if (!wsObj) return;

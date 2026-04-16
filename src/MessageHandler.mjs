@@ -2,11 +2,13 @@ import { Client, Events, EmbedBuilder } from "@fluxerjs/core";
 import { logger } from "./constants/Logger.mjs";
 import { Utils } from "./Utils.mjs";
 
-/** Parse a color value from config — accepts hex string "0xe9196c" or number */
+/** Parse a color value from config — accepts hex string "0xe9196c", "#e9196c", or number */
 export function parseColor(value, fallback = 0xe9196c) {
   if (!value) return fallback;
   if (typeof value === "number") return value;
-  const n = parseInt(value, 16);
+  // Strip leading # ("‌#ff0000" → "ff0000") or 0x prefix ("0xe9196c" → "e9196c")
+  const cleaned = String(value).replace(/^#/, "").replace(/^0x/i, "");
+  const n = parseInt(cleaned, 16);
   return isNaN(n) ? fallback : n;
 }
 
@@ -74,9 +76,13 @@ export class MessageHandler {
    */
   checkPermissions(permissions, channel) {
     if (!channel?.guild) return []; // DMs — no guild perms
-    const me = channel.guild.members.me;
-    if (!me) return []; // ← change: can't verify, assume OK instead of blocking
-    const perms = channel.permissionsFor(me);
+    // guild.members.me and channel.permissionsFor()
+    // @fluxerjs/core may expose them or may not — guard with optional chaining so
+    // a missing implementation fails open (assume OK) rather than throwing.
+    const me = channel.guild.members?.me ?? null;
+    if (!me) return []; // can't verify — assume OK
+    const perms = channel.permissionsFor?.(me) ?? null;
+    if (!perms) return []; // API unavailable — assume OK
     return permissions.filter(p => !perms.has(p));
   }
 
@@ -125,10 +131,10 @@ export class MessageHandler {
    * @returns {Message|null}
    */
   get(id) {
-    // fluxerjs messages are per-channel; search across cached channels
+    // channel.messages is a MessageManager — @fluxerjs/core may not expose it.
+    // Guard with optional chaining so the loop is a no-op if the property is absent.
     for (const channel of this.client.channels.cache.values()) {
-      if (!channel.messages) continue;
-      const msg = channel.messages.cache.get(id);
+      const msg = channel.messages?.cache?.get?.(id) ?? null;
       if (msg) return new Message(msg, this);
     }
     return null;
@@ -144,7 +150,12 @@ export class MessageHandler {
     const cached = this.get(id);
     if (cached) return cached;
     const channel = await this.client.channels.fetch(channelId);
-    return new Message(await channel.messages.fetch(id), this);
+    // channel.fetchMessage() is the @fluxerjs/core method.
+    // Fall back to the channel.messages.fetch() if the former is absent.
+    const raw = typeof channel.fetchMessage === "function"
+        ? await channel.fetchMessage(id)
+        : await channel.messages?.fetch?.(id);
+    return raw ? new Message(raw, this) : null;
   }
 
   /**
@@ -393,7 +404,7 @@ export class MessageHandler {
     const { joinVoiceChannel } = await import("@fluxerjs/voice");
     const channel = await this.client.channels.fetch(channelId);
     if (!channel || !("guildId" in channel)) throw new Error("Cannot join a non-guild voice channel.");
-    // @fluxerjs/voice API: joinVoiceChannel(client, channel) — NOT the old discord-voip object style
+    // @fluxerjs/voice API: joinVoiceChannel(client, channel) — NOT the old object style
     return joinVoiceChannel(this.client, channel);
   }
 }

@@ -12,25 +12,16 @@ export const command = new CommandBuilder()
 // ── User count ────────────────────────────────────────────────────────────────
 
 async function fetchUserCount(client) {
-  const guildIds = Array.from(client.guilds.cache.keys());
-  if (guildIds.length === 0) return 0;
+  // client.rest is a concept and is not available on @fluxerjs/core.
+  // Use guild.memberCount (a cached integer Fluxer exposes on every Guild object)
+  // instead of paginating the REST members endpoint.
+  // Falls back to 0 per guild if the property is absent so the stat still renders.
   try {
-    const counts = await Promise.all(guildIds.map(async (id) => {
-      let total = 0, after = "0", done = false;
-      try {
-        while (!done) {
-          const batch = await client.rest?.get(`/guilds/${id}/members?limit=1000&after=${after}`);
-          if (!batch?.length) { done = true; }
-          else {
-            total += batch.length;
-            done = batch.length < 1000;
-            if (!done) after = batch[batch.length - 1].user.id;
-          }
-        }
-        return total;
-      } catch { return 0; }
-    }));
-    return counts.reduce((a, b) => a + b, 0);
+    let total = 0;
+    for (const guild of client.guilds.cache.values()) {
+      total += guild.memberCount ?? guild.member_count ?? 0;
+    }
+    return total;
   } catch { return 0; }
 }
 
@@ -53,13 +44,15 @@ function buildEmbed({ guildCount, userCount, playerCount, ping, uptime, comHash,
     `💬 [Community](https://fluxer.gg/Remix)`,
   ].filter(l => l !== null).join("\n");
 
-  return new EmbedBuilder()
+  const builder = new EmbedBuilder()
       .setColor(getGlobalColor())
       .setAuthor({ name: "Remix Music Bot" })
       .setDescription(description)
-      .setFooter({ text: footer || "Remix Music Bot" })
-      .setTimestamp()
-      .toJSON();
+      .setFooter({ text: footer || "Remix Music Bot" });
+  // setTimestamp() is not verified on @fluxerjs/core's EmbedBuilder — call it only
+  // if the method exists so the command doesn't throw when building the embed.
+  if (typeof builder.setTimestamp === "function") builder.setTimestamp();
+  return builder.toJSON();
 }
 
 // ── Runner ────────────────────────────────────────────────────────────────────

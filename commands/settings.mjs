@@ -434,7 +434,12 @@ export async function run(message, data) {
     // List all settings
     const d         = set.getAll();
     const guildName = getGuildName(message);
-    const iconUrl   = message.message?.guild?.iconURL?.() ?? null;
+    // Use the Fluxer CDN raw property pattern (guild.icon is a hash string, not a URL).
+    // guild.iconURL() is a method that does not exist on @fluxerjs/core Guild objects.
+    const rawGuild  = message.message?.guild;
+    const iconUrl   = rawGuild?.icon
+        ? `https://cdn.fluxer.app/icons/${rawGuild.id}/${rawGuild.icon}.webp`
+        : null;
 
     const lines = Object.entries(d)
         .filter(([k]) => k !== "stay_247_mode") // surfaced inline with stay_247

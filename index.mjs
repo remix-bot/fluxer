@@ -121,7 +121,9 @@ class Remix {
 
       try {
         let channel = client.channels.cache.get(cleanChannelId);
-        if (!channel || typeof channel.guild?.voiceAdapterCreator !== "function") {
+        if (!channel) {
+          // voiceAdapterCreator is a concept and not meaningful in Fluxer.
+          // A simple cache-miss check is sufficient — fetch only when not already cached.
           try {
             channel = await client.channels.fetch(cleanChannelId);
           } catch (e) {
@@ -158,8 +160,12 @@ class Remix {
             try {
               const prefix = this.handler?.getPrefix?.(guildId) ?? "%";
               const guild  = this.client.guilds.cache.get(guildId);
+              // isTextBased() and permissionsFor() are APIs — use optional
+              // chaining so missing implementations fail gracefully. Fall back to channel_type
+              // string check which is the raw Fluxer gateway field.
               const ch = guild?.channels?.cache?.find(c =>
-                  c.isTextBased?.() && c.permissionsFor?.(this.client.user)?.has?.("SendMessages")
+                  (c.isTextBased?.() ?? c.channel_type === "TextChannel" ?? true) &&
+                  (c.permissionsFor?.(this.client.user)?.has?.("SendMessages") ?? true)
               );
               if (ch) {
                 const embed = new EmbedBuilder()
@@ -193,7 +199,8 @@ class Remix {
           }
           if (!ch) {
             ch = guild?.channels?.cache?.find(c =>
-                c.isTextBased?.() && c.permissionsFor?.(this.client.user)?.has?.("SendMessages")
+                (c.isTextBased?.() ?? c.channel_type === "TextChannel" ?? true) &&
+                (c.permissionsFor?.(this.client.user)?.has?.("SendMessages") ?? true)
             );
             if (ch) this._announcementChannelCache.set(guildId, ch.id);
           }
@@ -336,6 +343,9 @@ class Remix {
       }
 
       for (const [gId, guild] of client.guilds.cache) {
+        // guild.voice_states — raw snake_case array from @fluxerjs/core gateway payload (preferred).
+        // guild.voiceStates?.cache — voiceStateManager collection (fallback, may not exist).
+        // guild.voiceStates — bare iterable fallback if cache sub-property is absent.
         const voiceStatesRaw =
             guild.voice_states ??
             guild.voiceStates?.cache ??
@@ -363,6 +373,11 @@ class Remix {
       if (!wsListenerAttached) {
         wsListenerAttached = true;
         try {
+          // NOTE: client.ws.shards is declared private in @fluxerjs/ws, but there is
+          // no public API for attaching a raw message listener to the underlying socket.
+          // ws.send(shardId, payload) exists for sending, but not for receiving.
+          // This access is intentional — if @fluxerjs/core ever exposes a public
+          // onRawMessage() hook, replace these two lines with that API instead.
           const shard0 = client.ws?.shards?.get?.(0);
           const wsObj  = shard0?.ws ?? null;
 
@@ -430,10 +445,15 @@ class Remix {
             afk:           false,
             custom_status: { text: presenceContents[presenceIndex] },
           };
-          const shard = client.ws.shards.get(0);
-          if (shard) {
-            shard.options.presence = presence;
-            shard.send({ op: GatewayOpcodes.PresenceUpdate, d: presence });
+          // Use the public ws.send(shardId, payload) API instead of accessing the
+          // private shards Map directly — shards is declared private in @fluxerjs/ws
+          // and accessing it works at runtime but breaks on any internal refactor.
+          if (client.ws?.send) {
+            client.ws.send(0, { op: GatewayOpcodes.PresenceUpdate, d: presence });
+          } else {
+            // Fallback: access shards directly only if public API is unavailable
+            const shard = client.ws?.shards?.get?.(0);
+            if (shard) shard.send({ op: GatewayOpcodes.PresenceUpdate, d: presence });
           }
           presenceIndex = (presenceIndex + 1) % presenceContents.length;
         };
@@ -562,7 +582,7 @@ class Remix {
 
     // Track previous voice state per-user so we can detect channel moves.
     // @fluxerjs/core fires VoiceStateUpdate with ONE arg (raw gateway data),
-    // not two args (oldState, newState) like discord.js. We maintain prev state manually.
+    // not two args (oldState, newState) We maintain prev state manually.
     const _prevVoiceState = new Map(); // userId → { channelId, guildId }
 
     client.on(Events.VoiceStateUpdate, (data) => {
@@ -818,25 +838,36 @@ class Remix {
       const observed = self.observedVoiceUsers.get(userId);
       if (observed && observed.guildId === guildId) return observed.channelId;
 
+      // vm.getVoiceChannelId() is an unverified @fluxerjs/voice method — optional-chained
+      // so it fails silently and falls through to the next strategy if absent.
       try {
         const vm        = getVoiceManager(client);
         const channelId = vm?.getVoiceChannelId?.(guildId, userId);
         if (channelId) return seed(channelId);
       } catch (_) {}
 
+      // @fluxerjs/core member objects may not carry a .voice property.
+      // Optional-chained so it's a silent no-op if absent.
       const memberVoice =
           message?.member?.voice?.channelId ??
           message?.message?.member?.voice?.channelId ??
           null;
       if (memberVoice) return seed(memberVoice);
 
+      // @fluxerjs/core may expose voice states differently (e.g. raw voice_states array
+      // on the guild object from the gateway payload, which is handled in GuildCreate).
+      // The dual snake_case/camelCase probe covers both shapes.
       try {
         const guild       = client.guilds.cache.get(guildId);
-        const voiceStates = guild?.voiceStates?.cache ?? guild?.voiceStates ?? null;
+        // guild.voice_states = raw array from gateway (Fluxer-native)
+        // guild.voiceStates?.cache = VoiceStateManager (fallback)
+        const voiceStates = guild?.voice_states ?? guild?.voiceStates?.cache ?? guild?.voiceStates ?? null;
         if (voiceStates) {
-          const entries = typeof voiceStates.values === "function"
-              ? voiceStates.values()
-              : Object.values(voiceStates);
+          const entries = Array.isArray(voiceStates)
+              ? voiceStates
+              : typeof voiceStates.values === "function"
+                  ? voiceStates.values()
+                  : Object.values(voiceStates);
           for (const state of entries) {
             const sid  = state.userId ?? state.user_id ?? state.id;
             const sch  = state.channelId ?? state.channel_id;

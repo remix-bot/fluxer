@@ -61,7 +61,7 @@ export class CommandRequirement {
   }
   setOwnerOnly(bool) { this.ownerOnly = bool; return this; }
   /**
-   * @param {string} p Fluxer permission string (discord.js-style, e.g. "ManageChannels", "ManageGuild")
+   * @param {string} p Fluxer permission string (ManageChannels", "ManageGuild")
    */
   addPermission(p) { this.permissions.push(p); return this; }
   addPermissions(...p) { this.permissions.push(...p); return this; }
@@ -70,7 +70,7 @@ export class CommandRequirement {
 }
 
 export class Option {
-  // Fluxer uses discord.js-like channel mentions: <#id> and user mentions <@id>
+  // Fluxer uses channel mentions: <#id> and user mentions <@id>
   channelRegex = /^<#(?<id>\d+)>/;
   userRegex = /^<@!?(?<id>\d+)>/;
   idRegex = /^(?<id>\d+)/;
@@ -602,7 +602,7 @@ export class CommandHandler extends EventEmitter {
   }
 
   /**
-   * Checks requirements using fluxerjs (discord.js-like) permission API.
+   * Checks requirements using fluxerjs permission API.
    */
   assertRequirements(cmd, msg) {
     const authorId = msg.message?.author?.id;
@@ -625,7 +625,14 @@ export class CommandHandler extends EventEmitter {
           }
         } else {
           // not cached — fetch async and re-run
-          guild.fetchMember(authorId).then(member => {
+          // guild.fetchMember(id) is a Fluxer shorthand; guild.members.fetch(id) is the
+          // standard compatible form. Try both so either API name works.
+          const fetchPromise = typeof guild.fetchMember === "function"
+              ? guild.fetchMember(authorId)
+              : typeof guild.members?.fetch === "function"
+                  ? guild.members.fetch(authorId)
+                  : Promise.reject(new Error("No member fetch API available"));
+          fetchPromise.then(member => {
             const missing = req.permissions.filter(p => !member.permissions.has(PermissionFlags[p] ?? p));
             if (missing.length > 0) {
               this.replyHandler(req.permissionError, msg);

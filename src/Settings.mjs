@@ -137,8 +137,12 @@ export class RemoteSettingsManager extends EventEmitter {
       return this.remoteSave(server);
     }
     // Use mysql.escape() for every user-supplied value to prevent SQL injection.
+    // Preserve native boolean/number types — mysql.escape(String(false)) stores "false"
+    // (a truthy string) which breaks strict equality checks like songAnnouncements === false.
     const escapedPath = mysql.escape(`$.${key}`);
-    const escapedVal  = mysql.escape(String(val));
+    const escapedVal  = (typeof val === "boolean" || typeof val === "number")
+        ? mysql.escape(val)
+        : mysql.escape(String(val));
     const escapedId   = mysql.escape(server.id);
     const r = await this.query(`UPDATE settings SET data = JSON_SET(data, ${escapedPath}, ${escapedVal}) WHERE id=${escapedId}`);
     if (r.error) logger.error("[Settings] remoteUpdate error:", r.error);

@@ -118,15 +118,22 @@ export async function run(msg) {
       `⏱️ Session expires in ${Math.ceil(timeout / 60000)}m of inactivity`
     ].join("\n");
 
+    // avatarURL may be a plain property (Fluxer) or a method— call it if
+    // it's a function, otherwise use it as-is so the footer icon works in both cases.
+    const avatarUrl = typeof msg.author?.avatarURL === "function"
+        ? msg.author.avatarURL()
+        : msg.author?.avatarURL ?? null;
+
     const builder = new EmbedBuilder()
         .setColor(getGlobalColor())
         .setTitle("🎧 Music Player Controls")
         .setDescription(description)
         .setFooter({
           text: `Requested by ${msg.author?.username || "Unknown"} • Controls active`,
-          iconURL: msg.author?.avatarURL
-        })
-        .setTimestamp();
+          iconURL: avatarUrl
+        });
+    // setTimestamp() is not verified on @fluxerjs/core's EmbedBuilder — guard it.
+    if (typeof builder.setTimestamp === "function") builder.setTimestamp();
     if (current?.thumbnail) builder.setThumbnail(current.thumbnail);
     return builder.toJSON();
   };

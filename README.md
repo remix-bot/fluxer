@@ -31,7 +31,7 @@ Remix is a free and open-source music bot for Fluxer, built using [fluxerjs](htt
 
 ## 🚀 Getting Started
 
-Want to use Remix in your server right away? 
+Want to use Remix in your server right away?
 
 1. **[Invite Remix](https://web.fluxer.app/oauth2/authorize?client_id=1478084469635211806&scope=bot&permissions=3206208)** to your Fluxer server.
 2. Join a voice channel.
@@ -91,17 +91,17 @@ If you prefer to host Remix yourself, please note: **You must make it clear that
    ```
 
 3. **Configure the bot:**
-   - Rename `config.example.json` to `config.json`.
-   - Fill out the missing values (Bot Token, DB credentials, etc.).
-   - *Note: You can generate Spotify credentials [here](https://developer.spotify.com/).*
-   - Configure your NodeLink instance inside the `config.json` file:
-     ```json
-     "nodelink": {
-       "host": "localhost",
-       "port": 3000,
-       "password": "youshallnotpass"
-     }
-     ```
+    - Rename `config.example.json` to `config.json`.
+    - Fill out the missing values (Bot Token, DB credentials, etc.).
+    - *Note: You can generate Spotify credentials [here](https://developer.spotify.com/).*
+    - Configure your NodeLink instance inside the `config.json` file:
+      ```json
+      "nodelink": {
+        "host": "localhost",
+        "port": 3000,
+        "password": "youshallnotpass"
+      }
+      ```
 
 4. **Setup the Database:** *(See instructions below)*
 
