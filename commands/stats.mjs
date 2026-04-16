@@ -12,6 +12,10 @@ export const command = new CommandBuilder()
 // ── User count ────────────────────────────────────────────────────────────────
 
 async function fetchUserCount(client) {
+  // client.rest is a concept and is not available on @fluxerjs/core.
+  // Use guild.memberCount (a cached integer Fluxer exposes on every Guild object)
+  // instead of paginating the REST members endpoint.
+  // Falls back to 0 per guild if the property is absent so the stat still renders.
   try {
     let total = 0;
     for (const guild of client.guilds.cache.values()) {

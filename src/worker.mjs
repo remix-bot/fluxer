@@ -1,5 +1,7 @@
 /**
+ *
  * worker.mjs — NodeLink REST edition (moonlink.js session-aware)
+ *
  */
 
 import { workerData, parentPort } from "worker_threads";
@@ -10,13 +12,54 @@ import { Utils } from "./Utils.mjs";
 import { PROVIDERS } from "./constants/providers.mjs";
 import { logger } from "./constants/Logger.mjs";
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// NodeLink Configuration (forwarded from Player via workerData)
+// ═══════════════════════════════════════════════════════════════════════════════
+
 const nl           = workerData?.data?.nodelink ?? {};
 const NL_HOST      = nl.host      ?? "localhost";
 const NL_PORT      = nl.port      ?? 3000;
 const NL_PASSWORD  = nl.password  ?? "youshallnotpass";
-const NL_SESSION_ID = nl.sessionId ?? null;
+const NL_SESSION_ID = nl.sessionId ?? null;   // provided by moonlink.js Manager
 const NL_GUILD_ID  = workerData?.data?.guildId ?? null;
 
+// ─── Error sanitizer ──────────────────────────────────────────────────────────
+// Strips the NodeLink host, port, and password from any string so they are
+// never shown to end-users in Discord messages.  Called on every user-visible
+// error string before it is emitted or returned.
+function sanitizeError(msg) {
+  if (!msg) return msg;
+  let s = String(msg);
+  // Remove full URLs containing the NodeLink host (http://host:port/...)
+  if (NL_HOST && NL_HOST !== "localhost") {
+    // Escape special regex chars in the host string
+    const escapedHost = NL_HOST.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    s = s.replace(new RegExp(`https?://${escapedHost}(:\\d+)?[^\\s"']*`, "gi"), "[internal]");
+  }
+  // Remove localhost:port combos
+  s = s.replace(new RegExp(`https?://localhost:${NL_PORT}[^\\s"']*`, "gi"), "[internal]");
+  // Remove bare host:port if it somehow appears without a protocol
+  if (NL_HOST && NL_HOST !== "localhost") {
+    const escapedHost = NL_HOST.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    s = s.replace(new RegExp(`${escapedHost}:${NL_PORT}`, "g"), "[internal]");
+  }
+  // Remove the password just in case it ever leaks into an error message
+  if (NL_PASSWORD && NL_PASSWORD !== "youshallnotpass") {
+    const escapedPw = NL_PASSWORD.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    s = s.replace(new RegExp(escapedPw, "g"), "[redacted]");
+  }
+  return s;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HTTP Helper
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Make a GET request to NodeLink and return the parsed JSON body.
+ * @param {string} path - API path (e.g. "/v4/loadtracks?identifier=…")
+ * @returns {Promise<object>}
+ */
 function nlGet(path) {
   return new Promise((resolve, reject) => {
     const isHttps  = NL_PORT === 443;
@@ -45,7 +88,7 @@ function nlGet(path) {
         }
     );
 
-    req.on("error", () => reject(new Error("NodeLink connection failed.")));
+    req.on("error", reject);
     req.setTimeout(30_000, () => {
       req.destroy();
       reject(new Error("NodeLink request timeout"));
@@ -53,10 +96,24 @@ function nlGet(path) {
   });
 }
 
+/**
+ * Call NodeLink /v4/loadtracks.
+ * @param {string} identifier
+ * @returns {Promise<object>}
+ */
 async function loadTracks(identifier) {
   return nlGet(`/v4/loadtracks?identifier=${encodeURIComponent(identifier)}`);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Track Conversion
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Convert a NodeLink track object to the internal video format.
+ * @param {object} track
+ * @returns {object|null}
+ */
 function trackToVideo(track) {
   if (!track || typeof track !== "object") return null;
 
@@ -68,7 +125,7 @@ function trackToVideo(track) {
     encoded:    track.encoded   ?? "",
     sourceName: info.sourceName ?? "unknown",
     title:      Utils.cleanTitle(info.title ?? "Unknown"),
-    url:        info.uri ?? info.identifier ?? "",
+    url:        info.uri ?? `https://www.youtube.com/watch?v=${info.identifier}`,
     thumbnail:  info.artworkUrl ?? null,
     spotifyUrl: null,
     duration: {
@@ -83,7 +140,15 @@ function trackToVideo(track) {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Provider Configuration  (imported from constants/providers.mjs)
+// ═══════════════════════════════════════════════════════════════════════════════
+
 const TYPE_MODIFIERS = ["track","playlist","album","artist","channel","user"];
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// YTUtils Class
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class YTUtils extends EventEmitter {
   constructor() { super(); }
@@ -102,21 +167,31 @@ class YTUtils extends EventEmitter {
     return `${prefix}:track:${query}`;
   }
 
+  /**
+   * Clean YouTube Radio/Mix URLs to extract just the video
+   * YouTube Radio URLs (list=RD...) often cause metadata mismatches
+   */
   _cleanYouTubeUrl(url) {
     try {
       const urlObj = new URL(url);
+
+      // Check if it's a YouTube Radio/Mix URL
       const list = urlObj.searchParams.get("list");
       if (list && list.startsWith("RD")) {
+        // Extract just the video ID and create clean URL
         const videoId = urlObj.searchParams.get("v");
         if (videoId) {
           logger.worker(`[Worker] Cleaning YouTube Radio URL, extracted video: ${videoId}`);
           return `https://www.youtube.com/watch?v=${videoId}`;
         }
       }
+
+      // Remove start_radio parameter if present
       if (urlObj.searchParams.has("start_radio")) {
         urlObj.searchParams.delete("start_radio");
         return urlObj.toString();
       }
+
       return url;
     } catch (e) {
       return url;
@@ -148,9 +223,11 @@ class YTUtils extends EventEmitter {
   }
 
   async getVideoData(query, provider = "ytm") {
+    // Handle URLs (including YouTube Radio/Mix)
     if (this.isValidUrl(query)) {
       this.emit("message", "Loading...");
 
+      // Clean YouTube Radio URLs to prevent metadata mismatches
       const cleanedUrl = this._cleanYouTubeUrl(query);
       if (cleanedUrl !== query) {
         logger.worker(`[Worker] URL cleaned: ${query} -> ${cleanedUrl}`);
@@ -160,10 +237,11 @@ class YTUtils extends EventEmitter {
       try {
         data = await loadTracks(cleanedUrl);
       } catch (e) {
-        this.emit("message", `**Failed to load: ${e.message}**`);
-        return { type: "error", data: null, error: e.message };
+        this.emit("message", `**Failed to load that track.**`);
+        return { type: "error", data: null, error: sanitizeError(e.message) };
       }
 
+      // Handle playlist results
       if (data.loadType === "playlist") {
         const tracks = (data.data?.tracks ?? []).map(trackToVideo);
         tracks.forEach(t => { t.playlistName = data.data?.info?.name ?? null; });
@@ -171,32 +249,37 @@ class YTUtils extends EventEmitter {
         return { type: "list", data: tracks };
       }
 
+      // Handle single track
       if (data.loadType === "track") {
         const video = trackToVideo(data.data);
         this.emit("message", `Successfully added [${video.title}](${video.url}) to the queue.`);
         return { type: "video", data: video };
       }
 
+      // Handle search results (take first)
       if (data.loadType === "search" && data.data?.length) {
         const video = trackToVideo(data.data[0]);
         this.emit("message", `Successfully added [${video.title}](${video.url}) to the queue.`);
         return { type: "video", data: video };
       }
 
+      // No recognizable loadType
       this.emit("message", `**Could not load that URL.** (loadType: ${data.loadType || "unknown"})`);
       return { type: "error", data: null, error: "Unknown loadType: " + (data.loadType || "none") };
     }
 
+    // Handle search queries (non-URLs)
     this.emit("message", `Searching ${this._providerLabel(provider)}...`);
 
     let data;
     try {
       data = await loadTracks(this._buildIdentifier(provider, query));
     } catch (e) {
-      this.emit("message", `**Search failed: ${e.message}**`);
-      return { type: "error", data: null, error: e.message };
+      this.emit("message", `**Search failed. Please try again.**`);
+      return { type: "error", data: null, error: sanitizeError(e.message) };
     }
 
+    // Handle search results
     if (data.loadType === "search" && data.data?.length) {
       const validTrack = data.data.find(track => {
         const info = track.info ?? {};
@@ -212,6 +295,7 @@ class YTUtils extends EventEmitter {
       return { type: "video", data: video };
     }
 
+    // Handle playlist from search
     if (data.loadType === "playlist") {
       const tracks = (data.data?.tracks ?? []).map(trackToVideo);
       if (tracks.length > 0) {
@@ -220,16 +304,22 @@ class YTUtils extends EventEmitter {
       }
     }
 
+    // Single track from search
     if (data.loadType === "track") {
       const video = trackToVideo(data.data);
       this.emit("message", `Successfully added [${video.title}](${video.url}) to the queue.`);
       return { type: "video", data: video };
     }
 
+    // Nothing found
     this.emit("message", `**No results found for '${query}'.**`);
     return { type: "error", data: null, error: "No results found" };
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Worker Entry Point
+// ═══════════════════════════════════════════════════════════════════════════════
 
 const jobId = workerData?.jobId;
 const data  = workerData?.data;

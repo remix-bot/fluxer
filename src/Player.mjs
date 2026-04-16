@@ -26,6 +26,34 @@ function mkEmbed(desc) {
   return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).toJSON()] };
 }
 
+/**
+ * Strip NodeLink host, port, and password from a string so they are never
+ * shown to end-users in Discord messages.
+ * @param {string} msg
+ * @param {Object} nl  - The player's _nl config object { host, port, password }
+ * @returns {string}
+ */
+function sanitizeError(msg, nl = {}) {
+  if (!msg) return msg;
+  let s = String(msg);
+  const host = nl.host;
+  const port = nl.port;
+  const password = nl.password;
+  if (host && host !== "localhost") {
+    const escapedHost = host.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    s = s.replace(new RegExp(`https?://${escapedHost}(:\\d+)?[^\\s"']*`, "gi"), "[internal]");
+    if (port) s = s.replace(new RegExp(`${escapedHost}:${port}`, "g"), "[internal]");
+  }
+  if (port) {
+    s = s.replace(new RegExp(`https?://localhost:${port}[^\\s"']*`, "gi"), "[internal]");
+  }
+  if (password && password !== "youshallnotpass") {
+    const escapedPw = password.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    s = s.replace(new RegExp(escapedPw, "g"), "[redacted]");
+  }
+  return s;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Queue Class
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -539,7 +567,7 @@ export default class Player extends EventEmitter {
           }
           if (res.statusCode !== 200 && res.statusCode !== 204) {
             res.resume();
-            return reject(new Error(`HTTP ${res.statusCode} at NodeLink Server`));
+            return reject(new Error(`HTTP ${res.statusCode} at ${target}`));
           }
           if (returnStream) return resolve(res);
 
@@ -547,11 +575,11 @@ export default class Player extends EventEmitter {
           res.on("data", d => chunks.push(d));
           res.on("end", () => {
             try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
-            catch (e) { reject(new Error(`JSON parse error from NodeLink Server`)); }
+            catch (e) { reject(new Error(`JSON parse error from ${target}`)); }
           });
         });
 
-        req.on("error", () => reject(new Error("Request error to NodeLink Server")));
+        req.on("error", reject);
         req.setTimeout(options.timeout || 30_000, () => {
           req.destroy();
           reject(new Error("Request timeout"));
@@ -694,7 +722,9 @@ export default class Player extends EventEmitter {
       return this._streamViaRevoice(json.url);
     } catch (err) {
       logger.error("[Player] NodeLink resolve error:", err.message);
-      throw err;
+      // Sanitize before re-throwing — this error eventually becomes a user-visible
+      // "Error streaming X — skipping..." message, so the NodeLink URL must not appear.
+      throw new Error(sanitizeError(err.message, this._nl));
     }
   }
 
@@ -1309,7 +1339,7 @@ export default class Player extends EventEmitter {
 
           if (data.type === "error") {
             logger.worker("[Player] Worker returned error:", data.error);
-            events.emit("message", data.error || "Failed to load track.");
+            events.emit("message", sanitizeError(data.error, this._nl) || "Failed to load track.");
             return;
           }
 
@@ -1329,7 +1359,7 @@ export default class Player extends EventEmitter {
         })
         .catch((reason) => {
           logger.error("[Player] Worker job failed:", reason);
-          events.emit("message", reason?.message || "An error occurred while loading the track.");
+          events.emit("message", sanitizeError(reason?.message, this._nl) || "An error occurred while loading the track.");
         });
     return events;
   }

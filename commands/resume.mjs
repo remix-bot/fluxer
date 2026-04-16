@@ -8,7 +8,7 @@ export const command = new CommandBuilder()
   .setCategory("music");
 
 export async function run(message) {
-  const p = await this.getPlayer(message, false, false, false);
+  const p = await this.getPlayer(message, false, true, false);
   if (!p) return;
   const res = p.resume();
   const embed = new EmbedBuilder()

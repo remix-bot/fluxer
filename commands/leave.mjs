@@ -16,35 +16,26 @@ function embed(desc) {
 export async function run(msg) {
   const guildId = msg.channel?.guild?.id ?? msg.message?.guildId;
 
-  // Get all players in this guild
-  const guildPlayers = [...this.players.playerMap.entries()]
-      .filter(([chId, p]) => p._guildId === guildId);
+  const userChannelId = this.players.checkVoiceChannels(msg);
+  if (!userChannelId) return msg.replyEmbed(embed("⚠️ Please join a voice channel first."));
 
-  if (guildPlayers.length === 0) {
-    return msg.replyEmbed(embed("❌ I'm not in a voice channel in this server."));
+  const cid = String(userChannelId).replace(/\D/g, "");
+
+  if (!this.players.playerMap.has(cid)) {
+    const guildChannels = [...this.players.playerMap.entries()]
+        .filter(([chId, p]) => p._guildId === guildId)
+        .map(([chId]) => `<#${chId}>`);
+
+    if (guildChannels.length === 0) return msg.replyEmbed(embed("I'm not in a voice channel."));
+    if (guildChannels.length === 1) return msg.replyEmbed(embed(`⚠️ Please join ${guildChannels[0]} to use this command.`));
+    return msg.replyEmbed(embed(
+        `⚠️ I'm playing in multiple channels! Please join one of them:\n` +
+        guildChannels.map(c => `• ${c}`).join("\n")
+    ));
   }
-
-  let cid;
-
-  // Try to find the channel the user is in (optional, for convenience)
-  const userChannelId = await this.players.checkVoiceChannels(msg);
-
-  if (userChannelId && guildPlayers.some(([chId]) => chId === userChannelId)) {
-    // User is in a channel where the bot is playing - use that one
-    cid = userChannelId;
-  } else if (guildPlayers.length === 1) {
-    // Only one player in guild - use that one
-    cid = guildPlayers[0][0];
-  } else {
-    // Multiple channels - use the first one found
-    // Or you could implement a selection menu here
-    cid = guildPlayers[0][0];
-  }
-
-  cid = String(cid).replace(/\D/g, "");
 
   const player = this.players.playerMap.get(cid);
-  if (!player?.connection) return msg.replyEmbed(embed("❌ Player not initialized."));
+  if (!player?.connection) return msg.replyEmbed(embed("Player not initialized."));
 
   const set   = this.getSettings(msg);
   const raw   = set?.get("stay_247");
