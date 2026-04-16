@@ -539,7 +539,7 @@ export default class Player extends EventEmitter {
           }
           if (res.statusCode !== 200 && res.statusCode !== 204) {
             res.resume();
-            return reject(new Error(`HTTP ${res.statusCode} at ${target}`));
+            return reject(new Error(`HTTP ${res.statusCode} at NodeLink Server`));
           }
           if (returnStream) return resolve(res);
 
@@ -547,11 +547,11 @@ export default class Player extends EventEmitter {
           res.on("data", d => chunks.push(d));
           res.on("end", () => {
             try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
-            catch (e) { reject(new Error(`JSON parse error from ${target}`)); }
+            catch (e) { reject(new Error(`JSON parse error from NodeLink Server`)); }
           });
         });
 
-        req.on("error", reject);
+        req.on("error", () => reject(new Error("Request error to NodeLink Server")));
         req.setTimeout(options.timeout || 30_000, () => {
           req.destroy();
           reject(new Error("Request timeout"));
