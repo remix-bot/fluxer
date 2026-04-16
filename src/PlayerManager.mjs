@@ -123,7 +123,7 @@ export class PlayerManager {
       const channelList = serverPlayers.map(([chId]) => `<#${chId}>`).join(" or ");
 
       if (!userChannelId) {
-        message.replyEmbed(mkEmbed(`⚠️ Please join ${channelList} to use this command.`));
+        message.replyEmbed(mkEmbed(`⚠️ Please join a voice channel to use this command.`));
         return null;
       }
 
@@ -133,7 +133,19 @@ export class PlayerManager {
         return match[1];
       }
 
-      message.replyEmbed(mkEmbed(`⚠️ I'm already playing in ${channelList}. Join that channel.`));
+      // User is in a different channel than existing players.
+      if (shouldJoin) {
+        return new Promise((resolve) => {
+          this.initPlayer(message, userChannelId, (p) => resolve(p));
+        });
+      }
+
+      const prefix = (() => {
+        try {
+          return this.settings.getServer(serverId)?.get("prefix") ?? "%";
+        } catch (_) { return "%"; }
+      })();
+      message.replyEmbed(mkEmbed(`⚠️ I'm already playing in ${channelList}. Join that channel or use \`${prefix}play\` to start music in your channel.`));
       return null;
     }
 
