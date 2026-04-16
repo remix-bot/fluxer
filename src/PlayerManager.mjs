@@ -138,6 +138,10 @@ export class PlayerManager {
     }
 
     if (!userChannelId) {
+      if (shouldJoin) {
+        // Auto-detect failed — fall back to interactive channel selection prompt
+        return this.promptVC(message);
+      }
       message.replyEmbed(mkEmbed("⚠️ Please join a voice channel first."));
       return null;
     }
@@ -163,7 +167,7 @@ export class PlayerManager {
   async promptVC(msg) {
     const autoDetected = this.checkVoiceChannels(msg);
     if (autoDetected) {
-      return new Promise(resolve => this.initPlayer(msg, autoDetected, () => resolve(autoDetected)));
+      return new Promise(resolve => this.initPlayer(msg, autoDetected, (p) => resolve(p)));
     }
 
     const serverId   = msg.channel?.server_id ?? msg.channel?.serverId;
@@ -215,7 +219,7 @@ export class PlayerManager {
               clearTimeout(timeout);
               cleanup();
               const cid = channel._id ?? channel.id;
-              this.initPlayer(msg, cid, () => resolve(cid));
+              this.initPlayer(msg, cid, (p) => resolve(p));
             },
             msg.author
         );
@@ -237,7 +241,7 @@ export class PlayerManager {
         const channel = this.commands.formatInput("voiceChannel", m.content, m);
         clearTimeout(timeout);
         cleanup();
-        this.initPlayer(m, channel, () => resolve(channel));
+        this.initPlayer(m, channel, (p) => resolve(p));
       }, msg.author);
     });
   }
@@ -335,8 +339,8 @@ export class PlayerManager {
         } catch (_) { return "%"; }
       })();
       const desc = is247
-        ? `Left channel <#${cid}> because of inactivity.`
-        : `Left channel <#${cid}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
+          ? `Left channel <#${cid}> because of inactivity.`
+          : `Left channel <#${cid}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
       ch?.sendEmbed(mkEmbed(desc));
       this.playerMap.delete(cid);
       player.destroy();

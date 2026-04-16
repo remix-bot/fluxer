@@ -56,8 +56,8 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
       } catch (_) { return "%"; }
     })();
     const desc = is247
-      ? `Left channel <#${cid}> because of inactivity.`
-      : `Left channel <#${cid}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
+        ? `Left channel <#${cid}> because of inactivity.`
+        : `Left channel <#${cid}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
     const embed = new EmbedBuilder().setColor(getGlobalColor())
         .setDescription(desc)
         .toJSON();
@@ -98,16 +98,62 @@ export const command = new CommandBuilder()
     .setName("join")
     .setDescription("Make the bot join your voice channel, or specify one.", "commands.join")
     .setId("join")
-    .setCategory("music");
+    .setCategory("music")
+    .addTextOption(option =>
+        option.setName("channel")
+            .setDescription("A voice channel mention, ID, or name to join. Defaults to your current channel.")
+            .setRequired(false)
+    );
 
-export function run(message) {
-  // @fluxerjs/core Message has no .member property — voice channel detection
-  // is handled entirely by checkVoiceChannels() via the VoiceManager state map.
+export function run(message, data) {
+  // Check if a channel argument was provided (mention like <#123456>, bare ID, or name)
+  const rawArg = data?.get?.("channel")?.value?.trim?.() ?? null;
+
+  if (rawArg) {
+    // Parse channel mention <#ID>, bare numeric ID, or channel name
+    const mentionMatch = rawArg.match(/^<#(\d+)>$/);
+    const idMatch      = rawArg.match(/^(\d{15,})$/);
+    let resolvedId     = null;
+
+    if (mentionMatch) {
+      resolvedId = mentionMatch[1];
+    } else if (idMatch) {
+      resolvedId = idMatch[1];
+    } else {
+      // Try to look up by name
+      const serverId = message.channel?.server_id ?? message.channel?.serverId;
+      const allChannels = [
+        ...(this._commands?.client?.channels?.values?.() ??
+            this._commands?.client?.channels?.cache?.values?.() ??
+            this.client?.channels?.values?.() ??
+            this.client?.channels?.cache?.values?.() ?? [])
+      ];
+      const match = allChannels.find(c => {
+        const cServerId = c.server_id ?? c.serverId ?? c.guildId;
+        const isVoice   = c.channel_type === "VoiceChannel" || c.type === "VoiceChannel" || c.type === 2;
+        return isVoice && cServerId === serverId &&
+            (c.name?.toLowerCase() === rawArg.toLowerCase());
+      });
+      if (match) resolvedId = match._id ?? match.id;
+    }
+
+    if (!resolvedId) {
+      const embed = new EmbedBuilder().setColor(getGlobalColor())
+          .setDescription("❌ Couldn't find that voice channel. Try using a mention like `<#channelid>` or the exact channel name.")
+          .toJSON();
+      return message.replyEmbed({ embeds: [embed] });
+    }
+
+    return this.players.initPlayer(message, resolvedId);
+  }
+
+  // No argument — auto-detect the user's current voice channel
   const cid = this.players.checkVoiceChannels(message);
 
   if (!cid) {
+    const prefix = this._commands?.getPrefix?.(message.channel?.guild?.id ?? message.channel?.server_id ?? message.channel?.serverId) ?? "%";
     const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription("❌ You're not in a voice channel. Please join one first.")
+        .setDescription(`❌ You're not in a voice channel. Please join one first, or specify a channel: \`${prefix}join <#channel>\``)
         .toJSON();
     return message.replyEmbed({ embeds: [embed] });
   }
