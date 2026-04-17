@@ -9,33 +9,68 @@ export const command = new CommandBuilder()
     .addAliases("info")
     .setCategory("util");
 
-// ── User count ────────────────────────────────────────────────────────────────
+// ── User count cache ──────────────────────────────────────────────────────────
 
-async function fetchUserCount(client) {
-  // client.rest is a concept and is not available on @fluxerjs/core.
-  // Use guild.memberCount (a cached integer Fluxer exposes on every Guild object)
-  // instead of paginating the REST members endpoint.
-  // Falls back to 0 per guild if the property is absent so the stat still renders.
+const CACHE_TTL_MS = 5 * 60 * 1000; // refresh every 5 minutes
+
+let cachedUserCount = null; // null = never fetched, 0 = real zero
+let cacheExpiresAt  = 0;
+let inflightPromise = null;
+
+async function pool(limit, tasks) {
+  const results   = [];
+  const executing = new Set();
+  for (const task of tasks) {
+    const p = Promise.resolve().then(task).then(r => { results.push(r); executing.delete(p); });
+    executing.add(p);
+    if (executing.size >= limit) await Promise.race(executing);
+  }
+  await Promise.all(executing);
+  return results;
+}
+
+async function fetchGuildMemberCount(guild) {
   try {
+    let after = undefined;
     let total = 0;
-    for (const guild of client.guilds.cache.values()) {
-      total += guild.memberCount ?? guild.member_count ?? 0;
+    while (true) {
+      const batch = await guild.members.fetch({ limit: 1000, after });
+      total += batch.length;
+      if (batch.length < 1000) break;
+      after = batch.reduce((max, m) => (m.id > max ? m.id : max), "0");
     }
     return total;
-  } catch { return 0; }
+  } catch {
+    return guild.members.size ?? 0;
+  }
+}
+
+async function refreshUserCount(client) {
+  const guilds = [...client.guilds.cache.values()];
+  const counts = await pool(10, guilds.map(g => () => fetchGuildMemberCount(g)));
+  cachedUserCount = counts.reduce((a, b) => a + b, 0);
+  cacheExpiresAt  = Date.now() + CACHE_TTL_MS;
+  inflightPromise = null;
+  return cachedUserCount;
+}
+
+function getUserCount(client) {
+  if (cachedUserCount !== null && Date.now() < cacheExpiresAt) return Promise.resolve(cachedUserCount);
+  if (!inflightPromise) inflightPromise = refreshUserCount(client);
+  return inflightPromise;
 }
 
 // ── Embed builder ─────────────────────────────────────────────────────────────
 
 function buildEmbed({ guildCount, userCount, playerCount, ping, uptime, comHash, comLink, reason, footer, loading }) {
-  const num = (v) => Number(v).toLocaleString();
+  const num = (v) => Utils.formatNumber(v);
   const ld  = (v) => loading ? "..." : v;
 
   const description = [
     `📂  **Servers** — \`${num(guildCount)}\``,
     `👥  **Users** — \`${ld(num(userCount))}\``,
     `🎧  **Players** — \`${num(playerCount)}\``,
-    `🏓  **Ping** — \`${ld(`${ping}ms`)}\``,
+    `🏓  **Ping** — \`${ld(`${num(ping)}ms`)}\``,
     `⏱️  **Uptime** — \`${uptime}\``,
     `🔧  **Build** — [\`${comHash}\`](${comLink})`,
     reason ? `🪛  **Last restart** — \`${reason}\`` : null,
@@ -49,8 +84,7 @@ function buildEmbed({ guildCount, userCount, playerCount, ping, uptime, comHash,
       .setAuthor({ name: "Remix Music Bot" })
       .setDescription(description)
       .setFooter({ text: footer || "Remix Music Bot" });
-  // setTimestamp() is not verified on @fluxerjs/core's EmbedBuilder — call it only
-  // if the method exists so the command doesn't throw when building the embed.
+
   if (typeof builder.setTimestamp === "function") builder.setTimestamp();
   return builder.toJSON();
 }
@@ -68,16 +102,18 @@ export async function run(message) {
     footer:      this.config.customStatsFooter || null,
   };
 
+  const hasCached = cachedUserCount !== null;
+
+  // Measure real Discord round-trip latency
   const start = Date.now();
-
   const msg = await message.replyEmbed({
-    embeds: [buildEmbed({ ...shared, userCount: 0, ping: 0, loading: true })]
+    embeds: [buildEmbed({ ...shared, userCount: hasCached ? cachedUserCount : 0, ping: 0, loading: !hasCached })]
   });
+  const ping = Date.now() - start;
 
-  const ping  = Date.now() - start;
-  const users = await fetchUserCount(this.client);
+  const users = await getUserCount(this.client);
 
   await msg.editEmbed({
     embeds: [buildEmbed({ ...shared, userCount: users, ping, loading: false })]
-  }).catch(() => {});
+  }).catch((err) => console.error("[stats] editEmbed failed:", err));
 }
