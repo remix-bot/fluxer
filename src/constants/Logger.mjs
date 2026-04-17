@@ -62,4 +62,5 @@ export const logger = {
   worker(...args)      { if (isEnabled("worker"))       console.log(`[${ts()}]`, ...args); },
   moonlink(...args)    { if (isEnabled("moonlink"))     console.log(`[${ts()}]`, ...args); },
   aloneCheck(...args)  { if (isEnabled("inactivity"))  console.log(`[${ts()}]`, ...args); },
+  voice(...args)       { if (isEnabled("voice"))        console.log(`[${ts()}]`, ...args); },
 };

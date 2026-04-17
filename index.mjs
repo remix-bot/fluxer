@@ -352,18 +352,29 @@ class Remix {
             guild.voiceStates ??
             null;
         if (!voiceStatesRaw) continue;
-        const entries = Array.isArray(voiceStatesRaw)
-            ? voiceStatesRaw
-            : typeof voiceStatesRaw.values === "function"
-                ? [...voiceStatesRaw.values()]
-                : Object.values(voiceStatesRaw);
-        for (const state of entries) {
-          const userId    = state.userId ?? state.user_id ?? state.id;
-          const channelId = state.channelId ?? state.channel_id;
-          if (!userId || !channelId) continue;
-          const isBot  = state.member?.user?.bot ?? false;
-          const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
-          target.set(userId, { channelId, guildId: gId });
+        // Handle plain {[userId]: channelId} object, {[userId]: stateObj}, array, or Map
+        if (!Array.isArray(voiceStatesRaw) && typeof voiceStatesRaw === "object"
+            && typeof voiceStatesRaw.values !== "function") {
+          for (const [uid, val] of Object.entries(voiceStatesRaw)) {
+            const channelId = typeof val === "string" ? val
+                : val?.channelId ?? val?.channel_id ?? null;
+            if (!uid || !channelId) continue;
+            const isBot = val?.member?.user?.bot ?? false;
+            const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
+            target.set(uid, { channelId, guildId: gId });
+          }
+        } else {
+          const entries = Array.isArray(voiceStatesRaw)
+              ? voiceStatesRaw
+              : [...voiceStatesRaw.values()];
+          for (const state of entries) {
+            const userId    = state?.userId ?? state?.user_id ?? state?.id;
+            const channelId = state?.channelId ?? state?.channel_id;
+            if (!userId || !channelId) continue;
+            const isBot  = state?.member?.user?.bot ?? false;
+            const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
+            target.set(userId, { channelId, guildId: gId });
+          }
         }
       }
 
@@ -519,20 +530,34 @@ class Remix {
           guild.voiceStates ??
           null;
       if (voiceStatesRaw) {
-        const entries = Array.isArray(voiceStatesRaw)
-            ? voiceStatesRaw
-            : typeof voiceStatesRaw.values === "function"
-                ? [...voiceStatesRaw.values()]
-                : Object.values(voiceStatesRaw);
+        // Fluxer may store voiceStates as { [userId]: channelId } plain object,
+        // { [userId]: stateObject }, an array of state objects, or a Map.
+        // Handle all shapes.
+        if (!Array.isArray(voiceStatesRaw) && typeof voiceStatesRaw === "object"
+            && typeof voiceStatesRaw.values !== "function") {
+          // Plain object — keys are userIds
+          for (const [uid, val] of Object.entries(voiceStatesRaw)) {
+            const channelId = typeof val === "string" ? val
+                : val?.channelId ?? val?.channel_id ?? null;
+            if (!uid || !channelId) continue;
+            const isBot = val?.member?.user?.bot ?? false;
+            const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
+            target.set(uid, { channelId, guildId });
+          }
+        } else {
+          const entries = Array.isArray(voiceStatesRaw)
+              ? voiceStatesRaw
+              : [...voiceStatesRaw.values()];
 
-        for (const state of entries) {
-          const channelId = state.channelId ?? state.channel_id;
-          const userId    = state.userId    ?? state.user_id ?? state.id;
-          const sgid      = state.guildId   ?? state.guild_id ?? guildId;
-          const isBot     = state.member?.user?.bot ?? false;
-          if (!channelId || !userId) continue;
-          const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
-          target.set(userId, { channelId, guildId: sgid });
+          for (const state of entries) {
+            const channelId = state?.channelId ?? state?.channel_id;
+            const userId    = state?.userId    ?? state?.user_id ?? state?.id;
+            const sgid      = state?.guildId   ?? state?.guild_id ?? guildId;
+            const isBot     = state?.member?.user?.bot ?? false;
+            if (!channelId || !userId) continue;
+            const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
+            target.set(userId, { channelId, guildId: sgid });
+          }
         }
       }
 
@@ -852,6 +877,7 @@ class Remix {
     const self = this;
     this.players.checkVoiceChannels = function (message) {
       const userId  = message?.author?.id   ?? message?.message?.author?.id;
+      // Fluxer uses server_id (snake_case); Discord.js uses guildId; probe all known shapes.
       const guildId =
           message?.channel?.server_id    ??
           message?.channel?.serverId     ??
@@ -863,15 +889,25 @@ class Remix {
           message?.message?.channel?.server_id ??
           message?.message?.channel?.serverId  ??
           message?.message?.channel?.guildId;
-      if (!userId || !guildId) return null;
+
+      // ── DEBUG: dump state so voice-detection failures are diagnosable ──────
+      logger.voice(`[checkVC] userId=${userId} guildId=${guildId}`);
+      logger.voice(`[checkVC] channel keys: ${Object.keys(message?.channel ?? {}).join(",")}`);
+      logger.voice(`[checkVC] observedVoiceUsers size=${self.observedVoiceUsers.size}`);
+      for (const [uid, info] of self.observedVoiceUsers) {
+        logger.voice(`[checkVC]   stored: uid=${uid} channelId=${info.channelId} guildId=${info.guildId}`);
+      }
+
+      if (!userId || !guildId) {
+        logger.voice(`[checkVC] BAIL — missing userId or guildId`);
+        return null;
+      }
 
       // Normalise to digits-only for all comparisons so "123" === "123" regardless
       // of how the platform formatted the snowflake.
       const cleanGuild = String(guildId).replace(/\D/g, "");
 
       const seed = (channelId) => {
-        // Only seed if no entry exists — never overwrite fresh gateway voice state
-        // with potentially stale member-cache data.
         if (!self.observedVoiceUsers.has(userId)) {
           self.observedVoiceUsers.set(userId, { channelId, guildId: cleanGuild });
         }
@@ -879,61 +915,79 @@ class Remix {
       };
 
       const observed = self.observedVoiceUsers.get(userId);
-      // Use normalised comparison — the stored guildId and message guildId may come
-      // from different gateway fields with different formatting.
-      if (observed && String(observed.guildId).replace(/\D/g, "") === cleanGuild) return observed.channelId;
+      logger.voice(`[checkVC] observed=${JSON.stringify(observed)} cleanGuild=${cleanGuild}`);
+      if (observed && String(observed.guildId).replace(/\D/g, "") === cleanGuild) {
+        logger.voice(`[checkVC] HIT observedVoiceUsers → ${observed.channelId}`);
+        return observed.channelId;
+      }
 
-      // vm.getVoiceChannelId() is an unverified @fluxerjs/voice method — optional-chained
-      // so it fails silently and falls through to the next strategy if absent.
       try {
         const vm        = getVoiceManager(client);
         const channelId = vm?.getVoiceChannelId?.(guildId, userId);
+        logger.voice(`[checkVC] vm.getVoiceChannelId → ${channelId}`);
         if (channelId) return seed(channelId);
-      } catch (_) {}
+      } catch (e) { logger.voice(`[checkVC] vm error: ${e.message}`); }
 
-      // @fluxerjs/core member objects may not carry a .voice property.
-      // Optional-chained so it's a silent no-op if absent.
       const memberVoice =
           message?.member?.voice?.channelId ??
           message?.message?.member?.voice?.channelId ??
           null;
+      logger.voice(`[checkVC] memberVoice=${memberVoice}`);
       if (memberVoice) return seed(memberVoice);
 
-      // @fluxerjs/core may expose voice states differently (e.g. raw voice_states array
-      // on the guild object from the gateway payload, which is handled in GuildCreate).
-      // The dual snake_case/camelCase probe covers both shapes.
       try {
-        // Try both the raw guildId and the normalized cleanGuild — the guilds cache
-        // key may be stored as the raw string the gateway sent.
         const guild = client.guilds.cache.get(guildId) ?? client.guilds.cache.get(cleanGuild);
-        // guild.voice_states = raw array from gateway (Fluxer-native)
-        // guild.voiceStates?.cache = VoiceStateManager (fallback)
+        logger.voice(`[checkVC] guild=${guild?.id ?? guild?._id ?? "null"}`);
         const voiceStates = guild?.voice_states ?? guild?.voiceStates?.cache ?? guild?.voiceStates ?? null;
+        logger.voice(`[checkVC] voiceStates=${Array.isArray(voiceStates) ? "array["+voiceStates.length+"]" : typeof voiceStates}`);
         if (voiceStates) {
+          // Strategy A: direct key lookup — Fluxer may store as { [userId]: channelId }
+          // or { [userId]: { channel_id, ... } }
+          if (!Array.isArray(voiceStates) && typeof voiceStates === "object") {
+            const direct = voiceStates[userId];
+            logger.voice(`[checkVC] direct lookup voiceStates[userId]=${JSON.stringify(direct)}`);
+            if (direct) {
+              const sch = typeof direct === "string" ? direct
+                  : direct?.channelId ?? direct?.channel_id ?? null;
+              if (sch) { logger.voice(`[checkVC] HIT direct obj lookup → ${sch}`); return seed(sch); }
+            }
+            // Also dump first key/value so we understand the shape
+            const firstKey = Object.keys(voiceStates)[0];
+            if (firstKey) {
+              logger.voice(`[checkVC] shape sample: key=${firstKey} val=${JSON.stringify(voiceStates[firstKey])}`);
+            }
+          }
+          // Strategy B: iterate entries (array, Map, or plain object values)
           const entries = Array.isArray(voiceStates)
               ? voiceStates
               : typeof voiceStates.values === "function"
                   ? voiceStates.values()
                   : Object.values(voiceStates);
           for (const state of entries) {
-            const sid  = state.userId ?? state.user_id ?? state.id;
-            const sch  = state.channelId ?? state.channel_id;
-            const sgid = String(state.guildId ?? state.guild_id ?? guildId).replace(/\D/g, "");
-            if (sid === userId && sgid === cleanGuild && sch) return seed(sch);
+            const sid  = state?.userId ?? state?.user_id ?? state?.id;
+            const sch  = state?.channelId ?? state?.channel_id;
+            const sgid = String(state?.guildId ?? state?.guild_id ?? guildId).replace(/\D/g, "");
+            logger.voice(`[checkVC]   state: sid=${sid} sch=${sch} sgid=${sgid}`);
+            if (sid === userId && sgid === cleanGuild && sch) {
+              logger.voice(`[checkVC] HIT guild.voice_states iterate → ${sch}`);
+              return seed(sch);
+            }
           }
         }
-      } catch (_) {}
+      } catch (e) { logger.voice(`[checkVC] guild error: ${e.message}`); }
 
-      // Last resort: scan ALL entries in observedVoiceUsers for this userId regardless
-      // of guildId format, then verify the channel belongs to the right guild.
-      // This catches cases where the guildId was stored with a different string format.
       try {
         for (const [uid, info] of self.observedVoiceUsers) {
           if (uid !== userId) continue;
-          if (String(info.guildId).replace(/\D/g, "") === cleanGuild) return info.channelId;
+          logger.voice(`[checkVC] last-resort: uid=${uid} stored.guildId=${info.guildId} cleanGuild=${cleanGuild}`);
+          if (String(info.guildId).replace(/\D/g, "") === cleanGuild) {
+            logger.voice(`[checkVC] HIT last-resort → ${info.channelId}`);
+            return info.channelId;
+          }
         }
-      } catch (_) {}
+      } catch (e) { logger.voice(`[checkVC] last-resort error: ${e.message}`); }
 
+      logger.voice(`[checkVC] MISS — returning null`);
       return null;
     };
 
