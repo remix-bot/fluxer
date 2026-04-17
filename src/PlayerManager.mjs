@@ -62,24 +62,30 @@ export class PlayerManager {
     if (!message) return null;
 
     const userId   = message.author?.id;
-    const serverId = message.channel?.server_id  ??
+    const serverId =
+        message.channel?.server_id  ??
         message.channel?.serverId   ??
+        message.channel?.guild?.id  ??
+        message.channel?.guildId    ??
         message.message?.server_id  ??
-        message.message?.serverId;
+        message.message?.serverId   ??
+        message.message?.guildId;
 
     if (!userId) return null;
 
+    const cleanServer = serverId ? String(serverId).replace(/\D/g, "") : null;
+
     // Fallback: find any existing player in this server
-    if (serverId) {
+    if (cleanServer) {
       for (const [channelId] of this.playerMap) {
         const channel = this.commands.client?.channels?.get(channelId) ??
             this.commands.client?.channels?.cache?.get(channelId);
-        if (channel?.guildId === serverId || channel?.server_id === serverId || channel?.serverId === serverId) {
+        const chGuild = String(channel?.guildId ?? channel?.server_id ?? channel?.serverId ?? "").replace(/\D/g, "");
+        if (chGuild === cleanServer) {
           return channelId;
         }
       }
     }
-
     return null;
   }
 
@@ -96,10 +102,16 @@ export class PlayerManager {
    * @returns {Promise<Player|null>}
    */
   async getPlayer(message, promptJoin = true, verifyUser = true, shouldJoin = false) {
-    const serverId = message.channel?.server_id ??
-        message.channel?.serverId  ??
-        message.message?.server_id ??
-        message.message?.serverId;
+    const serverId =
+        message.channel?.server_id  ??
+        message.channel?.serverId   ??
+        message.channel?.guild?.id  ??
+        message.channel?.guildId    ??
+        message.message?.server_id  ??
+        message.message?.serverId   ??
+        message.message?.guildId;
+
+    const cleanServerId = serverId ? String(serverId).replace(/\D/g, "") : null;
 
     const userChannelId = this.checkVoiceChannels(message);
 
@@ -111,11 +123,12 @@ export class PlayerManager {
       }
     }
 
-    const serverPlayers = serverId
+    const serverPlayers = cleanServerId
         ? [...this.playerMap.entries()].filter(([chId]) => {
           const ch = this.commands.client?.channels?.get(chId) ??
               this.commands.client?.channels?.cache?.get(chId);
-          return ch?.guildId === serverId || ch?.server_id === serverId || ch?.serverId === serverId;
+          const chGuild = String(ch?.guildId ?? ch?.server_id ?? ch?.serverId ?? "").replace(/\D/g, "");
+          return chGuild === cleanServerId;
         })
         : [];
 

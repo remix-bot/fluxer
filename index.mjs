@@ -852,25 +852,36 @@ class Remix {
     const self = this;
     this.players.checkVoiceChannels = function (message) {
       const userId  = message?.author?.id   ?? message?.message?.author?.id;
-      const guildId = message?.channel?.server_id  ??
-          message?.channel?.serverId              ??
-          message?.channel?.guild?.id             ??
-          message?.message?.server_id             ??
-          message?.message?.serverId              ??
-          message?.message?.guildId;
+      const guildId =
+          message?.channel?.server_id    ??
+          message?.channel?.serverId     ??
+          message?.channel?.guild?.id    ??
+          message?.channel?.guildId      ??
+          message?.message?.server_id    ??
+          message?.message?.serverId     ??
+          message?.message?.guildId      ??
+          message?.message?.channel?.server_id ??
+          message?.message?.channel?.serverId  ??
+          message?.message?.channel?.guildId;
       if (!userId || !guildId) return null;
+
+      // Normalise to digits-only for all comparisons so "123" === "123" regardless
+      // of how the platform formatted the snowflake.
+      const cleanGuild = String(guildId).replace(/\D/g, "");
 
       const seed = (channelId) => {
         // Only seed if no entry exists — never overwrite fresh gateway voice state
         // with potentially stale member-cache data.
         if (!self.observedVoiceUsers.has(userId)) {
-          self.observedVoiceUsers.set(userId, { channelId, guildId });
+          self.observedVoiceUsers.set(userId, { channelId, guildId: cleanGuild });
         }
         return self.observedVoiceUsers.get(userId)?.channelId ?? channelId;
       };
 
       const observed = self.observedVoiceUsers.get(userId);
-      if (observed && observed.guildId === guildId) return observed.channelId;
+      // Use normalised comparison — the stored guildId and message guildId may come
+      // from different gateway fields with different formatting.
+      if (observed && String(observed.guildId).replace(/\D/g, "") === cleanGuild) return observed.channelId;
 
       // vm.getVoiceChannelId() is an unverified @fluxerjs/voice method — optional-chained
       // so it fails silently and falls through to the next strategy if absent.
@@ -892,7 +903,9 @@ class Remix {
       // on the guild object from the gateway payload, which is handled in GuildCreate).
       // The dual snake_case/camelCase probe covers both shapes.
       try {
-        const guild       = client.guilds.cache.get(guildId);
+        // Try both the raw guildId and the normalized cleanGuild — the guilds cache
+        // key may be stored as the raw string the gateway sent.
+        const guild = client.guilds.cache.get(guildId) ?? client.guilds.cache.get(cleanGuild);
         // guild.voice_states = raw array from gateway (Fluxer-native)
         // guild.voiceStates?.cache = VoiceStateManager (fallback)
         const voiceStates = guild?.voice_states ?? guild?.voiceStates?.cache ?? guild?.voiceStates ?? null;
@@ -905,9 +918,19 @@ class Remix {
           for (const state of entries) {
             const sid  = state.userId ?? state.user_id ?? state.id;
             const sch  = state.channelId ?? state.channel_id;
-            const sgid = state.guildId   ?? state.guild_id ?? guildId;
-            if (sid === userId && sgid === guildId && sch) return seed(sch);
+            const sgid = String(state.guildId ?? state.guild_id ?? guildId).replace(/\D/g, "");
+            if (sid === userId && sgid === cleanGuild && sch) return seed(sch);
           }
+        }
+      } catch (_) {}
+
+      // Last resort: scan ALL entries in observedVoiceUsers for this userId regardless
+      // of guildId format, then verify the channel belongs to the right guild.
+      // This catches cases where the guildId was stored with a different string format.
+      try {
+        for (const [uid, info] of self.observedVoiceUsers) {
+          if (uid !== userId) continue;
+          if (String(info.guildId).replace(/\D/g, "") === cleanGuild) return info.channelId;
         }
       } catch (_) {}
 
