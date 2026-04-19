@@ -171,8 +171,8 @@ class Remix {
                 const embed = new EmbedBuilder()
                     .setColor(getGlobalColor())
                     .setDescription(
-                      `Left channel <#${cleanChannelId}> because of inactivity.\n` +
-                      `If you want me to stay in voice, use \`${prefix}247 on/auto\``
+                        `Left channel <#${cleanChannelId}> because of inactivity.\n` +
+                        `If you want me to stay in voice, use \`${prefix}247 on/auto\``
                     )
                     .toJSON();
                 ch.send({ embeds: [embed] }).catch(() => {});
@@ -378,21 +378,25 @@ class Remix {
         }
       }
 
-      // Guard WS listener registration so it only runs once across all reconnects.
-      // Without this, each reconnect stacks a new listener on the same socket, causing
-      // every WS frame to be processed N times after N reconnects.
-      if (!wsListenerAttached) {
-        wsListenerAttached = true;
-        try {
-          // NOTE: client.ws.shards is declared private in @fluxerjs/ws, but there is
-          // no public API for attaching a raw message listener to the underlying socket.
-          // ws.send(shardId, payload) exists for sending, but not for receiving.
-          // This access is intentional — if @fluxerjs/core ever exposes a public
-          // onRawMessage() hook, replace these two lines with that API instead.
-          const shard0 = client.ws?.shards?.get?.(0);
-          const wsObj  = shard0?.ws ?? null;
+      try {
+        const shard0     = client.ws?.shards?.get?.(0);
+        const wsObj      = shard0?.ws ?? null;
 
-          const handleRaw = (data) => {
+        // Remove listener from the previous socket if it's a different object
+        if (wsListenerAttached && this._rawGatewayWsObj && this._rawGatewayWsObj !== wsObj) {
+          try {
+            if (typeof this._rawGatewayWsObj.removeEventListener === "function") {
+              this._rawGatewayWsObj.removeEventListener("message", this._rawGatewayHandler);
+              this._rawGatewayWsObj.removeEventListener("error",   this._rawGatewayErrorHandler);
+            } else if (typeof this._rawGatewayWsObj.off === "function") {
+              this._rawGatewayWsObj.off("message", this._rawGatewayHandler);
+              this._rawGatewayWsObj.off("error",   this._rawGatewayErrorHandler);
+            }
+          } catch (_) {}
+        }
+
+        if (wsObj && wsObj !== this._rawGatewayWsObj) {
+          this._rawGatewayHandler = (data) => {
             try {
               const payload = typeof data === "string" ? JSON.parse(data) : data;
 
@@ -457,13 +461,25 @@ class Remix {
             } catch (_) {}
           };
 
-          if (typeof wsObj?.addEventListener === "function") {
-            wsObj.addEventListener("message", (event) => handleRaw(event.data));
-          } else if (typeof wsObj?.on === "function") {
-            wsObj.on("message", handleRaw);
+          // Absorb socket-level errors so they don't bubble to uncaughtException.
+          // The gateway will emit Ready again once it reconnects — we re-attach then.
+          this._rawGatewayErrorHandler = (err) => {
+            logger.warn("[Gateway] Raw WS socket error (will reconnect):", err?.message ?? err);
+          };
+
+          if (typeof wsObj.addEventListener === "function") {
+            wsObj.addEventListener("message", (event) => this._rawGatewayHandler(event.data));
+            wsObj.addEventListener("error",   this._rawGatewayErrorHandler);
+          } else if (typeof wsObj.on === "function") {
+            wsObj.on("message", this._rawGatewayHandler);
+            wsObj.on("error",   this._rawGatewayErrorHandler);
           }
-        } catch (_) {}
-      }
+
+          this._rawGatewayWsObj = wsObj;
+          wsListenerAttached    = true;
+          logger.player("[Gateway] Raw WS listener attached to new socket.");
+        }
+      } catch (_) {}
 
       botReady = true;
       tryAutoJoin();

@@ -181,21 +181,23 @@ export class MoonlinkManager extends EventEmitter {
     // on gateway reconnects. Without this, each reconnect stacks another handler on the socket.
     const attachRawWs = () => {
       try {
-        // NOTE: client.ws.shards is private in @fluxerjs/ws. There is no public API for
-        // attaching a raw inbound message listener — ws.send() only covers outbound.
-        // This access is intentional. If @fluxerjs/core exposes a public onRawMessage()
-        // hook in a future release, replace shard0/wsObj extraction with that API.
         const shard0 = client.ws?.shards?.get?.(0);
         const wsObj  = shard0?.ws ?? null;
         if (!wsObj) return;
-
-        // Remove previous handler if any
-        if (this._rawWsHandler) {
+        if (this._rawWsHandler && this._rawWsObj && this._rawWsObj !== wsObj) {
           try {
-            if (typeof wsObj.removeEventListener === "function") wsObj.removeEventListener("message", this._rawWsHandler);
-            else if (typeof wsObj.off === "function")            wsObj.off("message", this._rawWsHandler);
+            if (typeof this._rawWsObj.removeEventListener === "function") {
+              this._rawWsObj.removeEventListener("message", this._rawWsHandler);
+              this._rawWsObj.removeEventListener("error",   this._rawWsErrorHandler);
+            } else if (typeof this._rawWsObj.off === "function") {
+              this._rawWsObj.off("message", this._rawWsHandler);
+              this._rawWsObj.off("error",   this._rawWsErrorHandler);
+            }
           } catch (_) {}
         }
+
+        // Skip re-attaching if it's the same socket object (spurious Ready re-fire)
+        if (wsObj === this._rawWsObj) return;
 
         this._rawWsHandler = (rawData) => {
           try {
@@ -211,11 +213,20 @@ export class MoonlinkManager extends EventEmitter {
           } catch (_) {}
         };
 
+        // Absorb socket-level errors so they don't escape to uncaughtException.
+        this._rawWsErrorHandler = (err) => {
+          logger.warn("[MoonlinkManager] Raw WS socket error (will reconnect):", err?.message ?? err);
+        };
+
         if (typeof wsObj.addEventListener === "function") {
           wsObj.addEventListener("message", this._rawWsHandler);
+          wsObj.addEventListener("error",   this._rawWsErrorHandler);
         } else if (typeof wsObj.on === "function") {
           wsObj.on("message", this._rawWsHandler);
+          wsObj.on("error",   this._rawWsErrorHandler);
         }
+
+        this._rawWsObj = wsObj;
       } catch (e) {
         logger.warn("[MoonlinkManager] Raw WS setup error:", e.message);
       }
