@@ -330,34 +330,44 @@ export class MessageHandler {
    * @returns {Promise<Message>}
    */
   async editEmbed(message, content, embedOptions = {}) {
-    // Raw embed payload — pass straight through without re-wrapping
+    // Transient HTTP status codes worth retrying (gateway/server hiccups).
+    const RETRYABLE = new Set([502, 503, 504]);
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 1500;
+
+    // Build the payload once, outside the retry loop.
+    let payload;
     if (typeof content === "object" && Array.isArray(content.embeds)) {
+      payload = content;
+    } else {
+      const text  = (typeof content === "object") ? content.embedText : content;
+      const embed = this.#embedify(text, embedOptions);
+      payload     = { embeds: [embed] };
+      if (typeof content === "object") {
+        const { embedText, ...rest } = content;
+        payload = { ...payload, ...rest };
+      }
+    }
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        return new Message(await message.edit(content), this);
+        return new Message(await message.edit(payload), this);
       } catch (err) {
-        if (err.code === "UNKNOWN_MESSAGE") {
+        // Message was deleted — nothing to edit, bail silently.
+        if (err.code === "UNKNOWN_MESSAGE" || err.code === 10008) {
           logger.warn("[MessageHandler] editEmbed: Message no longer exists, skipping edit.");
           return null;
         }
+
+        // Retry on transient gateway errors (502/503/504).
+        if (RETRYABLE.has(err.statusCode) && attempt < MAX_ATTEMPTS) {
+          logger.warn(`[MessageHandler] editEmbed: ${err.statusCode} on attempt ${attempt}/${MAX_ATTEMPTS}, retrying in ${RETRY_DELAY_MS}ms…`);
+          await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+          continue;
+        }
+
         throw err;
       }
-    }
-    const text = (typeof content === "object") ? content.embedText : content;
-    const embed = this.#embedify(text, embedOptions);
-    let payload = { embeds: [embed] };
-    if (typeof content === "object") {
-      const { embedText, ...rest } = content;
-      payload = { ...payload, ...rest };
-    }
-
-    try {
-      return new Message(await message.edit(payload), this);
-    } catch (err) {
-      if (err.code === 'UNKNOWN_MESSAGE') {
-        logger.warn("[MessageHandler] editEmbed: Message no longer exists, skipping edit.");
-        return null;
-      }
-      throw err;
     }
   }
 
