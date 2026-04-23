@@ -26,30 +26,51 @@ function mkEmbed(desc) {
   return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).toJSON()] };
 }
 
+/** NodeLink default password — centralised so it doesn't need to be hardcoded in two places. */
+const NL_DEFAULT_PASSWORD = "youshallnotpass";
+
+// Cache compiled sanitize regexes keyed by "host:port:password" to avoid
+// rebuilding identical RegExp objects on every error path.
+const _sanitizeCache = new Map();
+
 /**
  * Strip NodeLink host, port, and password from a string so they are never
- * shown to end-users in Discord messages.
+ * shown to end-users in Fluxer messages.
  * @param {string} msg
  * @param {Object} nl  - The player's _nl config object { host, port, password }
  * @returns {string}
  */
 function sanitizeError(msg, nl = {}) {
   if (!msg) return msg;
+  const host     = nl.host     ?? "";
+  const port     = nl.port     ?? 0;
+  const password = nl.password ?? NL_DEFAULT_PASSWORD;
+  const cacheKey = `${host}:${port}:${password}`;
+
+  let regexes = _sanitizeCache.get(cacheKey);
+  if (!regexes) {
+    regexes = [];
+    if (host && host !== "localhost") {
+      const eh = host.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      regexes.push(new RegExp(`https?://${eh}(:\\d+)?[^\\s"']*`, "gi"));
+      if (port) regexes.push(new RegExp(`${eh}:${port}`, "g"));
+    }
+    if (port) {
+      regexes.push(new RegExp(`https?://localhost:${port}[^\\s"']*`, "gi"));
+    }
+    if (password && password !== NL_DEFAULT_PASSWORD) {
+      const ep = password.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      regexes.push(new RegExp(ep, "g"));
+    }
+    // Cap cache size — in practice there's only one NodeLink config, but guard anyway
+    if (_sanitizeCache.size >= 20) _sanitizeCache.clear();
+    _sanitizeCache.set(cacheKey, regexes);
+  }
+
   let s = String(msg);
-  const host = nl.host;
-  const port = nl.port;
-  const password = nl.password;
-  if (host && host !== "localhost") {
-    const escapedHost = host.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    s = s.replace(new RegExp(`https?://${escapedHost}(:\\d+)?[^\\s"']*`, "gi"), "[internal]");
-    if (port) s = s.replace(new RegExp(`${escapedHost}:${port}`, "g"), "[internal]");
-  }
-  if (port) {
-    s = s.replace(new RegExp(`https?://localhost:${port}[^\\s"']*`, "gi"), "[internal]");
-  }
-  if (password && password !== "youshallnotpass") {
-    const escapedPw = password.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    s = s.replace(new RegExp(escapedPw, "g"), "[redacted]");
+  for (const re of regexes) {
+    re.lastIndex = 0; // reset stateful global regexes between calls
+    s = s.replace(re, re.source.includes("redacted") ? "[redacted]" : "[internal]");
   }
   return s;
 }
@@ -186,9 +207,10 @@ export default class Player extends EventEmitter {
   _playingNext      = false;
   _isRecovering     = false;
   startedPlaying    = null;
-  // searches Map with max-size eviction to prevent memory leak on busy servers
+  // searches Map with max-size eviction to prevent memory leak on busy servers.
+  // Map preserves insertion order natively, so we use keys().next() for LRU eviction
+  // instead of a separate _searchOrder array (which could hold ghost keys after playResult()).
   searches          = new Map();
-  _searchOrder      = [];       // insertion-order tracker for LRU eviction
   _searchMaxSize    = 50;       // cap: max concurrent pending search sessions
   resultLimit       = 5;
   preferredVolume   = 1;
@@ -200,6 +222,9 @@ export default class Player extends EventEmitter {
   _wasRadio            = false;
   _radioAnnounced      = false;
 
+  // Active audio filter — { key, label, payload } or null
+  activeFilter         = null;
+
   // Inactivity timeout
   _inactivityTimer     = null;
   _inactivityLimit = 3 * 60 * 1000; // 3 min default
@@ -209,10 +234,11 @@ export default class Player extends EventEmitter {
 
   // NodeLink config (kept for direct stream URL building; session managed by moonlink)
   _nl = {
-    host:      "localhost",
-    port:      3000,
-    password:  "youshallnotpass",
-    sessionId: null,
+    host:           "localhost",
+    port:           3000,
+    password:       "youshallnotpass",
+    sessionId:      null,
+    requestTimeout: 60_000, // ms before a NodeLink HTTP request is aborted (raise in config if needed)
   };
 
   constructor(token, opts = {}) {
@@ -242,16 +268,20 @@ export default class Player extends EventEmitter {
     // moonlink.js manager reference — injected by PlayerManager
     this._moonlink = opts.moonlink ?? null;
 
-    // Keep session ID in sync when moonlink establishes/re-establishes it.
-    // Use a named handler stored on the instance so it can be removed in destroy()
-    // and doesn't stack up across player replacements on the same moonlink instance.
+    // FIXED: Robust session sync that handles reconnection and stale sessions
     if (this._moonlink) {
       this._onMoonlinkReady = (sessionId) => {
+        const oldId = this._nl.sessionId;
         this._nl.sessionId = sessionId;
+        if (oldId && oldId !== sessionId) {
+          logger.moonlink(`[Player] Session ID updated: ${oldId} → ${sessionId}`);
+        }
       };
       this._moonlink.on("ready", this._onMoonlinkReady);
-      if (this._moonlink.sessionId) {
-        this._nl.sessionId = this._moonlink.sessionId;
+      // Immediate sync if moonlink is already ready
+      const existingSession = this._moonlink.getLiveSessionId?.() ?? this._moonlink.sessionId;
+      if (existingSession) {
+        this._nl.sessionId = existingSession;
       }
     }
   }
@@ -267,7 +297,6 @@ export default class Player extends EventEmitter {
   _is247Enabled() {
     if (!this._guildId) return false;
 
-    // Helper: check a single settings object
     const checkSettings = (set) => {
       if (!set?.get) return false;
       const raw = set.get("stay_247");
@@ -333,7 +362,18 @@ export default class Player extends EventEmitter {
       logger.mediaplayer(`[Player] Rejoining channel ${this._channelId}`);
       await this.join(this._channelId);
 
-      // Resume playing the interrupted track
+      // Verify the join actually produced a healthy connection before resuming playback.
+      // Releasing _isRecovering here (rather than in finally) means a second "disconnected"
+      // event that fires while join() is in-flight cannot enter a concurrent recovery cycle.
+      const roomState = this.connection?.room?.state;
+      const isConnected = roomState === 1 || roomState === "connected" || roomState === "connecting";
+      if (!isConnected) {
+        throw new Error(`Room in unexpected state after rejoin: ${roomState}`);
+      }
+
+      // Release the guard only after confirming the connection is live
+      this._isRecovering = false;
+
       const current = this.queue.getCurrent();
       if (current) {
         logger.player(`[Player] Resuming track after recovery: ${current.title}`);
@@ -347,9 +387,8 @@ export default class Player extends EventEmitter {
       }
     } catch (e) {
       logger.error("[Player] Recovery failed:", e.message);
-      this.emit("autoleave"); // Fallback to full recreate if recovery fails entirely
-    } finally {
       this._isRecovering = false;
+      this.emit("autoleave");
     }
   }
 
@@ -359,13 +398,9 @@ export default class Player extends EventEmitter {
 
   /**
    * Returns true if there is at least one non-bot human in the bot's current voice channel.
-   * Uses the observedVoiceUsers map maintained by the gateway voice state handler,
-   * since this bot uses intents: 0 and channel.members is never populated.
    */
   _hasHumansInChannel() {
     if (!this._channelId || !this._guildId) return false;
-    // Normalize to digits-only — IDs can arrive from different sources
-    // (gateway snake_case vs API camelCase) with inconsistent formatting.
     const cleanChan  = String(this._channelId).replace(/\D/g, "");
     const cleanGuild = String(this._guildId).replace(/\D/g, "");
     try {
@@ -373,14 +408,13 @@ export default class Player extends EventEmitter {
       if (voiceUsers) {
         for (const [, info] of voiceUsers) {
           if (
-            String(info.guildId   ?? "").replace(/\D/g, "") === cleanGuild &&
-            String(info.channelId ?? "").replace(/\D/g, "") === cleanChan
+              String(info.guildId   ?? "").replace(/\D/g, "") === cleanGuild &&
+              String(info.channelId ?? "").replace(/\D/g, "") === cleanChan
           ) return true;
         }
         return false;
       }
     } catch (_) {}
-    // Fallback: try channel.members cache (works if privileged intents are enabled)
     try {
       const channel = this.client?.channels?.cache?.get(this._channelId);
       const members = channel?.members;
@@ -407,7 +441,6 @@ export default class Player extends EventEmitter {
       return;
     }
 
-    // Don't start the inactivity timer if there are humans in the channel
     if (this._hasHumansInChannel()) {
       logger.inactivity(`[Player] Humans present in channel ${this._channelId}, skipping inactivity timer`);
       return;
@@ -419,7 +452,6 @@ export default class Player extends EventEmitter {
         logger.inactivity("[Player] 24/7 mode enabled during inactivity wait, aborting leave");
         return;
       }
-      // Double-check: abort if a human joined during the wait
       if (this._hasHumansInChannel()) {
         logger.inactivity("[Player] Human joined during inactivity wait, aborting leave");
         return;
@@ -484,23 +516,10 @@ export default class Player extends EventEmitter {
     }
   }
 
-  /**
-   * Monitor MediaPlayer for ghost connections via event — not polling.
-   * The connection.on("disconnected") handler in join() already calls
-   * _cleanupMediaPlayer() + _recoverConnection(), so this method is intentionally
-   * lightweight: it only validates the room state once before playing.
-   * @private
-   */
   _setupMediaPlayerMonitoring() {
     // No-op: recovery is fully handled by connection.on("disconnected") in join().
-    // The old setInterval(5000) approach polled LiveKit state unnecessarily and
-    // risked acting on a stale captured MediaPlayer reference.
   }
 
-  /**
-   * Clean up MediaPlayer properly.
-   * @private
-   */
   async _cleanupMediaPlayer() {
     try {
       await this._mediaPlayer?.stop();
@@ -571,16 +590,21 @@ export default class Player extends EventEmitter {
           }
           if (returnStream) return resolve(res);
 
+          // 204 No Content — valid success with no body
+          if (res.statusCode === 204) { res.resume(); return resolve(null); }
+
           const chunks = [];
           res.on("data", d => chunks.push(d));
           res.on("end", () => {
-            try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
+            const raw = Buffer.concat(chunks).toString().trim();
+            if (!raw) return resolve(null);
+            try { resolve(JSON.parse(raw)); }
             catch (e) { reject(new Error(`JSON parse error from ${target}`)); }
           });
         });
 
         req.on("error", reject);
-        req.setTimeout(options.timeout || 30_000, () => {
+        req.setTimeout(options.timeout || this._nl.requestTimeout || 60_000, () => {
           req.destroy();
           reject(new Error("Request timeout"));
         });
@@ -627,7 +651,8 @@ export default class Player extends EventEmitter {
           cleanup();
           if (this._streamingStopped || this._skipping) return resolve();
           const graceful = ["aborted", "ECONNRESET", "ERR_STREAM_DESTROYED", "ENOTFOUND", "ETIMEDOUT", "ECONNREFUSED"];
-          if (graceful.includes(e.code) || graceful.includes(e.message)) return resolve();
+          // Use substring matching so "Input stream error: aborted" (from NodeLink) is also caught
+          if (graceful.some(g => e.code === g || e.message?.includes(g))) return resolve();
           reject(e);
         });
 
@@ -636,13 +661,20 @@ export default class Player extends EventEmitter {
         this._mediaPlayer.removeAllListeners("finish");
         this._mediaPlayer.removeAllListeners("error");
 
-        // revoice.js MediaPlayer.playStream() pipes through FFmpeg but the FFmpeg
-        // error handler is a no-op (// TODO). Wire it up manually so errors surface.
         const onFfmpegError = (err) => {
-          logger.error("[Player] FFmpeg error:", err?.message ?? err);
+          const ffMsg = err?.message ?? String(err);
+          // "Input stream error: aborted" means NodeLink dropped the HTTP stream
+          // (e.g. filter PATCH restarted the player before voice state arrived).
+          // Treat it as graceful so the queue can advance normally.
+          if (ffMsg.includes("aborted") || ffMsg.includes("Input stream error")) {
+            logger.player("[Player] FFmpeg stream aborted gracefully (NodeLink stream closed)");
+            cleanup();
+            return resolve();
+          }
+          logger.error("[Player] FFmpeg error:", ffMsg);
           cleanup();
           if (this._streamingStopped || this._skipping) return resolve();
-          reject(new Error(`FFmpeg: ${err?.message ?? err}`));
+          reject(new Error(`FFmpeg: ${ffMsg}`));
         };
 
         try {
@@ -659,8 +691,6 @@ export default class Player extends EventEmitter {
           return reject(e);
         }
 
-        // Safety timeout — FFmpeg errors emit nothing in revoice.js, this ensures
-        // the queue always advances even if a future silent failure slips through.
         const safetyMs = 10 * 60 * 1000;
         const safetyTimer = setTimeout(() => {
           logger.warn("[Player] Stream safety timeout — advancing queue");
@@ -708,8 +738,6 @@ export default class Player extends EventEmitter {
 
     if (!isNodeLink) return this._streamViaRevoice(url);
 
-    // NodeLink /v4/trackstream returns { "url": "https://..." } — a JSON wrapper
-    // pointing to the actual CDN audio URL. Extract it then stream that.
     try {
       const json = await this._request(url, {
         headers: {
@@ -722,8 +750,6 @@ export default class Player extends EventEmitter {
       return this._streamViaRevoice(json.url);
     } catch (err) {
       logger.error("[Player] NodeLink resolve error:", err.message);
-      // Sanitize before re-throwing — this error eventually becomes a user-visible
-      // "Error streaming X — skipping..." message, so the NodeLink URL must not appear.
       throw new Error(sanitizeError(err.message, this._nl));
     }
   }
@@ -825,7 +851,7 @@ export default class Player extends EventEmitter {
         if (!this.leaving) {
           logger.mediaplayer("[Player] Unexpected disconnect detected");
           this._cleanupMediaPlayer();
-          this._recoverConnection(); // Trigger recovery instead of giving up
+          this._recoverConnection();
         } else {
           try { connection.destroy(); } catch (_) {}
         }
@@ -898,8 +924,6 @@ export default class Player extends EventEmitter {
 
   destroy() {
     try {
-      // Remove the moonlink "ready" listener registered in the constructor
-      // so it doesn't stack up across player replacements on the same manager.
       if (this._moonlink && this._onMoonlinkReady) {
         try { this._moonlink.off("ready", this._onMoonlinkReady); } catch (_) {}
         this._onMoonlinkReady = null;
@@ -907,10 +931,6 @@ export default class Player extends EventEmitter {
       this.leaving          = true;
       this._streamingStopped = true;
       this._stopInactivityTimer();
-      // _stopMediaPlayer is async; we fire it and swallow the promise here
-      // (destroy is intentionally sync/fire-and-forget), but we do wait for it
-      // before disconnecting via the chained .then so the media player stops
-      // cleanly before the connection tears down — preventing "AudioSource is closed" errors.
       this._stopMediaPlayer().catch(() => {}).then(() => {
         setTimeout(() => {
           const disconnectPromise = this.connection?.disconnect?.();
@@ -941,10 +961,7 @@ export default class Player extends EventEmitter {
     this._paused = true;
     this._mediaPlayer?.pause();
     this.emit("playback", false);
-
-    // patiently waits in the VC forever until you resume!
     this._stopInactivityTimer();
-
     return ":pause_button: Paused";
   }
 
@@ -956,7 +973,6 @@ export default class Player extends EventEmitter {
     this._paused = false;
     this._mediaPlayer?.resume();
     this.emit("playback", true);
-
     this._stopInactivityTimer();
     return ":arrow_forward: Resumed";
   }
@@ -1015,6 +1031,81 @@ export default class Player extends EventEmitter {
     if (!this.connection)
       return `Volume set to \`${Math.round(this.preferredVolume * 100)}%\` — will apply when connected.`;
     return `Volume changed to \`${Math.round(this.preferredVolume * 100)}%\`.`;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Audio Filter Control (NodeLink PATCH /v4/sessions/:id/players/:guildId)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Apply (or clear) an audio filter by sending a PATCH to NodeLink.
+   * Includes encodedTrack so NodeLink doesn't create a ghost player.
+   * Uses live session ID from moonlink to avoid stale sessions.
+   * Auto-retries once on stale session detection.
+   *
+   * @param {Object} filterPayload  - Lavalink v4 filters object. Pass {} to clear all filters.
+   * @param {{ key: string, label: string, emoji?: string }|null} meta - Filter metadata to store, or null to clear.
+   * @returns {Promise<{ ok: boolean, reason?: string }>}
+   */
+  async applyFilter(filterPayload, meta = null, _retryCount = 0) {
+    const guildId = this._guildId;
+    if (!guildId) {
+      return { ok: false, reason: "Player not bound to a guild." };
+    }
+
+    // CRITICAL: Get session ID directly from moonlink manager, not cached _nl
+    const liveSessionId = this._moonlink?.getLiveSessionId?.() ?? this._moonlink?.sessionId ?? this._nl.sessionId;
+    if (!liveSessionId) {
+      return { ok: false, reason: "No active NodeLink session. Try again in a few seconds." };
+    }
+
+    const { host, port } = this._nl;
+    const url = `http://${host}:${port}/v4/sessions/${liveSessionId}/players/${guildId}`;
+
+    // Per NodeLink REST API: send ONLY the filters object when updating filters.
+    // Including track.encoded causes NodeLink to restart playback (triggers play()),
+    // which leads to "No voice state" spam and eventually FFmpeg "Input stream error: aborted".
+    const current = this.queue.getCurrent();
+    if (!current?.encoded) {
+      return { ok: false, reason: "No active track loaded. Start playback first." };
+    }
+
+    const body = JSON.stringify({ filters: filterPayload });
+
+    try {
+      await this._request(url, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body),
+        },
+        body,
+      });
+
+      // Sync local session ID if it changed under us
+      if (liveSessionId !== this._nl.sessionId) {
+        this._nl.sessionId = liveSessionId;
+        logger.moonlink(`[Player] Synced session ID after filter apply: ${liveSessionId}`);
+      }
+
+      this.activeFilter = meta ?? null;
+      this.emit("filter", this.activeFilter);
+      return { ok: true };
+    } catch (e) {
+      // Detect stale session specifically — allow exactly one retry with a fresh session ID.
+      // The _retryCount guard prevents infinite recursion if back-to-back reconnects keep
+      // producing stale IDs faster than this method runs.
+      const errMsg = e.message ?? "";
+      if (_retryCount === 0 && (errMsg.includes("404") || errMsg.includes("not found") || errMsg.includes("Session-ID") || errMsg.includes("does not exist"))) {
+        logger.warn("[Player] Filter apply failed with stale session, forcing re-sync...");
+        const freshSession = this._moonlink?.getLiveSessionId?.() ?? this._moonlink?.sessionId;
+        if (freshSession && freshSession !== liveSessionId) {
+          this._nl.sessionId = freshSession;
+          return this.applyFilter(filterPayload, meta, 1); // Single retry with depth guard
+        }
+      }
+      return { ok: false, reason: sanitizeError(errMsg, this._nl) };
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1272,8 +1363,14 @@ export default class Player extends EventEmitter {
       worker.on("exit", (code) => { if (code !== 0) reject(new Error(`Worker exited ${code}`)); });
     });
 
-    return Utils.timeout(job, 60_000, "Worker timeout after 60s")
-        .finally(() => worker.terminate().catch(() => {}));
+    const raced = Utils.timeout(job, 60_000, "Worker timeout after 60s");
+
+    // Absorb any late "error" events emitted after the timeout has already settled
+    // the promise.  Without this no-op, a worker error arriving post-timeout produces
+    // an unhandled rejection / uncaughtException on some Node versions.
+    worker.on("error", () => {});
+
+    return raced.finally(() => worker.terminate().catch(() => {}));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1292,13 +1389,15 @@ export default class Player extends EventEmitter {
       });
       list += "\nSend the number of the result. Example: `2`\nSend 'x' to cancel.";
 
-      // FIX: evict oldest search session if we're at the cap, preventing unbounded growth
+      // LRU eviction: Map preserves insertion order; the first key() is always the oldest.
+      // This avoids the ghost-key bug that existed when _searchOrder tracked keys separately
+      // from the Map — playResult() could remove a key from searches but leave it in the
+      // order array, causing the eviction to silently skip the true oldest live entry.
       if (this.searches.size >= this._searchMaxSize) {
-        const oldestKey = this._searchOrder.shift();
-        if (oldestKey) this.searches.delete(oldestKey);
+        const oldestKey = this.searches.keys().next().value;
+        if (oldestKey !== undefined) this.searches.delete(oldestKey);
       }
       this.searches.set(id, data.data);
-      this._searchOrder.push(id);
 
       return { m: list, count: data.data.length };
     } catch (err) {
@@ -1314,10 +1413,7 @@ export default class Player extends EventEmitter {
     const res = searchResults[result];
     this.addToQueue(res, next);
 
-    // Clean up this search session once the user has picked a result
     this.searches.delete(id);
-    const orderIdx = this._searchOrder.indexOf(id);
-    if (orderIdx !== -1) this._searchOrder.splice(orderIdx, 1);
 
     if (!this.queue.getCurrent()) {
       this.playNext();
@@ -1475,7 +1571,7 @@ export default class Player extends EventEmitter {
         this.queue.current = null;
         this._playingNext = false;
       }
-      this._recoverConnection(); // Safely recover the broken LiveKit connection
+      this._recoverConnection();
       return;
     }
 

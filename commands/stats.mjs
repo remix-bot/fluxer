@@ -33,15 +33,27 @@ async function fetchGuildMemberCount(guild) {
   try {
     let after = undefined;
     let total = 0;
-    while (true) {
-      const batch = await guild.members.fetch({ limit: 1000, after });
+    // Guard against runaway pagination: Fluxer may have far fewer than 1000 members
+    // but return a Collection (Map-like) instead of an array, causing batch.length
+    // to be undefined and the loop to run forever. Normalise to an array first.
+    for (let page = 0; page < 1000; page++) {
+      const raw   = await guild.members.fetch({ limit: 1000, after });
+      // Normalise: Collection (Map), array, or plain object → array
+      const batch = Array.isArray(raw)
+          ? raw
+          : typeof raw?.values === "function"
+              ? [...raw.values()]
+              : Object.values(raw ?? {});
       total += batch.length;
       if (batch.length < 1000) break;
-      after = batch.reduce((max, m) => (m.id > max ? m.id : max), "0");
+      after = batch.reduce((max, m) => {
+        const id = m.id ?? m.user?.id ?? "";
+        return id > max ? id : max;
+      }, "0");
     }
     return total;
   } catch {
-    return guild.members.size ?? 0;
+    return guild.memberCount ?? guild.members?.size ?? 0;
   }
 }
 
@@ -104,7 +116,7 @@ export async function run(message) {
 
   const hasCached = cachedUserCount !== null;
 
-  // Measure real Discord round-trip latency
+  // Measure real round-trip latency
   const start = Date.now();
   const msg = await message.replyEmbed({
     embeds: [buildEmbed({ ...shared, userCount: hasCached ? cachedUserCount : 0, ping: 0, loading: !hasCached })]

@@ -27,5 +27,5 @@ export async function run(msg, data) {
   const p = this.players.playerMap.get(cid);
   if (!p) return msg.replyEmbed(embed("❌ Player not found."));
   if (!p.connection) return msg.replyEmbed(embed("❌ Player not initialized."));
-  this.players.leave(msg, cid);
+  await this.players.leave(msg, cid);
 }

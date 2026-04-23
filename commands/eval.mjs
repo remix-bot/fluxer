@@ -8,29 +8,46 @@ const EMOJI_REMOVE_TIMEOUT = 60000;
 
 /**
  * List of keys that should be redacted from objects before displaying in Discord.
+ * Matches any key that *contains* one of these strings (case-insensitive).
  */
 const RESTRICTED = [
   "token",
   "config",
   "key",
-  "clientSecret",
-  "clientId",
+  "clientsecret",
+  "clientid",
   "password",
   "secret",
-  "authorization"
+  "authorization",
+  "mysql",
+  "nodelink",
+  "_nl",
+  "credential",
+  "apikey",
+  "webhook",
 ];
 
-function hasSensitive(obj, level = 0) {
-  if (level >= 3 || typeof obj !== "object" || obj === null) return false;
+// Maximum depth for sensitive-key scanning and redaction.
+// 6 covers deeply nested config objects (e.g. config.nodelink.password nested
+// inside player config) without risking stack overflow on circular references.
+const SCAN_DEPTH = 6;
+
+// Track visited objects to handle circular references
+function hasSensitive(obj, level = 0, visited = new WeakSet()) {
+  if (level >= SCAN_DEPTH || typeof obj !== "object" || obj === null) return false;
+  if (visited.has(obj)) return false;
+  visited.add(obj);
   for (const key in obj) {
     if (RESTRICTED.some(r => key.toLowerCase().includes(r))) return true;
-    if (typeof obj[key] === "object" && hasSensitive(obj[key], level + 1)) return true;
+    if (typeof obj[key] === "object" && hasSensitive(obj[key], level + 1, visited)) return true;
   }
   return false;
 }
 
-function removeSensitive(obj, level = 0) {
-  if (level >= 3 || typeof obj !== "object" || obj === null) return obj;
+function removeSensitive(obj, level = 0, visited = new WeakSet()) {
+  if (level >= SCAN_DEPTH || typeof obj !== "object" || obj === null) return obj;
+  if (visited.has(obj)) return "[Circular]";
+  visited.add(obj);
 
   const isArray = Array.isArray(obj);
   const newObj = isArray ? [...obj] : { ...obj };
@@ -43,7 +60,7 @@ function removeSensitive(obj, level = 0) {
       newObj[key] = "[REDACTED]";
       modified = true;
     } else if (typeof newObj[key] === "object" && newObj[key] !== null) {
-      const cleaned = removeSensitive(newObj[key], level + 1);
+      const cleaned = removeSensitive(newObj[key], level + 1, visited);
       if (cleaned !== newObj[key]) {
         newObj[key] = cleaned;
         modified = true;

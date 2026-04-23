@@ -44,6 +44,8 @@ export class MySqlSettingsManager extends SettingsManager {
   descriptions = {};
   defaults = {};
   db = null;
+  // Per-server debounce timers — collapses rapid set() calls into one remoteSave()
+  _debounceTimers = new Map();
 
   constructor(config, defaultsPath) {
     super();
@@ -122,7 +124,13 @@ export class MySqlSettingsManager extends SettingsManager {
     if (!this.guilds.has(server.id)) { this.guilds.set(server.id, server); this.create(server.id, server); }
     const s = this.guilds.get(server.id);
     s.data[key] = server.data[key];
-    this.remoteUpdate(server, key);
+    // Debounce: batch rapid consecutive set() calls into a single remoteSave() 80ms later
+    const existing = this._debounceTimers.get(server.id);
+    if (existing) clearTimeout(existing);
+    this._debounceTimers.set(server.id, setTimeout(() => {
+      this._debounceTimers.delete(server.id);
+      this.remoteSave(s);
+    }, 80));
   }
   isOption(key) { return key in this.defaults; }
   hasServer(id) { return this.guilds.has(id); }

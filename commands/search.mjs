@@ -127,8 +127,9 @@ export async function run(msg, data) {
   const authorId = msg.message?.author?.id ?? msg.authorId;
 
   const unobserve = wrapped.onReaction(allReactions, async (e, reactionMsg) => {
-    // Only react to the command author
-    if (e.user_id && e.user_id !== authorId) return;
+    // Only react to the command author — normalise across Fluxer reaction event shapes
+    const reactorId = e.user_id ?? e.userId ?? e.user?.id ?? null;
+    if (reactorId && reactorId !== authorId) return;
 
     clearTimeout(timer);
     unobserve();

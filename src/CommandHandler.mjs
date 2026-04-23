@@ -376,6 +376,12 @@ export class CommandHandler extends EventEmitter {
   invalidFlagError = "Invalid flag `$invalidFlag`. It doesn't match any options on this command.\n`$previousCmd $invalidFlag`";
   textWrapError = "Malformed string `$value`: Missing a closing quote character (`$quote`) after the desired string.";
 
+  // Per-user rate limiting: userId → timestamp of last processed command
+  // Prevents command spam that could saturate worker threads and fill the searches Map.
+  // Owners are exempt so they can always use debug/reload commands.
+  _cmdCooldowns = new Map();
+  _cmdCooldownMs = 1500; // 1.5 seconds between commands per user
+
   constructor(handler, prefix = "!") {
     super();
     this.messages = handler;
@@ -420,6 +426,24 @@ export class CommandHandler extends EventEmitter {
         return this.onPing?.(msg);
       }
       return;
+    }
+
+    // Per-user rate limit — skip spam commands silently.
+    // Owners are always exempt so %reload and %eval are never blocked.
+    const userId = msg.message?.author?.id ?? msg.author?.id;
+    if (userId && !this.owners.includes(userId)) {
+      const now  = Date.now();
+      const last = this._cmdCooldowns.get(userId) ?? 0;
+      if (now - last < this._cmdCooldownMs) return;
+      this._cmdCooldowns.set(userId, now);
+      // Evict stale entries periodically to keep the Map from growing unbounded.
+      // 500 entries × 8 bytes ≈ negligible, but good hygiene on busy bots.
+      if (this._cmdCooldowns.size > 500) {
+        const cutoff = now - this._cmdCooldownMs * 2;
+        for (const [uid, ts] of this._cmdCooldowns) {
+          if (ts < cutoff) this._cmdCooldowns.delete(uid);
+        }
+      }
     }
     const guildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
     const prefix = this.getPrefix(guildId);

@@ -14,7 +14,24 @@ import mysql from "mysql";
 
 class Remix {
   constructor() {
-    const config = JSON.parse(fs.readFileSync("config.json"));
+    let config;
+    try {
+      config = JSON.parse(fs.readFileSync("config.json", "utf8"));
+    } catch (e) {
+      const reason = e.code === "ENOENT"
+          ? "config.json not found. Copy config_example.json → config.json and fill in your values."
+          : `config.json is malformed JSON: ${e.message}`;
+      console.error(`[Startup] FATAL: ${reason}`);
+      process.exit(1);
+    }
+    // Validate required top-level keys so missing config fails fast with a clear message
+    const REQUIRED_KEYS = ["token", "mysql"];
+    for (const key of REQUIRED_KEYS) {
+      if (config[key] == null) {
+        console.error(`[Startup] FATAL: config.json is missing required key "${key}".`);
+        process.exit(1);
+      }
+    }
     this.config  = config;
 
     // Apply embed color from config globally
@@ -34,7 +51,11 @@ class Remix {
     };
 
     const client = new Client({
-      intents: 0,
+      // Fluxer uses server-side intent declarations; intents here are informational.
+      // Set to the bitmask your bot actually has enabled on the developer dashboard so
+      // that a missing-intent failure is visible at startup rather than silently breaking
+      // voice state tracking.  0 = inherit from gateway (Fluxer default).
+      intents: config["fluxer.js"]?.intents ?? 0,
       ...config["fluxer.js"],
       presence: presenceContents.length > 0 ? {
         status:        "online",
@@ -189,9 +210,15 @@ class Remix {
               ["false", "0", "no", "off", "disable"].includes(String(raw).toLowerCase().trim());
           if (disabled) return;
           const guild = this.client.guilds.cache.get(guildId);
-          // _announcementChannelCache is always a Map — no null check needed.
-          const cachedChId = this._announcementChannelCache.get(guildId);
-          let ch = cachedChId ? guild?.channels?.cache?.get(cachedChId) : null;
+          // Announcement channel lookup order:
+          //   1. In-memory cache (fastest — populated on first find after startup)
+          //   2. Persisted setting "announcementChannelId" (survives restarts)
+          //   3. Channel scan (expensive — only on first use per guild per process lifetime)
+          const serverSet  = this.settingsMgr.getServer(guildId);
+          const cachedChId = this._announcementChannelCache.get(guildId)
+              ?? serverSet.get("announcementChannelId")
+              ?? null;
+          let ch = cachedChId ? guild?.channels?.cache?.get(String(cachedChId)) : null;
           // if cached channel is gone (deleted/uncached), clear the stale
           // entry immediately so we don't re-scan on every subsequent message event.
           if (cachedChId && !ch) {
@@ -202,7 +229,13 @@ class Remix {
                 (c.isTextBased?.() ?? c.channel_type === "TextChannel" ?? true) &&
                 (c.permissionsFor?.(this.client.user)?.has?.("SendMessages") ?? true)
             );
-            if (ch) this._announcementChannelCache.set(guildId, ch.id);
+            if (ch) {
+              this._announcementChannelCache.set(guildId, ch.id);
+              // Persist so future restarts skip the expensive channel scan
+              if (serverSet.get("announcementChannelId") !== ch.id) {
+                serverSet.set("announcementChannelId", ch.id);
+              }
+            }
           }
           ch?.send({ embeds: [{ description: String(m), color: getGlobalColor() }] }).catch(() => {});
         });
@@ -540,6 +573,17 @@ class Remix {
       if (!guildId) return;
 
       // ── Part 1: Voice state population ──────────────────────────────────────
+      // Purge stale entries for this guild first so old voice state from a previous
+      // READY cycle or an offline period doesn't persist after reconnect.
+      for (const [uid, info] of [...this.observedVoiceUsers]) {
+        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, ""))
+          this.observedVoiceUsers.delete(uid);
+      }
+      for (const [uid, info] of [...this.observedVoiceBots]) {
+        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, ""))
+          this.observedVoiceBots.delete(uid);
+      }
+
       const voiceStatesRaw =
           guild.voice_states ??
           guild.voiceStates?.cache ??
@@ -583,8 +627,11 @@ class Remix {
       if (!this.settingsMgr.guilds.has(guildId)) {
         logger.guild(`[GuildCreate] (Re-)joined server ${guildId} — initialising settings.`);
         try {
+          // Validate guildId is a non-empty snowflake string before using in query
+          const cleanGuildId = String(guildId).replace(/\D/g, "");
+          if (!cleanGuildId) throw new Error("Invalid guildId: " + guildId);
           const res = await this.settingsMgr.query(
-              `SELECT * FROM settings WHERE id=${mysql.escape(guildId)}`
+              `SELECT * FROM settings WHERE id=${mysql.escape(cleanGuildId)}`
           );
           if (res?.results?.length) {
             const row    = res.results[0];
@@ -606,6 +653,12 @@ class Remix {
         }
       }
     });
+
+    // Track previous voice state per-user so we can detect channel moves.
+    // @fluxerjs/core fires VoiceStateUpdate with ONE arg (raw gateway data),
+    // not two args (oldState, newState) We maintain prev state manually.
+    // Declared before GuildDelete so the delete handler can purge stale entries.
+    const _prevVoiceState = new Map(); // userId → { channelId, guildId }
 
     // ── Bot kicked / banned / server deleted ─────────────────────────────────
     client.on(Events.GuildDelete, (guild) => {
@@ -634,6 +687,11 @@ class Remix {
       for (const [userId, info] of [...this.observedVoiceBots]) {
         if (info.guildId === guildId) this.observedVoiceBots.delete(userId);
       }
+      // Also purge _prevVoiceState entries for this guild so the Map doesn't grow unbounded
+      for (const [userId, info] of [..._prevVoiceState]) {
+        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, ""))
+          _prevVoiceState.delete(userId);
+      }
 
       // Drop the cached settings so stale data can't be read back
       this.settingsMgr.removeServer(guildId);
@@ -643,11 +701,6 @@ class Remix {
 
       logger.guild(`[GuildDelete] Cleanup complete for server ${guildId}.`);
     });
-
-    // Track previous voice state per-user so we can detect channel moves.
-    // @fluxerjs/core fires VoiceStateUpdate with ONE arg (raw gateway data),
-    // not two args (oldState, newState) We maintain prev state manually.
-    const _prevVoiceState = new Map(); // userId → { channelId, guildId }
 
     client.on(Events.VoiceStateUpdate, (data) => {
       // data is the raw GatewayVoiceStateUpdateDispatchData — always snake_case
@@ -893,7 +946,7 @@ class Remix {
     const self = this;
     this.players.checkVoiceChannels = function (message) {
       const userId  = message?.author?.id   ?? message?.message?.author?.id;
-      // Fluxer uses server_id (snake_case); Discord.js uses guildId; probe all known shapes.
+      // Fluxer uses server_id (snake_case); uses guildId; probe all known shapes.
       const guildId =
           message?.channel?.server_id    ??
           message?.channel?.serverId     ??
@@ -1131,10 +1184,16 @@ const saveAndExit = () => {
     for (const [channelId, player] of remix.players.playerMap.entries()) {
       const current    = player.queue.getCurrent();
       const queueData  = player.queue.getQueue();
-      const tracksToSave = [];
 
-      if (current) tracksToSave.push(current);
-      tracksToSave.push(...queueData);
+      // Deep-clone track data to capture a stable snapshot.
+      // Without this, a concurrent skip() or playNext() can mutate the array
+      // between capture and writeFileSync, producing a corrupted recovery file.
+      const cloneTrack = (t) => {
+        try { return JSON.parse(JSON.stringify(t)); } catch { return t; }
+      };
+      const tracksToSave = [];
+      if (current) tracksToSave.push(cloneTrack(current));
+      for (const t of queueData) tracksToSave.push(cloneTrack(t));
 
       // Save ALL active sessions unconditionally so the bot always rejoins
       // the channel it was in before rebooting (queue or not, 24/7 or not)

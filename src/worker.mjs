@@ -19,34 +19,38 @@ import { logger } from "./constants/Logger.mjs";
 const nl           = workerData?.data?.nodelink ?? {};
 const NL_HOST      = nl.host      ?? "localhost";
 const NL_PORT      = nl.port      ?? 3000;
-const NL_PASSWORD  = nl.password  ?? "youshallnotpass";
+// Shared default — must match NL_DEFAULT_PASSWORD in Player.mjs
+const NL_DEFAULT_PASSWORD = "youshallnotpass";
+const NL_PASSWORD  = nl.password  ?? NL_DEFAULT_PASSWORD;
 const NL_SESSION_ID = nl.sessionId ?? null;   // provided by moonlink.js Manager
 const NL_GUILD_ID  = workerData?.data?.guildId ?? null;
 
 // ─── Error sanitizer ──────────────────────────────────────────────────────────
+// Compile regexes once at module load (constants are fixed for the worker's lifetime).
+// Re-compiling on every sanitizeError() call was wasteful and identical each time.
+const _sanitizeRegexes = (() => {
+  const r = [];
+  if (NL_HOST && NL_HOST !== "localhost") {
+    const eh = NL_HOST.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    r.push({ re: new RegExp(`https?://${eh}(:\\d+)?[^\\s"']*`, "gi"), sub: "[internal]" });
+    r.push({ re: new RegExp(`${eh}:${NL_PORT}`, "g"),                  sub: "[internal]" });
+  }
+  r.push({ re: new RegExp(`https?://localhost:${NL_PORT}[^\\s"']*`, "gi"), sub: "[internal]" });
+  if (NL_PASSWORD && NL_PASSWORD !== NL_DEFAULT_PASSWORD) {
+    const ep = NL_PASSWORD.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    r.push({ re: new RegExp(ep, "g"), sub: "[redacted]" });
+  }
+  return r;
+})();
+
 // Strips the NodeLink host, port, and password from any string so they are
-// never shown to end-users in Discord messages.  Called on every user-visible
-// error string before it is emitted or returned.
+// never shown to end-users in messages.
 function sanitizeError(msg) {
   if (!msg) return msg;
   let s = String(msg);
-  // Remove full URLs containing the NodeLink host (http://host:port/...)
-  if (NL_HOST && NL_HOST !== "localhost") {
-    // Escape special regex chars in the host string
-    const escapedHost = NL_HOST.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    s = s.replace(new RegExp(`https?://${escapedHost}(:\\d+)?[^\\s"']*`, "gi"), "[internal]");
-  }
-  // Remove localhost:port combos
-  s = s.replace(new RegExp(`https?://localhost:${NL_PORT}[^\\s"']*`, "gi"), "[internal]");
-  // Remove bare host:port if it somehow appears without a protocol
-  if (NL_HOST && NL_HOST !== "localhost") {
-    const escapedHost = NL_HOST.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    s = s.replace(new RegExp(`${escapedHost}:${NL_PORT}`, "g"), "[internal]");
-  }
-  // Remove the password just in case it ever leaks into an error message
-  if (NL_PASSWORD && NL_PASSWORD !== "youshallnotpass") {
-    const escapedPw = NL_PASSWORD.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    s = s.replace(new RegExp(escapedPw, "g"), "[redacted]");
+  for (const { re, sub } of _sanitizeRegexes) {
+    re.lastIndex = 0; // reset stateful global regexes between calls
+    s = s.replace(re, sub);
   }
   return s;
 }

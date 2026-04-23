@@ -40,8 +40,9 @@ async function reloadCommand(ctx, name) {
   ctx.runnables.delete(command.uid);
   ctx.commandFiles.delete(command.uid);
 
-  // Re-import with cache-buster
-  const url   = "file://" + file + "?t=" + Date.now();
+  // Re-import with cache-buster — use pathToFileURL so Windows drive letters and
+  // spaces in paths are handled correctly (plain "file://" + path breaks on Windows).
+  const url   = pathToFileURL(file).href + "?t=" + Date.now();
   const cData = await import(url);
 
   const raw     = cData.command ?? cData.default?.command;

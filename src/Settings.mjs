@@ -96,6 +96,11 @@ export class RemoteSettingsManager extends EventEmitter {
 
   // track retry count and apply exponential backoff on load failures
   _loadAttempts = 0;
+  // Per-server debounce timers: serverId → NodeJS.Timeout
+  // Batches rapid set() calls (e.g. 24/7 mode changes that write stay_247 + stay_247_mode)
+  // into a single remoteSave() 80ms after the last write, rather than firing one UPDATE
+  // per key.
+  _debounceTimers = new Map();
 
   constructor(config, defaultsPath) {
     super();
@@ -177,7 +182,15 @@ export class RemoteSettingsManager extends EventEmitter {
     if (!this.guilds.has(server.id)) { this.guilds.set(server.id, server); this.create(server.id, server); }
     const s = this.guilds.get(server.id);
     s.data[key] = server.data[key];
-    this.remoteUpdate(server, key);
+    // Debounce: collapse rapid successive set() calls (e.g. stay_247 + stay_247_mode written
+    // together) into a single remoteSave() 80ms after the last write for this server.
+    // This prevents N parallel UPDATE queries when multiple keys change in one command handler.
+    const existing = this._debounceTimers.get(server.id);
+    if (existing) clearTimeout(existing);
+    this._debounceTimers.set(server.id, setTimeout(() => {
+      this._debounceTimers.delete(server.id);
+      this.remoteSave(s);
+    }, 80));
   }
 
   isOption(key) { return key in this.defaults; }

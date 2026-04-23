@@ -58,11 +58,22 @@ export async function run(message, data) {
     .setColor(getGlobalColor())
     .setDescription("🔍 Searching...")
     .toJSON();
-  const statusMsg = await message.replyEmbed({ embeds: [searchEmbed] });
+
+  let statusMsg = null;
+  try {
+    statusMsg = await message.replyEmbed({ embeds: [searchEmbed] });
+  } catch (err) {
+    // Fluxer API timed out sending the status message — continue without it
+  }
 
   const messages = p.play(query, false, provider);
   messages.on("message", d => {
     const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d).toJSON();
-    statusMsg.editEmbed({ embeds: [embed] }).catch(() => {});
+    if (statusMsg) {
+      statusMsg.editEmbed({ embeds: [embed] }).catch(() => {});
+    } else {
+      // statusMsg failed to send earlier, fall back to a fresh reply
+      message.replyEmbed({ embeds: [embed] }).catch(() => {});
+    }
   });
 }

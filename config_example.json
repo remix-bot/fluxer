@@ -1,7 +1,12 @@
 {
   "token": "your bot token",
   "fluxer.js": {
-    "Comment": "Configuration data for @fluxerjs/core Client options. See: https://github.com/fluxerjs/core"
+    "Comment": "Configuration data for @fluxerjs/core Client options. See: https://github.com/fluxerjs/core",
+    "rest": {
+      "Comment": "REST client options. 'timeout' is ms before a request to api.fluxer.app is aborted (default: 15000). Raise if you see DOMException AbortError in logs.",
+      "timeout": 30000,
+      "retries": 3
+    }
   },
   "fluxer-api": {
     "Comment": "Configuration options for a fluxer REST client if self-hosting. See: https://docs.fluxer.app"
@@ -16,7 +21,9 @@
   "nodelink": {
     "host": "localhost",
     "port": 3000,
-    "password": "youshallnotpass"
+    "password": "youshallnotpass",
+    "requestTimeout": 60000,
+    "Comment": "requestTimeout: ms before a NodeLink HTTP request is aborted. Default: 60000 (60s). Raise if you see 'NodeLink request timeout' errors."
   },
   "comment-radio": {
     "message": "If you have radio stations you'd like to connect, add them to the array below. Radio stations must be rendered like following:",

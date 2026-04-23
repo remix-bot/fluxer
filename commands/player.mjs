@@ -28,6 +28,7 @@ const CONTROLS = {
   volDown: { emoji: "🔉", action: "voldown", desc: "Volume Down" },
   volUp: { emoji: "🔊", action: "volup", desc: "Volume Up" },
   lyrics: { emoji: "📜", action: "lyrics", desc: "Lyrics" },
+  filter: { emoji: "🎛️", action: "filter", desc: "Audio Filters" },
   close: { emoji: "❌", action: "close", desc: "Close" }
 };
 
@@ -51,7 +52,7 @@ export async function run(msg) {
   const controlsLayout = [
     [CONTROLS.prev, CONTROLS.play, CONTROLS.pause, CONTROLS.stop, CONTROLS.next],
     [CONTROLS.loop, CONTROLS.shuffle, CONTROLS.volDown, CONTROLS.volUp, CONTROLS.lyrics],
-    [CONTROLS.close]
+    [CONTROLS.filter, CONTROLS.close]
   ];
 
   const allControls = controlsLayout.flat();
@@ -83,7 +84,6 @@ export async function run(msg) {
           PROGRESS.empty.repeat(emptyCount) +
           PROGRESS.end;
 
-      // Use Utils.prettifyMS instead of local formatTime
       const elapsedStr = Utils.prettifyMS(elapsed);
       const totalStr = Utils.prettifyMS(totalMs);
       timeDisplay = `\`${elapsedStr} / ${totalStr}\``;
@@ -98,8 +98,17 @@ export async function run(msg) {
     const queueSize = player.queue.size();
     const loopStatus = player.queue.songLoop ? "🔂 Song" : player.queue.loop ? "🔁 Queue" : "❌ Off";
 
+    // FIXED: Show stacked filters if multiple are active
+    let filterStatus = "🔇 Off";
+    if (player.activeFilter) {
+      if (player.activeFilter.label.includes("+")) {
+        filterStatus = `🔥 **${player.activeFilter.label}**`;
+      } else {
+        filterStatus = `${player.activeFilter.emoji ?? "🎛️"} **${player.activeFilter.label}**`;
+      }
+    }
+
     const nowPlaying = current
-        // Use Utils.truncate instead of local truncate
         ? `[${Utils.truncate(current.title, 45)}](${current.spotifyUrl || current.url})`
         : "*Nothing playing*";
 
@@ -111,15 +120,13 @@ export async function run(msg) {
       `${timeDisplay}`,
       ``,
       `🔊 Volume: \`${volPercent}%\` ${volumeBar}`,
-      `📋 Queue: \`${queueSize}\` tracks | Loop: ${loopStatus}`,
+      `📋 Queue: \`${queueSize}\` tracks | Loop: ${loopStatus} | Filter: ${filterStatus}`,
       ``,
       state.message ? `💬 *${state.message}*` : "💡 *React to control playback*",
       ``,
       `⏱️ Session expires in ${Math.ceil(timeout / 60000)}m of inactivity`
     ].join("\n");
 
-    // avatarURL may be a plain property (Fluxer) or a method— call it if
-    // it's a function, otherwise use it as-is so the footer icon works in both cases.
     const avatarUrl = typeof msg.author?.avatarURL === "function"
         ? msg.author.avatarURL()
         : msg.author?.avatarURL ?? null;
@@ -132,7 +139,6 @@ export async function run(msg) {
           text: `Requested by ${msg.author?.username || "Unknown"} • Controls active`,
           iconURL: avatarUrl
         });
-    // setTimestamp() is not verified on @fluxerjs/core's EmbedBuilder — guard it.
     if (typeof builder.setTimestamp === "function") builder.setTimestamp();
     if (current?.thumbnail) builder.setThumbnail(current.thumbnail);
     return builder.toJSON();
@@ -141,12 +147,11 @@ export async function run(msg) {
   const message = await msg.replyEmbed({ embeds: [buildEmbed()] });
   if (!message?.message) return;
 
-  // Add reactions with staggered animation
   for (const row of controlsLayout) {
     for (const control of row) {
       try {
         await message.message.react(control.emoji);
-        await Utils.sleep(200); // Use Utils.sleep instead of inline Promise
+        await Utils.sleep(200);
       } catch (_) {}
     }
   }
@@ -156,12 +161,10 @@ export async function run(msg) {
   let emojiRemoveTimeout;
   let lastState = {};
 
-  // Track active lyrics message
   let activeLyricsMsg = null;
   let lyricsUnobserve = null;
   let lyricsEmojiTimeout = null;
 
-  // Helper: Clear all reactions
   const clearReactions = async () => {
     try {
       await message.message.removeAllReactions();
@@ -174,7 +177,6 @@ export async function run(msg) {
     }
   };
 
-  // Helper: Reset emoji removal timer
   const resetEmojiTimer = () => {
     clearTimeout(emojiRemoveTimeout);
     emojiRemoveTimeout = setTimeout(async () => {
@@ -185,7 +187,6 @@ export async function run(msg) {
     }, EMOJI_REMOVE_TIMEOUT);
   };
 
-  // Helper: Clear lyrics reactions
   const clearLyricsReactions = async (lyricsMsg) => {
     if (!lyricsMsg?.message) return;
     try {
@@ -211,15 +212,14 @@ export async function run(msg) {
     clearInterval(updateInterval);
     unobserve?.();
 
-    // Remove all player event listeners added by this session
     player.off("startplay", onStartPlay);
     player.off("playback",  onPlayback);
     player.off("stopplay",  onStopPlay);
     player.off("queue",     onQueue);
     player.off("volume",    onVolume);
+    player.off("filter",    onFilter);
     player.off("autoleave", onAutoLeave);
 
-    // Cleanup any active lyrics
     if (lyricsUnobserve) {
       lyricsUnobserve();
       clearTimeout(lyricsEmojiTimeout);
@@ -233,7 +233,6 @@ export async function run(msg) {
     const closedEmbed = buildEmbed({
       message: `Session closed${reason !== "timeout" ? ` • ${reason}` : " due to inactivity"}`
     });
-    // Override title and footer on the plain object returned by toJSON()
     closedEmbed.color  = getGlobalColor();
     closedEmbed.footer = { text: "Session ended" };
     closedEmbed.title  = "🎧 Music Player (Inactive)";
@@ -249,14 +248,12 @@ export async function run(msg) {
     sessionTimeout = setTimeout(() => closeSession("timeout"), timeout);
   };
 
-  // Live progress updates
   updateInterval = setInterval(() => {
     if (!player.paused && player.queue.getCurrent()) {
       refresh(lastState);
     }
   }, this.config?.timers?.playerUpdateInterval ?? 5000);
 
-  // Player events — store named handlers so we can remove them on closeSession
   const onStartPlay  = ()       => refresh({ message: "▶️ Started playing" });
   const onPlayback   = (playing) => refresh({ message: playing ? "▶️ Resumed" : "⏸️ Paused" });
   const onStopPlay   = ()       => refresh({ message: "⏹️ Stopped" });
@@ -265,6 +262,15 @@ export async function run(msg) {
     if (e.type === "add") refresh({ message: `➕ Added: ${Utils.truncate(e.data.data.title, 30)}` });
   };
   const onVolume     = (v)      => refresh({ message: `🔊 Volume: ${Math.round(v * 100)}%` });
+  const onFilter     = (f)      => {
+    if (!f) {
+      refresh({ message: "🔇 Filters cleared" });
+    } else if (f.label.includes("+")) {
+      refresh({ message: `🔥 Filters: **${f.label}** applied` });
+    } else {
+      refresh({ message: `${f.emoji ?? "🎛️"} Filter: **${f.label}** applied` });
+    }
+  };
   const onAutoLeave  = ()       => closeSession("disconnected");
 
   player.on("startplay",  onStartPlay);
@@ -272,9 +278,9 @@ export async function run(msg) {
   player.on("stopplay",   onStopPlay);
   player.on("queue",      onQueue);
   player.on("volume",     onVolume);
+  player.on("filter",     onFilter);
   player.on("autoleave",  onAutoLeave);
 
-  // Reaction handler
   const unobserve = message.onReaction(controlEmojis, async (e) => {
     const control = allControls.find(c => c.emoji === e.emoji_id);
     if (!control) return;
@@ -349,12 +355,22 @@ export async function run(msg) {
           break;
         }
 
+        case "filter":
+          reply = "🎛️ Opening filter picker — check the filter menu above or use the `filter` command.";
+          shouldUpdate = true;
+          try {
+            const { run: runFilter } = await import("./filter.mjs");
+            runFilter.call(this, msg);
+          } catch (err) {
+            reply = `⚠️ Filter error: ${Utils.truncate(err.message, 50)}`;
+          }
+          break;
+
         case "lyrics":
           reply = "📜 Fetching lyrics...";
           refresh({ message: reply });
 
           try {
-            // Cleanup previous lyrics
             if (lyricsUnobserve) {
               lyricsUnobserve();
               clearTimeout(lyricsEmojiTimeout);
@@ -374,7 +390,6 @@ export async function run(msg) {
             const LINES_PER_PAGE = 25;
             const totalPages = Math.ceil(totalLines / LINES_PER_PAGE);
 
-            // Build pages
             const pages = [];
             for (let i = 0; i < totalLines; i += LINES_PER_PAGE) {
               pages.push(lines.slice(i, i + LINES_PER_PAGE).join('\n'));
@@ -384,8 +399,8 @@ export async function run(msg) {
 
             const buildLyricsContent = (pageIdx, expired = false, closed = false) => {
               const title = Utils.truncate(
-                player.queue.getCurrent()?.title?.replace(/\(Official.*?\)/gi, '').trim() ?? '',
-                50
+                  player.queue.getCurrent()?.title?.replace(/\(Official.*?\)/gi, '').trim() ?? '',
+                  50
               );
               const footerText = closed
                   ? `👋 Lyrics closed • NodeLink • ${totalLines} lines`
@@ -403,17 +418,14 @@ export async function run(msg) {
               return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).setFooter({ text: footerText }).toJSON()] };
             };
 
-            // Send initial lyrics
             activeLyricsMsg = await msg.replyEmbed(buildLyricsContent(0));
 
-            // Add pagination and close button if needed
             if (activeLyricsMsg?.message && totalPages > 1) {
               const navEmojis = ["⬅️", "➡️", "❌"];
               for (const emoji of navEmojis) {
                 await activeLyricsMsg.message.react(emoji).catch(() => {});
               }
 
-              // Reset timer helper
               const resetLyricsTimer = () => {
                 clearTimeout(lyricsEmojiTimeout);
                 lyricsEmojiTimeout = setTimeout(async () => {
@@ -422,9 +434,7 @@ export async function run(msg) {
                 }, EMOJI_REMOVE_TIMEOUT);
               };
 
-              // Navigation handler
               lyricsUnobserve = activeLyricsMsg.onReaction(navEmojis, async (e) => {
-                // Close button
                 if (e.emoji_id === "❌") {
                   lyricsUnobserve();
                   clearTimeout(lyricsEmojiTimeout);
@@ -433,7 +443,6 @@ export async function run(msg) {
                   return;
                 }
 
-                // Reset timer on navigation
                 resetLyricsTimer();
 
                 if (e.emoji_id === "⬅️") {
@@ -445,10 +454,8 @@ export async function run(msg) {
                 await activeLyricsMsg.editEmbed(buildLyricsContent(currentPage));
               });
 
-              // Start 1 minute timer
               resetLyricsTimer();
             } else if (activeLyricsMsg?.message) {
-              // Single page - just add close button
               await activeLyricsMsg.message.react("❌").catch(() => {});
 
               const resetLyricsTimer = () => {
@@ -474,7 +481,6 @@ export async function run(msg) {
             reply = `Lyrics displayed (${totalLines} lines, ${totalPages} pages)`;
 
           } catch (err) {
-            // Use Utils.truncate instead of local truncate
             reply = `⚠️ Lyrics error: ${Utils.truncate(err.message, 50)}`;
           }
           shouldUpdate = true;
@@ -491,7 +497,6 @@ export async function run(msg) {
     if (shouldUpdate) refresh({ message: reply });
   });
 
-  // Start timers
   resetTimeout();
   resetEmojiTimer();
 }

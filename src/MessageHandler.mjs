@@ -1046,6 +1046,12 @@ export class HelpCommand {
    * Call once during bot startup, after commands have been loaded.
    */
   register() {
+    // Guard: if register() is called more than once (e.g. via hot-reload), bail out.
+    // A second call would stack another MessageCreate listener and re-wrap the format/reply
+    // handlers a second time, causing duplicate help responses and doubled logic.
+    if (this._registered) return;
+    this._registered = true;
+
     const HELP_ALIASES = ["help", "h", "commands"];
 
     // Neutralize built-in help interceptor
