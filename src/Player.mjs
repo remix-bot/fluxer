@@ -578,13 +578,15 @@ export default class Player extends EventEmitter {
             ...options.headers,
           },
         }, (res) => {
+          if (returnStream) req.setTimeout(0); // Disable socket idle timeout for media streams
+
           if ([301, 302, 307, 308].includes(res.statusCode)) {
             let loc = res.headers.location;
             if (!loc) return reject(new Error("Redirect without location"));
             if (loc.startsWith("/")) loc = `${urlObj.protocol}//${urlObj.host}${loc}`;
             return fetchUrl(loc);
           }
-          if (res.statusCode !== 200 && res.statusCode !== 204) {
+          if (![200, 204, 206].includes(res.statusCode)) {
             res.resume();
             return reject(new Error(`HTTP ${res.statusCode} at ${target}`));
           }
@@ -691,7 +693,7 @@ export default class Player extends EventEmitter {
           return reject(e);
         }
 
-        const safetyMs = 10 * 60 * 1000;
+        const safetyMs = 24 * 60 * 60 * 1000; // 24 hours
         const safetyTimer = setTimeout(() => {
           logger.warn("[Player] Stream safety timeout — advancing queue");
           cleanup();
