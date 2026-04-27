@@ -1061,21 +1061,18 @@ export default class Player extends EventEmitter {
     }
 
     const { host, port } = this._nl;
-    const url = `http://${host}:${port}/v4/sessions/${liveSessionId}/players/${guildId}`;
+
+    const url = `http://${host}:${port}/v4/sessions/${liveSessionId}/players/${guildId}?noReplace=true`;
 
     const current = this.queue.getCurrent();
     if (!current?.encoded) {
       return { ok: false, reason: "No active track loaded. Start playback first." };
     }
 
-    // Include the current track so NodeLink knows what to keep playing.
-    // Use the v4 format: track.encoded (not the deprecated encodedTrack).
-    // Also include position so it resumes from where it left off instead of restarting.
-    const body = JSON.stringify({
-      track: { encoded: current.encoded },
-      position: this.startedPlaying ? Date.now() - this.startedPlaying : 0,
-      filters: filterPayload,
-    });
+    // Send ONLY filters. With noReplace=true, NodeLink won't touch the track.
+    // Including track.encoded causes NodeLink to restart the Voice Worker,
+    // which aborts the current stream and causes the "Input stream error: aborted" FFmpeg error.
+    const body = JSON.stringify({ filters: filterPayload });
 
     try {
       await this._request(url, {
