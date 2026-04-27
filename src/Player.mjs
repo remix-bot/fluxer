@@ -1055,7 +1055,6 @@ export default class Player extends EventEmitter {
       return { ok: false, reason: "Player not bound to a guild." };
     }
 
-    // CRITICAL: Get session ID directly from moonlink manager, not cached _nl
     const liveSessionId = this._moonlink?.getLiveSessionId?.() ?? this._moonlink?.sessionId ?? this._nl.sessionId;
     if (!liveSessionId) {
       return { ok: false, reason: "No active NodeLink session. Try again in a few seconds." };
@@ -1064,15 +1063,19 @@ export default class Player extends EventEmitter {
     const { host, port } = this._nl;
     const url = `http://${host}:${port}/v4/sessions/${liveSessionId}/players/${guildId}`;
 
-    // Per NodeLink REST API: send ONLY the filters object when updating filters.
-    // Including track.encoded causes NodeLink to restart playback (triggers play()),
-    // which leads to "No voice state" spam and eventually FFmpeg "Input stream error: aborted".
     const current = this.queue.getCurrent();
     if (!current?.encoded) {
       return { ok: false, reason: "No active track loaded. Start playback first." };
     }
 
-    const body = JSON.stringify({ filters: filterPayload });
+    // Include the current track so NodeLink knows what to keep playing.
+    // Use the v4 format: track.encoded (not the deprecated encodedTrack).
+    // Also include position so it resumes from where it left off instead of restarting.
+    const body = JSON.stringify({
+      track: { encoded: current.encoded },
+      position: this.startedPlaying ? Date.now() - this.startedPlaying : 0,
+      filters: filterPayload,
+    });
 
     try {
       await this._request(url, {
@@ -1084,7 +1087,6 @@ export default class Player extends EventEmitter {
         body,
       });
 
-      // Sync local session ID if it changed under us
       if (liveSessionId !== this._nl.sessionId) {
         this._nl.sessionId = liveSessionId;
         logger.moonlink(`[Player] Synced session ID after filter apply: ${liveSessionId}`);
@@ -1094,16 +1096,13 @@ export default class Player extends EventEmitter {
       this.emit("filter", this.activeFilter);
       return { ok: true };
     } catch (e) {
-      // Detect stale session specifically — allow exactly one retry with a fresh session ID.
-      // The _retryCount guard prevents infinite recursion if back-to-back reconnects keep
-      // producing stale IDs faster than this method runs.
       const errMsg = e.message ?? "";
       if (_retryCount === 0 && (errMsg.includes("404") || errMsg.includes("not found") || errMsg.includes("Session-ID") || errMsg.includes("does not exist"))) {
         logger.warn("[Player] Filter apply failed with stale session, forcing re-sync...");
         const freshSession = this._moonlink?.getLiveSessionId?.() ?? this._moonlink?.sessionId;
         if (freshSession && freshSession !== liveSessionId) {
           this._nl.sessionId = freshSession;
-          return this.applyFilter(filterPayload, meta, 1); // Single retry with depth guard
+          return this.applyFilter(filterPayload, meta, 1);
         }
       }
       return { ok: false, reason: sanitizeError(errMsg, this._nl) };
