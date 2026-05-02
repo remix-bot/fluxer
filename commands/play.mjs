@@ -41,7 +41,7 @@ export const command = new CommandBuilder()
                 .setDescription("The search provider. Default: YouTube Music. Or use inline prefix: sp:, dz:, am:, yt:, sc: etc.", "options.play.provider")
                 .addFlagAliases("p", "u", "use")
                 .addChoices(...PROVIDER_CHOICES)
-                .setDefault("yt")
+                .setDefault("ytm")
         , true)
     .addAlias("p");
 

@@ -362,7 +362,8 @@ export async function run(msg) {
     if (!filter) return;
 
     const track = player.queue.getCurrent();
-    if (!track) {
+    const previousActiveKeys = [...activeKeys];
+    if (!track && false) { // pending filters are allowed; keep old fallback block unreachable
       await menuMsg.editEmbed({
         embeds: [buildPageEmbed(page, activeKeys, null)]
       }).catch(() => {});
@@ -401,9 +402,10 @@ export async function run(msg) {
         }
         : null;
 
-    const { ok, reason } = await player.applyFilter(mergedPayload, meta);
+    const { ok, reason, pending } = await player.applyFilter(mergedPayload, meta);
 
     if (!ok) {
+      activeKeys = previousActiveKeys;
       const errEmbed = new EmbedBuilder()
           .setColor(getGlobalColor())
           .setDescription(
@@ -422,7 +424,13 @@ export async function run(msg) {
     // Update active key and refresh embed (player.activeFilter is already updated by applyFilter)
     activeKeys = meta ? meta.key.split("+") : [];
 
-    const successMsg = filter.key === "off"
+    const successMsg = pending
+        ? (filter.key === "off"
+            ? "Filter cleared. Original audio will be used on the next playable track."
+            : activeKeys.includes(filter.key)
+                ? `${filter.label} saved. It will apply on the next playable track.`
+                : `${filter.label} removed. The next playable track will use the updated filters.`)
+        : filter.key === "off"
         ? "🔇 Filters cleared — original audio restored."
         : activeKeys.includes(filter.key)
             ? `${filter.emoji} **${filter.label}** applied!`

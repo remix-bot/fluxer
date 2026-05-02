@@ -75,6 +75,11 @@ function sanitizeError(msg, nl = {}) {
   return s;
 }
 
+function isIgnorableMediaStateError(err) {
+  const msg = err?.message ?? String(err ?? "");
+  return msg.includes("InvalidState") || msg.includes("failed to capture frame") || msg.includes("capture frame");
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Queue Class
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -224,6 +229,7 @@ export default class Player extends EventEmitter {
 
   // Active audio filter — { key, label, payload } or null
   activeFilter         = null;
+  activeFilterPayload  = null;
 
   // Inactivity timeout
   _inactivityTimer     = null;
@@ -626,13 +632,36 @@ export default class Player extends EventEmitter {
     }, true);
   }
 
+  _getTrackDurationMs(track) {
+    if (!track?.duration) return 0;
+    if (typeof track.duration === "object" && track.duration?.seconds != null) {
+      return track.duration.seconds * 1000;
+    }
+    if (typeof track.duration === "string" && track.duration.startsWith("PT")) {
+      return Utils.parseISODuration(track.duration);
+    }
+    if (typeof track.duration === "number") return track.duration;
+    return 0;
+  }
+
+  _didTrackMostlyFinish(track) {
+    const totalMs = this._getTrackDurationMs(track);
+    if (!totalMs || !this.startedPlaying) return false;
+
+    const elapsedMs = Math.max(0, Date.now() - this.startedPlaying);
+    const remainingMs = Math.max(0, totalMs - elapsedMs);
+
+    return elapsedMs / totalMs >= 0.85 || remainingMs <= 15_000;
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Audio Streaming (revoice.js)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  async _streamViaRevoice(url) {
+  async _streamViaRevoice(url, options = {}) {
     this._streamingStopped = false;
     let audioStream = null;
+    const currentTrack = this.queue.getCurrent();
 
     try {
       audioStream = await this._fetchStream(url);
@@ -654,7 +683,10 @@ export default class Player extends EventEmitter {
           if (this._streamingStopped || this._skipping) return resolve();
           const graceful = ["aborted", "ECONNRESET", "ERR_STREAM_DESTROYED", "ENOTFOUND", "ETIMEDOUT", "ECONNREFUSED"];
           // Use substring matching so "Input stream error: aborted" (from NodeLink) is also caught
-          if (graceful.some(g => e.code === g || e.message?.includes(g))) return resolve();
+          if (graceful.some(g => e.code === g || e.message?.includes(g))) {
+            if (this._didTrackMostlyFinish(currentTrack)) return resolve();
+            return reject(new Error(`Stream ended early for ${currentTrack?.title || "track"}: ${e.message ?? e.code ?? "stream aborted"}`));
+          }
           reject(e);
         });
 
@@ -667,11 +699,15 @@ export default class Player extends EventEmitter {
           const ffMsg = err?.message ?? String(err);
           // "Input stream error: aborted" means NodeLink dropped the HTTP stream
           // (e.g. filter PATCH restarted the player before voice state arrived).
-          // Treat it as graceful so the queue can advance normally.
+          // Only treat it as graceful if the track was already close to ending.
           if (ffMsg.includes("aborted") || ffMsg.includes("Input stream error")) {
-            logger.player("[Player] FFmpeg stream aborted gracefully (NodeLink stream closed)");
+            if (this._didTrackMostlyFinish(currentTrack)) {
+              logger.player("[Player] FFmpeg stream ended near track completion");
+              cleanup();
+              return resolve();
+            }
             cleanup();
-            return resolve();
+            return reject(new Error(`FFmpeg stream ended early: ${ffMsg}`));
           }
           logger.error("[Player] FFmpeg error:", ffMsg);
           cleanup();
@@ -680,13 +716,25 @@ export default class Player extends EventEmitter {
         };
 
         try {
-          this._mediaPlayer.playStream(audioStream);
+          const playResult = this._mediaPlayer.playStream(audioStream, options);
+          if (playResult && typeof playResult.catch === "function") {
+            playResult.catch((e) => {
+              if (isIgnorableMediaStateError(e) || this._streamingStopped || this._skipping || this.leaving) {
+                logger.mediaplayer("[Player] Suppressed async playStream InvalidState rejection");
+                cleanup();
+                resolve();
+                return;
+              }
+              cleanup();
+              reject(e);
+            });
+          }
           if (this._mediaPlayer.fProc) {
             this._mediaPlayer.fProc.once("error", onFfmpegError);
           }
         } catch (e) {
           cleanup();
-          if (e.message?.includes("InvalidState") || e.message?.includes("capture frame")) {
+          if (isIgnorableMediaStateError(e)) {
             logger.mediaplayer("[Player] Suppressed InvalidState during stream start");
             return resolve();
           }
@@ -710,10 +758,9 @@ export default class Player extends EventEmitter {
           clearTimeout(safetyTimer);
           if (this._mediaPlayer?.fProc) this._mediaPlayer.fProc.removeListener("error", onFfmpegError);
           cleanup();
-          if (e.message?.includes("InvalidState") || e.message?.includes("capture frame")) {
+          if (isIgnorableMediaStateError(e)) {
             logger.mediaplayer("[Player] Suppressed InvalidState during playback");
-            if (this._streamingStopped) return resolve();
-            return;
+            return resolve();
           }
           if (this._streamingStopped) return resolve();
           reject(e);
@@ -725,7 +772,7 @@ export default class Player extends EventEmitter {
         try { audioStream.destroy(); } catch (_) {}
       }
       this._currentPassthrough = null;
-      if (e.message?.includes("InvalidState") || e.message?.includes("capture frame")) {
+      if (isIgnorableMediaStateError(e)) {
         logger.mediaplayer("[Player] Suppressed InvalidState in stream setup");
         return;
       }
@@ -736,9 +783,31 @@ export default class Player extends EventEmitter {
 
   async _streamUrl(url) {
     const isNodeLink = url.includes(`${this._nl.host}:${this._nl.port}`) ||
-        url.includes("/v4/trackstream");
+        url.includes("/v4/trackstream") ||
+        url.includes("/v4/loadstream");
 
     if (!isNodeLink) return this._streamViaRevoice(url);
+
+    if (url.includes("/v4/loadstream")) {
+      logger.player(`[Player] NodeLink loadStream PCM active`);
+      try {
+        return await this._streamViaRevoice(url, { rawPcm: true });
+      } catch (err) {
+        const msg = err?.message ?? String(err ?? "");
+        // Fall back on any HTTP error (404, 500, etc) — NodeLink may return JSON error
+        // bodies which would be played as PCM causing loud buzzing
+        if (msg.includes("HTTP ")) {
+          logger.warn(`[Player] NodeLink loadStream failed (${msg}), falling back to trackstream URL mode`);
+          const parsed = new URL(url);
+          const encodedTrack = parsed.searchParams.get("encodedTrack");
+          if (!encodedTrack) throw err;
+          const nlBase = `http://${this._nl.host}:${this._nl.port}`;
+          const fallbackUrl = `${nlBase}/v4/trackstream?encodedTrack=${encodeURIComponent(encodedTrack)}`;
+          return this._streamUrl(fallbackUrl);
+        }
+        throw err;
+      }
+    }
 
     try {
       const json = await this._request(url, {
@@ -846,14 +915,15 @@ export default class Player extends EventEmitter {
       connection.on("error", (err) => {
         const causeStr = err?.cause ? ` (Cause: ${err.cause})` : "";
         logger.error("[Player] Voice error:", err?.message ?? err, causeStr);
-        this._cleanupMediaPlayer();
+        this._stopMediaPlayer().catch(() => {});
       });
 
       connection.on("disconnected", () => {
         if (!this.leaving) {
           logger.mediaplayer("[Player] Unexpected disconnect detected");
-          this._cleanupMediaPlayer();
-          this._recoverConnection();
+          this._stopMediaPlayer()
+              .catch(() => {})
+              .finally(() => this._recoverConnection());
         } else {
           try { connection.destroy(); } catch (_) {}
         }
@@ -1055,19 +1125,20 @@ export default class Player extends EventEmitter {
       return { ok: false, reason: "Player not bound to a guild." };
     }
 
+    const current = this.queue.getCurrent();
     const liveSessionId = this._moonlink?.getLiveSessionId?.() ?? this._moonlink?.sessionId ?? this._nl.sessionId;
-    if (!liveSessionId) {
-      return { ok: false, reason: "No active NodeLink session. Try again in a few seconds." };
+
+    // Allow filters to be selected before a playable encoded track is active.
+    // They will be applied automatically on the next track start.
+    if (!liveSessionId || !current?.encoded) {
+      this.activeFilter = meta ?? null;
+      this.activeFilterPayload = meta ? filterPayload : null;
+      this.emit("filter", this.activeFilter);
+      return { ok: true, pending: true };
     }
 
     const { host, port } = this._nl;
-
     const url = `http://${host}:${port}/v4/sessions/${liveSessionId}/players/${guildId}?noReplace=true`;
-
-    const current = this.queue.getCurrent();
-    if (!current?.encoded) {
-      return { ok: false, reason: "No active track loaded. Start playback first." };
-    }
 
     // Send ONLY filters. With noReplace=true, NodeLink won't touch the track.
     // Including track.encoded causes NodeLink to restart the Voice Worker,
@@ -1090,6 +1161,7 @@ export default class Player extends EventEmitter {
       }
 
       this.activeFilter = meta ?? null;
+      this.activeFilterPayload = meta ? filterPayload : null;
       this.emit("filter", this.activeFilter);
       return { ok: true };
     } catch (e) {
@@ -1584,6 +1656,15 @@ export default class Player extends EventEmitter {
       return;
     }
 
+    if (songData.encoded && this.activeFilter) {
+      const { ok, pending, reason } = await this.applyFilter(this.activeFilterPayload ?? {}, this.activeFilter);
+      if (!ok) {
+        logger.warn(`[Player] Failed to apply active filter before playback: ${reason}`);
+      } else if (!pending) {
+        logger.mediaplayer(`[Player] Applied active filter before playback: ${this.activeFilter.label}`);
+      }
+    }
+
     if (this._mediaPlayer && this.preferredVolume !== 1) {
       this._mediaPlayer.setVolume(this.preferredVolume);
     }
@@ -1597,9 +1678,13 @@ export default class Player extends EventEmitter {
       streamUrl = songData.url;
     } else if (songData.encoded) {
       const nlBase = `http://${this._nl.host}:${this._nl.port}`;
-      const sessionParam = this._nl.sessionId ? `&sessionId=${encodeURIComponent(this._nl.sessionId)}` : "";
-      const guildParam   = this._guildId      ? `&guildId=${this._guildId}`                            : "";
-      streamUrl = `${nlBase}/v4/trackstream?encodedTrack=${encodeURIComponent(songData.encoded)}${guildParam}${sessionParam}`;
+      const positionMs = this.queue.songLoop ? 0 : Math.max(0, Date.now() - (this.startedPlaying ?? Date.now()));
+      const filters = this.activeFilterPayload ?? {};
+      const filtersParam =
+          Object.keys(filters).length > 0
+              ? `&filters=${encodeURIComponent(JSON.stringify(filters))}`
+              : "";
+      streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(songData.encoded)}&position=${positionMs}&volume=100${filtersParam}`;
     } else if (songData.url && Utils.isValidUrl(songData.url)) {
       streamUrl = songData.url;
     } else {
@@ -1639,7 +1724,7 @@ export default class Player extends EventEmitter {
     this.emit("startplay", songData);
 
     try {
-      await Utils.retry(() => this._streamUrl(streamUrl), 2, 1000);
+      await this._streamUrl(streamUrl);
     } catch (err) {
       logger.error("[Player] Stream error:", err.message);
       this._streamingStopped = true;

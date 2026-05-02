@@ -160,6 +160,7 @@ class YTUtils extends EventEmitter {
   isValidUrl(str)      { return Utils.isValidUrl(str); }
   _prefix(p)           { return PROVIDERS[p]?.prefix  ?? "ytmsearch"; }
   _providerLabel(p)    { return PROVIDERS[p]?.label   ?? "YouTube Music"; }
+  _isAudioPreferredProvider(p) { return p === "ytm"; }
 
   _buildIdentifier(provider, query) {
     const prefix    = this._prefix(provider);
@@ -202,6 +203,97 @@ class YTUtils extends EventEmitter {
     }
   }
 
+  _isPlayableTrack(track) {
+    const info = track?.info ?? {};
+    const uri  = info.uri || "";
+    if (uri.includes("/channel/"))                       return false;
+    if (uri.includes("/c/") && !uri.includes("/watch")) return false;
+    if (uri.includes("/playlist?"))                      return false;
+    if (uri.includes("/user/"))                          return false;
+    if (!info.length || info.length === 0)               return false;
+    return true;
+  }
+
+  _scoreTrackForAudio(track, provider = "ytm") {
+    if (!this._isPlayableTrack(track)) return Number.NEGATIVE_INFINITY;
+
+    if (!this._isAudioPreferredProvider(provider)) return 0;
+
+    const info   = track?.info ?? {};
+    const title  = String(info.title ?? "").toLowerCase();
+    const author = String(info.author ?? "").toLowerCase();
+    const uri    = String(info.uri ?? "").toLowerCase();
+    const source = String(info.sourceName ?? "").toLowerCase();
+    const text   = `${title} ${author} ${uri} ${source}`;
+
+    let score = 0;
+
+    const positiveHints = [
+      /\bofficial audio\b/,
+      /\baudio\b/,
+      /\bsong\b/,
+      /\bprovided to youtube by\b/,
+      /\btopic\b/,
+      /\bart track\b/,
+      /\blyrics?\b/,
+    ];
+
+    const negativeHints = [
+      /\bofficial music video\b/,
+      /\bmusic video\b/,
+      /\bofficial video\b/,
+      /\bvideo\b/,
+      /\bmv\b/,
+      /\bvisuali[sz]er\b/,
+      /\blive\b/,
+      /\bperformance\b/,
+      /\bconcert\b/,
+      /\bkaraoke\b/,
+      /\bsped up\b/,
+      /\bslowed\b/,
+      /\breverb\b/,
+      /\bnightcore\b/,
+      /\b8d\b/,
+      /\bremix\b/,
+      /\bcover\b/,
+      /\bfan cam\b/,
+    ];
+
+    for (const re of positiveHints) {
+      if (re.test(text)) score += 3;
+    }
+    for (const re of negativeHints) {
+      if (re.test(text)) score -= 4;
+    }
+
+    if (author.endsWith(" - topic") || author.includes("topic")) score += 4;
+    if (uri.includes("music.youtube.com")) score += 3;
+    if (source === "youtube music") score += 3;
+
+    return score;
+  }
+
+  _pickBestTrack(tracks, provider = "ytm") {
+    const playable = tracks.filter(track => this._isPlayableTrack(track));
+    const candidates = playable.length > 0 ? playable : tracks;
+    if (!candidates.length) return null;
+
+    return candidates
+        .map((track, index) => ({ track, index, score: this._scoreTrackForAudio(track, provider) }))
+        .sort((a, b) => b.score - a.score || a.index - b.index)[0]
+        ?.track ?? null;
+  }
+
+  _rankTracks(tracks, provider = "ytm") {
+    const playable = tracks.filter(track => this._isPlayableTrack(track));
+    const candidates = playable.length > 0 ? playable : tracks;
+
+    return candidates
+        .map((track, index) => ({ track, index, score: this._scoreTrackForAudio(track, provider) }))
+        .sort((a, b) => b.score - a.score || a.index - b.index)
+        .map(item => item.track);
+  }
+
   async getResults(query, limit = 5, provider = "ytm") {
     const id   = this.isValidUrl(query) ? query : this._buildIdentifier(provider, query);
     const data = await loadTracks(id);
@@ -211,18 +303,7 @@ class YTUtils extends EventEmitter {
     else if (data.loadType === "track")    tracks = [data.data];
     else if (data.loadType === "playlist") tracks = data.data?.tracks ?? [];
 
-    const validTracks = tracks.filter(track => {
-      const info = track.info ?? {};
-      const uri  = info.uri  || "";
-      if (uri.includes("/channel/"))                         return false;
-      if (uri.includes("/c/") && !uri.includes("/watch"))   return false;
-      if (uri.includes("/playlist?"))                        return false;
-      if (uri.includes("/user/"))                            return false;
-      if (!info.length || info.length === 0)                 return false;
-      return true;
-    });
-
-    const resultTracks = validTracks.length > 0 ? validTracks : tracks;
+    const resultTracks = this._rankTracks(tracks, provider);
     return { data: resultTracks.slice(0, limit).map(trackToVideo) };
   }
 
@@ -262,7 +343,8 @@ class YTUtils extends EventEmitter {
 
       // Handle search results (take first)
       if (data.loadType === "search" && data.data?.length) {
-        const video = trackToVideo(data.data[0]);
+        const bestTrack = this._pickBestTrack(data.data, provider) ?? data.data[0];
+        const video = trackToVideo(bestTrack);
         this.emit("message", `Successfully added [${video.title}](${video.url}) to the queue.`);
         return { type: "video", data: video };
       }
@@ -285,15 +367,7 @@ class YTUtils extends EventEmitter {
 
     // Handle search results
     if (data.loadType === "search" && data.data?.length) {
-      const validTrack = data.data.find(track => {
-        const info = track.info ?? {};
-        const uri  = info.uri  || "";
-        if (uri.includes("/channel/"))                       return false;
-        if (uri.includes("/c/") && !uri.includes("/watch")) return false;
-        if (!info.length || info.length === 0)               return false;
-        return true;
-      });
-      const trackToUse = validTrack || data.data[0];
+      const trackToUse = this._pickBestTrack(data.data, provider) ?? data.data[0];
       const video      = trackToVideo(trackToUse);
       this.emit("message", `Successfully added [${video.title}](${video.url}) to the queue.`);
       return { type: "video", data: video };
