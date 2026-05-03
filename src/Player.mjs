@@ -1622,9 +1622,9 @@ export default class Player extends EventEmitter {
     };
 
     return Utils.timeout(
-      pool.run(jobId, jobData, onMessage),
-      60_000,
-      "Worker timeout after 60s"
+        pool.run(jobId, jobData, onMessage),
+        60_000,
+        "Worker timeout after 60s"
     );
   }
 
@@ -1872,7 +1872,7 @@ export default class Player extends EventEmitter {
       streamUrl = songData.url;
     } else if (songData.encoded) {
       const nlBase = `http://${this._nl.host}:${this._nl.port}`;
-      const positionMs = this.queue.songLoop ? 0 : Math.max(0, Date.now() - (this.startedPlaying ?? Date.now()));
+      const positionMs = 0;
       const filters = this.activeFilterPayload ?? {};
       const filtersParam =
           Object.keys(filters).length > 0
