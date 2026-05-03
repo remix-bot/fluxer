@@ -870,6 +870,7 @@ export default class Player extends EventEmitter {
         return;
       }
       logger.mediaplayer(`[Player] Connection in bad state (${state}), reconnecting...`);
+      try { this.connection.removeAllListeners(); } catch (_) {}
       try { await this.connection.disconnect(); } catch (_) {}
       this.connection = null;
       this._mediaPlayer = null;
@@ -882,6 +883,7 @@ export default class Player extends EventEmitter {
 
       if (this.connection) {
         logger.mediaplayer("[Player] Cleaning up existing connection before join");
+        try { this.connection.removeAllListeners(); } catch (_) {}
         try {
           await this.connection.disconnect();
           await Utils.sleep(500);
@@ -942,6 +944,14 @@ export default class Player extends EventEmitter {
       }
 
       connection.on("error", (err) => {
+        // ignore events from a connection that has already been replaced
+        // by a reconnect. Without this guard, the old connection fires "error" after
+        // disconnect, calls _recoverConnection(), which spawns yet another connection
+        // with yet more listeners — causing exponential listener accumulation.
+        if (this.connection !== connection) {
+          try { connection.removeAllListeners(); } catch (_) {}
+          return;
+        }
         const causeStr = err?.cause ? ` (Cause: ${err.cause})` : "";
         logger.error("[Player] Voice error:", err?.message ?? err, causeStr);
         // Stop media AND attempt recovery — previously only stopped media, leaving the bot
@@ -954,13 +964,19 @@ export default class Player extends EventEmitter {
       });
 
       connection.on("disconnected", () => {
+        // stale connection fired "disconnected" after being replaced.
+        // If this isn't the current connection, clean it up and bail out.
+        if (this.connection !== connection) {
+          try { connection.removeAllListeners(); connection.destroy(); } catch (_) {}
+          return;
+        }
         if (!this.leaving) {
           logger.mediaplayer("[Player] Unexpected disconnect detected");
           this._stopMediaPlayer()
               .catch(() => {})
               .finally(() => this._recoverConnection());
         } else {
-          try { connection.destroy(); } catch (_) {}
+          try { connection.removeAllListeners(); connection.destroy(); } catch (_) {}
         }
       });
 
@@ -1048,7 +1064,16 @@ export default class Player extends EventEmitter {
       this._workerSemaphore = 0;
 
       this._stopMediaPlayer().catch(() => {}).then(() => {
+        // increased from 100ms to 400ms so the media player has time to
+        // fully flush before we disconnect the underlying connection. Racing disconnect
+        // against a flushing native FFmpeg/revoice stream leaves the room object alive
+        // in the @livekit/rtc-node native heap indefinitely.
         setTimeout(() => {
+          // removeAllListeners before disconnect so no stale "error" /
+          // "disconnected" callbacks fire after we null this.connection. Without this,
+          // the old handlers hold a closure reference to `this` (the Player) and can
+          // call _recoverConnection() on a player that has already been destroyed.
+          try { this.connection?.removeAllListeners?.(); } catch (_) {}
           const disconnectPromise = this.connection?.disconnect?.();
           if (disconnectPromise instanceof Promise) {
             disconnectPromise.catch((err) => {
@@ -1061,7 +1086,7 @@ export default class Player extends EventEmitter {
           // MediaPlayer (backed by @livekit/rtc-node native heap) stays referenced
           // even after the player is removed from playerMap, causing steady RAM growth.
           this._mediaPlayer = null;
-        }, 100);
+        }, 400);
       });
     } catch (e) {
       logger.error("[Player] destroy error:", e.message);
