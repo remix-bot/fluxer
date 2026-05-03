@@ -726,18 +726,24 @@ export default class Player extends EventEmitter {
 
         const onFfmpegError = (err) => {
           const ffMsg = err?.message ?? String(err);
-          // "Input stream error: aborted" means NodeLink dropped the HTTP stream
-          // (e.g. filter PATCH restarted the player before voice state arrived).
-          // Only treat it as graceful if the track was already close to ending.
-          if (ffMsg.includes("aborted") || ffMsg.includes("Input stream error")) {
+
+          const isGracefulKill =
+              ffMsg.includes("aborted") ||
+              ffMsg.includes("Input stream error") ||
+              ffMsg.includes("SIGKILL") ||
+              ffMsg.includes("killed with signal");
+
+          if (isGracefulKill) {
             if (this._didTrackMostlyFinish(currentTrack)) {
               logger.player("[Player] FFmpeg stream ended near track completion");
               cleanup();
               return resolve();
             }
             cleanup();
+            if (this._streamingStopped || this._skipping) return resolve();
             return reject(new Error(`FFmpeg stream ended early: ${ffMsg}`));
           }
+
           logger.error("[Player] FFmpeg error:", ffMsg);
           cleanup();
           if (this._streamingStopped || this._skipping) return resolve();
