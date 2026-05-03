@@ -213,10 +213,8 @@ export default class Player extends EventEmitter {
   _isRecovering     = false;
   startedPlaying    = null;
   // searches Map with max-size eviction to prevent memory leak on busy servers.
-  // Map preserves insertion order natively, so we use keys().next() for LRU eviction
-  // instead of a separate _searchOrder array (which could hold ghost keys after playResult()).
   searches          = new Map();
-  _searchMaxSize    = 50;       // cap: max concurrent pending search sessions
+  _searchMaxSize    = 50;
   resultLimit       = 5;
   preferredVolume   = 1;
 
@@ -238,13 +236,16 @@ export default class Player extends EventEmitter {
   // Join mutex — prevents concurrent join() calls from racing each other
   _isJoining           = false;
 
+  // destroyed flag — prevents recovery/playback/worker spawn after destroy()
+  _destroyed           = false;
+
   // NodeLink config (kept for direct stream URL building; session managed by moonlink)
   _nl = {
     host:           "localhost",
     port:           3000,
     password:       "youshallnotpass",
     sessionId:      null,
-    requestTimeout: 60_000, // ms before a NodeLink HTTP request is aborted (raise in config if needed)
+    requestTimeout: 60_000,
   };
 
   constructor(token, opts = {}) {
@@ -265,7 +266,7 @@ export default class Player extends EventEmitter {
       ...(opts.nodelink ?? {}),
     };
 
-    // Set inactivity limit — checks config.timers.inactivityTimeout first, then legacy config.inactivityTimeout
+    // Set inactivity limit
     const inactivityMs = this.config?.timers?.inactivityTimeout ?? this.config?.inactivityTimeout;
     if (inactivityMs !== undefined) {
       this._inactivityLimit = inactivityMs;
@@ -296,10 +297,6 @@ export default class Player extends EventEmitter {
   // 24/7 Mode Check
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Check if 24/7 mode is enabled for this guild.
-   * @private
-   */
   _is247Enabled() {
     if (!this._guildId) return false;
 
@@ -353,12 +350,10 @@ export default class Player extends EventEmitter {
   // ═══════════════════════════════════════════════════════════════════════════
 
   async _recoverConnection() {
-    if (this._isRecovering) return;
+    // bail immediately if the player has been destroyed
+    if (this._isRecovering || this._destroyed) return;
     this._isRecovering = true;
 
-    // Increment attempt counter and apply exponential backoff.
-    // Without a limit, a permanently broken NodeLink or network causes an infinite
-    // rejoin loop that floods logs, hammers the DB, and can OOM the process.
     this._recoveryAttempts = (this._recoveryAttempts ?? 0) + 1;
     const MAX_RECOVERY = 5;
     if (this._recoveryAttempts > MAX_RECOVERY) {
@@ -372,6 +367,12 @@ export default class Player extends EventEmitter {
     logger.mediaplayer(`[Player] Recovery attempt ${this._recoveryAttempts}/${MAX_RECOVERY} for ${this._guildId} (backoff ${backoffMs}ms)`);
     await Utils.sleep(backoffMs);
 
+    // re-check after await — player may have been destroyed during backoff
+    if (this._destroyed) {
+      this._isRecovering = false;
+      return;
+    }
+
     logger.mediaplayer(`[Player] Attempting to recover voice connection for ${this._guildId}`);
 
     try {
@@ -380,23 +381,19 @@ export default class Player extends EventEmitter {
       }
 
       await Utils.sleep(2000);
-      if (this.leaving) return;
+      if (this.leaving || this._destroyed) return;
 
       logger.mediaplayer(`[Player] Rejoining channel ${this._channelId}`);
       await this.join(this._channelId);
 
-      // Verify the join actually produced a healthy connection before resuming playback.
-      // Releasing _isRecovering here (rather than in finally) means a second "disconnected"
-      // event that fires while join() is in-flight cannot enter a concurrent recovery cycle.
       const roomState = this.connection?.room?.state;
       const isConnected = roomState === 1 || roomState === "connected" || roomState === "connecting";
       if (!isConnected) {
         throw new Error(`Room in unexpected state after rejoin: ${roomState}`);
       }
 
-      // Release the guard only after confirming the connection is live
       this._isRecovering = false;
-      this._recoveryAttempts = 0; // reset so future disconnects get a fresh retry budget
+      this._recoveryAttempts = 0;
 
       const current = this.queue.getCurrent();
       if (current) {
@@ -420,9 +417,6 @@ export default class Player extends EventEmitter {
   // Inactivity Timer
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Returns true if there is at least one non-bot human in the bot's current voice channel.
-   */
   _hasHumansInChannel() {
     if (!this._channelId || !this._guildId) return false;
     const cleanChan  = String(this._channelId).replace(/\D/g, "");
@@ -498,6 +492,9 @@ export default class Player extends EventEmitter {
   // ═══════════════════════════════════════════════════════════════════════════
 
   async _ensureMediaPlayer() {
+    // never create a MediaPlayer on a destroyed player
+    if (this._destroyed) return false;
+
     if (!this.connection) {
       logger.mediaplayer("[Player] No connection available");
       return false;
@@ -522,11 +519,12 @@ export default class Player extends EventEmitter {
       }
 
       logger.mediaplayer("[Player] Existing MediaPlayer unhealthy, cleaning up...");
-      // Don't call _cleanupMediaPlayer (which calls _stopMediaPlayer and nulls _mediaPlayer)
-      // because we're about to create a new one — just discard the unhealthy reference.
       try { await this._mediaPlayer.stop(); } catch (_) {}
       this._mediaPlayer = null;
     }
+
+    // re-check after async stop — player may have been destroyed
+    if (this._destroyed) return false;
 
     try {
       this._mediaPlayer = new MediaPlayer();
@@ -580,8 +578,6 @@ export default class Player extends EventEmitter {
 
       await new Promise(r => setTimeout(r, 150));
       // Null the reference so the native revoice.js/LiveKit object can be GC'd.
-      // Keeping _mediaPlayer alive after stop() prevents the native heap backing the
-      // MediaPlayer (track publication, audio source) from being released.
       this._mediaPlayer = null;
     }
   }
@@ -609,7 +605,7 @@ export default class Player extends EventEmitter {
             ...options.headers,
           },
         }, (res) => {
-          if (returnStream) req.setTimeout(0); // Disable socket idle timeout for media streams
+          if (returnStream) req.setTimeout(0);
 
           if ([301, 302, 307, 308].includes(res.statusCode)) {
             let loc = res.headers.location;
@@ -623,7 +619,6 @@ export default class Player extends EventEmitter {
           }
           if (returnStream) return resolve(res);
 
-          // 204 No Content — valid success with no body
           if (res.statusCode === 204) { res.resume(); return resolve(null); }
 
           const chunks = [];
@@ -684,8 +679,6 @@ export default class Player extends EventEmitter {
   // ═══════════════════════════════════════════════════════════════════════════
 
   async _streamViaRevoice(url, options = {}) {
-    // Early bail: if streaming was stopped before we even fetch the stream,
-    // don't open the HTTP connection at all.
     if (this._streamingStopped) return;
 
     this._streamingStopped = false;
@@ -711,7 +704,6 @@ export default class Player extends EventEmitter {
           cleanup();
           if (this._streamingStopped || this._skipping) return resolve();
           const graceful = ["aborted", "ECONNRESET", "ERR_STREAM_DESTROYED", "ENOTFOUND", "ETIMEDOUT", "ECONNREFUSED"];
-          // Use substring matching so "Input stream error: aborted" (from NodeLink) is also caught
           if (graceful.some(g => e.code === g || e.message?.includes(g))) {
             if (this._didTrackMostlyFinish(currentTrack)) return resolve();
             return reject(new Error(`Stream ended early for ${currentTrack?.title || "track"}: ${e.message ?? e.code ?? "stream aborted"}`));
@@ -727,6 +719,8 @@ export default class Player extends EventEmitter {
         const onFfmpegError = (err) => {
           const ffMsg = err?.message ?? String(err);
 
+          // treat SIGKILL as graceful — _stopMediaPlayer() always kills FFmpeg with SIGKILL.
+          // Previously this fell through to logger.error, creating a noisy false-positive.
           const isGracefulKill =
               ffMsg.includes("aborted") ||
               ffMsg.includes("Input stream error") ||
@@ -740,10 +734,12 @@ export default class Player extends EventEmitter {
               return resolve();
             }
             cleanup();
+            // If we deliberately stopped (skip/leave), resolve silently
             if (this._streamingStopped || this._skipping) return resolve();
             return reject(new Error(`FFmpeg stream ended early: ${ffMsg}`));
           }
 
+          // Genuine unexpected FFmpeg error
           logger.error("[Player] FFmpeg error:", ffMsg);
           cleanup();
           if (this._streamingStopped || this._skipping) return resolve();
@@ -829,8 +825,6 @@ export default class Player extends EventEmitter {
         return await this._streamViaRevoice(url, { rawPcm: true });
       } catch (err) {
         const msg = err?.message ?? String(err ?? "");
-        // Fall back on any HTTP error (404, 500, etc) — NodeLink may return JSON error
-        // bodies which would be played as PCM causing loud buzzing
         if (msg.includes("HTTP ")) {
           logger.warn(`[Player] NodeLink loadStream failed (${msg}), falling back to trackstream URL mode`);
           const parsed = new URL(url);
@@ -865,6 +859,8 @@ export default class Player extends EventEmitter {
   // ═══════════════════════════════════════════════════════════════════════════
 
   async join(channelId) {
+    if (this._destroyed) return;
+
     if (this._isJoining) {
       logger.player(`[Player] Busy joining. Ignoring: ${channelId}`);
       return;
@@ -950,33 +946,25 @@ export default class Player extends EventEmitter {
       }
 
       connection.on("error", (err) => {
-        // ignore events from a connection that has already been replaced
-        // by a reconnect. Without this guard, the old connection fires "error" after
-        // disconnect, calls _recoverConnection(), which spawns yet another connection
-        // with yet more listeners — causing exponential listener accumulation.
         if (this.connection !== connection) {
           try { connection.removeAllListeners(); } catch (_) {}
           return;
         }
         const causeStr = err?.cause ? ` (Cause: ${err.cause})` : "";
         logger.error("[Player] Voice error:", err?.message ?? err, causeStr);
-        // Stop media AND attempt recovery — previously only stopped media, leaving the bot
-        // silently sitting in voice with no audio and no self-healing.
         this._stopMediaPlayer()
             .catch(() => {})
             .finally(() => {
-              if (!this.leaving) this._recoverConnection();
+              if (!this.leaving && !this._destroyed) this._recoverConnection();
             });
       });
 
       connection.on("disconnected", () => {
-        // stale connection fired "disconnected" after being replaced.
-        // If this isn't the current connection, clean it up and bail out.
         if (this.connection !== connection) {
           try { connection.removeAllListeners(); connection.destroy(); } catch (_) {}
           return;
         }
-        if (!this.leaving) {
+        if (!this.leaving && !this._destroyed) {
           logger.mediaplayer("[Player] Unexpected disconnect detected");
           this._stopMediaPlayer()
               .catch(() => {})
@@ -1052,6 +1040,11 @@ export default class Player extends EventEmitter {
   }
 
   destroy() {
+    // guard against double-destroy — prevents listener accumulation and
+    // double-free of native LiveKit/revoice heap objects.
+    if (this._destroyed) return;
+    this._destroyed = true;
+
     try {
       if (this._moonlink && this._onMoonlinkReady) {
         try { this._moonlink.off("ready", this._onMoonlinkReady); } catch (_) {}
@@ -1061,24 +1054,18 @@ export default class Player extends EventEmitter {
       this._streamingStopped = true;
       this._stopInactivityTimer();
 
-      // Drain queued worker slots so any pending play() calls resolve immediately
-      // rather than hanging indefinitely waiting for a slot that will never come.
+      // clear the searches map to free track data held in memory
+      this.searches.clear();
+
+      // Drain queued worker slots so pending play/search calls resolve immediately.
       while (this._workerQueue.length > 0) {
         const resolve = this._workerQueue.shift();
-        resolve(); // release immediately; the worker will be terminated via .finally()
+        resolve();
       }
       this._workerSemaphore = 0;
 
       this._stopMediaPlayer().catch(() => {}).then(() => {
-        // increased from 100ms to 400ms so the media player has time to
-        // fully flush before we disconnect the underlying connection. Racing disconnect
-        // against a flushing native FFmpeg/revoice stream leaves the room object alive
-        // in the @livekit/rtc-node native heap indefinitely.
         setTimeout(() => {
-          // removeAllListeners before disconnect so no stale "error" /
-          // "disconnected" callbacks fire after we null this.connection. Without this,
-          // the old handlers hold a closure reference to `this` (the Player) and can
-          // call _recoverConnection() on a player that has already been destroyed.
           try { this.connection?.removeAllListeners?.(); } catch (_) {}
           const disconnectPromise = this.connection?.disconnect?.();
           if (disconnectPromise instanceof Promise) {
@@ -1087,10 +1074,6 @@ export default class Player extends EventEmitter {
             });
           }
           this.connection   = null;
-          // Null _mediaPlayer AFTER disconnect so the native LiveKit/revoice objects
-          // are released and can be garbage collected. Without this the revoice.js
-          // MediaPlayer (backed by @livekit/rtc-node native heap) stays referenced
-          // even after the player is removed from playerMap, causing steady RAM growth.
           this._mediaPlayer = null;
         }, 400);
       });
@@ -1186,19 +1169,9 @@ export default class Player extends EventEmitter {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Audio Filter Control (NodeLink PATCH /v4/sessions/:id/players/:guildId)
+  // Audio Filter Control
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Apply (or clear) an audio filter by sending a PATCH to NodeLink.
-   * Includes encodedTrack so NodeLink doesn't create a ghost player.
-   * Uses live session ID from moonlink to avoid stale sessions.
-   * Auto-retries once on stale session detection.
-   *
-   * @param {Object} filterPayload  - Lavalink v4 filters object. Pass {} to clear all filters.
-   * @param {{ key: string, label: string, emoji?: string }|null} meta - Filter metadata to store, or null to clear.
-   * @returns {Promise<{ ok: boolean, reason?: string }>}
-   */
   async applyFilter(filterPayload, meta = null, _retryCount = 0) {
     const guildId = this._guildId;
     if (!guildId) {
@@ -1208,8 +1181,6 @@ export default class Player extends EventEmitter {
     const current = this.queue.getCurrent();
     const liveSessionId = this._moonlink?.getLiveSessionId?.() ?? this._moonlink?.sessionId ?? this._nl.sessionId;
 
-    // Allow filters to be selected before a playable encoded track is active.
-    // They will be applied automatically on the next track start.
     if (!liveSessionId || !current?.encoded) {
       this.activeFilter = meta ?? null;
       this.activeFilterPayload = meta ? filterPayload : null;
@@ -1220,9 +1191,6 @@ export default class Player extends EventEmitter {
     const { host, port } = this._nl;
     const url = `http://${host}:${port}/v4/sessions/${liveSessionId}/players/${guildId}?noReplace=true`;
 
-    // Send ONLY filters. With noReplace=true, NodeLink won't touch the track.
-    // Including track.encoded causes NodeLink to restart the Voice Worker,
-    // which aborts the current stream and causes the "Input stream error: aborted" FFmpeg error.
     const body = JSON.stringify({ filters: filterPayload });
 
     try {
@@ -1488,10 +1456,6 @@ export default class Player extends EventEmitter {
   // Worker Management
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Per-player semaphore: at most 3 concurrent worker threads per player.
-  // Without this, a user spamming play or search spawns an unlimited number of
-  // OS threads (visible as 40+ threads in btop), each holding ~8-16MB stack + V8 heap.
-  // 3 concurrent workers per player is more than enough for any realistic usage.
   _workerSemaphore  = 0;
   _workerMaxConcurrent = 3;
   _workerQueue      = [];
@@ -1507,7 +1471,7 @@ export default class Player extends EventEmitter {
   _releaseWorkerSlot() {
     const next = this._workerQueue.shift();
     if (next) {
-      next(); // pass the slot directly to the next waiter
+      next();
     } else {
       this._workerSemaphore--;
     }
@@ -1517,6 +1481,10 @@ export default class Player extends EventEmitter {
     const workerPath = new URL("./worker.mjs", import.meta.url);
 
     const runWorker = () => {
+      // don't spawn new workers on a destroyed player — the slot was released
+      // by destroy() draining _workerQueue, so we just return an empty result.
+      if (this._destroyed) return Promise.resolve(null);
+
       const worker = new Worker(workerPath, {
         workerData: {
           jobId,
@@ -1542,9 +1510,6 @@ export default class Player extends EventEmitter {
 
       const raced = Utils.timeout(job, 60_000, "Worker timeout after 60s");
 
-      // Absorb any late "error" events emitted after the timeout has already settled
-      // the promise.  Without this no-op, a worker error arriving post-timeout produces
-      // an unhandled rejection / uncaughtException on some Node versions.
       worker.on("error", () => {});
 
       return raced.finally(() => worker.terminate().catch(() => {}));
@@ -1571,10 +1536,6 @@ export default class Player extends EventEmitter {
       });
       list += "\nSend the number of the result. Example: `2`\nSend 'x' to cancel.";
 
-      // LRU eviction: Map preserves insertion order; the first key() is always the oldest.
-      // This avoids the ghost-key bug that existed when _searchOrder tracked keys separately
-      // from the Map — playResult() could remove a key from searches but leave it in the
-      // order array, causing the eviction to silently skip the true oldest live entry.
       if (this.searches.size >= this._searchMaxSize) {
         const oldestKey = this.searches.keys().next().value;
         if (oldestKey !== undefined) this.searches.delete(oldestKey);
@@ -1695,6 +1656,10 @@ export default class Player extends EventEmitter {
   async playNext() {
     if (this._playingNext) return;
     this._playingNext = true;
+    // use try/finally so _playingNext is ALWAYS cleared, even if _doPlayNext
+    // throws. Previously _doPlayNext would set _playingNext=false itself before
+    // tail-calling this.playNext(), causing a race where the outer finally would
+    // then overwrite the new call's _playingNext=true with false.
     try { await this._doPlayNext(); }
     finally { this._playingNext = false; }
   }
@@ -1751,7 +1716,9 @@ export default class Player extends EventEmitter {
       if (songData) {
         this.queue.data.unshift(songData);
         this.queue.current = null;
-        this._playingNext = false;
+        // _playingNext is intentionally NOT cleared here — the outer
+        // playNext() finally block handles it. Recovery will call playNext()
+        // after the outer finally has run and cleared the flag.
       }
       this._recoverConnection();
       return;
@@ -1820,10 +1787,11 @@ export default class Player extends EventEmitter {
     if (!streamUrl || !Utils.isValidUrl(streamUrl)) {
       logger.error("[Player] No valid stream URL for:", songData.title);
       this.emit("message", mkEmbed(`:x: Could not get stream URL for **${songData.title}** — skipping...`))
-      this._playingNext    = false;
       this._streamingStopped = false;
-      this.playNext();
-      return;
+      // tail-call via _doPlayNext directly instead of manipulating
+      // _playingNext and calling playNext() — avoids the race where the outer
+      // playNext() finally overwrites _playingNext=true set by the new call.
+      return this._doPlayNext();
     }
 
     logger.player(`[Player:${this._guildId}] Streaming: ${songData.title}`);
@@ -1852,15 +1820,17 @@ export default class Player extends EventEmitter {
         this.queue.data.unshift(songData);
         this.queue.current = null;
         this._streamingStopped = false;
-        this._playingNext      = false;
         await Utils.sleep(1500);
-        if (!this.leaving && !this._skipping) this.playNext();
+        // tail-call directly into _doPlayNext instead of setting
+        // _playingNext=false and calling playNext() — eliminates the race where
+        // the outer finally resets _playingNext=false mid-execution of the new call.
+        if (!this.leaving && !this._skipping) return this._doPlayNext();
       } else {
         if (!this._paused) {
           if (!this.queue.songLoop) this.queue.current = null;
           this._streamingStopped = false;
-          this._playingNext      = false;
-          this.playNext();
+          // same tail-call fix as above
+          return this._doPlayNext();
         }
       }
     }
