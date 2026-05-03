@@ -83,10 +83,6 @@ function isIgnorableMediaStateError(err) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // PlayerWorkerPool — persistent worker pool to avoid spawning a new Node.js
 // isolate (~40 MB V8 heap) for every search/play command.
-//
-// Instead of: new Worker() per job → terminate after job (slow, memory spikes)
-// Now:        N workers stay alive, jobs are dispatched via postMessage with
-//             a unique jobKey so responses can be routed back to the right caller.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class PlayerWorkerPool {
@@ -315,6 +311,7 @@ export default class Player extends EventEmitter {
   // Playback state
   leaving           = false;
   _paused           = false;
+  _pausedAt         = null; // track exact moment of pause for clock sync
   _playingNext      = false;
   _isRecovering     = false;
   startedPlaying    = null;
@@ -381,7 +378,7 @@ export default class Player extends EventEmitter {
     // moonlink.js manager reference — injected by PlayerManager
     this._moonlink = opts.moonlink ?? null;
 
-    // FIXED: Robust session sync that handles reconnection and stale sessions
+    // Robust session sync that handles reconnection and stale sessions
     if (this._moonlink) {
       this._onMoonlinkReady = (sessionId) => {
         const oldId = this._nl.sessionId;
@@ -826,7 +823,6 @@ export default class Player extends EventEmitter {
           const ffMsg = err?.message ?? String(err);
 
           // treat SIGKILL as graceful — _stopMediaPlayer() always kills FFmpeg with SIGKILL.
-          // Previously this fell through to logger.error, creating a noisy false-positive.
           const isGracefulKill =
               ffMsg.includes("aborted") ||
               ffMsg.includes("Input stream error") ||
@@ -878,13 +874,14 @@ export default class Player extends EventEmitter {
           return reject(e);
         }
 
-        // 20 min is plenty for any real track; 24h was holding the entire
-        // stream closure (audioStream, MediaPlayer, Player ref) alive for a full
-        // day whenever a stream dropped without firing "finish" (radio dropout,
-        // network blip). Multiply by active guilds → gigabytes of leaked native mem.
-        const safetyMs = 20 * 60 * 1000; // 20 minutes
+        // Dynamic safety timeout based on track duration.
+        const trackDuration = this._getTrackDurationMs(currentTrack);
+        const safetyMs = (trackDuration > 0 && currentTrack.type !== "radio")
+            ? trackDuration + 15_000
+            : 20 * 60 * 1000; // default 20 min for radio/unknown
+
         const safetyTimer = setTimeout(() => {
-          logger.warn("[Player] Stream safety timeout — advancing queue");
+          logger.warn(`[Player] Stream safety timeout hit (${Math.round(safetyMs/1000)}s) — advancing queue`);
           cleanup();
           resolve();
         }, safetyMs);
@@ -1139,6 +1136,7 @@ export default class Player extends EventEmitter {
       this.connection  = null;
       this._mediaPlayer = null;
       this._paused     = false;
+      this._pausedAt   = null;
       this._playingNext = false;
       this.leaving     = false;
     } catch (e) {
@@ -1150,8 +1148,6 @@ export default class Player extends EventEmitter {
   }
 
   destroy() {
-    // guard against double-destroy — prevents listener accumulation and
-    // double-free of native LiveKit/revoice heap objects.
     if (this._destroyed) return;
     this._destroyed = true;
 
@@ -1163,28 +1159,19 @@ export default class Player extends EventEmitter {
       this.leaving          = true;
       this._streamingStopped = true;
       this._stopInactivityTimer();
-
-      // clear the searches map to free track data held in memory
       this.searches.clear();
 
-      // Terminate the persistent worker pool — releases the 2 worker isolates
-      // and their ~80 MB of V8 heap for this player.
       if (this._workerPool) {
         try { this._workerPool.terminate(); } catch (_) {}
         this._workerPool = null;
       }
 
-      // Drain queued worker slots so pending play/search calls resolve immediately.
       while (this._workerQueue.length > 0) {
         const resolve = this._workerQueue.shift();
         resolve();
       }
       this._workerSemaphore = 0;
 
-      // Disconnect eagerly — don't defer with setTimeout so native LiveKit/
-      // revoice heap objects are released as soon as possible instead of
-      // waiting 400ms (which, multiplied by many concurrent destroys, left
-      // native WebRTC audio buffers alive far longer than necessary).
       const connToDestroy = this.connection;
       this.connection   = null;
       this._mediaPlayer = null;
@@ -1216,6 +1203,7 @@ export default class Player extends EventEmitter {
     if (this._paused)
       return ":negative_squared_cross_mark: Already paused!";
     this._paused = true;
+    this._pausedAt = Date.now(); // Capture freeze moment
     this._mediaPlayer?.pause();
     this.emit("playback", false);
     this._stopInactivityTimer();
@@ -1227,7 +1215,14 @@ export default class Player extends EventEmitter {
       return ":negative_squared_cross_mark: There's nothing playing at the moment!";
     if (!this._paused)
       return ":negative_squared_cross_mark: Not paused!";
+
+    // Adjust start time by the duration of the pause
+    if (this._pausedAt) {
+      this.startedPlaying += (Date.now() - this._pausedAt);
+    }
+
     this._paused = false;
+    this._pausedAt = null;
     this._mediaPlayer?.resume();
     this.emit("playback", true);
     this._stopInactivityTimer();
@@ -1416,11 +1411,18 @@ export default class Player extends EventEmitter {
   _createProgressBar(length = 15) {
     const current = this.queue.getCurrent();
     if (!current?.duration || !this.startedPlaying) return Utils.progressBar(0, 1, length);
-    const elapsed = Date.now() - this.startedPlaying;
-    let totalMs;
-    if (typeof current.duration === "object") totalMs = (current.duration.seconds ?? 0) * 1000;
-    else if (typeof current.duration === "number") totalMs = current.duration;
-    else return Utils.progressBar(0, 1, length);
+
+    // Common elapsed calculation
+    const totalMs = this._getTrackDurationMs(current);
+    let elapsed = Date.now() - this.startedPlaying;
+    if (this._paused && this._pausedAt) {
+      elapsed = this._pausedAt - this.startedPlaying;
+    }
+
+    // Clamp to ensure 1:58/1:30 doesn't happen
+    if (totalMs > 0 && elapsed > totalMs) elapsed = totalMs;
+    elapsed = Math.max(0, elapsed);
+
     const bar     = Utils.progressBar(elapsed, totalMs, length);
     const timeNow = Utils.prettifyMS(elapsed);
     const total   = Utils.prettifyMS(totalMs);
@@ -1457,23 +1459,32 @@ export default class Player extends EventEmitter {
     let totalMs  = 0;
     const current = this.queue.getCurrent();
     if (current?.duration && this.startedPlaying) {
-      const elapsed   = Date.now() - this.startedPlaying;
-      const durationMs = typeof current.duration === "object"
-          ? (current.duration.seconds ?? 0) * 1000
-          : current.duration;
-      totalMs += Math.max(0, durationMs - elapsed);
+      const totalMsCurrent = this._getTrackDurationMs(current);
+      let elapsed = Date.now() - this.startedPlaying;
+      if (this._paused && this._pausedAt) {
+        elapsed = this._pausedAt - this.startedPlaying;
+      }
+      totalMs += Math.max(0, totalMsCurrent - elapsed);
     }
     for (const track of this.queue.data) {
-      if (!track?.duration) continue;
-      if (typeof track.duration === "object" && track.duration?.seconds) totalMs += track.duration.seconds * 1000;
-      else if (typeof track.duration === "number") totalMs += track.duration;
+      totalMs += this._getTrackDurationMs(track);
     }
     return Utils.prettifyMS(totalMs);
   }
 
   getCurrentElapsedDuration() {
     if (!this.startedPlaying) return "0:00";
-    return Utils.prettifyMS(Date.now() - this.startedPlaying);
+    const current = this.queue.getCurrent();
+    const totalMs = this._getTrackDurationMs(current);
+
+    let elapsed = Date.now() - this.startedPlaying;
+    if (this._paused && this._pausedAt) {
+      elapsed = this._pausedAt - this.startedPlaying;
+    }
+
+    // Clamp UI to total duration
+    if (totalMs > 0 && elapsed > totalMs) elapsed = totalMs;
+    return Utils.prettifyMS(Math.max(0, elapsed));
   }
 
   list(page = 1, pageSize = 10) {
@@ -1581,7 +1592,6 @@ export default class Player extends EventEmitter {
   _workerSemaphore  = 0;
   _workerMaxConcurrent = 3;
   _workerQueue      = [];
-  // Shared pool — one per Player instance (2 persistent workers, no per-job spawn overhead)
   _workerPool       = null;
 
   _acquireWorkerSlot() {
@@ -1604,8 +1614,6 @@ export default class Player extends EventEmitter {
   _getWorkerPool() {
     if (!this._workerPool) {
       const workerPath = new URL("./worker.mjs", import.meta.url);
-      // 2 persistent workers per player — enough for concurrent play+search
-      // without spawning a new 40MB isolate per command.
       this._workerPool = new PlayerWorkerPool(2, workerPath);
     }
     return this._workerPool;
@@ -1681,7 +1689,7 @@ export default class Player extends EventEmitter {
           if (!data) {
             logger.worker("[Player] Worker returned empty result");
             events.emit("message", "Could not load track - no data returned.");
-            events.removeAllListeners(); // release closure references immediately
+            events.removeAllListeners();
             return;
           }
 
@@ -1706,8 +1714,6 @@ export default class Player extends EventEmitter {
           if (!this.queue.getCurrent()) {
             this.playNext();
           }
-          // Drop all listeners — the job is done, nothing more will be emitted.
-          // This releases the closure the command holds over statusMsg etc.
           events.removeAllListeners();
         })
         .catch((reason) => {
@@ -1771,10 +1777,6 @@ export default class Player extends EventEmitter {
   async playNext() {
     if (this._playingNext) return;
     this._playingNext = true;
-    // use try/finally so _playingNext is ALWAYS cleared, even if _doPlayNext
-    // throws. Previously _doPlayNext would set _playingNext=false itself before
-    // tail-calling this.playNext(), causing a race where the outer finally would
-    // then overwrite the new call's _playingNext=true with false.
     try { await this._doPlayNext(); }
     finally { this._playingNext = false; }
   }
@@ -1831,9 +1833,6 @@ export default class Player extends EventEmitter {
       if (songData) {
         this.queue.data.unshift(songData);
         this.queue.current = null;
-        // _playingNext is intentionally NOT cleared here — the outer
-        // playNext() finally block handles it. Recovery will call playNext()
-        // after the outer finally has run and cleared the flag.
       }
       this._recoverConnection();
       return;
@@ -1903,15 +1902,16 @@ export default class Player extends EventEmitter {
       logger.error("[Player] No valid stream URL for:", songData.title);
       this.emit("message", mkEmbed(`:x: Could not get stream URL for **${songData.title}** — skipping...`))
       this._streamingStopped = false;
-      // tail-call via _doPlayNext directly instead of manipulating
-      // _playingNext and calling playNext() — avoids the race where the outer
-      // playNext() finally overwrites _playingNext=true set by the new call.
       return this._doPlayNext();
     }
 
     logger.player(`[Player:${this._guildId}] Streaming: ${songData.title}`);
+
+    // Reset all timing flags
     this.startedPlaying = Date.now();
     this._paused        = false;
+    this._pausedAt      = null;
+
     if (songData.type !== "radio" || !this._radioAnnounced) {
       this.announceSong(songData);
       if (songData.type === "radio") this._radioAnnounced = true;
@@ -1936,15 +1936,11 @@ export default class Player extends EventEmitter {
         this.queue.current = null;
         this._streamingStopped = false;
         await Utils.sleep(1500);
-        // tail-call directly into _doPlayNext instead of setting
-        // _playingNext=false and calling playNext() — eliminates the race where
-        // the outer finally resets _playingNext=false mid-execution of the new call.
         if (!this.leaving && !this._skipping) return this._doPlayNext();
       } else {
         if (!this._paused) {
           if (!this.queue.songLoop) this.queue.current = null;
           this._streamingStopped = false;
-          // same tail-call fix as above
           return this._doPlayNext();
         }
       }
