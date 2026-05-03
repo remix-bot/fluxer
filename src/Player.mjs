@@ -1457,10 +1457,6 @@ export default class Player extends EventEmitter {
   // Worker Management
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Worker Management
-  // ═══════════════════════════════════════════════════════════════════════════
-
   // Per-player semaphore: at most 3 concurrent worker threads per player.
   // Without this, a user spamming play or search spawns an unlimited number of
   // OS threads (visible as 40+ threads in btop), each holding ~8-16MB stack + V8 heap.
