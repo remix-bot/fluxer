@@ -718,8 +718,14 @@ class Remix {
       const prev         = _prevVoiceState.get(userId);
       const oldChannelId = prev?.channelId ?? null;
 
-      // Update prev state
+      // Update prev state — evict oldest entry if Map exceeds 10,000 entries
+      // (one per user who has ever touched voice since last restart) to prevent
+      // unbounded growth on large bots that never restart.
       if (channelId) {
+        if (_prevVoiceState.size >= 10_000 && !_prevVoiceState.has(userId)) {
+          // Remove the oldest inserted entry (Maps preserve insertion order)
+          _prevVoiceState.delete(_prevVoiceState.keys().next().value);
+        }
         _prevVoiceState.set(userId, { channelId, guildId });
       } else {
         _prevVoiceState.delete(userId);

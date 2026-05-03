@@ -105,8 +105,8 @@ function nlGet(path) {
  * @param {string} identifier
  * @returns {Promise<object>}
  */
-async function loadTracks(identifier) {
-  return nlGet(`/v4/loadtracks?identifier=${encodeURIComponent(identifier)}`);
+async function loadTracks(identifier, nlGetFn = nlGet) {
+  return nlGetFn(`/v4/loadtracks?identifier=${encodeURIComponent(identifier)}`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -296,7 +296,7 @@ class YTUtils extends EventEmitter {
 
   async getResults(query, limit = 5, provider = "ytm") {
     const id   = this.isValidUrl(query) ? query : this._buildIdentifier(provider, query);
-    const data = await loadTracks(id);
+    const data = await loadTracks(id, this._nlGet ?? nlGet);
 
     let tracks = [];
     if      (data.loadType === "search")   tracks = data.data ?? [];
@@ -320,7 +320,7 @@ class YTUtils extends EventEmitter {
 
       let data;
       try {
-        data = await loadTracks(cleanedUrl);
+        data = await loadTracks(cleanedUrl, this._nlGet ?? nlGet);
       } catch (e) {
         this.emit("message", `**Failed to load that track.**`);
         return { type: "error", data: null, error: sanitizeError(e.message) };
@@ -359,7 +359,7 @@ class YTUtils extends EventEmitter {
 
     let data;
     try {
-      data = await loadTracks(this._buildIdentifier(provider, query));
+      data = await loadTracks(this._buildIdentifier(provider, query), this._nlGet ?? nlGet);
     } catch (e) {
       this.emit("message", `**Search failed. Please try again.**`);
       return { type: "error", data: null, error: sanitizeError(e.message) };
@@ -401,6 +401,96 @@ class YTUtils extends EventEmitter {
 
 const jobId = workerData?.jobId;
 const data  = workerData?.data;
+
+// ─── Pool mode ────────────────────────────────────────────────────────────────
+// When spawned by PlayerWorkerPool, the worker stays alive and handles multiple
+// jobs via parentPort messages instead of exiting after one.
+if (workerData?.poolMode) {
+  const utils = new YTUtils();
+
+  const post = (jobKey, event, payload) => {
+    parentPort.postMessage(JSON.stringify({ jobKey, event, data: payload }));
+  };
+
+  parentPort.on("message", async (raw) => {
+    let parsed;
+    try { parsed = typeof raw === "string" ? JSON.parse(raw) : raw; }
+    catch (_) { return; }
+
+    const { jobKey, jobId: jId, data: jData } = parsed;
+    if (!jobKey || !jId) return;
+
+    const nl           = jData?.nodelink ?? {};
+    const NL_HOST_job  = nl.host      ?? "localhost";
+    const NL_PORT_job  = nl.port      ?? 3000;
+    const NL_PASS_job  = nl.password  ?? NL_DEFAULT_PASSWORD;
+    const NL_SID_job   = nl.sessionId ?? null;
+    const NL_GID_job   = jData?.guildId ?? null;
+
+    // Build a job-scoped request helper so pool workers handle different
+    // nodelink configs per job (useful when the session ID rotates).
+    const nlGetJob = (path) => new Promise((resolve, reject) => {
+      const isHttps  = NL_PORT_job === 443;
+      const mod      = isHttps ? https : http;
+      const protocol = isHttps ? "https" : "http";
+      const req = mod.get(
+          `${protocol}://${NL_HOST_job}:${NL_PORT_job}${path}`,
+          {
+            headers: {
+              Authorization: NL_PASS_job,
+              ...(NL_SID_job ? { "Session-Id": NL_SID_job } : {}),
+              ...(NL_GID_job ? { "Guild-Id":   NL_GID_job } : {}),
+            }
+          },
+          (res) => {
+            const chunks = [];
+            res.on("data", d => chunks.push(d));
+            res.on("end", () => {
+              try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
+              catch (e) { reject(new Error(`NodeLink JSON parse error: ${e.message}`)); }
+            });
+          }
+      );
+      req.on("error", reject);
+      req.setTimeout(30_000, () => { req.destroy(); reject(new Error("NodeLink request timeout")); });
+    });
+
+    const jobUtils = new YTUtils();
+    jobUtils._nlGet = nlGetJob;
+
+    jobUtils.on("message", (m) => post(jobKey, "message", m));
+    jobUtils.on("error",   (m) => post(jobKey, "error", m));
+
+    try {
+      let result;
+      switch (jId) {
+        case "generalQuery":
+          result = await jobUtils.getVideoData(jData.query, jData.provider);
+          break;
+        case "searchResults":
+          result = await jobUtils.getResults(jData.query, jData.resultCount, jData.provider);
+          break;
+        case "search":
+          result = await jobUtils.getVideoData(String(jData), "ytm");
+          result = result?.data ?? null;
+          break;
+        default:
+          post(jobKey, "error", `Unknown jobId: ${jId}`);
+          return;
+      }
+      post(jobKey, "finished", result);
+    } catch (err) {
+      post(jobKey, "error", err.message);
+    } finally {
+      jobUtils.removeAllListeners();
+    }
+  });
+
+  // Keep the worker alive — don't exit, the pool will terminate() when done.
+}
+
+// ─── Legacy single-job mode (fallback / dev) ──────────────────────────────────
+else {
 
 if (!jobId) {
   logger.error("No jobId provided to worker");
@@ -461,3 +551,4 @@ utils.on("error", (m) => {
     process.exit(0);
   }
 })();
+}

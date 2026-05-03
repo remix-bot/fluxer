@@ -81,6 +81,112 @@ function isIgnorableMediaStateError(err) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// PlayerWorkerPool — persistent worker pool to avoid spawning a new Node.js
+// isolate (~40 MB V8 heap) for every search/play command.
+//
+// Instead of: new Worker() per job → terminate after job (slow, memory spikes)
+// Now:        N workers stay alive, jobs are dispatched via postMessage with
+//             a unique jobKey so responses can be routed back to the right caller.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class PlayerWorkerPool {
+  constructor(size, workerPath) {
+    this._size       = size;
+    this._workerPath = workerPath;
+    this._workers    = [];   // { worker, busy }
+    this._queue      = [];   // { jobKey, msg, resolve, reject, onMessage }
+    this._pending    = new Map(); // jobKey → { resolve, reject, onMessage }
+    this._jobCounter = 0;
+
+    for (let i = 0; i < size; i++) this._spawn();
+  }
+
+  _spawn() {
+    const worker = new Worker(this._workerPath, {
+      workerData: { poolMode: true }
+    });
+    const entry = { worker, busy: false };
+
+    worker.on("message", (raw) => {
+      try {
+        const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
+        const { jobKey, event, data } = msg;
+        const cb = this._pending.get(jobKey);
+        if (!cb) return;
+        if (event === "message" && cb.onMessage) {
+          cb.onMessage(data);
+        } else if (event === "finished") {
+          this._pending.delete(jobKey);
+          entry.busy = false;
+          cb.resolve(data);
+          this._drain();
+        } else if (event === "error") {
+          this._pending.delete(jobKey);
+          entry.busy = false;
+          cb.reject(new Error(String(data)));
+          this._drain();
+        }
+      } catch (_) {}
+    });
+
+    worker.on("error", (err) => {
+      // Release any job currently assigned to this worker
+      for (const [key, cb] of this._pending) {
+        cb.reject(err);
+        this._pending.delete(key);
+      }
+      entry.busy = false;
+      // Replace dead worker
+      this._workers.splice(this._workers.indexOf(entry), 1);
+      this._spawn();
+    });
+
+    worker.on("exit", (code) => {
+      this._workers.splice(this._workers.indexOf(entry), 1);
+      if (this._workers.length < this._size) this._spawn();
+    });
+
+    this._workers.push(entry);
+  }
+
+  _drain() {
+    if (this._queue.length === 0) return;
+    const free = this._workers.find(e => !e.busy);
+    if (!free) return;
+    const job = this._queue.shift();
+    this._dispatch(free, job);
+  }
+
+  _dispatch(entry, { jobKey, msg, resolve, reject, onMessage }) {
+    entry.busy = true;
+    this._pending.set(jobKey, { resolve, reject, onMessage });
+    entry.worker.postMessage(JSON.stringify(msg));
+  }
+
+  run(jobId, data, onMessage = null) {
+    const jobKey = String(++this._jobCounter);
+    const msg    = { poolMode: true, jobKey, jobId, data };
+    return new Promise((resolve, reject) => {
+      const free = this._workers.find(e => !e.busy);
+      if (free) {
+        this._dispatch(free, { jobKey, msg, resolve, reject, onMessage });
+      } else {
+        this._queue.push({ jobKey, msg, resolve, reject, onMessage });
+      }
+    });
+  }
+
+  terminate() {
+    for (const entry of this._workers) {
+      entry.worker.terminate().catch(() => {});
+    }
+    this._workers  = [];
+    this._queue    = [];
+    this._pending.clear();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Queue Class
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -772,7 +878,11 @@ export default class Player extends EventEmitter {
           return reject(e);
         }
 
-        const safetyMs = 24 * 60 * 60 * 1000; // 24 hours
+        // 20 min is plenty for any real track; 24h was holding the entire
+        // stream closure (audioStream, MediaPlayer, Player ref) alive for a full
+        // day whenever a stream dropped without firing "finish" (radio dropout,
+        // network blip). Multiply by active guilds → gigabytes of leaked native mem.
+        const safetyMs = 20 * 60 * 1000; // 20 minutes
         const safetyTimer = setTimeout(() => {
           logger.warn("[Player] Stream safety timeout — advancing queue");
           cleanup();
@@ -1057,6 +1167,13 @@ export default class Player extends EventEmitter {
       // clear the searches map to free track data held in memory
       this.searches.clear();
 
+      // Terminate the persistent worker pool — releases the 2 worker isolates
+      // and their ~80 MB of V8 heap for this player.
+      if (this._workerPool) {
+        try { this._workerPool.terminate(); } catch (_) {}
+        this._workerPool = null;
+      }
+
       // Drain queued worker slots so pending play/search calls resolve immediately.
       while (this._workerQueue.length > 0) {
         const resolve = this._workerQueue.shift();
@@ -1064,18 +1181,23 @@ export default class Player extends EventEmitter {
       }
       this._workerSemaphore = 0;
 
+      // Disconnect eagerly — don't defer with setTimeout so native LiveKit/
+      // revoice heap objects are released as soon as possible instead of
+      // waiting 400ms (which, multiplied by many concurrent destroys, left
+      // native WebRTC audio buffers alive far longer than necessary).
+      const connToDestroy = this.connection;
+      this.connection   = null;
+      this._mediaPlayer = null;
       this._stopMediaPlayer().catch(() => {}).then(() => {
-        setTimeout(() => {
-          try { this.connection?.removeAllListeners?.(); } catch (_) {}
-          const disconnectPromise = this.connection?.disconnect?.();
+        if (connToDestroy) {
+          try { connToDestroy.removeAllListeners?.(); } catch (_) {}
+          const disconnectPromise = connToDestroy.disconnect?.();
           if (disconnectPromise instanceof Promise) {
             disconnectPromise.catch((err) => {
               logger.error("[Player] Deferred disconnect failed:", err.message);
             });
           }
-          this.connection   = null;
-          this._mediaPlayer = null;
-        }, 400);
+        }
       });
     } catch (e) {
       logger.error("[Player] destroy error:", e.message);
@@ -1459,6 +1581,8 @@ export default class Player extends EventEmitter {
   _workerSemaphore  = 0;
   _workerMaxConcurrent = 3;
   _workerQueue      = [];
+  // Shared pool — one per Player instance (2 persistent workers, no per-job spawn overhead)
+  _workerPool       = null;
 
   _acquireWorkerSlot() {
     if (this._workerSemaphore < this._workerMaxConcurrent) {
@@ -1477,47 +1601,31 @@ export default class Player extends EventEmitter {
     }
   }
 
+  _getWorkerPool() {
+    if (!this._workerPool) {
+      const workerPath = new URL("./worker.mjs", import.meta.url);
+      // 2 persistent workers per player — enough for concurrent play+search
+      // without spawning a new 40MB isolate per command.
+      this._workerPool = new PlayerWorkerPool(2, workerPath);
+    }
+    return this._workerPool;
+  }
+
   workerJob(jobId, data, onMessage = null) {
-    const workerPath = new URL("./worker.mjs", import.meta.url);
+    if (this._destroyed) return Promise.resolve(null);
 
-    const runWorker = () => {
-      // don't spawn new workers on a destroyed player — the slot was released
-      // by destroy() draining _workerQueue, so we just return an empty result.
-      if (this._destroyed) return Promise.resolve(null);
-
-      const worker = new Worker(workerPath, {
-        workerData: {
-          jobId,
-          data: {
-            ...data,
-            nodelink: this._nl,
-            guildId:  this._guildId,
-          }
-        }
-      });
-
-      const job = new Promise((resolve, reject) => {
-        worker.on("message", (raw) => {
-          const parsed = Utils.safeJsonParse(raw);
-          if (!parsed) { reject(new Error("Invalid worker message")); return; }
-          if      (parsed.event === "error")    reject(parsed.data);
-          else if (parsed.event === "message" && onMessage) onMessage(parsed.data);
-          else if (parsed.event === "finished") resolve(parsed.data);
-        });
-        worker.on("error", reject);
-        worker.on("exit", (code) => { if (code !== 0) reject(new Error(`Worker exited ${code}`)); });
-      });
-
-      const raced = Utils.timeout(job, 60_000, "Worker timeout after 60s");
-
-      worker.on("error", () => {});
-
-      return raced.finally(() => worker.terminate().catch(() => {}));
+    const pool = this._getWorkerPool();
+    const jobData = {
+      ...data,
+      nodelink: this._nl,
+      guildId:  this._guildId,
     };
 
-    return this._acquireWorkerSlot()
-        .then(() => runWorker())
-        .finally(() => this._releaseWorkerSlot());
+    return Utils.timeout(
+      pool.run(jobId, jobData, onMessage),
+      60_000,
+      "Worker timeout after 60s"
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1573,12 +1681,14 @@ export default class Player extends EventEmitter {
           if (!data) {
             logger.worker("[Player] Worker returned empty result");
             events.emit("message", "Could not load track - no data returned.");
+            events.removeAllListeners(); // release closure references immediately
             return;
           }
 
           if (data.type === "error") {
             logger.worker("[Player] Worker returned error:", data.error);
             events.emit("message", sanitizeError(data.error, this._nl) || "Failed to load track.");
+            events.removeAllListeners();
             return;
           }
 
@@ -1589,16 +1699,21 @@ export default class Player extends EventEmitter {
           } else {
             logger.worker("[Player] Unknown worker result:", data);
             events.emit("message", "Unexpected result from track loader.");
+            events.removeAllListeners();
             return;
           }
 
           if (!this.queue.getCurrent()) {
             this.playNext();
           }
+          // Drop all listeners — the job is done, nothing more will be emitted.
+          // This releases the closure the command holds over statusMsg etc.
+          events.removeAllListeners();
         })
         .catch((reason) => {
           logger.error("[Player] Worker job failed:", reason);
           events.emit("message", sanitizeError(reason?.message, this._nl) || "An error occurred while loading the track.");
+          events.removeAllListeners();
         });
     return events;
   }
