@@ -609,12 +609,19 @@ export default class Player extends EventEmitter {
       return false;
     }
 
-    logger.mediaplayer(`[Player] _ensureMediaPlayer: attempting to create MediaPlayer (room.state: ${room.state})`);
+    // only block on explicit dead states — do NOT treat undefined as dead.
+    // On some LiveKit builds room.state is not a persistent property and returns
+    // undefined even while the room is healthy. Blocking on undefined here causes
+    // publishToRoom to be skipped on a perfectly live connection.
+    const roomState = room.state;
+    const roomAlive = roomState !== "disconnected" &&
+        roomState !== "failed" &&
+        roomState !== 0;
+
+    logger.mediaplayer(`[Player] _ensureMediaPlayer: attempting to create MediaPlayer (room.state: ${roomState})`);
 
     if (this._mediaPlayer) {
-      const room      = this.connection?.room;
-      const roomAlive = room && room.state !== "disconnected" && room.state !== "failed" && room.state !== 0;
-      const mpAlive   = !this._mediaPlayer.destroyed && typeof this._mediaPlayer.playStream === "function";
+      const mpAlive = !this._mediaPlayer.destroyed && typeof this._mediaPlayer.playStream === "function";
 
       if (roomAlive && mpAlive) {
         logger.mediaplayer("[Player] Reusing healthy MediaPlayer");
@@ -624,6 +631,12 @@ export default class Player extends EventEmitter {
       logger.mediaplayer("[Player] Existing MediaPlayer unhealthy, cleaning up...");
       try { await this._mediaPlayer.stop(); } catch (_) {}
       this._mediaPlayer = null;
+    }
+
+    // Room is dead — don't even attempt publishToRoom
+    if (!roomAlive) {
+      logger.mediaplayer(`[Player] Room is in dead state (${roomState}), skipping MediaPlayer creation`);
+      return false;
     }
 
     // re-check after async stop — player may have been destroyed
@@ -1014,7 +1027,7 @@ export default class Player extends EventEmitter {
         let connected = false;
 
         if (room.state === "connected" || room.state === 1) {
-          logger.mediaplayer("[Player] Room appears connected");
+          logger.mediaplayer("[Player] Room already connected");
           connected = true;
         } else {
           try {
@@ -1026,7 +1039,10 @@ export default class Player extends EventEmitter {
 
               const onStateChange = (state) => {
                 logger.mediaplayer(`[Player] LiveKit state changed: ${state}`);
-                if (state === "connected" || state === 1 || state === "connecting") {
+                // only resolve on "connected" — never on "connecting".
+                // "connecting" is a transient state and the engine may collapse
+                // before publishToRoom can run, causing the "engine is closed" error.
+                if (state === "connected" || state === 1) {
                   clearTimeout(timeout);
                   room.off("connectionStateChanged", onStateChange);
                   connected = true;
@@ -1047,7 +1063,16 @@ export default class Player extends EventEmitter {
         }
 
         await Utils.sleep(300);
-        logger.mediaplayer("[Player] Proceeding to create MediaPlayer (trusting connection event)");
+
+        // re-check liveness using the `connected` flag set by the event
+        // handler rather than re-reading room.state — on some LiveKit builds the
+        // state getter returns undefined outside of the event callback even when
+        // the room is healthy (the property is not persistently stored).
+        if (!connected) {
+          throw new Error("LiveKit room did not reach connected state");
+        }
+
+        logger.mediaplayer("[Player] Proceeding to create MediaPlayer (room confirmed alive)");
       } else {
         throw new Error("No room available after joinVoiceChannel");
       }
