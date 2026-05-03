@@ -363,10 +363,14 @@ export class Utils {
    * @returns {Promise<T>}
    */
   static timeout(promise, ms, message = "Operation timed out") {
+    // Always clear the timeout timer once the race settles — whether promise wins or
+    // the timeout wins. Without this, every successful call leaks a live timer for the
+    // full `ms` duration, holding the timer handle in the event loop and bloating heap.
+    let timerId;
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(message)), ms);
+      timerId = setTimeout(() => reject(new Error(message)), ms);
     });
-    return Promise.race([promise, timeoutPromise]);
+    return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timerId));
   }
 
   // ═════════════════════════════════════════════════════════════════════════════

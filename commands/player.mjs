@@ -206,7 +206,12 @@ export async function run(msg) {
     lastState = extra;
   };
 
+  let _sessionClosed = false;
+
   const closeSession = async (reason = "timeout") => {
+    if (_sessionClosed) return;
+    _sessionClosed = true;
+
     clearTimeout(sessionTimeout);
     clearTimeout(emojiRemoveTimeout);
     clearInterval(updateInterval);

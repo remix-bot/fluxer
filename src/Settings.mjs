@@ -105,6 +105,11 @@ export class RemoteSettingsManager extends EventEmitter {
   constructor(config, defaultsPath) {
     super();
     this.db = mysql.createPool({ connectionLimit: 15, ...config });
+    // Without this listener, any pool-level error (connection drop, timeout, protocol error)
+    // fires an unhandled 'error' event which crashes the entire process with no log output.
+    this.db.on("error", (err) => {
+      logger.error("[DB] MySQL pool error:", err.code ?? err.message);
+    });
     if (defaultsPath) this.loadDefaultsSync(defaultsPath);
     this.load();
   }
@@ -211,6 +216,13 @@ export class RemoteSettingsManager extends EventEmitter {
    * @param {string} id - Guild / server ID
    */
   removeServer(id) {
+    // Clear any pending debounce timer so it doesn't fire after the guild is gone
+    // and attempt a DB write for a server that no longer belongs to us.
+    const timer = this._debounceTimers.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      this._debounceTimers.delete(id);
+    }
     this.guilds.delete(id);
   }
 }

@@ -355,6 +355,23 @@ export default class Player extends EventEmitter {
   async _recoverConnection() {
     if (this._isRecovering) return;
     this._isRecovering = true;
+
+    // Increment attempt counter and apply exponential backoff.
+    // Without a limit, a permanently broken NodeLink or network causes an infinite
+    // rejoin loop that floods logs, hammers the DB, and can OOM the process.
+    this._recoveryAttempts = (this._recoveryAttempts ?? 0) + 1;
+    const MAX_RECOVERY = 5;
+    if (this._recoveryAttempts > MAX_RECOVERY) {
+      logger.error(`[Player] Recovery failed after ${MAX_RECOVERY} attempts for guild ${this._guildId} — giving up.`);
+      this._isRecovering = false;
+      this._recoveryAttempts = 0;
+      this.emit("autoleave");
+      return;
+    }
+    const backoffMs = Math.min(2000 * this._recoveryAttempts, 30_000);
+    logger.mediaplayer(`[Player] Recovery attempt ${this._recoveryAttempts}/${MAX_RECOVERY} for ${this._guildId} (backoff ${backoffMs}ms)`);
+    await Utils.sleep(backoffMs);
+
     logger.mediaplayer(`[Player] Attempting to recover voice connection for ${this._guildId}`);
 
     try {
@@ -379,6 +396,7 @@ export default class Player extends EventEmitter {
 
       // Release the guard only after confirming the connection is live
       this._isRecovering = false;
+      this._recoveryAttempts = 0; // reset so future disconnects get a fresh retry budget
 
       const current = this.queue.getCurrent();
       if (current) {
@@ -504,7 +522,10 @@ export default class Player extends EventEmitter {
       }
 
       logger.mediaplayer("[Player] Existing MediaPlayer unhealthy, cleaning up...");
-      await this._cleanupMediaPlayer();
+      // Don't call _cleanupMediaPlayer (which calls _stopMediaPlayer and nulls _mediaPlayer)
+      // because we're about to create a new one — just discard the unhealthy reference.
+      try { await this._mediaPlayer.stop(); } catch (_) {}
+      this._mediaPlayer = null;
     }
 
     try {
@@ -558,6 +579,10 @@ export default class Player extends EventEmitter {
       }
 
       await new Promise(r => setTimeout(r, 150));
+      // Null the reference so the native revoice.js/LiveKit object can be GC'd.
+      // Keeping _mediaPlayer alive after stop() prevents the native heap backing the
+      // MediaPlayer (track publication, audio source) from being released.
+      this._mediaPlayer = null;
     }
   }
 
@@ -659,6 +684,10 @@ export default class Player extends EventEmitter {
   // ═══════════════════════════════════════════════════════════════════════════
 
   async _streamViaRevoice(url, options = {}) {
+    // Early bail: if streaming was stopped before we even fetch the stream,
+    // don't open the HTTP connection at all.
+    if (this._streamingStopped) return;
+
     this._streamingStopped = false;
     let audioStream = null;
     const currentTrack = this.queue.getCurrent();
@@ -915,7 +944,13 @@ export default class Player extends EventEmitter {
       connection.on("error", (err) => {
         const causeStr = err?.cause ? ` (Cause: ${err.cause})` : "";
         logger.error("[Player] Voice error:", err?.message ?? err, causeStr);
-        this._stopMediaPlayer().catch(() => {});
+        // Stop media AND attempt recovery — previously only stopped media, leaving the bot
+        // silently sitting in voice with no audio and no self-healing.
+        this._stopMediaPlayer()
+            .catch(() => {})
+            .finally(() => {
+              if (!this.leaving) this._recoverConnection();
+            });
       });
 
       connection.on("disconnected", () => {
@@ -1003,6 +1038,15 @@ export default class Player extends EventEmitter {
       this.leaving          = true;
       this._streamingStopped = true;
       this._stopInactivityTimer();
+
+      // Drain queued worker slots so any pending play() calls resolve immediately
+      // rather than hanging indefinitely waiting for a slot that will never come.
+      while (this._workerQueue.length > 0) {
+        const resolve = this._workerQueue.shift();
+        resolve(); // release immediately; the worker will be terminated via .finally()
+      }
+      this._workerSemaphore = 0;
+
       this._stopMediaPlayer().catch(() => {}).then(() => {
         setTimeout(() => {
           const disconnectPromise = this.connection?.disconnect?.();
@@ -1011,7 +1055,12 @@ export default class Player extends EventEmitter {
               logger.error("[Player] Deferred disconnect failed:", err.message);
             });
           }
-          this.connection = null;
+          this.connection   = null;
+          // Null _mediaPlayer AFTER disconnect so the native LiveKit/revoice objects
+          // are released and can be garbage collected. Without this the revoice.js
+          // MediaPlayer (backed by @livekit/rtc-node native heap) stays referenced
+          // even after the player is removed from playerMap, causing steady RAM growth.
+          this._mediaPlayer = null;
         }, 100);
       });
     } catch (e) {
@@ -1408,39 +1457,75 @@ export default class Player extends EventEmitter {
   // Worker Management
   // ═══════════════════════════════════════════════════════════════════════════
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Worker Management
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Per-player semaphore: at most 3 concurrent worker threads per player.
+  // Without this, a user spamming play or search spawns an unlimited number of
+  // OS threads (visible as 40+ threads in btop), each holding ~8-16MB stack + V8 heap.
+  // 3 concurrent workers per player is more than enough for any realistic usage.
+  _workerSemaphore  = 0;
+  _workerMaxConcurrent = 3;
+  _workerQueue      = [];
+
+  _acquireWorkerSlot() {
+    if (this._workerSemaphore < this._workerMaxConcurrent) {
+      this._workerSemaphore++;
+      return Promise.resolve();
+    }
+    return new Promise(resolve => this._workerQueue.push(resolve));
+  }
+
+  _releaseWorkerSlot() {
+    const next = this._workerQueue.shift();
+    if (next) {
+      next(); // pass the slot directly to the next waiter
+    } else {
+      this._workerSemaphore--;
+    }
+  }
+
   workerJob(jobId, data, onMessage = null) {
     const workerPath = new URL("./worker.mjs", import.meta.url);
-    const worker = new Worker(workerPath, {
-      workerData: {
-        jobId,
-        data: {
-          ...data,
-          nodelink: this._nl,
-          guildId:  this._guildId,
+
+    const runWorker = () => {
+      const worker = new Worker(workerPath, {
+        workerData: {
+          jobId,
+          data: {
+            ...data,
+            nodelink: this._nl,
+            guildId:  this._guildId,
+          }
         }
-      }
-    });
-
-    const job = new Promise((resolve, reject) => {
-      worker.on("message", (raw) => {
-        const parsed = Utils.safeJsonParse(raw);
-        if (!parsed) { reject(new Error("Invalid worker message")); return; }
-        if      (parsed.event === "error")    reject(parsed.data);
-        else if (parsed.event === "message" && onMessage) onMessage(parsed.data);
-        else if (parsed.event === "finished") resolve(parsed.data);
       });
-      worker.on("error", reject);
-      worker.on("exit", (code) => { if (code !== 0) reject(new Error(`Worker exited ${code}`)); });
-    });
 
-    const raced = Utils.timeout(job, 60_000, "Worker timeout after 60s");
+      const job = new Promise((resolve, reject) => {
+        worker.on("message", (raw) => {
+          const parsed = Utils.safeJsonParse(raw);
+          if (!parsed) { reject(new Error("Invalid worker message")); return; }
+          if      (parsed.event === "error")    reject(parsed.data);
+          else if (parsed.event === "message" && onMessage) onMessage(parsed.data);
+          else if (parsed.event === "finished") resolve(parsed.data);
+        });
+        worker.on("error", reject);
+        worker.on("exit", (code) => { if (code !== 0) reject(new Error(`Worker exited ${code}`)); });
+      });
 
-    // Absorb any late "error" events emitted after the timeout has already settled
-    // the promise.  Without this no-op, a worker error arriving post-timeout produces
-    // an unhandled rejection / uncaughtException on some Node versions.
-    worker.on("error", () => {});
+      const raced = Utils.timeout(job, 60_000, "Worker timeout after 60s");
 
-    return raced.finally(() => worker.terminate().catch(() => {}));
+      // Absorb any late "error" events emitted after the timeout has already settled
+      // the promise.  Without this no-op, a worker error arriving post-timeout produces
+      // an unhandled rejection / uncaughtException on some Node versions.
+      worker.on("error", () => {});
+
+      return raced.finally(() => worker.terminate().catch(() => {}));
+    };
+
+    return this._acquireWorkerSlot()
+        .then(() => runWorker())
+        .finally(() => this._releaseWorkerSlot());
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

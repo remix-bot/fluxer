@@ -261,6 +261,9 @@ class Remix {
           }
         } catch (e) {
           this.players.playerMap.delete(cleanChannelId);
+          // destroy() removes the moonlink "ready" listener attached in the Player constructor.
+          // Without this, every failed join permanently leaks a listener on the moonlink manager.
+          try { p.destroy(); } catch (_) {}
           logger.warn("[PlayerSpawn] Failed to join channel", cleanChannelId, "guild", guildId, e.message);
         }
 
@@ -1170,6 +1173,29 @@ process.on("unhandledRejection", (reason, p) => {
 process.on("uncaughtException", (err, origin) => {
   logger.error("[Error_Handling] Uncaught Exception/Catch");
   logger.error("Error:", err, origin);
+  // Node.js is in an undefined state after an uncaughtException.
+  // Continuing execution is unsafe and causes random silent failures.
+  // Attempt a synchronous recovery snapshot then always exit.
+  try {
+    const state = [];
+    for (const [channelId, player] of remix.players.playerMap.entries()) {
+      try {
+        const current      = player.queue.getCurrent();
+        const queueData    = player.queue.getQueue();
+        const cloneTrack   = (t) => { try { return JSON.parse(JSON.stringify(t)); } catch { return t; } };
+        const tracksToSave = [];
+        if (current) tracksToSave.push(cloneTrack(current));
+        for (const t of queueData) tracksToSave.push(cloneTrack(t));
+        state.push({ guildId: player._guildId, channelId, textChannelId: player.textChannel?.id ?? player.textChannel?._id, queue: tracksToSave, loopQueue: player.queue.loop, loopSong: player.queue.songLoop });
+      } catch (_) {}
+    }
+    if (state.length > 0) {
+      fs.writeFileSync("./storage/recovery.json.tmp", JSON.stringify(state, null, 2));
+      fs.renameSync("./storage/recovery.json.tmp", "./storage/recovery.json");
+      logger.recovery(`[Shutdown/Crash] Saved ${state.length} session(s) for recovery.`);
+    }
+  } catch (_) {}
+  process.exit(1);
 });
 process.on("uncaughtExceptionMonitor", (err, origin) => {
   logger.error("[Error_Handling] Uncaught Exception/Catch (MONITOR)");
