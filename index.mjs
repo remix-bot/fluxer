@@ -865,11 +865,24 @@ class Remix {
       // Auto-save channel when bot moves (247 active)
       if (channelId && guildId && oldChannelId && oldChannelId !== channelId) {
         try {
+          const cleanId  = String(channelId).replace(/\D/g, "");
+          const cleanOld = String(oldChannelId).replace(/\D/g, "");
+
+          // Re-key the playerMap so the player is findable by its new channel.
+          // Without this, every lookup by channel ID (AloneCheck, inactivity
+          // timer, _is247Enabled) uses the stale old key and fails or makes
+          // wrong decisions. The player's own _channelId is updated inside
+          // join(), but the map key has to be manually migrated here.
+          const existingPlayer = this.players.playerMap.get(cleanOld);
+          if (existingPlayer && cleanId !== cleanOld) {
+            this.players.playerMap.delete(cleanOld);
+            this.players.playerMap.set(cleanId, existingPlayer);
+            logger.voice247(`[247] Re-keyed playerMap ${cleanOld} → ${cleanId}`);
+          }
+
           const set = this.settingsMgr.getServer(guildId);
           const raw = set.get("stay_247");
           if (raw && raw !== "none") {
-            const cleanId  = String(channelId).replace(/\D/g, "");
-            const cleanOld = String(oldChannelId).replace(/\D/g, "");
             const channels = Array.isArray(raw)
                 ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
                 : new Set([String(raw).replace(/\D/g, "")]);
@@ -980,7 +993,7 @@ class Remix {
     // This is the authoritative leave mechanism — does not rely on voice state events.
     const ALONE_CHECK_INTERVAL = T.aloneCheckInterval;
     setInterval(() => {
-      for (const [channelId, player] of this.players.playerMap) {
+      for (const [mapKey, player] of this.players.playerMap) {
         try {
           const guildId = player._guildId;
           if (!guildId) continue;
@@ -990,12 +1003,28 @@ class Remix {
           // "not 247" result that immediately leaves a freshly spawned 247 player.
           if (player._isJoining || player._isRecovering) continue;
 
+          // Use the player's actual current _channelId — NOT the playerMap key.
+          // When the bot moves channels the playerMap key stays as the old channel
+          // but _channelId is updated inside join(). Using the stale key means
+          // _is247Enabled() checks the wrong channel against stay_247, always
+          // returns false, and the bot leaves even with 247 active.
+          const channelId = player._channelId ?? mapKey;
+
+          // Re-key the playerMap if the player has moved to a different channel.
+          // This keeps the map consistent so future lookups work correctly.
+          const cleanMapKey = String(mapKey).replace(/\D/g, "");
+          const cleanChanId = String(channelId).replace(/\D/g, "");
+          if (cleanChanId && cleanChanId !== cleanMapKey) {
+            this.players.playerMap.delete(mapKey);
+            if (!this.players.playerMap.has(cleanChanId)) {
+              this.players.playerMap.set(cleanChanId, player);
+            }
+          }
+
           // Skip if 247 is on or auto
           if (player._is247Enabled()) continue;
 
           // Read directly from observedVoiceUsers — bypass any cache issues
-          // Normalize both sides to digits-only to avoid format mismatch
-          const cleanChanId  = String(channelId).replace(/\D/g, "");
           const cleanGuildId = String(guildId).replace(/\D/g, "");
           let hasHuman = false;
           for (const [, info] of this.observedVoiceUsers) {
