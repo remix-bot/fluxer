@@ -289,9 +289,14 @@ export class Queue extends EventEmitter {
 
 export default class Player extends EventEmitter {
   /** @type {import("revoice.js").VoiceConnection|null} */
-  connection   = null;
-  _guildId     = null;
-  _channelId   = null;
+  connection        = null;
+  _guildId          = null;
+  _channelId        = null;
+  // The channel this player was originally spawned/assigned to for 247 mode.
+  // Set externally by spawnPlayer after joining. Used by _is247Enabled() so
+  // that even if the bot is temporarily in a transit channel (e.g. "move"),
+  // the player knows its intended home channel and can check 247 correctly.
+  _home247Channel   = null;
 
   // Components
   queue        = null;
@@ -413,19 +418,19 @@ export default class Player extends EventEmitter {
       const channels = Array.isArray(raw)
           ? raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
           : [String(raw).replace(/\D/g, "")];
-      const currentChannel = String(this._channelId).replace(/\D/g, "");
 
-      // Primary check: current channel is in the 247 list.
-      if (channels.includes(currentChannel)) return true;
+      // Use the home channel this player was assigned to for 247 — this is
+      // set by spawnPlayer and doesn't change when the bot is temporarily
+      // moved to a transit channel. This gives a per-player 247 check that
+      // works correctly with multi-voice-per-guild setups.
+      const homeChannel    = this._home247Channel
+          ? String(this._home247Channel).replace(/\D/g, "")
+          : null;
+      const currentChannel = String(this._channelId ?? "").replace(/\D/g, "");
 
-      // Fallback: if the player is mid-recovery or mid-join, the bot may
-      // temporarily be in a transit channel (e.g. "move") that isn't in the
-      // 247 list yet. If the guild has ANY 247 channels configured and active,
-      // treat the player as 247 to prevent premature inactivity/alone timers
-      // from firing while the player is still reconnecting to the right channel.
-      if ((this._isRecovering || this._isJoining) && channels.length > 0) return true;
-
-      return false;
+      // Check home channel first (most reliable), then current channel
+      // (covers players created via join command that have no home set).
+      return channels.includes(homeChannel) || channels.includes(currentChannel);
     };
 
     if (this.settingsMgr?.getServer) return checkSettings(this.settingsMgr.getServer(this._guildId));
@@ -513,6 +518,8 @@ export default class Player extends EventEmitter {
       this._isRecovering = false;
       this._recoveryPending = false;
       this._recoveryAttempts = 0;
+      // Keep _home247Channel in sync with the channel we successfully recovered to.
+      if (this._channelId) this._home247Channel = this._channelId;
 
       const current = this.queue.getCurrent();
       if (current) {

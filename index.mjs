@@ -256,6 +256,12 @@ class Remix {
         try {
           await p.join(cleanChannelId);
 
+          // Record the intended 247 home channel for this player.
+          // This is the channel spawnPlayer was called with — it doesn't
+          // change when the bot is temporarily moved to a transit channel,
+          // so _is247Enabled() can always check the right channel per-player.
+          p._home247Channel = cleanChannelId;
+
           // ==== RESTORE STATE IF RECOVERING ====
           if (recoveryData) {
             if (recoveryData.textChannelId) {
@@ -878,11 +884,10 @@ class Remix {
           if (existingPlayer && cleanId !== cleanOld) {
             this.players.playerMap.delete(cleanOld);
             this.players.playerMap.set(cleanId, existingPlayer);
-            // CRITICAL: also update the player's own _channelId so that
-            // _recoverConnection, _is247Enabled, and _hasHumansInChannel
-            // all use the correct channel. Without this they keep referencing
-            // the old channel even after the bot has moved.
-            existingPlayer._channelId = cleanId;
+            // Update both _channelId and _home247Channel so _recoverConnection
+            // and _is247Enabled always reference the correct current channel.
+            existingPlayer._channelId     = cleanId;
+            existingPlayer._home247Channel = cleanId;
             logger.voice247(`[247] Re-keyed playerMap ${cleanOld} → ${cleanId}`);
           }
 
