@@ -297,6 +297,7 @@ export default class Player extends EventEmitter {
   // that even if the bot is temporarily in a transit channel (e.g. "move"),
   // the player knows its intended home channel and can check 247 correctly.
   _home247Channel   = null;
+  _recoveryTimer    = null;
 
   // Components
   queue        = null;
@@ -439,6 +440,16 @@ export default class Player extends EventEmitter {
     return false;
   }
 
+  _getRecoveryChannelId() {
+    const cleanCurrent = String(this._channelId ?? "").replace(/\D/g, "");
+    if (cleanCurrent) return cleanCurrent;
+
+    const cleanHome = String(this._home247Channel ?? "").replace(/\D/g, "");
+    if (cleanHome && this._is247Enabled()) return cleanHome;
+
+    return cleanHome || null;
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Volume Restore
   // ═══════════════════════════════════════════════════════════════════════════
@@ -473,6 +484,12 @@ export default class Player extends EventEmitter {
     // bail immediately if the player has been destroyed or a recovery is
     // already in-flight or scheduled (covers the gap between attempts).
     if (this._isRecovering || this._recoveryPending || this._destroyed) return;
+    const targetChannelId = this._getRecoveryChannelId();
+    if (!targetChannelId) {
+      logger.warn(`[Player] Recovery aborted for guild ${this._guildId} - no channel target available.`);
+      this.emit("autoleave");
+      return;
+    }
     this._isRecovering = true;
     this._recoveryPending = true;
 
@@ -506,8 +523,8 @@ export default class Player extends EventEmitter {
       await Utils.sleep(2000);
       if (this.leaving || this._destroyed) return;
 
-      logger.mediaplayer(`[Player] Rejoining channel ${this._channelId}`);
-      await this.join(this._channelId);
+      logger.mediaplayer(`[Player] Rejoining channel ${targetChannelId}`);
+      await this.join(targetChannelId);
 
       // Do NOT re-read room.state here — on this LiveKit build room.state
       // returns undefined even on a healthy connection (not persistently stored).
@@ -518,6 +535,10 @@ export default class Player extends EventEmitter {
       this._isRecovering = false;
       this._recoveryPending = false;
       this._recoveryAttempts = 0;
+      if (this._recoveryTimer) {
+        clearTimeout(this._recoveryTimer);
+        this._recoveryTimer = null;
+      }
       // Keep _home247Channel in sync with the channel we successfully recovered to.
       if (this._channelId) this._home247Channel = this._channelId;
 
@@ -539,7 +560,9 @@ export default class Player extends EventEmitter {
       // calls from stacking up (e.g. two rapid disconnect events).
       if (!this._destroyed && !this.leaving) {
         const delay = Math.min(2000 * (this._recoveryAttempts ?? 1), 30_000);
-        setTimeout(() => {
+        if (this._recoveryTimer) clearTimeout(this._recoveryTimer);
+        this._recoveryTimer = setTimeout(() => {
+          this._recoveryTimer = null;
           this._recoveryPending = false;
           if (!this._destroyed && !this.leaving) this._recoverConnection();
         }, delay);
@@ -1213,6 +1236,12 @@ export default class Player extends EventEmitter {
     try {
       this.leaving = true;
       this._stopInactivityTimer();
+      if (this._recoveryTimer) {
+        clearTimeout(this._recoveryTimer);
+        this._recoveryTimer = null;
+      }
+      this._recoveryPending = false;
+      this._isRecovering = false;
       await this._stopMediaPlayer();
       await Utils.sleep(100);
       await this.connection.disconnect();
@@ -1243,6 +1272,12 @@ export default class Player extends EventEmitter {
       this.leaving          = true;
       this._streamingStopped = true;
       this._stopInactivityTimer();
+      if (this._recoveryTimer) {
+        clearTimeout(this._recoveryTimer);
+        this._recoveryTimer = null;
+      }
+      this._recoveryPending = false;
+      this._isRecovering = false;
       this.searches.clear();
 
       if (this._workerPool) {

@@ -116,13 +116,115 @@ class Remix {
     // Per-channel spawn mutex — prevents two rapid calls both passing the
     // playerMap.has() guard before either has inserted, creating zombie players.
     const pendingSpawns = new Set();
+    const scheduledSpawns = new Map();
+    const recoveryPath = "./storage/recovery.json";
+    const normalizeChannelId = (value) => String(value ?? "").replace(/\D/g, "");
+    const cloneRecoveryTrack = (track) => {
+      try { return JSON.parse(JSON.stringify(track)); } catch { return track; }
+    };
+    const buildRecoveryState = () => {
+      const sessions = [];
+      const seen = new Set();
+
+      for (const [channelKey, player] of this.players.playerMap.entries()) {
+        try {
+          if (!player || player._destroyed || player.leaving) continue;
+
+          const guildId = normalizeChannelId(player._guildId);
+          const channelId = normalizeChannelId(player._channelId ?? channelKey);
+          if (!guildId || !channelId) continue;
+
+          const dedupeKey = `${guildId}:${channelId}`;
+          if (seen.has(dedupeKey)) continue;
+          seen.add(dedupeKey);
+
+          const current = player.queue.getCurrent();
+          const queueData = player.queue.getQueue();
+          const tracksToSave = [];
+          if (current) tracksToSave.push(cloneRecoveryTrack(current));
+          for (const track of queueData) tracksToSave.push(cloneRecoveryTrack(track));
+
+          sessions.push({
+            guildId,
+            channelId,
+            home247ChannelId: normalizeChannelId(player._home247Channel) || channelId,
+            textChannelId: player.textChannel?.id ?? player.textChannel?._id ?? null,
+            queue: tracksToSave,
+            loopQueue: !!player.queue.loop,
+            loopSong: !!player.queue.songLoop,
+            preferredVolume: player.preferredVolume ?? 1,
+            savedAt: Date.now(),
+          });
+        } catch (_) {}
+      }
+
+      return sessions;
+    };
+    const writeRecoveryState = (state, sourceLabel) => {
+      if (!Array.isArray(state) || state.length === 0) {
+        logger.recovery(`[${sourceLabel}] No active sessions to save.`);
+        return false;
+      }
+
+      const tmpPath = `${recoveryPath}.tmp`;
+      fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2));
+      fs.renameSync(tmpPath, recoveryPath);
+      logger.recovery(`[${sourceLabel}] Saved ${state.length} active session(s) to ${recoveryPath}`);
+      return true;
+    };
+    const normalizeRecoverySessions = (rawSessions) => {
+      if (!Array.isArray(rawSessions)) return [];
+
+      const deduped = new Map();
+      for (const session of rawSessions) {
+        const guildId = normalizeChannelId(session?.guildId);
+        const channelId = normalizeChannelId(session?.channelId ?? session?.home247ChannelId);
+        if (!guildId || !channelId) continue;
+
+        deduped.set(`${guildId}:${channelId}`, {
+          ...session,
+          guildId,
+          channelId,
+          home247ChannelId: normalizeChannelId(session?.home247ChannelId) || channelId,
+          queue: Array.isArray(session?.queue) ? session.queue : [],
+          loopQueue: !!session?.loopQueue,
+          loopSong: !!session?.loopSong,
+        });
+      }
+
+      return [...deduped.values()];
+    };
+    this._buildRecoveryState = buildRecoveryState;
+    this._writeRecoveryState = writeRecoveryState;
+    const scheduleSpawn = (guildId, channelId, delayMs = 0, recoveryData = null, reason = "spawn") => {
+      const cleanChannelId = normalizeChannelId(channelId);
+      if (!cleanChannelId) return;
+
+      const existing = scheduledSpawns.get(cleanChannelId);
+      if (existing) clearTimeout(existing.timer);
+
+      const timer = setTimeout(() => {
+        scheduledSpawns.delete(cleanChannelId);
+        spawnPlayer(guildId, cleanChannelId, 0, recoveryData).catch(e => {
+          logger.warn(`[PlayerSpawn] Scheduled ${reason} failed for ${cleanChannelId}:`, e?.message ?? e);
+        });
+      }, Math.max(0, delayMs));
+
+      scheduledSpawns.set(cleanChannelId, { timer, guildId, recoveryData, reason });
+    };
 
     // ── spawnPlayer ───────────────────────────────────────────────────────────
     const spawnPlayer = async (guildId, channelId, delayMs = 0, recoveryData = null) => {
       if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
 
-      const cleanChannelId = String(channelId).replace(/\D/g, "");
+      const cleanChannelId = normalizeChannelId(channelId);
       if (!cleanChannelId) return;
+
+      const scheduled = scheduledSpawns.get(cleanChannelId);
+      if (scheduled) {
+        clearTimeout(scheduled.timer);
+        scheduledSpawns.delete(cleanChannelId);
+      }
 
       // Only enforce 24/7 check if we are NOT recovering from a reboot
       if (!recoveryData) {
@@ -188,7 +290,7 @@ class Remix {
             // Both modes should rejoin on autoleave — the difference is only
             // whether the inactivity timer fires at all (handled in Player).
             if (mode2 === "on" || mode2 === "auto") {
-              await spawnPlayer(guildId, cleanChannelId, T.rejoin247Delay);
+              scheduleSpawn(guildId, cleanChannelId, T.rejoin247Delay, null, "247-autoleave");
             }
           } else {
             // 24/7 is off — send inactivity message with hint to enable 247
@@ -267,8 +369,14 @@ class Remix {
             if (recoveryData.textChannelId) {
               p.textChannel = client.channels.cache.get(recoveryData.textChannelId);
             }
+            if (recoveryData.home247ChannelId) {
+              p._home247Channel = normalizeChannelId(recoveryData.home247ChannelId) || cleanChannelId;
+            }
             if (recoveryData.loopQueue) p.queue.setLoop(true);
             if (recoveryData.loopSong)  p.queue.setSongLoop(true);
+            if (typeof recoveryData.preferredVolume === "number") {
+              p.preferredVolume = recoveryData.preferredVolume;
+            }
 
             if (recoveryData.queue && recoveryData.queue.length > 0) {
               // Restore queue preserving original position order.
@@ -323,7 +431,7 @@ class Remix {
           if (shouldRetry) {
             const retryDelay = T.rejoin247Delay * 3; // longer than normal rejoin
             logger.warn(`[PlayerSpawn] Transient join failure — retrying in ${retryDelay}ms`);
-            setTimeout(() => spawnPlayer(guildId, cleanChannelId, 0, recoveryData ?? null), retryDelay);
+            scheduleSpawn(guildId, cleanChannelId, retryDelay, recoveryData ?? null, "transient-join-retry");
           }
         }
 
@@ -345,7 +453,6 @@ class Remix {
       await new Promise(r => setTimeout(r, 2000));
 
       // 1. Recover standard reboots first
-      const recoveryPath = "./storage/recovery.json";
       if (fs.existsSync(recoveryPath)) {
         logger.recovery("[Recovery] Found previous session data, restoring...");
         // Delete the file BEFORE processing so a crash during restore doesn't
@@ -358,15 +465,16 @@ class Remix {
           logger.error("[Recovery] Failed to read/parse recovery file:", e);
           try { fs.unlinkSync(recoveryPath); } catch (_) {}
         }
-        if (Array.isArray(data)) {
-          for (const session of data) {
+        const sessions = normalizeRecoverySessions(data);
+        if (sessions.length > 0) {
+          for (const session of sessions) {
             try {
               await spawnPlayer(session.guildId, session.channelId, 500, session);
             } catch (e) {
               logger.error("[Recovery] Failed to restore session", session.channelId, e);
             }
           }
-          logger.recovery(`[Recovery] Processed ${data.length} session(s).`);
+          logger.recovery(`[Recovery] Processed ${sessions.length} session(s).`);
         }
       }
 
@@ -935,10 +1043,10 @@ class Remix {
                       // No _recoverConnection — destroy stale player and respawn.
                       this.players.playerMap.delete(cleanOld);
                       try { player.destroy(); } catch (_) {}
-                      spawnPlayer(guildId, cleanOld, T.rejoin247Delay);
+                      scheduleSpawn(guildId, cleanOld, T.rejoin247Delay, null, "gateway-disconnect");
                     }
                   } else {
-                    spawnPlayer(guildId, cleanOld, T.rejoin247Delay);
+                    scheduleSpawn(guildId, cleanOld, T.rejoin247Delay, null, "gateway-disconnect");
                   }
                 } else {
                   // mode === "off" or unknown — user explicitly disabled 247,
@@ -1279,6 +1387,14 @@ class Remix {
         msg
     );
   }
+
+  buildRecoveryState() {
+    return this._buildRecoveryState?.() ?? [];
+  }
+
+  writeRecoveryState(state, sourceLabel = "Recovery") {
+    return this._writeRecoveryState?.(state, sourceLabel) ?? false;
+  }
 }
 
 const remix = new Remix();
@@ -1295,35 +1411,8 @@ process.on("uncaughtException", (err, origin) => {
   // Continuing execution is unsafe and causes random silent failures.
   // Attempt a synchronous recovery snapshot then always exit.
   try {
-    const state = [];
-    for (const [channelId, player] of remix.players.playerMap.entries()) {
-      try {
-        const current      = player.queue.getCurrent();
-        const queueData    = player.queue.getQueue();
-        const cloneTrack   = (t) => { try { return JSON.parse(JSON.stringify(t)); } catch { return t; } };
-        // Save [currentTrack, ...remainingTracks] so on restore addMany()
-        // + playNext() resumes from exactly the same song at position 0.
-        const tracksToSave = [];
-        if (current) tracksToSave.push(cloneTrack(current));
-        for (const t of queueData) tracksToSave.push(cloneTrack(t));
-        state.push({
-          guildId:       player._guildId,
-          // Use _channelId (the player's actual current channel) not the map
-          // key — they can differ after a channel move where the map wasn't
-          // re-keyed. Saving the wrong channel causes a ghost player on recovery.
-          channelId:     player._channelId ?? channelId,
-          textChannelId: player.textChannel?.id ?? player.textChannel?._id,
-          queue:         tracksToSave,
-          loopQueue:     player.queue.loop,
-          loopSong:      player.queue.songLoop,
-        });
-      } catch (_) {}
-    }
-    if (state.length > 0) {
-      fs.writeFileSync("./storage/recovery.json.tmp", JSON.stringify(state, null, 2));
-      fs.renameSync("./storage/recovery.json.tmp", "./storage/recovery.json");
-      logger.recovery(`[Shutdown/Crash] Saved ${state.length} session(s) for recovery.`);
-    }
+    const state = remix.buildRecoveryState();
+    remix.writeRecoveryState(state, "Shutdown/Crash");
   } catch (_) {}
   process.exit(1);
 });
@@ -1336,45 +1425,8 @@ process.on("uncaughtExceptionMonitor", (err, origin) => {
 const saveAndExit = () => {
   logger.recovery("\n[Shutdown] Saving active sessions for reboot recovery...");
   try {
-    const state = [];
-    for (const [channelId, player] of remix.players.playerMap.entries()) {
-      const current    = player.queue.getCurrent();
-      const queueData  = player.queue.getQueue();
-
-      // Deep-clone track data to capture a stable snapshot.
-      // Without this, a concurrent skip() or playNext() can mutate the array
-      // between capture and writeFileSync, producing a corrupted recovery file.
-      const cloneTrack = (t) => {
-        try { return JSON.parse(JSON.stringify(t)); } catch { return t; }
-      };
-      const tracksToSave = [];
-      if (current) tracksToSave.push(cloneTrack(current));
-      for (const t of queueData) tracksToSave.push(cloneTrack(t));
-
-      state.push({
-        guildId:       player._guildId,
-        // Use _channelId (the player's actual current channel) not the map
-        // key — they can differ after a channel move. Saving the stale map key
-        // causes a ghost player on recovery that _is247Enabled() can't match.
-        channelId:     player._channelId ?? channelId,
-        textChannelId: player.textChannel?.id ?? player.textChannel?._id,
-        queue:         tracksToSave,
-        loopQueue:     player.queue.loop,
-        loopSong:      player.queue.songLoop,
-      });
-    }
-
-    if (state.length > 0) {
-      // Write to a temp file then rename atomically to prevent partial writes
-      // if the OS sends SIGKILL before writeFileSync finishes on large queue states.
-      const recoveryPath = "./storage/recovery.json";
-      const tmpPath      = recoveryPath + ".tmp";
-      fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2));
-      fs.renameSync(tmpPath, recoveryPath);
-      logger.recovery(`[Shutdown] Saved ${state.length} active sessions to storage/recovery.json`);
-    } else {
-      logger.recovery("[Shutdown] No active sessions to save.");
-    }
+    const state = remix.buildRecoveryState();
+    remix.writeRecoveryState(state, "Shutdown");
   } catch (e) {
     logger.error("[Shutdown] Failed to save recovery state:", e.message);
   }
