@@ -843,7 +843,29 @@ class Remix {
     // @fluxerjs/core fires VoiceStateUpdate with ONE arg (raw gateway data),
     // not two args (oldState, newState) We maintain prev state manually.
     // Declared before GuildDelete so the delete handler can purge stale entries.
-    const _prevVoiceState = new Map(); // userId → { channelId, guildId }
+    const _prevVoiceState = new Map(); // guildId:userId → { channelId, guildId }
+    const getPrevVoiceStateKey = (userId, guildId) => {
+      const cleanUserId = String(userId ?? "").replace(/\D/g, "");
+      const cleanGuildId = String(guildId ?? "").replace(/\D/g, "");
+      return cleanUserId && cleanGuildId ? `${cleanGuildId}:${cleanUserId}` : null;
+    };
+    const findPrevVoiceStateEntry = (userId, guildId = null) => {
+      const directKey = getPrevVoiceStateKey(userId, guildId);
+      if (directKey && _prevVoiceState.has(directKey)) {
+        return { key: directKey, value: _prevVoiceState.get(directKey) };
+      }
+
+      const cleanUserId = String(userId ?? "").replace(/\D/g, "");
+      if (!cleanUserId) return { key: null, value: null };
+
+      for (const [key, value] of _prevVoiceState) {
+        if (key.endsWith(`:${cleanUserId}`)) {
+          return { key, value };
+        }
+      }
+
+      return { key: null, value: null };
+    };
 
     // ── Bot kicked / banned / server deleted ─────────────────────────────────
     client.on(Events.GuildDelete, (guild) => {
@@ -873,9 +895,9 @@ class Remix {
         if (info.guildId === guildId) this.observedVoiceBots.delete(userId);
       }
       // Also purge _prevVoiceState entries for this guild so the Map doesn't grow unbounded
-      for (const [userId, info] of [..._prevVoiceState]) {
+      for (const [stateKey, info] of [..._prevVoiceState]) {
         if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, ""))
-          _prevVoiceState.delete(userId);
+          _prevVoiceState.delete(stateKey);
       }
 
       // Drop the cached settings so stale data can't be read back
@@ -897,20 +919,24 @@ class Remix {
       const isBot     = data?.member?.user?.bot ?? null;
 
       // Capture old channel BEFORE updating prev state
-      const prev         = _prevVoiceState.get(userId);
+      const prevEntry    = findPrevVoiceStateEntry(userId, guildId);
+      const prev         = prevEntry.value;
       const oldChannelId = prev?.channelId ?? null;
+      const prevKey      = prevEntry.key;
 
       // Update prev state — evict oldest entry if Map exceeds 10,000 entries
       // (one per user who has ever touched voice since last restart) to prevent
       // unbounded growth on large bots that never restart.
+      const nextKey = getPrevVoiceStateKey(userId, guildId ?? prev?.guildId);
       if (channelId) {
-        if (_prevVoiceState.size >= 10_000 && !_prevVoiceState.has(userId)) {
+        if (prevKey && prevKey !== nextKey) _prevVoiceState.delete(prevKey);
+        if (nextKey && _prevVoiceState.size >= 10_000 && !_prevVoiceState.has(nextKey)) {
           // Remove the oldest inserted entry (Maps preserve insertion order)
           _prevVoiceState.delete(_prevVoiceState.keys().next().value);
         }
-        _prevVoiceState.set(userId, { channelId, guildId });
+        if (nextKey) _prevVoiceState.set(nextKey, { channelId, guildId: guildId ?? prev?.guildId });
       } else {
-        _prevVoiceState.delete(userId);
+        if (prevKey) _prevVoiceState.delete(prevKey);
       }
 
       // Always update/delete the voice maps so they never accumulate stale entries
