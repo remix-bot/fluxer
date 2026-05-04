@@ -1402,12 +1402,28 @@ class Remix {
 
 const remix = new Remix();
 
+const isIgnorableWsCrash = (err) => {
+  const message = String(err?.message ?? err ?? "");
+  const stack = String(err?.stack ?? "");
+
+  return message === "WebSocket error" &&
+      (
+        stack.includes("@fluxerjs/ws/dist/index.mjs") ||
+        stack.includes("node:internal/deps/undici/undici")
+      );
+};
+
 process.on("unhandledRejection", (reason, p) => {
   if (reason?.message?.includes("AudioSource is closed")) return;
   logger.error("[Error_Handling] Unhandled Rejection/Catch");
   logger.error("Reason:", reason, p);
 });
 process.on("uncaughtException", (err, origin) => {
+  if (isIgnorableWsCrash(err)) {
+    logger.warn("[Error_Handling] Suppressed recoverable websocket transport crash.");
+    logger.warn("Error:", err?.stack ?? err, origin);
+    return;
+  }
   logger.error("[Error_Handling] Uncaught Exception/Catch");
   logger.error("Error:", err, origin);
   // Node.js is in an undefined state after an uncaughtException.
