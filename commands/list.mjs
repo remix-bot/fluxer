@@ -67,13 +67,16 @@ export async function run(message, data) {
       const { items, start } = p.queue.getPage(safePage, PAGE_SIZE);
 
       items.forEach((vid, i) => {
-        const index = String(start + i + 1).padStart(2, " ");
-        const dur   = vid.duration ? p.getDuration(vid.duration) : "?:??";
-        const link  = vid.spotifyUrl || vid.url || "";
-        let   title = vid.title;
+        const index   = String(start + i + 1).padStart(2, " ");
+        const dur     = vid.duration ? p.getDuration(vid.duration) : "?:??";
+        const link    = vid.spotifyUrl || vid.url || "";
+        let   title   = vid.title;
         if (title.length > 45) title = title.slice(0, 42) + "...";
         title = link ? `[${title}](${link})` : title;
-        desc += `\`${index}.\` ${title} • \`${dur}\`\n`;
+        // Mark the very first item in the queue as "Up Next" — useful after
+        // a bot recovery or shuffle so the next song's position is obvious.
+        const upNext  = (start + i === 0) ? " ▶" : "";
+        desc += `\`${index}.\` ${title}${upNext} • \`${dur}\`\n`;
       });
     }
 

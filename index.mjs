@@ -165,25 +165,36 @@ class Remix {
         });
 
         p.on("autoleave", async () => {
-          this.players.playerMap.delete(cleanChannelId);
-          p.destroy();
+          // Read 247 state BEFORE destroying the player so we can decide
+          // whether to rejoin. Destroying first, then checking, means the
+          // check always runs against a clean state — which is correct —
+          // but the old code called p.destroy() before the spawnPlayer mutex
+          // check, which could race with a concurrent spawn.
           const raw2      = this.settingsMgr.getServer(guildId).get("stay_247");
           const channels2 = (!raw2 || raw2 === "none")
               ? []
               : Array.isArray(raw2)
                   ? raw2.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
                   : [String(raw2).replace(/\D/g, "")].filter(Boolean);
+          const mode2 = this.settingsMgr.getServer(guildId).get("stay_247_mode") ?? "auto";
+
+          // Remove player from map and destroy it now that we've read the state.
+          this.players.playerMap.delete(cleanChannelId);
+          p.destroy();
+
           if (channels2.includes(cleanChannelId)) {
-            const mode = this.settingsMgr.getServer(guildId).get("stay_247_mode") ?? "auto";
-            if (mode === "auto") await spawnPlayer(guildId, cleanChannelId, T.rejoin247Delay);
+            // "on"  = always stay in voice, rejoin even when queue ends
+            // "auto" = stay while people are around / queue is active, rejoin
+            // Both modes should rejoin on autoleave — the difference is only
+            // whether the inactivity timer fires at all (handled in Player).
+            if (mode2 === "on" || mode2 === "auto") {
+              await spawnPlayer(guildId, cleanChannelId, T.rejoin247Delay);
+            }
           } else {
             // 24/7 is off — send inactivity message with hint to enable 247
             try {
               const prefix = this.handler?.getPrefix?.(guildId) ?? "%";
               const guild  = this.client.guilds.cache.get(guildId);
-              // isTextBased() and permissionsFor() are APIs — use optional
-              // chaining so missing implementations fail gracefully. Fall back to channel_type
-              // string check which is the raw Fluxer gateway field.
               const ch = guild?.channels?.cache?.find(c =>
                   (c.isTextBased?.() ?? c.channel_type === "TextChannel" ?? true) &&
                   (c.permissionsFor?.(this.client.user)?.has?.("SendMessages") ?? true)
@@ -254,10 +265,30 @@ class Remix {
             if (recoveryData.loopSong)  p.queue.setSongLoop(true);
 
             if (recoveryData.queue && recoveryData.queue.length > 0) {
+              // Restore queue preserving original position order.
+              // The saved array is [currentTrack, ...remainingTracks], so
+              // addMany keeps the exact same order and playNext() resumes
+              // from the track that was playing before the crash/reload.
               p.queue.addMany(recoveryData.queue);
-              p.playNext();
+
+              // Wait until Moonlink is ready before starting playback so
+              // the first play attempt doesn't fail silently on a slow node.
+              const startPlayback = () => p.playNext().catch(e =>
+                logger.warn("[Recovery] playNext failed:", e?.message)
+              );
+
+              if (this.moonlink?._sessionId || this.moonlink?.sessionId) {
+                // Moonlink already has an active session — start immediately.
+                startPlayback();
+              } else if (this.moonlink) {
+                // Moonlink exists but session not yet confirmed — wait for it.
+                this.moonlink.once("ready", () => startPlayback());
+              } else {
+                // No moonlink at all (nodelink-only setup) — start immediately.
+                startPlayback();
+              }
             }
-            logger.recovery(`[Recovery] Restored session in ${cleanChannelId}.`);
+            logger.recovery(`[Recovery] Restored session in ${cleanChannelId} (${recoveryData.queue?.length ?? 0} track(s)).`);
           }
         } catch (e) {
           this.players.playerMap.delete(cleanChannelId);
@@ -288,14 +319,25 @@ class Remix {
       const recoveryPath = "./storage/recovery.json";
       if (fs.existsSync(recoveryPath)) {
         logger.recovery("[Recovery] Found previous session data, restoring...");
+        // Delete the file BEFORE processing so a crash during restore doesn't
+        // cause an infinite boot-loop replaying the same bad recovery data.
+        let data = null;
         try {
-          const data = JSON.parse(fs.readFileSync(recoveryPath, "utf8"));
-          for (const session of data) {
-            await spawnPlayer(session.guildId, session.channelId, 500, session);
-          }
+          data = JSON.parse(fs.readFileSync(recoveryPath, "utf8"));
           fs.unlinkSync(recoveryPath);
         } catch (e) {
-          logger.error("[Recovery] Failed to recover sessions:", e);
+          logger.error("[Recovery] Failed to read/parse recovery file:", e);
+          try { fs.unlinkSync(recoveryPath); } catch (_) {}
+        }
+        if (Array.isArray(data)) {
+          for (const session of data) {
+            try {
+              await spawnPlayer(session.guildId, session.channelId, 500, session);
+            } catch (e) {
+              logger.error("[Recovery] Failed to restore session", session.channelId, e);
+            }
+          }
+          logger.recovery(`[Recovery] Processed ${data.length} session(s).`);
         }
       }
 
@@ -751,13 +793,16 @@ class Remix {
 
         if (channelId) {
           try {
-            const raw = this.settingsMgr.getServer(resolvedGuildId)?.get("stay_247");
-            if (raw && raw !== "none") {
-              const cleanId  = String(channelId).replace(/\D/g, "");
-              const channels = Array.isArray(raw)
-                  ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
-                  : new Set([String(raw).replace(/\D/g, "")]);
-              if (channels.has(cleanId)) return;
+            // Always cancel any pending inactivity timer when a human joins —
+            // even in 247 mode. The old code returned early here which meant
+            // the "_stopInactivityTimer" block below never ran, so the bot
+            // could leave a 247 channel right after a human joined if the
+            // queue had just ended.
+            const cleanId247 = String(channelId).replace(/\D/g, "");
+            const player247  = this.players.playerMap.get(cleanId247);
+            if (player247 && typeof player247._stopInactivityTimer === "function") {
+              logger.voiceState(`[VoiceState] Human joined 247 channel ${cleanId247}, stopping inactivity timer`);
+              player247._stopInactivityTimer();
             }
           } catch (_) {}
         }
@@ -832,21 +877,29 @@ class Remix {
                   : new Set([String(raw).replace(/\D/g, "")]);
               if (channels.has(cleanOld)) {
                 const mode = set.get("stay_247_mode") ?? "auto";
-                if (mode === "auto") {
+                if (mode === "on" || mode === "auto") {
+                  // Both "on" and "auto" should rejoin after an unexpected
+                  // disconnect — never silently drop the channel from 247.
                   const player = this.players.playerMap.get(cleanOld);
                   if (player && !player.leaving) {
                     logger.voice247("[247] Fluxer gateway disconnected us. Forcing player recovery...");
                     if (typeof player._recoverConnection === "function") {
                       player._recoverConnection();
+                    } else {
+                      // No _recoverConnection — destroy stale player and respawn.
+                      this.players.playerMap.delete(cleanOld);
+                      try { player.destroy(); } catch (_) {}
+                      spawnPlayer(guildId, cleanOld, T.rejoin247Delay);
                     }
                   } else {
                     spawnPlayer(guildId, cleanOld, T.rejoin247Delay);
                   }
                 } else {
-                  logger.voice247(`[247] stay_247_mode='${mode}' — not rejoining. Removing from 24/7.`);
+                  // mode === "off" or unknown — user explicitly disabled 247,
+                  // so do NOT rejoin and clean up the stale channel entry.
+                  logger.voice247(`[247] stay_247_mode='${mode}' — not rejoining.`);
                   channels.delete(cleanOld);
                   set.set("stay_247", channels.size > 0 ? [...channels] : "none");
-                  if (channels.size === 0) set.set("stay_247_mode", "off");
                 }
               }
             }
@@ -1116,6 +1169,9 @@ class Remix {
     if (channels.has(cleanId)) {
       channels.delete(cleanId);
       set.set("stay_247", channels.size > 0 ? [...channels] : "none");
+      // Only reset the mode to "off" when ALL 247 channels have been removed
+      // AND the current mode is "on" (explicit user action). If mode is "auto"
+      // and we still have other channels, preserve the mode for those channels.
       if (channels.size === 0) set.set("stay_247_mode", "off");
     }
 
@@ -1189,10 +1245,19 @@ process.on("uncaughtException", (err, origin) => {
         const current      = player.queue.getCurrent();
         const queueData    = player.queue.getQueue();
         const cloneTrack   = (t) => { try { return JSON.parse(JSON.stringify(t)); } catch { return t; } };
+        // Save [currentTrack, ...remainingTracks] so on restore addMany()
+        // + playNext() resumes from exactly the same song at position 0.
         const tracksToSave = [];
         if (current) tracksToSave.push(cloneTrack(current));
         for (const t of queueData) tracksToSave.push(cloneTrack(t));
-        state.push({ guildId: player._guildId, channelId, textChannelId: player.textChannel?.id ?? player.textChannel?._id, queue: tracksToSave, loopQueue: player.queue.loop, loopSong: player.queue.songLoop });
+        state.push({
+          guildId:       player._guildId,
+          channelId,
+          textChannelId: player.textChannel?.id ?? player.textChannel?._id,
+          queue:         tracksToSave,
+          loopQueue:     player.queue.loop,
+          loopSong:      player.queue.songLoop,
+        });
       } catch (_) {}
     }
     if (state.length > 0) {
