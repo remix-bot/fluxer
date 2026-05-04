@@ -1035,9 +1035,22 @@ class Remix {
 
       // ── Bot-only logic below ─────────────────────────────────────────────
 
+      const activeGuildPlayers = [...this.players.playerMap.entries()].filter(([, player]) =>
+        String(player?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
+      );
+      const multiVoiceGuild = activeGuildPlayers.length > 1;
+
       // Auto-save channel when bot moves (247 active)
       if (channelId && guildId && oldChannelId && oldChannelId !== channelId) {
         try {
+          if (multiVoiceGuild) {
+            logger.voice247(
+              `[247] Skipping bot move gateway auto-save ${oldChannelId} → ${channelId} ` +
+              `(guild ${guildId} has ${activeGuildPlayers.length} active players)`
+            );
+            return;
+          }
+
           const cleanId  = String(channelId).replace(/\D/g, "");
           const cleanOld = String(oldChannelId).replace(/\D/g, "");
 
@@ -1052,10 +1065,19 @@ class Remix {
             ?? null;
           const targetGuildId = String(targetChannel?.guildId ?? targetChannel?.guild?.id ?? guildId ?? "").replace(/\D/g, "");
           const playerGuildId = String(existingPlayer?._guildId ?? "").replace(/\D/g, "");
+          const guildPlayers = [...this.players.playerMap.entries()].filter(([, player]) =>
+            String(player?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
+          );
+          const guildIsAmbiguous = guildPlayers.length > 1;
 
           let rekeyed = false;
           if (existingPlayer && cleanId !== cleanOld) {
-            if (playerGuildId && targetGuildId && playerGuildId !== targetGuildId) {
+            if (guildIsAmbiguous) {
+              logger.voice247(
+                `[247] Skipping bot move auto-rekey ${cleanOld} → ${cleanId} ` +
+                `(guild ${guildId} has ${guildPlayers.length} active players)`
+              );
+            } else if (playerGuildId && targetGuildId && playerGuildId !== targetGuildId) {
               logger.warn(
                 `[247] Refused cross-guild re-key ${cleanOld} → ${cleanId} ` +
                 `(playerGuild=${playerGuildId} targetGuild=${targetGuildId})`
@@ -1093,6 +1115,14 @@ class Remix {
       // Bot disconnected unexpectedly — rejoin if 247 active
       if (!channelId && oldChannelId && guildId) {
         try {
+          if (multiVoiceGuild) {
+            logger.voice247(
+              `[247] Skipping bot disconnect gateway recovery for ${oldChannelId} ` +
+              `(guild ${guildId} has ${activeGuildPlayers.length} active players)`
+            );
+            return;
+          }
+
           const cleanOld = String(oldChannelId).replace(/\D/g, "");
           if (this.intentionalLeaves.has(cleanOld)) {
             logger.voice247(`[247] Skipping rejoin for ${cleanOld} — intentional leave.`);
