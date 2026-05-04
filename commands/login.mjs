@@ -12,13 +12,18 @@ export const command = new CommandBuilder()
       .setRequired(true));
 
 export async function run(msg, data) {
-  const log = data.get("id").value;
-  const verified = await this.loadedModules.get("wb-dashboard").instance.login(log, msg.author);
-  const desc = (typeof verified === "string")
-    ? "❌ Login failed! Reason: `" + verified + "`. If this is an error and the issue persists, please contact a team member through the server in my description."
-    : (verified === true)
-      ? "✅ Login succeeded! You can continue to the webpage now."
-      : "⚠️ An unknown error occurred. Please contact a team member if this issue persists!";
+  const code = data.get("id").value;
+
+  if (!this.dashboard?.enabled) {
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("❌ The dashboard is not enabled on this bot.").toJSON();
+    return msg.replyEmbed({ embeds: [embed] });
+  }
+
+  const error = await this.dashboard.confirmLogin(msg.author.id, code);
+  const desc = (error === null)
+    ? "✅ Login succeeded! You can continue to the webpage now."
+    : "❌ Login failed! Reason: `" + error + "`. If this is an error and the issue persists, please contact a team member through the server in my description.";
+
   const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).toJSON();
   msg.replyEmbed({ embeds: [embed] });
 }

@@ -118,8 +118,27 @@ export class PlayerManager {
       this.dashboard.updatePlayer(payload, player);
     };
 
+    // Broadcast user list changes to the global :users channel when
+    // someone joins or leaves the player's voice channel.
+    const sendUserUpdates = (event) => {
+      if (!this.dashboard?.enabled) return;
+      const channelId = getPlayerChannelId(player, context.channelId);
+      const channel = player.client?.channels?.cache?.get(channelId);
+      if (!channel?.members) return;
+      for (const member of channel.members.values()) {
+        if (member.user?.bot) continue;
+        const details = {
+          event,
+          guildId: cleanId(player._guildId ?? context.guildId),
+          channelId,
+        };
+        this.dashboard.userUpdate(details, member.user);
+      }
+    };
+
     player.on("roomfetched", () => {
       sendDashboardUpdate("roomfetched", { state: "connected" });
+      sendUserUpdates("roomfetched");
     });
 
     player.on("startplay", () => {
@@ -156,6 +175,7 @@ export class PlayerManager {
     });
 
     player.on("autoleave", () => {
+      sendUserUpdates("autoleave");
       sendDashboardUpdate("autoleave", {
         state: "disconnected",
         reason: "inactivity",
@@ -163,6 +183,7 @@ export class PlayerManager {
     });
 
     player.on("leave", () => {
+      sendUserUpdates("leave");
       sendDashboardUpdate("leave", {
         state: "disconnected",
         reason: "manual",

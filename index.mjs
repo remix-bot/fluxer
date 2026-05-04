@@ -942,7 +942,7 @@ export class Remix {
       logger.guild(`[GuildDelete] Cleanup complete for server ${guildId}.`);
     });
 
-    client.on(Events.VoiceStateUpdate, (data) => {
+    client.on(Events.VoiceStateUpdate, async (data) => {
       // data is the raw GatewayVoiceStateUpdateDispatchData — always snake_case
       const userId = data?.user_id;
       if (!userId) return;
@@ -1033,6 +1033,23 @@ export class Remix {
             if (player && typeof player._stopInactivityTimer === "function") {
               logger.voiceState(`[VoiceState] Human joined ${cleanId}, stopping inactivity timer`);
               player._stopInactivityTimer();
+            }
+          } catch (_) {}
+        }
+
+        // Notify dashboard of per-user voice-state change (join / leave / move)
+        if (this.dashboard?.enabled) {
+          try {
+            const userObj = data?.member?.user ?? await client.users.fetch(userId).catch(() => null);
+            if (userObj) {
+              const details = {
+                event:    "voiceStateUpdate",
+                userId,
+                guildId:  resolvedGuildId,
+                channelId: channelId ?? null,
+                oldChannelId: oldChannelId ?? null,
+              };
+              this.dashboard.updateUser(details, userObj);
             }
           } catch (_) {}
         }
