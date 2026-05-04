@@ -27,16 +27,22 @@ export async function run(msg) {
 
   const cid = String(userChannelId).replace(/\D/g, "");
   const cleanGuildId = String(guildId ?? "").replace(/\D/g, "");
+  const guildPlayers = [...this.players.playerMap.values()].filter(p =>
+    String(p?._guildId ?? "").replace(/\D/g, "") === cleanGuildId &&
+    !p?._destroyed
+  );
 
   const player = this.players.playerMap.get(cid)
       ?? [...this.players.playerMap.values()].find(p =>
         String(p?._channelId ?? "").replace(/\D/g, "") === cid
-      );
+      )
+      ?? (guildPlayers.length === 1 ? guildPlayers[0] : null);
 
   if (!player) {
-    const guildChannels = [...this.players.playerMap.entries()]
-        .filter(([, p]) => String(p?._guildId ?? "").replace(/\D/g, "") === cleanGuildId)
-        .map(([chId, p]) => `<#${String(p?._channelId ?? chId).replace(/\D/g, "")}>`);
+    const guildChannels = guildPlayers.map((p) => {
+      const liveId = String(p?._channelId ?? "").replace(/\D/g, "");
+      return liveId ? `<#${liveId}>` : "`unknown voice channel`";
+    });
 
     if (guildChannels.length === 0) return msg.replyEmbed(embed("I'm not in a voice channel."));
     if (guildChannels.length === 1) return msg.replyEmbed(embed(`⚠️ Please join ${guildChannels[0]} to use this command.`));
