@@ -123,9 +123,15 @@ async function handle247(ctx, message, value) {
       channels.delete(id);
       save247Channels(set, channels);
       ctx.markIntentionalLeave?.(id);
-      const player = ctx.players.playerMap.get(id);
+      const player = ctx.players.playerMap.get(id)
+          ?? [...ctx.players.playerMap.values()].find(p =>
+            cleanId(p?._channelId ?? "") === id &&
+            cleanId(p?._guildId ?? "") === cleanId(guildId)
+          );
       if (player) {
-        ctx.players.playerMap.delete(id);
+        const activeChannelId = cleanId(player._channelId ?? id);
+        ctx.players.playerMap.delete(activeChannelId);
+        if (activeChannelId !== id) ctx.players.playerMap.delete(id);
         await player.leave().catch(() => {});
         player.destroy();
       }
@@ -137,10 +143,11 @@ async function handle247(ctx, message, value) {
     save247Channels(set, new Set());
     set.set("stay_247_mode", "off");
     for (const [chId, player] of [...ctx.players.playerMap.entries()]) {
-      const ch = ctx.handler.client.channels.cache.get(chId);
-      if (ch?.guild?.id === guildId || ch?.guildId === guildId) {
-        ctx.markIntentionalLeave?.(chId);
-        ctx.players.playerMap.delete(chId);
+      if (cleanId(player?._guildId ?? "") === cleanId(guildId)) {
+        const activeChannelId = cleanId(player._channelId ?? chId);
+        ctx.markIntentionalLeave?.(activeChannelId);
+        ctx.players.playerMap.delete(activeChannelId);
+        if (activeChannelId !== chId) ctx.players.playerMap.delete(chId);
         await player.leave().catch(() => {});
         player.destroy();
       }

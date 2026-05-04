@@ -604,10 +604,10 @@ class Remix {
         if (wsListenerAttached && this._rawGatewayWsObj && this._rawGatewayWsObj !== wsObj) {
           try {
             if (typeof this._rawGatewayWsObj.removeEventListener === "function") {
-              this._rawGatewayWsObj.removeEventListener("message", this._rawGatewayHandler);
+              this._rawGatewayWsObj.removeEventListener("message", this._rawGatewayMessageListener ?? this._rawGatewayHandler);
               this._rawGatewayWsObj.removeEventListener("error",   this._rawGatewayErrorHandler);
             } else if (typeof this._rawGatewayWsObj.off === "function") {
-              this._rawGatewayWsObj.off("message", this._rawGatewayHandler);
+              this._rawGatewayWsObj.off("message", this._rawGatewayMessageListener ?? this._rawGatewayHandler);
               this._rawGatewayWsObj.off("error",   this._rawGatewayErrorHandler);
             }
           } catch (_) {}
@@ -704,12 +704,13 @@ class Remix {
           this._rawGatewayErrorHandler = (err) => {
             logger.warn("[Gateway] Raw WS socket error (will reconnect):", err?.message ?? err);
           };
+          this._rawGatewayMessageListener = (event) => this._rawGatewayHandler(event?.data ?? event);
 
           if (typeof wsObj.addEventListener === "function") {
-            wsObj.addEventListener("message", (event) => this._rawGatewayHandler(event.data));
+            wsObj.addEventListener("message", this._rawGatewayMessageListener);
             wsObj.addEventListener("error",   this._rawGatewayErrorHandler);
           } else if (typeof wsObj.on === "function") {
-            wsObj.on("message", this._rawGatewayHandler);
+            wsObj.on("message", this._rawGatewayMessageListener);
             wsObj.on("error",   this._rawGatewayErrorHandler);
           }
 

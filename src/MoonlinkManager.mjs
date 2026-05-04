@@ -188,10 +188,10 @@ export class MoonlinkManager extends EventEmitter {
         if (this._rawWsHandler && this._rawWsObj && this._rawWsObj !== wsObj) {
           try {
             if (typeof this._rawWsObj.removeEventListener === "function") {
-              this._rawWsObj.removeEventListener("message", this._rawWsHandler);
+              this._rawWsObj.removeEventListener("message", this._rawWsMessageListener ?? this._rawWsHandler);
               this._rawWsObj.removeEventListener("error",   this._rawWsErrorHandler);
             } else if (typeof this._rawWsObj.off === "function") {
-              this._rawWsObj.off("message", this._rawWsHandler);
+              this._rawWsObj.off("message", this._rawWsMessageListener ?? this._rawWsHandler);
               this._rawWsObj.off("error",   this._rawWsErrorHandler);
             }
           } catch (_) {}
@@ -216,12 +216,13 @@ export class MoonlinkManager extends EventEmitter {
         this._rawWsErrorHandler = (err) => {
           logger.warn("[MoonlinkManager] Raw WS socket error (will reconnect):", err?.message ?? err);
         };
+        this._rawWsMessageListener = (event) => this._rawWsHandler(event?.data ?? event);
 
         if (typeof wsObj.addEventListener === "function") {
-          wsObj.addEventListener("message", this._rawWsHandler);
+          wsObj.addEventListener("message", this._rawWsMessageListener);
           wsObj.addEventListener("error",   this._rawWsErrorHandler);
         } else if (typeof wsObj.on === "function") {
-          wsObj.on("message", this._rawWsHandler);
+          wsObj.on("message", this._rawWsMessageListener);
           wsObj.on("error",   this._rawWsErrorHandler);
         }
 

@@ -292,18 +292,19 @@ export class PlayerManager {
       const serverId = msg.channel?.server_id ?? msg.channel?.serverId ??
           msg.message?.server_id ?? msg.message?.serverId;
       if (serverId) {
-        cid = [...this.playerMap.keys()].find((id) => {
-          const ch = this.commands.client?.channels?.get(id) ??
-              this.commands.client?.channels?.cache?.get(id);
-          return ch?.guildId === serverId || ch?.server_id === serverId || ch?.serverId === serverId;
-        });
+        const matchedEntry = [...this.playerMap.entries()].find(([, player]) =>
+          String(player?._guildId ?? "").replace(/\D/g, "") === String(serverId).replace(/\D/g, "")
+        );
+        cid = matchedEntry?.[0] ?? null;
       }
     }
 
     const player = cid ? this.playerMap.get(cid) : null;
     if (!player) return msg.replyEmbed(mkEmbed("I'm not in a voice channel."));
 
-    this.playerMap.delete(cid);
+    const activeChannelId = String(player._channelId ?? cid).replace(/\D/g, "") || cid;
+    this.playerMap.delete(activeChannelId);
+    if (activeChannelId !== cid) this.playerMap.delete(cid);
     await msg.replyEmbed(mkEmbed("✅ Successfully Left"));
     await player.leave();
     player.destroy();

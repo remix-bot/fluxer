@@ -39,6 +39,8 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
   });
 
   p.on("autoleave", () => {
+    const activeChannelId = String(p._channelId ?? cid).replace(/\D/g, "") || cid;
+    const homeChannelId = String(p._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
     const guildId = message.channel?.guildId
         ?? message.channel?.guild?.id
         ?? message.message?.guildId
@@ -56,13 +58,15 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
       } catch (_) { return "%"; }
     })();
     const desc = is247
-        ? `Left channel <#${cid}> because of inactivity.`
-        : `Left channel <#${cid}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
+        ? `Left channel <#${activeChannelId}> because of inactivity.`
+        : `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
     const embed = new EmbedBuilder().setColor(getGlobalColor())
         .setDescription(desc)
         .toJSON();
     message.channel.sendEmbed({ embeds: [embed] });
-    this.players.playerMap.delete(cid);
+    this.players.playerMap.delete(activeChannelId);
+    if (activeChannelId !== cid) this.players.playerMap.delete(cid);
+    if (homeChannelId !== activeChannelId) this.players.playerMap.delete(homeChannelId);
     p.destroy();
   });
 
