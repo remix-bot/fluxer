@@ -304,7 +304,8 @@ class Remix {
           const isTransient = e.message?.includes("engine is closed") ||
               e.message?.includes("MediaPlayer after retry") ||
               e.message?.includes("LiveKit connection timeout") ||
-              e.message?.includes("LiveKit failed");
+              e.message?.includes("LiveKit failed") ||
+              e.message?.includes("No room available");
           const shouldRetry = isTransient && !recoveryData?.queue?.length
               ? (() => {
                   try {
@@ -877,6 +878,11 @@ class Remix {
           if (existingPlayer && cleanId !== cleanOld) {
             this.players.playerMap.delete(cleanOld);
             this.players.playerMap.set(cleanId, existingPlayer);
+            // CRITICAL: also update the player's own _channelId so that
+            // _recoverConnection, _is247Enabled, and _hasHumansInChannel
+            // all use the correct channel. Without this they keep referencing
+            // the old channel even after the bot has moved.
+            existingPlayer._channelId = cleanId;
             logger.voice247(`[247] Re-keyed playerMap ${cleanOld} → ${cleanId}`);
           }
 

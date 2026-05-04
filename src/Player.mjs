@@ -407,13 +407,25 @@ export default class Player extends EventEmitter {
       if (!set?.get) return false;
       const raw = set.get("stay_247");
       if (!raw || raw === "none") return false;
+      const mode = set.get("stay_247_mode") ?? "auto";
+      if (mode !== "on" && mode !== "auto") return false;
+
       const channels = Array.isArray(raw)
           ? raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
           : [String(raw).replace(/\D/g, "")];
       const currentChannel = String(this._channelId).replace(/\D/g, "");
-      if (!channels.includes(currentChannel)) return false;
-      const mode = set.get("stay_247_mode") ?? "auto";
-      return mode === "on" || mode === "auto";
+
+      // Primary check: current channel is in the 247 list.
+      if (channels.includes(currentChannel)) return true;
+
+      // Fallback: if the player is mid-recovery or mid-join, the bot may
+      // temporarily be in a transit channel (e.g. "move") that isn't in the
+      // 247 list yet. If the guild has ANY 247 channels configured and active,
+      // treat the player as 247 to prevent premature inactivity/alone timers
+      // from firing while the player is still reconnecting to the right channel.
+      if ((this._isRecovering || this._isJoining) && channels.length > 0) return true;
+
+      return false;
     };
 
     if (this.settingsMgr?.getServer) return checkSettings(this.settingsMgr.getServer(this._guildId));
@@ -1098,6 +1110,10 @@ export default class Player extends EventEmitter {
 
         logger.mediaplayer("[Player] Proceeding to create MediaPlayer (room confirmed alive)");
       } else {
+        // connection.room is null — this happens when joinVoiceChannel returns
+        // a stale/recycled connection object before the LiveKit room is assigned,
+        // usually due to a concurrent join race or a channel that no longer has
+        // an active room. Treat it as transient so the retry loop handles it.
         throw new Error("No room available after joinVoiceChannel");
       }
 
