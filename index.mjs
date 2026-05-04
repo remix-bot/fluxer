@@ -622,6 +622,16 @@ class Remix {
                 logger.warn("[Gateway] GatewayError (12) received from Fluxer:", payload.d);
               }
 
+              if (payload?.op === GatewayOpcodes.Hello || payload?.op === 10) {
+                logger.player(`[Gateway] HELLO received (heartbeat ${payload.d?.heartbeat_interval ?? "unknown"}ms)`);
+              }
+              if (payload?.op === GatewayOpcodes.Reconnect || payload?.op === 7) {
+                logger.warn("[Gateway] RECONNECT requested by gateway.");
+              }
+              if (payload?.op === GatewayOpcodes.InvalidSession || payload?.op === 9) {
+                logger.warn("[Gateway] INVALID_SESSION received from gateway.");
+              }
+
               if (payload?.op !== 0) return;
 
               // READY payload contains an unavailable-guilds summary, but some
@@ -630,6 +640,7 @@ class Remix {
               // bot knows who is in voice immediately on reboot, before the
               // individual GUILD_CREATE bursts complete.
               if (payload.t === "READY") {
+                logger.player(`[Gateway] READY received (session ${payload.d?.session_id ?? "unknown"})`);
                 const readyGuilds = payload.d?.guilds;
                 if (Array.isArray(readyGuilds)) {
                   for (const g of readyGuilds) {
@@ -641,10 +652,14 @@ class Remix {
                       if (!userId || !channelId) continue;
                       const isBot  = state.member?.user?.bot ?? false;
                       const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
-                      target.set(userId, { channelId, guildId: gId });
+                      target.set(isBot ? getObservedVoiceBotKey(userId, gId) : userId, { channelId, guildId: gId });
                     }
                   }
                 }
+              }
+
+              if (payload.t === "RESUMED") {
+                logger.player("[Gateway] RESUMED received from gateway.");
               }
 
               if (payload.t === "GUILD_CREATE") {
@@ -658,9 +673,13 @@ class Remix {
                     if (!userId || !channelId) continue;
                     const isBot  = state.member?.user?.bot ?? false;
                     const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
-                    target.set(userId, { channelId, guildId: gId });
+                    target.set(isBot ? getObservedVoiceBotKey(userId, gId) : userId, { channelId, guildId: gId });
                   }
                 }
+              }
+
+              if (payload.t === "VOICE_SERVER_UPDATE") {
+                logger.voiceState(`[Gateway] VOICE_SERVER_UPDATE guild=${payload.d?.guild_id ?? "dm"} endpoint=${payload.d?.endpoint ?? "unknown"}`);
               }
 
               if (payload.t === "VOICE_STATE_UPDATE") {
@@ -671,10 +690,11 @@ class Remix {
                 const isBot     = d?.member?.user?.bot ?? false;
                 if (!userId) return;
                 const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
+                const voiceKey = isBot ? getObservedVoiceBotKey(userId, guildId) : userId;
                 // WS path correctly deletes on channelId=null,
                 // keeping observedVoice* from growing unbounded.
-                if (channelId) target.set(userId, { channelId, guildId });
-                else           target.delete(userId);
+                if (channelId) target.set(voiceKey, { channelId, guildId });
+                else if (voiceKey) target.delete(voiceKey);
               }
             } catch (_) {}
           };
@@ -739,6 +759,11 @@ class Remix {
     // (channelId=null → delete) and in GuildDelete, so they don't grow unbounded.
     this.observedVoiceUsers = new Map();
     this.observedVoiceBots  = new Map();
+    const getObservedVoiceBotKey = (userId, guildId) => {
+      const cleanUserId = String(userId ?? "").replace(/\D/g, "");
+      const cleanGuildId = String(guildId ?? "").replace(/\D/g, "");
+      return cleanUserId && cleanGuildId ? `${cleanGuildId}:${cleanUserId}` : cleanUserId || null;
+    };
     // initialise announcement channel cache eagerly alongside other caches
     // so the hot path never needs a null-check allocation.
     this._announcementChannelCache = new Map();
@@ -787,7 +812,7 @@ class Remix {
             if (!uid || !channelId) continue;
             const isBot = val?.member?.user?.bot ?? false;
             const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
-            target.set(uid, { channelId, guildId });
+            target.set(isBot ? getObservedVoiceBotKey(uid, guildId) : uid, { channelId, guildId });
           }
         } else {
           const entries = Array.isArray(voiceStatesRaw)
@@ -801,7 +826,7 @@ class Remix {
             const isBot     = state?.member?.user?.bot ?? false;
             if (!channelId || !userId) continue;
             const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
-            target.set(userId, { channelId, guildId: sgid });
+            target.set(isBot ? getObservedVoiceBotKey(userId, sgid) : userId, { channelId, guildId: sgid });
           }
         }
       }
@@ -941,13 +966,16 @@ class Remix {
 
       // Always update/delete the voice maps so they never accumulate stale entries
       const target = isBot === true ? this.observedVoiceBots : this.observedVoiceUsers;
+      const voiceKey = isBot === true ? getObservedVoiceBotKey(userId, guildId ?? prev?.guildId) : userId;
       if (channelId) {
-        target.set(userId, { channelId, guildId });
+        if (voiceKey) target.set(voiceKey, { channelId, guildId });
       } else {
         // On leave, delete from BOTH maps — isBot can be null/inconsistent
         // between join and leave events, so the user may be in either map.
         this.observedVoiceUsers.delete(userId);
-        this.observedVoiceBots.delete(userId);
+        if (voiceKey) this.observedVoiceBots.delete(voiceKey);
+        const fallbackBotKey = getObservedVoiceBotKey(userId, prev?.guildId);
+        if (fallbackBotKey && fallbackBotKey !== voiceKey) this.observedVoiceBots.delete(fallbackBotKey);
       }
 
       const isBotUser = isBot === true && userId === client.user?.id;
@@ -1157,12 +1185,23 @@ class Remix {
           // _is247Enabled() checks the wrong channel against stay_247.
           const channelId   = player._channelId ?? mapKey;
           const cleanChanId = String(channelId).replace(/\D/g, "");
+          if (!cleanChanId) continue;
+
+          const cleanGuildId = String(guildId).replace(/\D/g, "");
+          const channelGuildId = String(
+              this.client?.channels?.cache?.get?.(channelId)?.guildId ??
+              this.client?.channels?.cache?.get?.(channelId)?.guild_id ??
+              ""
+          ).replace(/\D/g, "");
+          if (channelGuildId && channelGuildId !== cleanGuildId) {
+            logger.warn(`[AloneCheck] Skipping inconsistent player state channel=${channelId} playerGuild=${guildId} channelGuild=${channelGuildId}`);
+            continue;
+          }
 
           // Skip if 247 is on or auto
           if (player._is247Enabled()) continue;
 
           // Read directly from observedVoiceUsers — bypass any cache issues
-          const cleanGuildId = String(guildId).replace(/\D/g, "");
           let hasHuman = false;
           for (const [, info] of this.observedVoiceUsers) {
             const infoChannel = String(info.channelId ?? "").replace(/\D/g, "");
