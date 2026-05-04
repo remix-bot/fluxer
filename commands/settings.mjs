@@ -96,7 +96,47 @@ function format247Status(set) {
   if (channels.size === 0) return "❌ disabled";
   const channelList = [...channels].map(id => `<#${id}>`).join(", ");
   const modeLabel = mode === "auto" ? "🔄 auto" : mode === "on" ? "✅ on" : "❌ off";
-  return `${modeLabel} — ${channelList}`;
+  const countLabel = channels.size === 1 ? "1 channel" : `${channels.size} channels`;
+  return `${modeLabel} — ${countLabel}: ${channelList}`;
+}
+
+function format247Summary(set) {
+  const channels = [...get247Channels(set)];
+  const mode = set.get("stay_247_mode") ?? "off";
+  if (channels.length === 0) {
+    return [
+      "**24/7 Mode**",
+      "Status: ❌ disabled",
+      "Saved channels: none"
+    ].join("\n");
+  }
+
+  const modeLabel = mode === "auto"
+    ? "🔄 auto"
+    : mode === "on"
+      ? "✅ on"
+      : "❌ off";
+
+  return [
+    "**24/7 Mode**",
+    `Status: ${modeLabel}`,
+    `Saved channels (${channels.length}): ${channels.map(id => `<#${id}>`).join(", ")}`
+  ].join("\n");
+}
+
+function prettifySettingLabel(key) {
+  const custom = {
+    songAnnouncements: "Song announcements",
+    prefix: "Prefix",
+    pfp: "Bot avatar style",
+    locale: "Locale",
+    stay_247: "24/7 mode",
+    volume: "Default volume",
+    announcementChannelId: "Announcement channel",
+    restrictVolume: "Restrict volume",
+    autojoin_channel: "Autojoin channel"
+  };
+  return custom[key] ?? key.replace(/_/g, " ");
 }
 
 async function handle247(ctx, message, value) {
@@ -112,8 +152,8 @@ async function handle247(ctx, message, value) {
         `❌ Invalid value \`${value}\` for 24/7 mode.\n\n` +
         `**Valid options:**\n` +
         `• \`off\` — bot leaves after inactivity\n` +
-        `• \`on\` — bot stays, but won't rejoin after restart or force-kick\n` +
-        `• \`auto\` — bot stays and always rejoins after restart or force-kick`
+        `• \`on\` — bot stays active in the saved channel list\n` +
+        `• \`auto\` — bot stays active and keeps the saved channel list ready for recovery`
     ));
   }
 
@@ -142,7 +182,11 @@ async function handle247(ctx, message, value) {
         player.destroy();
       }
       if (channels.size === 0) set.set("stay_247_mode", "off");
-      return message.replyEmbed(embed(`✅ 24/7 mode **disabled** for <#${id}>. Bot has left.`));
+      const remaining = [...channels];
+      const extra = remaining.length > 0
+        ? `\nSaved channels left: ${remaining.map(ch => `<#${ch}>`).join(", ")}`
+        : "";
+      return message.replyEmbed(embed(`✅ 24/7 mode **disabled** for <#${id}>. Bot has left.${extra}`));
     }
 
     // Not in a channel — disable all for this guild
@@ -178,18 +222,26 @@ async function handle247(ctx, message, value) {
   set.set("stay_247_mode", resolved);
 
   const modeLabel = resolved === "auto"
-      ? "**auto** (stays and rejoins automatically)"
-      : "**on** (stays but won't rejoin if kicked)";
+      ? "**auto**"
+      : "**on**";
+  const savedSummary = channels.size === 1
+    ? `Saved channel: <#${id}>`
+    : `Saved channels (${channels.size}): ${[...channels].map(ch => `<#${ch}>`).join(", ")}`;
 
-  if (ctx.players.playerMap.has(id)) {
-    return message.replyEmbed(embed(`✅ 24/7 mode set to ${modeLabel} for <#${id}>.`));
+  if (
+    ctx.players.playerMap.has(id) ||
+    [...ctx.players.playerMap.values()].some(p =>
+      cleanId(p?._channelId ?? "") === id && cleanId(p?._guildId ?? "") === cleanId(guildId)
+    )
+  ) {
+    return message.replyEmbed(embed(`✅ 24/7 mode set to ${modeLabel} for <#${id}>.\n${savedSummary}`));
   }
 
   try {
     await ctx._spawnPlayer(guildId, id);
-    return message.replyEmbed(embed(`✅ 24/7 mode set to ${modeLabel} for <#${id}>. Bot joined!`));
+    return message.replyEmbed(embed(`✅ 24/7 mode set to ${modeLabel} for <#${id}>. Bot joined!\n${savedSummary}`));
   } catch (e) {
-    return message.replyEmbed(embed(`✅ 24/7 mode saved, but failed to join: ${e.message}`));
+    return message.replyEmbed(embed(`✅ 24/7 mode saved for <#${id}>, but failed to join: ${e.message}\n${savedSummary}`));
   }
 }
 
@@ -386,7 +438,7 @@ export const command = function() {
 
 export async function run(message, data) {
   const set = this.getSettings(message);
-  const cmd = data.commandId;
+  const cmd = data.commandId || "getSettings";
 
   // ── Shortcut commands (%prefix, %pfx, %247) ───────────────────────────────
   if (cmd?.startsWith("shortcut_")) {
@@ -428,18 +480,18 @@ export async function run(message, data) {
     if (settingKey === "stay_247") return; // handle247 replied already
 
     const newVal = set.get(settingKey);
-    return message.replyEmbed(embed(`✅ \`${settingKey}\` set to ${displayValue(settingKey, newVal)}`));
+    return message.replyEmbed(embed(`✅ **${prettifySettingLabel(settingKey)}** set to ${displayValue(settingKey, newVal)}`));
   }
 
   // ── get ───────────────────────────────────────────────────────────────────
   if (cmd === "getSettings") {
     if (settingKey) {
       if (settingKey === "stay_247") {
-        return message.replyEmbed(embed(`24/7 mode: ${format247Status(set)}`));
+        return message.replyEmbed(embed(format247Summary(set)));
       }
       const val = set.get(settingKey);
       const description = this.settingsMgr.descriptions?.[settingKey];
-      let reply = `**${settingKey}** → ${displayValue(settingKey, val)}`;
+      let reply = `**${prettifySettingLabel(settingKey)}**\nValue: ${displayValue(settingKey, val)}`;
       if (description) reply += `\n\n*${description}*`;
       return message.replyEmbed(embed(reply));
     }
@@ -458,13 +510,14 @@ export async function run(message, data) {
         .filter(([k]) => k !== "stay_247_mode") // surfaced inline with stay_247
         .map(([k]) => {
           if (k === "stay_247") {
-            return `• **stay_247** — ${format247Status(set)}`;
+            return `• **24/7 mode** — ${format247Status(set)}`;
           }
-          return `• **${k}** — ${displayValue(k, d[k])}`;
+          return `• **${prettifySettingLabel(k)}** — ${displayValue(k, d[k])}`;
         });
 
     return message.replyEmbed(embed(
-        `Settings for **${guildName}**\n\n${lines.join("\n")}\n\n` +
+        `Server: **${guildName}**\n\n${lines.join("\n")}\n\n` +
+        `Shortcuts: \`${prefix}247\`, \`${prefix}prefix\`\n` +
         `Use \`${prefix}settings help <setting>\` to learn about any setting.`,
         { title: "⚙️ Server Settings", iconURL: iconUrl }
     ));
@@ -515,13 +568,13 @@ export async function run(message, data) {
     } else if (BOOL_SETTINGS.has(settingKey)) {
       extra = `\n**Valid values:** \`true\`, \`false\`, \`on\`, \`off\``;
     } else if (settingKey === "stay_247") {
-      extra = `\n**Valid values:** \`off\`, \`on\`, \`auto\``;
+      extra = `\n**Valid values:** \`off\`, \`on\`, \`auto\`\n**Tip:** You can save more than one voice channel in the same server.`;
     }
 
     return message.replyEmbed(embed(
         `**⚙️ Setting: \`${settingKey}\`**\n\n` +
         `${description}${extra}\n\n` +
-        `**Current value:** ${displayValue(settingKey, currentVal)}\n` +
+        `**Current value:** ${settingKey === "stay_247" ? format247Status(set) : displayValue(settingKey, currentVal)}\n` +
         `**Default:** ${displayValue(settingKey, defaultVal)}`,
         { title: `⚙️ ${settingKey}` }
     ));
