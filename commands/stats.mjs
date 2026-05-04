@@ -72,6 +72,21 @@ function getUserCount(client) {
   return inflightPromise;
 }
 
+function getLivePlayerCount(playerMap) {
+  const liveChannels = new Set();
+
+  for (const [mapKey, player] of playerMap ?? []) {
+    if (!player || player._destroyed || player.leaving) continue;
+
+    const channelId = String(player._channelId ?? mapKey ?? "").replace(/\D/g, "");
+    if (!channelId) continue;
+
+    liveChannels.add(channelId);
+  }
+
+  return liveChannels.size;
+}
+
 // ── Embed builder ─────────────────────────────────────────────────────────────
 
 function buildEmbed({ guildCount, userCount, playerCount, ping, uptime, comHash, comLink, reason, footer, loading }) {
@@ -106,7 +121,7 @@ function buildEmbed({ guildCount, userCount, playerCount, ping, uptime, comHash,
 export async function run(message) {
   const shared = {
     guildCount:  this.client.guilds.cache.size,
-    playerCount: this.players.playerMap.size,
+    playerCount: getLivePlayerCount(this.players.playerMap),
     uptime:      Utils.prettifyMS(Math.round(process.uptime()) * 1000),
     comHash:     this.comHash,
     comLink:     this.comLink,

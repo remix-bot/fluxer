@@ -114,9 +114,13 @@ export class PlayerManager {
     const cleanServerId = serverId ? String(serverId).replace(/\D/g, "") : null;
 
     const userChannelId = this.checkVoiceChannels(message);
+    const cleanUserChannelId = userChannelId ? String(userChannelId).replace(/\D/g, "") : null;
 
-    if (userChannelId) {
-      const player = this.playerMap.get(userChannelId);
+    if (cleanUserChannelId) {
+      const player = this.playerMap.get(cleanUserChannelId)
+          ?? [...this.playerMap.values()].find(p =>
+            String(p?._channelId ?? "").replace(/\D/g, "") === cleanUserChannelId
+          );
       if (player) {
         player.textChannel = message.channel;
         return player;
@@ -124,11 +128,9 @@ export class PlayerManager {
     }
 
     const serverPlayers = cleanServerId
-        ? [...this.playerMap.entries()].filter(([chId]) => {
-          const ch = this.commands.client?.channels?.get(chId) ??
-              this.commands.client?.channels?.cache?.get(chId);
-          const chGuild = String(ch?.guildId ?? ch?.server_id ?? ch?.serverId ?? "").replace(/\D/g, "");
-          return chGuild === cleanServerId;
+        ? [...this.playerMap.entries()].filter(([, player]) => {
+          const playerGuildId = String(player?._guildId ?? "").replace(/\D/g, "");
+          return playerGuildId === cleanServerId;
         })
         : [];
 
@@ -147,7 +149,9 @@ export class PlayerManager {
         return null;
       }
 
-      const match = serverPlayers.find(([chId]) => chId === userChannelId);
+      const match = serverPlayers.find(([, player]) =>
+        String(player?._channelId ?? "").replace(/\D/g, "") === cleanUserChannelId
+      );
       if (match) {
         match[1].textChannel = message.channel;
         return match[1];
