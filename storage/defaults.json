@@ -14,8 +14,8 @@
     "prefix": "The prefix used to trigger commands.",
     "pfp": "What profile picture the bot should use. Presets: `default | dark | light | mono | <custom url>`.",
     "locale": "The preferred language of your server.",
-    "stay_247": "24/7 mode channels. Managed automatically by %247 — do not edit manually.",
-    "stay_247_mode": "Controls 247 behaviour. Set via %247 off/on/auto. off = disabled, on = stay but no rejoin on force-kick, auto = stay and always rejoins.",
+    "stay_247": "24/7 saved voice channels for this server. Supports multiple channels and is managed automatically by %247 — do not edit manually.",
+    "stay_247_mode": "Controls 24/7 behaviour for the saved channel list. Set via %247 off/on/auto. off = disabled, on = keep channels saved and active, auto = keep channels saved and recovery-ready.",
     "volume": "The default playback volume for this server (1-200). Saved automatically when you use %volume. Restored every time the bot joins a channel.",
     "announcementChannelId": "The channel where song announcements are sent. Managed automatically — do not edit manually."
   }
