@@ -1047,19 +1047,35 @@ class Remix {
           // wrong decisions. The player's own _channelId is updated inside
           // join(), but the map key has to be manually migrated here.
           const existingPlayer = this.players.playerMap.get(cleanOld);
+          const targetChannel = this.client.channels.cache.get(cleanId)
+            ?? this.client.channels.get?.(cleanId)
+            ?? null;
+          const targetGuildId = String(targetChannel?.guildId ?? targetChannel?.guild?.id ?? guildId ?? "").replace(/\D/g, "");
+          const playerGuildId = String(existingPlayer?._guildId ?? "").replace(/\D/g, "");
+
+          let rekeyed = false;
           if (existingPlayer && cleanId !== cleanOld) {
-            this.players.playerMap.delete(cleanOld);
-            this.players.playerMap.set(cleanId, existingPlayer);
-            // Update both _channelId and _home247Channel so _recoverConnection
-            // and _is247Enabled always reference the correct current channel.
-            existingPlayer._channelId     = cleanId;
-            existingPlayer._home247Channel = cleanId;
-            logger.voice247(`[247] Re-keyed playerMap ${cleanOld} → ${cleanId}`);
+            if (playerGuildId && targetGuildId && playerGuildId !== targetGuildId) {
+              logger.warn(
+                `[247] Refused cross-guild re-key ${cleanOld} → ${cleanId} ` +
+                `(playerGuild=${playerGuildId} targetGuild=${targetGuildId})`
+              );
+            } else {
+              this.players.playerMap.delete(cleanOld);
+              this.players.playerMap.set(cleanId, existingPlayer);
+              // Update both _channelId and _home247Channel so _recoverConnection
+              // and _is247Enabled always reference the correct current channel.
+              existingPlayer._channelId = cleanId;
+              existingPlayer._home247Channel = cleanId;
+              if (targetGuildId) existingPlayer._guildId = targetGuildId;
+              rekeyed = true;
+              logger.voice247(`[247] Re-keyed playerMap ${cleanOld} → ${cleanId}`);
+            }
           }
 
           const set = this.settingsMgr.getServer(guildId);
           const raw = set.get("stay_247");
-          if (raw && raw !== "none") {
+          if (rekeyed && raw && raw !== "none") {
             const channels = Array.isArray(raw)
                 ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
                 : new Set([String(raw).replace(/\D/g, "")]);
