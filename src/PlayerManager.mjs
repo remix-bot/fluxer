@@ -357,6 +357,8 @@ export class PlayerManager {
     player.textChannel = message.channel;
 
     player.on("autoleave", () => {
+      const activeChannelId = String(player._channelId ?? cid).replace(/\D/g, "") || cid;
+      const homeChannelId = String(player._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
       const ch       = player.textChannel;
       const serverId = ch?.server_id ?? ch?.serverId ?? ch?.guild?.id;
       const is247 = (() => {
@@ -371,10 +373,12 @@ export class PlayerManager {
         } catch (_) { return "%"; }
       })();
       const desc = is247
-          ? `Left channel <#${cid}> because of inactivity.`
-          : `Left channel <#${cid}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
+          ? `Left channel <#${activeChannelId}> because of inactivity.`
+          : `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
       ch?.sendEmbed(mkEmbed(desc));
-      this.playerMap.delete(cid);
+      this.playerMap.delete(activeChannelId);
+      if (activeChannelId !== cid) this.playerMap.delete(cid);
+      if (homeChannelId !== activeChannelId) this.playerMap.delete(homeChannelId);
       player.destroy();
     });
 

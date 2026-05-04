@@ -267,6 +267,8 @@ class Remix {
         });
 
         p.on("autoleave", async () => {
+          const activeChannelId = String(p._channelId ?? cleanChannelId).replace(/\D/g, "") || cleanChannelId;
+          const homeChannelId = String(p._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
           // Read 247 state BEFORE destroying the player so we can decide
           // whether to rejoin. Destroying first, then checking, means the
           // check always runs against a clean state — which is correct —
@@ -281,16 +283,17 @@ class Remix {
           const mode2 = this.settingsMgr.getServer(guildId).get("stay_247_mode") ?? "auto";
 
           // Remove player from map and destroy it now that we've read the state.
-          this.players.playerMap.delete(cleanChannelId);
+          this.players.playerMap.delete(activeChannelId);
+          if (activeChannelId !== cleanChannelId) this.players.playerMap.delete(cleanChannelId);
           p.destroy();
 
-          if (channels2.includes(cleanChannelId)) {
+          if (channels2.includes(homeChannelId) || channels2.includes(activeChannelId)) {
             // "on"  = always stay in voice, rejoin even when queue ends
             // "auto" = stay while people are around / queue is active, rejoin
             // Both modes should rejoin on autoleave — the difference is only
             // whether the inactivity timer fires at all (handled in Player).
             if (mode2 === "on" || mode2 === "auto") {
-              scheduleSpawn(guildId, cleanChannelId, T.rejoin247Delay, null, "247-autoleave");
+              scheduleSpawn(guildId, homeChannelId, T.rejoin247Delay, null, "247-autoleave");
             }
           } else {
             // 24/7 is off — send inactivity message with hint to enable 247
@@ -301,14 +304,14 @@ class Remix {
                   (c.isTextBased?.() ?? c.channel_type === "TextChannel" ?? true) &&
                   (c.permissionsFor?.(this.client.user)?.has?.("SendMessages") ?? true)
               );
-              if (ch) {
-                const embed = new EmbedBuilder()
-                    .setColor(getGlobalColor())
-                    .setDescription(
-                        `Left channel <#${cleanChannelId}> because of inactivity.\n` +
-                        `If you want me to stay in voice, use \`${prefix}247 on/auto\``
-                    )
-                    .toJSON();
+                if (ch) {
+                  const embed = new EmbedBuilder()
+                      .setColor(getGlobalColor())
+                      .setDescription(
+                          `Left channel <#${activeChannelId}> because of inactivity.\n` +
+                          `If you want me to stay in voice, use \`${prefix}247 on/auto\``
+                      )
+                      .toJSON();
                 ch.send({ embeds: [embed] }).catch(() => {});
               }
             } catch (_) {}
