@@ -296,6 +296,28 @@ class Remix {
           // Without this, every failed join permanently leaks a listener on the moonlink manager.
           try { p.destroy(); } catch (_) {}
           logger.warn("[PlayerSpawn] Failed to join channel", cleanChannelId, "guild", guildId, e.message);
+
+          // Retry if the failure is a transient LiveKit race (engine closed mid-join)
+          // and this is a 247 channel or a recovery session. These failures are
+          // expected when LiveKit disconnects at the exact moment we try to join —
+          // waiting longer gives the room time to fully tear down before we retry.
+          const isTransient = e.message?.includes("engine is closed") ||
+              e.message?.includes("MediaPlayer after retry") ||
+              e.message?.includes("LiveKit connection timeout") ||
+              e.message?.includes("LiveKit failed");
+          const shouldRetry = isTransient && !recoveryData?.queue?.length
+              ? (() => {
+                  try {
+                    const raw = this.settingsMgr.getServer(guildId)?.get("stay_247");
+                    return raw && raw !== "none";
+                  } catch (_) { return false; }
+                })()
+              : isTransient && !!recoveryData;
+          if (shouldRetry) {
+            const retryDelay = T.rejoin247Delay * 3; // longer than normal rejoin
+            logger.warn(`[PlayerSpawn] Transient join failure — retrying in ${retryDelay}ms`);
+            setTimeout(() => spawnPlayer(guildId, cleanChannelId, 0, recoveryData ?? null), retryDelay);
+          }
         }
 
         return p;

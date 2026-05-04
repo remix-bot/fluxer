@@ -665,7 +665,17 @@ export default class Player extends EventEmitter {
       logger.mediaplayer("[Player] MediaPlayer published successfully");
       return true;
     } catch (e) {
-      logger.error("[Player] publishToRoom failed:", e.message);
+      // "engine is closed" = LiveKit room disconnected mid-publish (transient race).
+      // Anything else = real failure. Both return false so the caller can retry,
+      // but we distinguish them in the log for easier diagnosis.
+      const isTransient = e.message?.includes("engine is closed") ||
+          e.message?.includes("engine: connection error");
+      if (isTransient) {
+        logger.mediaplayer(`[Player] publishToRoom transient fail (room mid-teardown): ${e.message}`);
+      } else {
+        logger.error(`[Player] publishToRoom failed: ${e.message}`);
+      }
+      try { this._mediaPlayer?.stop?.(); } catch (_) {}
       this._mediaPlayer = null;
       return false;
     }
@@ -1130,7 +1140,19 @@ export default class Player extends EventEmitter {
       const playerReady = await this._ensureMediaPlayer();
       if (!playerReady) {
         logger.mediaplayer("[Player] First MediaPlayer attempt failed, retrying after delay...");
-        await Utils.sleep(1000);
+        // 1s wasn't enough — LiveKit can take 2-3s to fully tear down after
+        // a room_disconnected event fires. If we retry too soon we hit the
+        // same "engine is closed" error. 3s gives the engine time to settle.
+        await Utils.sleep(3000);
+        if (this._destroyed || this.leaving) throw new Error("Player destroyed during MediaPlayer retry");
+        // If the room disconnected while we were waiting, fail fast so the
+        // caller's retry logic (spawnPlayer) can respawn with a fresh connection.
+        const roomAlive = this.connection?.room?.state !== "disconnected" &&
+            this.connection?.room?.state !== "failed" &&
+            this.connection?.room?.state !== 0;
+        if (!roomAlive && this.connection?.room?.state !== undefined) {
+          throw new Error("Room disconnected during MediaPlayer retry");
+        }
         const retryReady = await this._ensureMediaPlayer();
         if (!retryReady) throw new Error("Failed to create MediaPlayer after retry");
       }
