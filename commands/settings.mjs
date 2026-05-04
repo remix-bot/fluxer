@@ -56,7 +56,13 @@ function displayValue(key, value) {
 
 /** Resolve guild ID from a message context */
 function getGuildId(message) {
-  return message.message?.guild?.id ?? message.channel?.guild?.id ?? null;
+  return message.message?.guildId
+    ?? message.message?.guild?.id
+    ?? message.channel?.guildId
+    ?? message.channel?.guild?.id
+    ?? message.channel?.server_id
+    ?? message.channel?.serverId
+    ?? null;
 }
 
 /** Resolve guild name from a message context */

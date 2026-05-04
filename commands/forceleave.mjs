@@ -18,13 +18,18 @@ function embed(desc) {
   return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).toJSON()] };
 }
 
+function cleanId(value) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
 export async function run(msg, data) {
-  const cid = data.get("channelId").value;
+  const cid = cleanId(data.get("channelId").value);
   const targetChannel = this.client.channels.cache.get(cid);
   if (!targetChannel) return msg.replyEmbed(embed("❌ Channel not found."));
-  if (msg.message.guildId !== targetChannel.guildId)
+  if (cleanId(msg.message.guildId) !== cleanId(targetChannel.guildId))
     return msg.replyEmbed(embed("❌ This command has to be run in the same server as the voice channel."));
-  const p = this.players.playerMap.get(cid);
+  const p = this.players.playerMap.get(cid)
+    ?? [...this.players.playerMap.values()].find((player) => cleanId(player?._channelId) === cid);
   if (!p) return msg.replyEmbed(embed("❌ Player not found."));
   if (!p.connection) return msg.replyEmbed(embed("❌ Player not initialized."));
   await this.players.leave(msg, cid);

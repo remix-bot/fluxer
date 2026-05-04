@@ -3,6 +3,20 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import Player from "../src/Player.mjs";
 
+function getGuildId(message) {
+  return message?.channel?.guildId
+    ?? message?.channel?.guild?.id
+    ?? message?.message?.guildId
+    ?? message?.message?.guild?.id
+    ?? message?.channel?.server_id
+    ?? message?.channel?.serverId
+    ?? null;
+}
+
+function cleanId(value) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
 export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
   if (!this.client.channels.cache.has(cid)) {
     ecb();
@@ -11,8 +25,11 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
         .toJSON();
     return message.replyEmbed({ embeds: [embed] });
   }
-  if (this.players.playerMap.has(cid)) {
-    cb(this.players.playerMap.get(cid));
+  const cleanChannelId = cleanId(cid);
+  const existing = this.players.playerMap.get(cleanChannelId)
+    ?? [...this.players.playerMap.values()].find((player) => cleanId(player?._channelId) === cleanChannelId);
+  if (existing) {
+    cb(existing);
     const embed = new EmbedBuilder().setColor(getGlobalColor())
         .setDescription("Already joined <#" + cid + ">.")
         .toJSON();
@@ -41,11 +58,7 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
   p.on("autoleave", () => {
     const activeChannelId = String(p._channelId ?? cid).replace(/\D/g, "") || cid;
     const homeChannelId = String(p._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
-    const guildId = message.channel?.guildId
-        ?? message.channel?.guild?.id
-        ?? message.message?.guildId
-        ?? message.channel?.server_id
-        ?? message.channel?.serverId;
+      const guildId = getGuildId(message);
     const is247 = (() => {
       try {
         const raw = this.settingsMgr?.getServer?.(guildId)?.get?.("stay_247");
@@ -54,7 +67,7 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
     })();
     const prefix = (() => {
       try {
-        return this._commands?.getPrefix?.(message.channel?.guild?.id) ?? "%";
+        return this._commands?.getPrefix?.(guildId) ?? "%";
       } catch (_) { return "%"; }
     })();
     const desc = is247
@@ -71,7 +84,7 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
   });
 
   p.on("message", m => {
-    const guildId  = message.channel?.guild?.id ?? message.channel?.server_id ?? message.channel?.serverId;
+    const guildId  = getGuildId(message);
     const raw      = this.settingsMgr?.getServer?.(guildId)?.get("songAnnouncements");
     const disabled = raw === false || raw === 0 ||
         ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
@@ -80,17 +93,17 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
     message.channel.sendEmbed({ embeds: [embed] });
   });
 
-  this.players.playerMap.set(cid, p);
+  this.players.playerMap.set(cleanChannelId, p);
 
   const joiningEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("⏳ Joining Channel...").toJSON();
   const statusMsg = await message.replyEmbed({ embeds: [joiningEmbed] });
   try {
-    await p.join(cid);
+    await p.join(cleanChannelId);
     const okEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(`✅ Successfully joined <#${cid}>`).toJSON();
     await statusMsg.editEmbed({ embeds: [okEmbed] });
     cb(p);
   } catch (e) {
-    this.players.playerMap.delete(cid);
+    this.players.playerMap.delete(cleanChannelId);
     p.destroy();
     const errEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(`❌ Failed to join: ${e.message}`).toJSON();
     await statusMsg.editEmbed({ embeds: [errEmbed] });
@@ -125,7 +138,7 @@ export function run(message, data) {
       resolvedId = idMatch[1];
     } else {
       // Try to look up by name
-      const serverId = message.channel?.server_id ?? message.channel?.serverId;
+      const guildId = cleanId(getGuildId(message));
       const allChannels = [
         ...(this._commands?.client?.channels?.values?.() ??
             this._commands?.client?.channels?.cache?.values?.() ??
@@ -133,9 +146,9 @@ export function run(message, data) {
             this.client?.channels?.cache?.values?.() ?? [])
       ];
       const match = allChannels.find(c => {
-        const cServerId = c.server_id ?? c.serverId ?? c.guildId;
+        const cServerId = cleanId(c.guildId ?? c.guild?.id ?? c.server_id ?? c.serverId);
         const isVoice   = c.channel_type === "VoiceChannel" || c.type === "VoiceChannel" || c.type === 2;
-        return isVoice && cServerId === serverId &&
+        return isVoice && cServerId === guildId &&
             (c.name?.toLowerCase() === rawArg.toLowerCase());
       });
       if (match) resolvedId = match._id ?? match.id;
@@ -155,7 +168,7 @@ export function run(message, data) {
   const cid = this.players.checkVoiceChannels(message);
 
   if (!cid) {
-    const prefix = this._commands?.getPrefix?.(message.channel?.guild?.id ?? message.channel?.server_id ?? message.channel?.serverId) ?? "%";
+    const prefix = this._commands?.getPrefix?.(getGuildId(message)) ?? "%";
     const embed = new EmbedBuilder().setColor(getGlobalColor())
         .setDescription(`❌ You're not in a voice channel. Please join one first, or specify a channel: \`${prefix}join <#channel>\``)
         .toJSON();
