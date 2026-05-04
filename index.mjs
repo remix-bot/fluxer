@@ -1043,14 +1043,32 @@ export class Remix {
             const userObj = data?.member?.user ?? await client.users.fetch(userId).catch(() => null);
             if (userObj) {
               const details = {
-                event:    "voiceStateUpdate",
+                event: "voiceStateUpdate",
                 userId,
-                guildId:  resolvedGuildId,
+                guildId: resolvedGuildId,
                 channelId: channelId ?? null,
                 oldChannelId: oldChannelId ?? null,
               };
               this.dashboard.updateUser(details, userObj);
             }
+
+            const refChannel = channelId ?? oldChannelId;
+            const cleanId = refChannel ? String(refChannel).replace(/\D/g, "") : null;
+
+            if (cleanId) {
+              const player = this.players.playerMap.get(cleanId);
+
+              if (player) {
+                this.dashboard.updatePlayer({
+                  guildId: player._guildId,
+                  channelId: player._channelId,
+                  playing: player.playing ?? false,
+                  paused: player.paused ?? false,
+                  queueLength: player.queue?.length ?? 0,
+                });
+              }
+            }
+
           } catch (_) {}
         }
 
