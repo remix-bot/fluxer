@@ -66,6 +66,9 @@ export class PlayerManager {
   /** @type {Object} */
   playerConfig;
 
+  /** @type {import("./dashboard/Dashboard.mjs").Dashboard|null} */
+  dashboard = null;
+
   /**
    * @param {SettingsManager} settings
    * @param {CommandHandler} commands
@@ -78,6 +81,99 @@ export class PlayerManager {
     this.settings     = settings;
     this.config       = config.config;
     this.playerConfig = config.player;
+    this.dashboard    = config.dashboard ?? null;
+  }
+
+  /**
+   * Forward player lifecycle/state events to the dashboard pub/sub channels.
+   * This keeps the event bridge in one place so both regular joins and
+   * background-spawned players can reuse it.
+   * @param {Player} player
+   * @param {Object} [context]
+   * @param {string|null} [context.channelId]
+   * @param {string|null} [context.guildId]
+   * @returns {Player}
+   */
+  setupEvents(player, context = {}) {
+    if (!player || player._dashboardEventsBound) return player;
+
+    Object.defineProperty(player, "_dashboardEventsBound", {
+      value: true,
+      configurable: true,
+      enumerable: false,
+      writable: true,
+    });
+
+    const sendDashboardUpdate = (event, details = {}) => {
+      if (!this.dashboard?.enabled) return;
+
+      const payload = {
+        event,
+        guildId: cleanId(player._guildId ?? context.guildId),
+        channelId: getPlayerChannelId(player, context.channelId),
+        ...details,
+      };
+
+      this.dashboard.playerUpdate(payload, player);
+      this.dashboard.updatePlayer(payload, player);
+    };
+
+    player.on("roomfetched", () => {
+      sendDashboardUpdate("roomfetched", { state: "connected" });
+    });
+
+    player.on("startplay", () => {
+      sendDashboardUpdate("startplay", { state: "playing" });
+    });
+
+    player.on("stopplay", () => {
+      sendDashboardUpdate("stopplay", { state: "idle" });
+    });
+
+    player.on("playback", (playing) => {
+      sendDashboardUpdate("playback", {
+        state: playing ? "playing" : "paused",
+        playing: !!playing,
+      });
+    });
+
+    player.on("volume", (volume) => {
+      sendDashboardUpdate("volume", { volume });
+    });
+
+    player.on("filter", (filter) => {
+      sendDashboardUpdate("filter", { filter });
+    });
+
+    player.on("update", (scope) => {
+      sendDashboardUpdate("update", { scope });
+    });
+
+    player.on("message", (message) => {
+      sendDashboardUpdate("message", {
+        message: typeof message === "string" ? message : null,
+      });
+    });
+
+    player.on("autoleave", () => {
+      sendDashboardUpdate("autoleave", {
+        state: "disconnected",
+        reason: "inactivity",
+      });
+    });
+
+    player.on("leave", () => {
+      sendDashboardUpdate("leave", {
+        state: "disconnected",
+        reason: "manual",
+      });
+    });
+
+    player.queue?.on("queue", (queueEvent) => {
+      sendDashboardUpdate("queue", { queueEvent });
+    });
+
+    return player;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -441,6 +537,10 @@ export class PlayerManager {
     });
 
     player.textChannel = message.channel;
+    this.setupEvents(player, {
+      channelId: cleanChannelId,
+      guildId: cleanId(channel.guildId ?? getMessageGuildId(message)),
+    });
 
     player.on("autoleave", () => {
       const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;

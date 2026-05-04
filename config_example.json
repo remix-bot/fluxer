@@ -61,6 +61,12 @@
     "database": "name of the target database"
   },
   "webPort": 80,
+  "dashboard": {
+    "enabled": false,
+    "redis": {
+      "url": "redis://localhost:6379"
+    }
+  },
   "dashboardUrl": "The url the dashboard is accessible with.",
   "ssl": {
     "private": "path-to-private-key.pem",

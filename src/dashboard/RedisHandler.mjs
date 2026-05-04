@@ -1,0 +1,72 @@
+import { createClient } from "redis";
+
+export class RedisHandler {
+  platform = "fluxer";
+  /**
+   *
+   * @param {Object} opts
+   * @param {import("redis").RedisClientOptions} opts
+   */
+  constructor(opts) {
+    this.client = createClient(opts);
+    this.client.on("error", (err) => {
+      console.log("[Redis/Main] Error: ", err);
+    });
+    this.client.connect().then(() => {
+      console.log("[RedisMain] Connected");
+      this.readyMessage();
+    });
+
+    this.subscriber = this.client.duplicate();
+    this.subscriber.on("error", (err) => {
+      console.log("[Redis/Subscriber] Error: ", err);
+    });
+    this.subscriber.connect().then(() => {
+      console.log("[Redis/Subscriber] Connected");
+      this.subscriber.subscribe("request", async (m) => {
+        const payload = JSON.parse(m);
+        if (payload.platform !== this.platform) return;
+        const result = await this.handleRequest(payload.content);
+        this.send("response", JSON.stringify({
+          id: payload.id,
+          content: result
+        }));
+      });
+      this.subscriber.subscribe("info", (m) => {
+        const data = JSON.parse(m);
+        if (data.platform !== "backend") return;
+        if (data.type !== "requestConnected") return;
+        this.readyMessage();
+      });
+    });
+  }
+  readyMessage() {
+    this.send("info", JSON.stringify({
+      platform: "fluxer",
+      type: "connected"
+    }));
+  }
+  /**
+   *
+   * @param {string} channel
+   * @param {string} message
+   * @returns {Promise<number>}
+   */
+  send(channel, message) {
+    return this.client.publish(channel, message);
+  }
+
+  /**
+   * @callback RequestCallback
+   * @param {Object} data
+   * @param {string} data.type
+   * @returns {Promise<Object>}
+   */
+  handleRequest;
+  /**
+   * @param {RequestCallback} handler
+   */
+  setRequestHandler(handler) {
+    this.handleRequest = handler;
+  }
+}

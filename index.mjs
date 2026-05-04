@@ -11,8 +11,9 @@ import childProcess from "node:child_process";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { MoonlinkManager } from "./src/MoonlinkManager.mjs";
 import mysql from "mysql";
+import { Dashboard } from "./src/dashboard/Dashboard.mjs";
 
-class Remix {
+export class Remix {
   constructor() {
     let config;
     try {
@@ -36,6 +37,11 @@ class Remix {
 
     // Apply embed color from config globally
     setGlobalColor(config.embedColor);
+
+    this.dashboard = new Dashboard(this, {
+      mysql: config.mysql,
+      ...config.dashboard,
+    });
 
     const presenceContents = config.presenceContents ?? [];
     const presenceInterval = config.presenceInterval ?? 30_000;
@@ -265,6 +271,7 @@ class Remix {
           settingsMgr:      this.settingsMgr,
           observedVoiceUsers: this.observedVoiceUsers,
         });
+        this.players.setupEvents(p, { channelId: cleanChannelId, guildId });
 
         p.on("autoleave", async () => {
           const activeChannelId = String(p._channelId ?? cleanChannelId).replace(/\D/g, "") || cleanChannelId;
@@ -1207,7 +1214,11 @@ class Remix {
       nodelink: config.nodelink,
       moonlink: null,
     };
-    this.players = new PlayerManager(settings, commands, { config, player: this.playerContext });
+    this.players = new PlayerManager(settings, commands, {
+      config,
+      player: this.playerContext,
+      dashboard: this.dashboard,
+    });
     this.players.observedVoiceUsers = this.observedVoiceUsers;
 
     // ── Periodic alone-check ───────────────────────────────────────────────────
