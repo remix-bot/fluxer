@@ -1006,20 +1006,9 @@ class Remix {
           // Use the player's actual current _channelId — NOT the playerMap key.
           // When the bot moves channels the playerMap key stays as the old channel
           // but _channelId is updated inside join(). Using the stale key means
-          // _is247Enabled() checks the wrong channel against stay_247, always
-          // returns false, and the bot leaves even with 247 active.
-          const channelId = player._channelId ?? mapKey;
-
-          // Re-key the playerMap if the player has moved to a different channel.
-          // This keeps the map consistent so future lookups work correctly.
-          const cleanMapKey = String(mapKey).replace(/\D/g, "");
+          // _is247Enabled() checks the wrong channel against stay_247.
+          const channelId   = player._channelId ?? mapKey;
           const cleanChanId = String(channelId).replace(/\D/g, "");
-          if (cleanChanId && cleanChanId !== cleanMapKey) {
-            this.players.playerMap.delete(mapKey);
-            if (!this.players.playerMap.has(cleanChanId)) {
-              this.players.playerMap.set(cleanChanId, player);
-            }
-          }
 
           // Skip if 247 is on or auto
           if (player._is247Enabled()) continue;
@@ -1308,7 +1297,10 @@ process.on("uncaughtException", (err, origin) => {
         for (const t of queueData) tracksToSave.push(cloneTrack(t));
         state.push({
           guildId:       player._guildId,
-          channelId,
+          // Use _channelId (the player's actual current channel) not the map
+          // key — they can differ after a channel move where the map wasn't
+          // re-keyed. Saving the wrong channel causes a ghost player on recovery.
+          channelId:     player._channelId ?? channelId,
           textChannelId: player.textChannel?.id ?? player.textChannel?._id,
           queue:         tracksToSave,
           loopQueue:     player.queue.loop,
@@ -1348,11 +1340,12 @@ const saveAndExit = () => {
       if (current) tracksToSave.push(cloneTrack(current));
       for (const t of queueData) tracksToSave.push(cloneTrack(t));
 
-      // Save ALL active sessions unconditionally so the bot always rejoins
-      // the channel it was in before rebooting (queue or not, 24/7 or not)
       state.push({
         guildId:       player._guildId,
-        channelId:     channelId,
+        // Use _channelId (the player's actual current channel) not the map
+        // key — they can differ after a channel move. Saving the stale map key
+        // causes a ghost player on recovery that _is247Enabled() can't match.
+        channelId:     player._channelId ?? channelId,
         textChannelId: player.textChannel?.id ?? player.textChannel?._id,
         queue:         tracksToSave,
         loopQueue:     player.queue.loop,
