@@ -453,15 +453,18 @@ export default class Player extends EventEmitter {
   // ═══════════════════════════════════════════════════════════════════════════
 
   async _recoverConnection() {
-    // bail immediately if the player has been destroyed
-    if (this._isRecovering || this._destroyed) return;
+    // bail immediately if the player has been destroyed or a recovery is
+    // already in-flight or scheduled (covers the gap between attempts).
+    if (this._isRecovering || this._recoveryPending || this._destroyed) return;
     this._isRecovering = true;
+    this._recoveryPending = true;
 
     this._recoveryAttempts = (this._recoveryAttempts ?? 0) + 1;
     const MAX_RECOVERY = 5;
     if (this._recoveryAttempts > MAX_RECOVERY) {
       logger.error(`[Player] Recovery failed after ${MAX_RECOVERY} attempts for guild ${this._guildId} — giving up.`);
       this._isRecovering = false;
+      this._recoveryPending = false;
       this._recoveryAttempts = 0;
       this.emit("autoleave");
       return;
@@ -489,13 +492,14 @@ export default class Player extends EventEmitter {
       logger.mediaplayer(`[Player] Rejoining channel ${this._channelId}`);
       await this.join(this._channelId);
 
-      const roomState = this.connection?.room?.state;
-      const isConnected = roomState === 1 || roomState === "connected" || roomState === "connecting";
-      if (!isConnected) {
-        throw new Error(`Room in unexpected state after rejoin: ${roomState}`);
-      }
-
+      // Do NOT re-read room.state here — on this LiveKit build room.state
+      // returns undefined even on a healthy connection (not persistently stored).
+      // join() already awaited connectionStateChanged and only resolved when
+      // the room was truly connected, so reaching this line means success.
+      // The old room.state check here always threw "unexpected state: undefined"
+      // and emitted autoleave, causing the infinite reconnect storm in the logs.
       this._isRecovering = false;
+      this._recoveryPending = false;
       this._recoveryAttempts = 0;
 
       const current = this.queue.getCurrent();
@@ -512,7 +516,17 @@ export default class Player extends EventEmitter {
     } catch (e) {
       logger.error("[Player] Recovery failed:", e.message);
       this._isRecovering = false;
-      this.emit("autoleave");
+      // _recoveryPending stays true during the retry delay to block duplicate
+      // calls from stacking up (e.g. two rapid disconnect events).
+      if (!this._destroyed && !this.leaving) {
+        const delay = Math.min(2000 * (this._recoveryAttempts ?? 1), 30_000);
+        setTimeout(() => {
+          this._recoveryPending = false;
+          if (!this._destroyed && !this.leaving) this._recoverConnection();
+        }, delay);
+      } else {
+        this._recoveryPending = false;
+      }
     }
   }
 

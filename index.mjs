@@ -963,6 +963,11 @@ class Remix {
           const guildId = player._guildId;
           if (!guildId) continue;
 
+          // Skip if player is mid-join or mid-recovery — _is247Enabled() and
+          // _channelId/_guildId may not be populated yet, causing a false
+          // "not 247" result that immediately leaves a freshly spawned 247 player.
+          if (player._isJoining || player._isRecovering) continue;
+
           // Skip if 247 is on or auto
           if (player._is247Enabled()) continue;
 
