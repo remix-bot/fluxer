@@ -612,8 +612,8 @@ export default class Player extends EventEmitter {
         const entries = Array.isArray(voiceStates)
             ? voiceStates
             : typeof voiceStates.values === "function"
-              ? voiceStates.values()
-              : Object.values(voiceStates);
+                ? voiceStates.values()
+                : Object.values(voiceStates);
         for (const state of entries) {
           const stateChannelId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
           if (stateChannelId === cleanChan) {
@@ -1480,7 +1480,13 @@ export default class Player extends EventEmitter {
       // Restart the current stream so the loadstream URL picks up the new filters.
       // The PATCH only updates NodeLink's player state — it does NOT modify the
       // currently-streaming PCM pipe. Without restarting, the audio won't change.
-      if (current?.encoded && this.connection && !this.leaving && !this._streamingStopped) {
+      //
+      // Guard: only restart if we're mid-playback (startedPlaying is set) AND
+      // _doPlayNext is NOT in progress.  When _doPlayNext calls applyFilter()
+      // before starting a new track, startedPlaying hasn't been set yet and
+      // _doPlayNext itself handles the stream — firing _replayWithFilters here
+      // would cause the same song to play twice simultaneously.
+      if (current?.encoded && this.connection && !this.leaving && !this._streamingStopped && this.startedPlaying && !this._playingNext) {
         const elapsed = this.startedPlaying ? (Date.now() - this.startedPlaying) : 0;
         const positionMs = Math.max(0, elapsed);
         logger.player(`[Player] Filter applied — restarting stream from ${positionMs}ms`);

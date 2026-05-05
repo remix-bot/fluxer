@@ -11,7 +11,7 @@
     "genius-lyrics": "^4.4.3",
     "moonlink.js": "^5.2.0",
     "mysql": "^2.18.1",
-    "revoice.js": "^0.2.1694",
+    "revoice.js": "^0.2.1696",
     "util": "^0.12.5",
     "ws": "^8.19.0"
   },
