@@ -19,6 +19,6 @@ export async function run(message, data) {
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
     .setDescription(res)
-    .toJSON();
-  message.replyEmbed({ embeds: [embed] });
+    ;
+  message.reply({ embeds: [embed] });
 }

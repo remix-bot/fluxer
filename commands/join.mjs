@@ -5,12 +5,12 @@ import Player from "../src/Player.mjs";
 
 function getGuildId(message) {
   return message?.channel?.guildId
-    ?? message?.channel?.guild?.id
-    ?? message?.message?.guildId
-    ?? message?.message?.guild?.id
-    ?? message?.channel?.server_id
-    ?? message?.channel?.serverId
-    ?? null;
+      ?? message?.channel?.guild?.id
+      ?? message?.message?.guildId
+      ?? message?.message?.guild?.id
+      ?? message?.channel?.server_id
+      ?? message?.channel?.serverId
+      ?? null;
 }
 
 function cleanId(value) {
@@ -18,31 +18,28 @@ function cleanId(value) {
 }
 
 export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
-  if (!this.client.channels.cache.has(cid)) {
+  if (!this.client.channels.has(cid)) {
     ecb();
     const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription("Couldn't find the channel `" + cid + "`\nUse the help command to learn more about this. (`%help join`)")
-        .toJSON();
-    return message.replyEmbed({ embeds: [embed] });
+        .setDescription("Couldn't find the channel `" + cid + "`\nUse the help command to learn more about this. (`%help join`)");
+    return message.reply({ embeds: [embed] });
   }
   const cleanChannelId = cleanId(cid);
   const existing = this.players.playerMap.get(cleanChannelId)
-    ?? [...this.players.playerMap.values()].find((player) => cleanId(player?._channelId) === cleanChannelId);
+      ?? [...this.players.playerMap.values()].find((player) => cleanId(player?._channelId) === cleanChannelId);
   if (existing) {
     cb(existing);
     const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription("Already joined <#" + cid + ">.")
-        .toJSON();
-    return message.replyEmbed({ embeds: [embed] });
+        .setDescription("Already joined <#" + cid + ">.");
+    return message.reply({ embeds: [embed] });
   }
 
   // Guard: moonlink must be ready before we can play anything
   if (!this.moonlink) {
     const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription("⚠️ Audio node is still connecting — please try again in a few seconds.")
-        .toJSON();
+        .setDescription("⚠️ Audio node is still connecting — please try again in a few seconds.");
     ecb();
-    return message.replyEmbed({ embeds: [embed] });
+    return message.reply({ embeds: [embed] });
   }
 
   const p = new Player(this.config.token, {
@@ -58,7 +55,7 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
   p.on("autoleave", () => {
     const activeChannelId = String(p._channelId ?? cid).replace(/\D/g, "") || cid;
     const homeChannelId = String(p._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
-      const guildId = getGuildId(message);
+    const guildId = getGuildId(message);
     const is247 = (() => {
       try {
         const raw = this.settingsMgr?.getServer?.(guildId)?.get?.("stay_247");
@@ -74,9 +71,8 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
         ? `Left channel <#${activeChannelId}> because of inactivity.`
         : `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
     const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription(desc)
-        .toJSON();
-    message.channel.sendEmbed({ embeds: [embed] });
+        .setDescription(desc);
+    message.channel.send({ embeds: [embed] });
     this.players.playerMap.delete(activeChannelId);
     if (activeChannelId !== cid) this.players.playerMap.delete(cid);
     if (homeChannelId !== activeChannelId) this.players.playerMap.delete(homeChannelId);
@@ -89,24 +85,24 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
     const disabled = raw === false || raw === 0 ||
         ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
     if (disabled) return;
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(m).toJSON();
-    message.channel.sendEmbed({ embeds: [embed] });
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(m);
+    message.channel.send({ embeds: [embed] });
   });
 
   this.players.playerMap.set(cleanChannelId, p);
 
-  const joiningEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("⏳ Joining Channel...").toJSON();
-  const statusMsg = await message.replyEmbed({ embeds: [joiningEmbed] });
+  const joiningEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("⏳ Joining Channel...");
+  const statusMsg = await message.reply({ embeds: [joiningEmbed] });
   try {
     await p.join(cleanChannelId);
-    const okEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(`✅ Successfully joined <#${cid}>`).toJSON();
-    await statusMsg.editEmbed({ embeds: [okEmbed] });
+    const okEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(`✅ Successfully joined <#${cid}>`);
+    await statusMsg.edit({ embeds: [okEmbed] });
     cb(p);
   } catch (e) {
     this.players.playerMap.delete(cleanChannelId);
     p.destroy();
-    const errEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(`❌ Failed to join: ${e.message}`).toJSON();
-    await statusMsg.editEmbed({ embeds: [errEmbed] });
+    const errEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(`❌ Failed to join: ${e.message}`);
+    await statusMsg.edit({ embeds: [errEmbed] });
     ecb(e);
   }
 }
@@ -140,25 +136,22 @@ export function run(message, data) {
       // Try to look up by name
       const guildId = cleanId(getGuildId(message));
       const allChannels = [
-        ...(this._commands?.client?.channels?.values?.() ??
-            this._commands?.client?.channels?.cache?.values?.() ??
-            this.client?.channels?.values?.() ??
-            this.client?.channels?.cache?.values?.() ?? [])
+        ...(this.client?.channels?.values?.() ?? [])
       ];
       const match = allChannels.find(c => {
         const cServerId = cleanId(c.guildId ?? c.guild?.id ?? c.server_id ?? c.serverId);
-        const isVoice   = c.channel_type === "VoiceChannel" || c.type === "VoiceChannel" || c.type === 2;
+        // Fluxer uses numeric channel types: 0=text, 2=voice, 4=category, 5=link
+        const isVoice = c.type === 2;
         return isVoice && cServerId === guildId &&
             (c.name?.toLowerCase() === rawArg.toLowerCase());
       });
-      if (match) resolvedId = match._id ?? match.id;
+      if (match) resolvedId = match.id;
     }
 
     if (!resolvedId) {
       const embed = new EmbedBuilder().setColor(getGlobalColor())
-          .setDescription("❌ Couldn't find that voice channel. Try using a mention like `<#channelid>` or the exact channel name.")
-          .toJSON();
-      return message.replyEmbed({ embeds: [embed] });
+          .setDescription("❌ Couldn't find that voice channel. Try using a mention like `<#channelid>` or the exact channel name.");
+      return message.reply({ embeds: [embed] });
     }
 
     return this.players.initPlayer(message, resolvedId);
@@ -170,9 +163,8 @@ export function run(message, data) {
   if (!cid) {
     const prefix = this._commands?.getPrefix?.(getGuildId(message)) ?? "%";
     const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription(`❌ You're not in a voice channel. Please join one first, or specify a channel: \`${prefix}join <#channel>\``)
-        .toJSON();
-    return message.replyEmbed({ embeds: [embed] });
+        .setDescription(`❌ You're not in a voice channel. Please join one first, or specify a channel: \`${prefix}join <#channel>\``);
+    return message.reply({ embeds: [embed] });
   }
 
   this.players.initPlayer(message, cid);

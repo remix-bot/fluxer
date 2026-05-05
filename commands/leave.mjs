@@ -10,7 +10,7 @@ export const command = new CommandBuilder()
     .setCategory("music");
 
 function embed(desc) {
-  return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).toJSON()] };
+  return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] };
 }
 
 export async function run(msg) {
@@ -23,7 +23,7 @@ export async function run(msg) {
       ?? msg.message?.serverId;
 
   const userChannelId = this.players.checkVoiceChannels(msg);
-  if (!userChannelId) return msg.replyEmbed(embed("⚠️ Please join a voice channel first."));
+  if (!userChannelId) return msg.reply(embed("⚠️ Please join a voice channel first."));
 
   const cid = String(userChannelId).replace(/\D/g, "");
   const cleanGuildId = String(guildId ?? "").replace(/\D/g, "");
@@ -44,15 +44,15 @@ export async function run(msg) {
       return liveId ? `<#${liveId}>` : "`unknown voice channel`";
     });
 
-    if (guildChannels.length === 0) return msg.replyEmbed(embed("I'm not in a voice channel."));
-    if (guildChannels.length === 1) return msg.replyEmbed(embed(`⚠️ Please join ${guildChannels[0]} to use this command.`));
-    return msg.replyEmbed(embed(
+    if (guildChannels.length === 0) return msg.reply(embed("I'm not in a voice channel."));
+    if (guildChannels.length === 1) return msg.reply(embed(`⚠️ Please join ${guildChannels[0]} to use this command.`));
+    return msg.reply(embed(
         `⚠️ I'm playing in multiple channels! Please join one of them:\n` +
         guildChannels.map(c => `• ${c}`).join("\n")
     ));
   }
 
-  if (!player?.connection) return msg.replyEmbed(embed("Player not initialized."));
+  if (!player?.connection) return msg.reply(embed("Player not initialized."));
   const activeChannelId = String(player._channelId ?? cid).replace(/\D/g, "") || cid;
   const homeChannelId = String(player._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
 
@@ -74,7 +74,7 @@ export async function run(msg) {
     player.destroy();
 
     if (mode === "auto") {
-      msg.replyEmbed(embed(`✅ Successfully Left — rejoining <#${cid}> in 5 seconds.\nTo disable 24/7 mode permanently, use \`%247 off\`.`));
+      msg.reply(embed(`✅ Successfully Left — rejoining <#${cid}> in 5 seconds.\nTo disable 24/7 mode permanently, use \`%247 off\`.`));
       const leave247Delay = this.config?.timers?.leave247RejoinDelay ?? 5000;
       setTimeout(() => {
         if (this._spawnPlayer) {
@@ -84,7 +84,7 @@ export async function run(msg) {
         }
       }, leave247Delay);
     } else {
-      msg.replyEmbed(embed(`✅ Successfully Left.\nℹ️ 24/7 mode is **on** — bot won't rejoin automatically. Use \`%play\` to bring it back, or \`%247 off\` to fully disable.`));
+      msg.reply(embed(`✅ Successfully Left.\nℹ️ 24/7 mode is **on** — bot won't rejoin automatically. Use \`%play\` to bring it back, or \`%247 off\` to fully disable.`));
     }
   } else {
     await this.leaveChannel(activeChannelId, guildId, msg);

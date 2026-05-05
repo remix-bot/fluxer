@@ -240,7 +240,7 @@ function buildPageEmbed(page, activeKeys, current) {
       .setFooter({
         text: `Page ${page + 1}/${totalPages} • React with a filter emoji to toggle it`
       })
-      .toJSON();
+      ;
 }
 
 // ── Command handler ───────────────────────────────────────────────────────────
@@ -264,7 +264,7 @@ export async function run(msg) {
   ];
 
   const current = player.queue.getCurrent();
-  const menuMsg = await msg.replyEmbed({
+  const menuMsg = await msg.reply({
     embeds: [buildPageEmbed(page, activeKeys, current)]
   });
   if (!menuMsg?.message) return;
@@ -275,6 +275,13 @@ export async function run(msg) {
         await menuMsg.message.react(emoji);
         await Utils.sleep(150);
       } catch (_) {}
+    }
+  };
+
+  const removePageFilterEmojis = async (p) => {
+    const pageEmojis = getPageItems(p).map(f => f.emoji);
+    for (const emoji of pageEmojis) {
+      try { await menuMsg.message.removeReaction(emoji); } catch (_) {}
     }
   };
 
@@ -313,9 +320,9 @@ export async function run(msg) {
                 : `🔇 No filter active.\n\n${reason}`
         )
         .setFooter({ text: "Session ended" })
-        .toJSON();
+    ;
 
-    await menuMsg.editEmbed({ embeds: [closedEmbed] }).catch(() => {});
+    await menuMsg.edit({ embeds: [closedEmbed] }).catch(() => {});
   };
 
   const resetTimer = () => {
@@ -342,16 +349,26 @@ export async function run(msg) {
     }
 
     if (emoji === PREV_EMOJI) {
+      const prevPage = page;
       page = (page - 1 + totalPages) % totalPages;
-      await menuMsg.editEmbed({
+      if (page !== prevPage) {
+        await removePageFilterEmojis(prevPage);
+        await addReactions(page);
+      }
+      await menuMsg.edit({
         embeds: [buildPageEmbed(page, activeKeys, player.queue.getCurrent())]
       }).catch(() => {});
       return;
     }
 
     if (emoji === NEXT_EMOJI) {
+      const prevPage = page;
       page = (page + 1) % totalPages;
-      await menuMsg.editEmbed({
+      if (page !== prevPage) {
+        await removePageFilterEmojis(prevPage);
+        await addReactions(page);
+      }
+      await menuMsg.edit({
         embeds: [buildPageEmbed(page, activeKeys, player.queue.getCurrent())]
       }).catch(() => {});
       return;
@@ -364,16 +381,16 @@ export async function run(msg) {
     const track = player.queue.getCurrent();
     const previousActiveKeys = [...activeKeys];
     if (!track && false) { // pending filters are allowed; keep old fallback block unreachable
-      await menuMsg.editEmbed({
+      await menuMsg.edit({
         embeds: [buildPageEmbed(page, activeKeys, null)]
       }).catch(() => {});
       const errEmbed = new EmbedBuilder()
           .setColor(getGlobalColor())
           .setDescription("❌ Nothing is playing right now.")
-          .toJSON();
-      await menuMsg.editEmbed({ embeds: [errEmbed] }).catch(() => {});
+      ;
+      await menuMsg.edit({ embeds: [errEmbed] }).catch(() => {});
       await Utils.sleep(2000);
-      await menuMsg.editEmbed({
+      await menuMsg.edit({
         embeds: [buildPageEmbed(page, activeKeys, null)]
       }).catch(() => {});
       return;
@@ -412,10 +429,10 @@ export async function run(msg) {
               `❌ Failed to apply **${filter.label}**: \`${reason}\`\n\n` +
               `Make sure your NodeLink node has filters enabled.`
           )
-          .toJSON();
-      await menuMsg.editEmbed({ embeds: [errEmbed] }).catch(() => {});
+      ;
+      await menuMsg.edit({ embeds: [errEmbed] }).catch(() => {});
       await Utils.sleep(3000);
-      await menuMsg.editEmbed({
+      await menuMsg.edit({
         embeds: [buildPageEmbed(page, activeKeys, track)]
       }).catch(() => {});
       return;
@@ -431,10 +448,10 @@ export async function run(msg) {
                 ? `${filter.label} saved. It will apply on the next playable track.`
                 : `${filter.label} removed. The next playable track will use the updated filters.`)
         : filter.key === "off"
-        ? "🔇 Filters cleared — original audio restored."
-        : activeKeys.includes(filter.key)
-            ? `${filter.emoji} **${filter.label}** applied!`
-            : `${filter.emoji} **${filter.label}** removed.`;
+            ? "🔇 Filters cleared — original audio restored."
+            : activeKeys.includes(filter.key)
+                ? `${filter.emoji} **${filter.label}** applied!`
+                : `${filter.emoji} **${filter.label}** removed.`;
 
     const confirmEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
@@ -443,14 +460,14 @@ export async function run(msg) {
             `*${filter.desc}*\n\n` +
             `💡 React again to toggle, or ${CANCEL_EMOJI} to close.`
         )
-        .toJSON();
+    ;
 
-    await menuMsg.editEmbed({ embeds: [confirmEmbed] }).catch(() => {});
+    await menuMsg.edit({ embeds: [confirmEmbed] }).catch(() => {});
     await Utils.sleep(2500);
 
     // Restore picker (session stays open)
     if (!settled) {
-      await menuMsg.editEmbed({
+      await menuMsg.edit({
         embeds: [buildPageEmbed(page, activeKeys, player.queue.getCurrent())]
       }).catch(() => {});
     }

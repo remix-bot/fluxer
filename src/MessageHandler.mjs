@@ -133,8 +133,8 @@ export class MessageHandler {
   get(id) {
     // channel.messages is a MessageManager — @fluxerjs/core may not expose it.
     // Guard with optional chaining so the loop is a no-op if the property is absent.
-    for (const channel of this.client.channels.cache.values()) {
-      const msg = channel.messages?.cache?.get?.(id) ?? null;
+    for (const channel of this.client.channels.values()) {
+      const msg = channel.messages?.get?.(id) ?? null;
       if (msg) return new Message(msg, this);
     }
     return null;
@@ -164,7 +164,7 @@ export class MessageHandler {
    * @returns {Channel}
    */
   getChannel(id) {
-    const c = this.client.channels.cache.get(id);
+    const c = this.client.channels.get(id);
     return new Channel(c, this);
   }
 
@@ -237,7 +237,7 @@ export class MessageHandler {
       }
     }
 
-    return builder.toJSON();
+    return builder;
   }
 
   #createEmbed(text, message, options = {}) {
@@ -384,7 +384,7 @@ export class MessageHandler {
     const currPage = { n: 0 };
     const send     = () => builder.getPage(currPage.n);
 
-    const m = await msg.replyEmbed(send());
+    const m = await msg.reply(send());
     if (!m) return;
 
     m.message.react(arrows[0]).catch(() => {});
@@ -396,13 +396,13 @@ export class MessageHandler {
       } else {
         currPage.n = Math.min(pages.length - 1, currPage.n + 1);
       }
-      m.editEmbed(send()).catch(() => {});
+      m.edit(send()).catch(() => {});
     });
 
     // Auto-close after 5 minutes
     setTimeout(() => {
       unobserve();
-      m.editEmbed(send() + "\nSession closed - Changing pages **won't work** from here.").catch(() => {});
+      m.edit(send() + "\nSession closed - Changing pages **won't work** from here.").catch(() => {});
     }, 5 * 60 * 1000);
   }
 
@@ -479,6 +479,14 @@ export class Channel {
    * @returns {Promise<Message>}
    */
   sendMessage(content) {
+    return this.handler.sendMessage(this.channel, content);
+  }
+
+  /**
+   * @param {string|Object} content
+   * @returns {Promise<Message>}
+   */
+  send(content) {
     return this.handler.sendMessage(this.channel, content);
   }
 
@@ -580,6 +588,15 @@ export class Message {
    * @returns {Promise<Message>}
    */
   editEmbed(content, embedOptions = {}) {
+    return this.handler.editEmbed(this.message, content, embedOptions);
+  }
+
+  /**
+   * @param {string|Object} content
+   * @param {Object} embedOptions
+   * @returns {Promise<Message>}
+   */
+  edit(content, embedOptions = {}) {
     return this.handler.editEmbed(this.message, content, embedOptions);
   }
 }
@@ -731,8 +748,7 @@ export class RichPaginator {
         .setAuthor({ name: tab.header })
         .setTitle(tab.title)
         .setDescription(content)
-        .setFooter({ text: footerParts.join(" ") })
-        .toJSON();
+        .setFooter({ text: footerParts.join(" ") });
   }
 
   async send() {
@@ -1142,13 +1158,13 @@ export class HelpCommand {
             c.aliases.some(a => a.toLowerCase() === word.toLowerCase())
         );
         if (!found) {
-          msg.replyEmbed(`❌ Unknown command \`${word}\`. Use \`${prefix}help\` to browse.`);
+          msg.reply(`❌ Unknown command \`${word}\`. Use \`${prefix}help\` to browse.`);
           return;
         }
         currCmd = found;
       }
       if (currCmd) {
-        msg.replyEmbed(this._commands.helpHandler.getCommandHelp(currCmd, msg));
+        msg.reply(this._commands.helpHandler.getCommandHelp(currCmd, msg));
       }
       return;
     }

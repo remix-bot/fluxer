@@ -69,7 +69,7 @@ export async function run(msg, data) {
         .setAuthor({ name: authorLabel })
         .setDescription(description);
     if (footerText) b.setFooter({ text: footerText });
-    return b.toJSON();
+    return b;
   };
 
   const nativeMsg = msg.message ?? msg;

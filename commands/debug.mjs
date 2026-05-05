@@ -17,7 +17,7 @@ export function run(msg, data) {
   switch (data.get("target").value) {
     case "voice": {
       const servers = [...this.players.playerMap.entries()].map(([cid, s]) => {
-        const channel = this.client.channels.cache.get(cid);
+        const channel = this.client.channels.get(cid);
         return {
           name:      channel?.name ?? "unknown",
           id:        channel?.id ?? cid,
@@ -30,8 +30,8 @@ export function run(msg, data) {
         .setColor(getGlobalColor())
         .setTitle("🔧 Voice Debug")
         .setDescription("```json\n" + JSON.stringify(servers, null, 2) + "\n```")
-        .toJSON();
-      msg.replyEmbed({ embeds: [embed] });
+        ;
+      msg.reply({ embeds: [embed] });
       break;
     }
   }

@@ -15,8 +15,8 @@ export async function run(msg, data) {
   const code = data.get("id").value;
 
   if (!this.dashboard?.enabled) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("❌ The dashboard is not enabled on this bot.").toJSON();
-    return msg.replyEmbed({ embeds: [embed] });
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("❌ The dashboard is not enabled on this bot.");
+    return msg.reply({ embeds: [embed] });
   }
 
   const error = await this.dashboard.confirmLogin(msg.author.id, code);
@@ -24,6 +24,6 @@ export async function run(msg, data) {
     ? "✅ Login succeeded! You can continue to the webpage now."
     : "❌ Login failed! Reason: `" + error + "`. If this is an error and the issue persists, please contact a team member through the server in my description.";
 
-  const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).toJSON();
-  msg.replyEmbed({ embeds: [embed] });
+  const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc);
+  msg.reply({ embeds: [embed] });
 }

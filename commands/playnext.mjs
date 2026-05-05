@@ -49,12 +49,12 @@ export async function run(message, data) {
   const searchEmbed = new EmbedBuilder()
     .setColor(getGlobalColor())
     .setDescription("🔍 Searching...")
-    .toJSON();
-  const statusMsg = await message.replyEmbed({ embeds: [searchEmbed] });
+    ;
+  const statusMsg = await message.reply({ embeds: [searchEmbed] });
 
   const messages = p.playFirst(query, provider);
   messages.on("message", d => {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d).toJSON();
-    statusMsg.editEmbed({ embeds: [embed] }).catch(() => {});
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
+    statusMsg.edit({ embeds: [embed] }).catch(() => {});
   });
 }

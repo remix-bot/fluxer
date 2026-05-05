@@ -18,8 +18,8 @@ export async function run(message) {
 
   const err = p.skip();
   if (err && err.includes("nothing playing")) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(err).toJSON();
-    return message.replyEmbed({ embeds: [embed] });
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(err);
+    return message.reply({ embeds: [embed] });
   }
 
   const desc = skippedTitle
@@ -29,6 +29,6 @@ export async function run(message) {
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
     .setDescription(desc)
-    .toJSON();
-  message.replyEmbed({ embeds: [embed] });
+    ;
+  message.reply({ embeds: [embed] });
 }

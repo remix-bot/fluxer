@@ -20,24 +20,24 @@ export async function run(message) {
 
   const current = p.queue.getCurrent();
   if (!current) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("❌ There's nothing playing at the moment.").toJSON();
-    return message.replyEmbed({ embeds: [embed] });
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("❌ There's nothing playing at the moment.");
+    return message.reply({ embeds: [embed] });
   }
 
   // Animated loading spinner
   let frame = 0;
-  const loadingMsg = await message.replyEmbed({ embeds: [
+  const loadingMsg = await message.reply({ embeds: [
     new EmbedBuilder().setColor(getGlobalColor())
       .setDescription(`${LOADING_FRAMES[0]} Searching lyrics for **${Utils.truncate(current.title, 40)}**...`)
-      .toJSON()
+      
   ] });
 
   const loadingInterval = setInterval(() => {
     frame = (frame + 1) % LOADING_FRAMES.length;
-    loadingMsg.editEmbed({ embeds: [
+    loadingMsg.edit({ embeds: [
       new EmbedBuilder().setColor(getGlobalColor())
         .setDescription(`${LOADING_FRAMES[frame]} Searching lyrics for **${Utils.truncate(current.title, 40)}**...`)
-        .toJSON()
+        
     ] }).catch(() => {});
   }, 800);
 
@@ -47,12 +47,12 @@ export async function run(message) {
     clearInterval(loadingInterval);
 
     if (!result || !result.text) {
-      return loadingMsg.editEmbed({ embeds: [
+      return loadingMsg.edit({ embeds: [
         new EmbedBuilder().setColor(getGlobalColor())
           .setDescription(
             `❌ No lyrics available for **${Utils.truncate(current.title, 40)}**.\n\n` +
             `💡 NodeLink lyrics plugin may not have this track. Try a popular song!`
-          ).toJSON()
+          )
       ] });
     }
 
@@ -81,7 +81,7 @@ export async function run(message) {
         ].join("\n"))
         .setFooter({ text: `NodeLink • ${totalLines} lines` });
       if (current.thumbnail) singleEmbed.setThumbnail(current.thumbnail);
-      return message.replyEmbed({ embeds: [singleEmbed.toJSON()] });
+      return message.reply({ embeds: [singleEmbed] });
     }
 
     // Multi-page
@@ -108,10 +108,10 @@ export async function run(message) {
           ? `⌛ Controls expired • NodeLink • ${totalLines} lines`
           : `NodeLink • ${totalLines} lines total` });
       if (current.thumbnail) b.setThumbnail(current.thumbnail);
-      return { embeds: [b.toJSON()] };
+      return { embeds: [b] };
     };
 
-    const msg = await message.replyEmbed(buildContent(0));
+    const msg = await message.reply(buildContent(0));
     if (!msg?.message) return;
 
     const emojis = ["⬅️", "➡️"];
@@ -133,7 +133,7 @@ export async function run(message) {
       clearTimeout(emojiRemoveTimeout);
       emojiRemoveTimeout = setTimeout(async () => {
         await clearReactions();
-        msg.editEmbed(buildContent(currentPage, true)).catch(() => {});
+        msg.edit(buildContent(currentPage, true)).catch(() => {});
       }, EMOJI_REMOVE_TIMEOUT);
     };
 
@@ -144,7 +144,7 @@ export async function run(message) {
       } else if (e.emoji_id === "➡️") {
         currentPage = currentPage < totalPages - 1 ? currentPage + 1 : 0;
       }
-      msg.editEmbed(buildContent(currentPage)).catch(() => {});
+      msg.edit(buildContent(currentPage)).catch(() => {});
     });
 
     resetEmojiTimer();
@@ -165,12 +165,12 @@ export async function run(message) {
         ].join("\n"))
         .setFooter({ text: `Session closed • NodeLink • ${totalLines} lines` });
       if (current.thumbnail) closedEmbed.setThumbnail(current.thumbnail);
-      msg.editEmbed({ embeds: [closedEmbed.toJSON()] }).catch(() => {});
+      msg.edit({ embeds: [closedEmbed] }).catch(() => {});
     }, SESSION_MS);
 
   } catch (err) {
     clearInterval(loadingInterval);
     logger.error("[Lyrics Command] Error:", err);
-    loadingMsg.editEmbed({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`❌ Error: ${Utils.truncate(err.message, 100)}`).toJSON()] }).catch(() => {});
+    loadingMsg.edit({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`❌ Error: ${Utils.truncate(err.message, 100)}`)] }).catch(() => {});
   }
 }

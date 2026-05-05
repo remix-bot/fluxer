@@ -7,7 +7,7 @@ function embed(desc, opts = {}) {
   const b = new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc);
   if (opts.title) b.setTitle(opts.title);
   if (opts.iconURL) b.setAuthor({ name: opts.title || "\u200b", iconURL: opts.iconURL });
-  return { embeds: [b.toJSON()] };
+  return { embeds: [b] };
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -148,7 +148,7 @@ async function handle247(ctx, message, value) {
   const resolved = mode === "true" ? "auto" : mode === "false" ? "off" : mode;
 
   if (!["off", "on", "auto"].includes(resolved)) {
-    return message.replyEmbed(embed(
+    return message.reply(embed(
         `❌ Invalid value \`${value}\` for 24/7 mode.\n\n` +
         `**Valid options:**\n` +
         `• \`off\` — bot leaves after inactivity\n` +
@@ -159,7 +159,7 @@ async function handle247(ctx, message, value) {
 
   // ── OFF ───────────────────────────────────────────────────────────────────
   if (resolved === "off") {
-    if (!guildId) return message.replyEmbed(embed("❌ Could not detect your server."));
+    if (!guildId) return message.reply(embed("❌ Could not detect your server."));
 
     const channelId = ctx.players.checkVoiceChannels(message);
     const channels  = get247Channels(set);
@@ -186,7 +186,7 @@ async function handle247(ctx, message, value) {
       const extra = remaining.length > 0
         ? `\nSaved channels left: ${remaining.map(ch => `<#${ch}>`).join(", ")}`
         : "";
-      return message.replyEmbed(embed(`✅ 24/7 mode **disabled** for <#${id}>. Bot has left.${extra}`));
+      return message.reply(embed(`✅ 24/7 mode **disabled** for <#${id}>. Bot has left.${extra}`));
     }
 
     // Not in a channel — disable all for this guild
@@ -202,15 +202,15 @@ async function handle247(ctx, message, value) {
         player.destroy();
       }
     }
-    return message.replyEmbed(embed("✅ 24/7 mode **disabled** for all channels in this server."));
+    return message.reply(embed("✅ 24/7 mode **disabled** for all channels in this server."));
   }
 
   // ── ON / AUTO ─────────────────────────────────────────────────────────────
-  if (!guildId) return message.replyEmbed(embed("❌ Could not detect your server."));
+  if (!guildId) return message.reply(embed("❌ Could not detect your server."));
 
   const channelId = ctx.players.checkVoiceChannels(message);
   if (!channelId) {
-    return message.replyEmbed(embed(
+    return message.reply(embed(
         `❌ You're not in a voice channel. Join one first, then run \`%247 ${resolved}\` again.`
     ));
   }
@@ -234,14 +234,14 @@ async function handle247(ctx, message, value) {
       cleanId(p?._channelId ?? "") === id && cleanId(p?._guildId ?? "") === cleanId(guildId)
     )
   ) {
-    return message.replyEmbed(embed(`✅ 24/7 mode set to ${modeLabel} for <#${id}>.\n${savedSummary}`));
+    return message.reply(embed(`✅ 24/7 mode set to ${modeLabel} for <#${id}>.\n${savedSummary}`));
   }
 
   try {
     await ctx._spawnPlayer(guildId, id);
-    return message.replyEmbed(embed(`✅ 24/7 mode set to ${modeLabel} for <#${id}>. Bot joined!\n${savedSummary}`));
+    return message.reply(embed(`✅ 24/7 mode set to ${modeLabel} for <#${id}>. Bot joined!\n${savedSummary}`));
   } catch (e) {
-    return message.replyEmbed(embed(`✅ 24/7 mode saved for <#${id}>, but failed to join: ${e.message}\n${savedSummary}`));
+    return message.reply(embed(`✅ 24/7 mode saved for <#${id}>, but failed to join: ${e.message}\n${savedSummary}`));
   }
 }
 
@@ -322,21 +322,21 @@ async function handleShortcut(ctx, message, settingKey, valueTokens) {
   // GET (no value provided)
   if (valueTokens.length === 0) {
     if (settingKey === "stay_247") {
-      return message.replyEmbed(embed(`24/7 mode: ${format247Status(set)}`));
+      return message.reply(embed(`24/7 mode: ${format247Status(set)}`));
     }
     const val = set.get(settingKey);
-    return message.replyEmbed(embed(`\`${settingKey}\` → ${displayValue(settingKey, val)}`));
+    return message.reply(embed(`\`${settingKey}\` → ${displayValue(settingKey, val)}`));
   }
 
   // SET
   const rawValue = valueTokens.join(" ");
   const err = await applySet(ctx, message, set, settingKey, rawValue);
-  if (err) return message.replyEmbed(embed(err));
+  if (err) return message.reply(embed(err));
 
   // handle247 replies on its own
   if (settingKey !== "stay_247") {
     const val = set.get(settingKey);
-    return message.replyEmbed(embed(`✅ \`${settingKey}\` set to ${displayValue(settingKey, val)}`));
+    return message.reply(embed(`✅ \`${settingKey}\` set to ${displayValue(settingKey, val)}`));
   }
 }
 
@@ -469,31 +469,31 @@ export async function run(message, data) {
 
     if (!this.settingsMgr.isOption(settingKey)) {
       const available = Object.keys(this.settingsMgr.defaults).join("`, `");
-      return message.replyEmbed(embed(
+      return message.reply(embed(
           `❌ Unknown setting \`${settingKey}\`.\nAvailable: \`${available}\``
       ));
     }
 
     const err = await applySet(this, message, set, settingKey, rawValue);
-    if (err) return message.replyEmbed(embed(err));
+    if (err) return message.reply(embed(err));
 
     if (settingKey === "stay_247") return; // handle247 replied already
 
     const newVal = set.get(settingKey);
-    return message.replyEmbed(embed(`✅ **${prettifySettingLabel(settingKey)}** set to ${displayValue(settingKey, newVal)}`));
+    return message.reply(embed(`✅ **${prettifySettingLabel(settingKey)}** set to ${displayValue(settingKey, newVal)}`));
   }
 
   // ── get ───────────────────────────────────────────────────────────────────
   if (cmd === "getSettings") {
     if (settingKey) {
       if (settingKey === "stay_247") {
-        return message.replyEmbed(embed(format247Summary(set)));
+        return message.reply(embed(format247Summary(set)));
       }
       const val = set.get(settingKey);
       const description = this.settingsMgr.descriptions?.[settingKey];
       let reply = `**${prettifySettingLabel(settingKey)}**\nValue: ${displayValue(settingKey, val)}`;
       if (description) reply += `\n\n*${description}*`;
-      return message.replyEmbed(embed(reply));
+      return message.reply(embed(reply));
     }
 
     // List all settings
@@ -515,7 +515,7 @@ export async function run(message, data) {
           return `• **${prettifySettingLabel(k)}** — ${displayValue(k, d[k])}`;
         });
 
-    return message.replyEmbed(embed(
+    return message.reply(embed(
         `Server: **${guildName}**\n\n${lines.join("\n")}\n\n` +
         `Shortcuts: \`${prefix}247\`, \`${prefix}prefix\`\n` +
         `Use \`${prefix}settings help <setting>\` to learn about any setting.`,
@@ -526,11 +526,11 @@ export async function run(message, data) {
   // ── reset ─────────────────────────────────────────────────────────────────
   if (cmd === "resetSettings") {
     if (!this.settingsMgr.isOption(settingKey)) {
-      return message.replyEmbed(embed(`❌ Unknown setting \`${settingKey}\`.`));
+      return message.reply(embed(`❌ Unknown setting \`${settingKey}\`.`));
     }
     set.reset(settingKey);
     const def = set.get(settingKey);
-    return message.replyEmbed(embed(
+    return message.reply(embed(
         `🔄 \`${settingKey}\` has been reset to its default: ${displayValue(settingKey, def)}`
     ));
   }
@@ -542,7 +542,7 @@ export async function run(message, data) {
     if (!settingKey) {
       const keys    = Object.keys(this.settingsMgr.defaults);
       const keyList = keys.map(k => `\`${k}\``).join(", ");
-      return message.replyEmbed(embed(
+      return message.reply(embed(
           `**⚙️ Settings Help**\n\n` +
           `**Available settings:** ${keyList}\n\n` +
           `**Subcommands:**\n` +
@@ -571,7 +571,7 @@ export async function run(message, data) {
       extra = `\n**Valid values:** \`off\`, \`on\`, \`auto\`\n**Tip:** You can save more than one voice channel in the same server.`;
     }
 
-    return message.replyEmbed(embed(
+    return message.reply(embed(
         `**⚙️ Setting: \`${settingKey}\`**\n\n` +
         `${description}${extra}\n\n` +
         `**Current value:** ${settingKey === "stay_247" ? format247Status(set) : displayValue(settingKey, currentVal)}\n` +

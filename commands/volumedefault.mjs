@@ -60,5 +60,5 @@ export async function run(message, data) {
         }
     }
 
-    message.replyEmbed({ embeds: [embed.toJSON()] });
+    message.reply({ embeds: [embed] });
 }

@@ -162,13 +162,13 @@ export async function run(msg, data) {
         .setTitle(title)
         .setDescription(desc)
         .setFooter({ text: footerText })
-        .toJSON();
+        ;
 
     return { embeds: [embed] };
   };
 
   // 3. Send the initial message using the wrapper
-  const replyMsg = await msg.replyEmbed(buildPageContent(0));
+  const replyMsg = await msg.reply(buildPageContent(0));
   if (!replyMsg?.message) return;
 
   // 4. Setup React UI
@@ -200,7 +200,7 @@ export async function run(msg, data) {
     emojiTimeout = setTimeout(async () => {
       if (unobserve) unobserve();
       await clearReactions();
-      await replyMsg.editEmbed(buildPageContent(currentPage, true)).catch(() => {});
+      await replyMsg.edit(buildPageContent(currentPage, true)).catch(() => {});
     }, EMOJI_REMOVE_TIMEOUT);
   };
 
@@ -224,7 +224,7 @@ export async function run(msg, data) {
     }
 
     // Update Embed
-    await replyMsg.editEmbed(buildPageContent(currentPage)).catch(() => {});
+    await replyMsg.edit(buildPageContent(currentPage)).catch(() => {});
   });
 
   resetTimer();

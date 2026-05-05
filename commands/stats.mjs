@@ -58,7 +58,7 @@ async function fetchGuildMemberCount(guild) {
 }
 
 async function refreshUserCount(client) {
-  const guilds = [...client.guilds.cache.values()];
+  const guilds = [...client.guilds.values()];
   const counts = await pool(10, guilds.map(g => () => fetchGuildMemberCount(g)));
   cachedUserCount = counts.reduce((a, b) => a + b, 0);
   cacheExpiresAt  = Date.now() + CACHE_TTL_MS;
@@ -113,14 +113,14 @@ function buildEmbed({ guildCount, userCount, playerCount, ping, uptime, comHash,
       .setFooter({ text: footer || "Remix Music Bot" });
 
   if (typeof builder.setTimestamp === "function") builder.setTimestamp();
-  return builder.toJSON();
+  return builder;
 }
 
 // ── Runner ────────────────────────────────────────────────────────────────────
 
 export async function run(message) {
   const shared = {
-    guildCount:  this.client.guilds.cache.size,
+    guildCount:  this.client.guilds.size,
     playerCount: getLivePlayerCount(this.players.playerMap),
     uptime:      Utils.prettifyMS(Math.round(process.uptime()) * 1000),
     comHash:     this.comHash,
@@ -133,14 +133,14 @@ export async function run(message) {
 
   // Measure real round-trip latency
   const start = Date.now();
-  const msg = await message.replyEmbed({
+  const msg = await message.reply({
     embeds: [buildEmbed({ ...shared, userCount: hasCached ? cachedUserCount : 0, ping: 0, loading: !hasCached })]
   });
   const ping = Date.now() - start;
 
   const users = await getUserCount(this.client);
 
-  await msg.editEmbed({
+  await msg.edit({
     embeds: [buildEmbed({ ...shared, userCount: users, ping, loading: false })]
   }).catch((err) => console.error("[stats] editEmbed failed:", err));
 }

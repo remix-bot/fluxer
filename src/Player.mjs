@@ -23,7 +23,7 @@ import { PROVIDER_NAMES } from "./constants/providers.mjs";
 
 /** Emit a plain embed payload so listeners can send it directly */
 function mkEmbed(desc) {
-  return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).toJSON()] };
+  return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] };
 }
 
 /** NodeLink default password — centralised so it doesn't need to be hardcoded in two places. */
@@ -593,13 +593,36 @@ export default class Player extends EventEmitter {
       }
     } catch (_) {}
     try {
-      const channel = this.client?.channels?.cache?.get(this._channelId);
-      const members = channel?.members;
-      if (members) {
-        const iter = typeof members.values === "function" ? members.values() : Object.values(members);
-        for (const entry of iter) {
-          const isBot = entry?.user?.bot ?? entry?.member?.user?.bot ?? false;
-          if (!isBot) return true;
+      // @fluxerjs channels do NOT have a .members property.
+      // Use the guild's member manager and filter by voice state instead.
+      const guild = this.client?.guilds?.get?.(this._guildId);
+      if (guild?.members) {
+        for (const member of guild.members.values()) {
+          // GuildMember doesn't expose voice channelId directly in @fluxerjs,
+          // so fall through to the voice_states raw data check below.
+          if (!member?.user?.bot) {
+            // We can't determine channel from member alone — skip here
+            // and rely on _observedVoiceUsers or voice_states instead.
+          }
+        }
+      }
+      // Fallback: iterate raw voice_states on the guild object.
+      const voiceStates = guild?.voice_states;
+      if (voiceStates) {
+        const entries = Array.isArray(voiceStates)
+            ? voiceStates
+            : typeof voiceStates.values === "function"
+              ? voiceStates.values()
+              : Object.values(voiceStates);
+        for (const state of entries) {
+          const stateChannelId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
+          if (stateChannelId === cleanChan) {
+            const userId = String(state?.userId ?? state?.user_id ?? "");
+            // Check if user is a bot — look up via members or observedVoiceUsers
+            const member = guild?.members?.get?.(userId);
+            const isBot = member?.user?.bot ?? false;
+            if (!isBot) return true;
+          }
         }
       }
     } catch (_) {}
@@ -724,7 +747,7 @@ export default class Player extends EventEmitter {
   }
 
   _setupMediaPlayerMonitoring() {
-    // No-op: recovery is fully handled by connection.on("disconnected") in join().
+    // No-op: recovery is fully handled by connection.on("disconnect") in join().
   }
 
   async _cleanupMediaPlayer() {
@@ -1066,7 +1089,7 @@ export default class Player extends EventEmitter {
 
     this._isJoining = true;
     try {
-      const channel = this.client?.channels?.cache?.get(channelId);
+      const channel = this.client?.channels?.get?.(channelId);
       if (!channel) throw new Error(`Channel not found: ${channelId}`);
 
       if (this.connection) {
@@ -1161,7 +1184,11 @@ export default class Player extends EventEmitter {
             });
       });
 
-      connection.on("disconnected", () => {
+      // @fluxerjs VoiceConnection / LiveKitRtcConnection emits "disconnect",
+      // NOT "disconnected" (Discord.js naming). Using the wrong event name meant
+      // this handler was silently never registered — voice disconnect recovery
+      // was completely broken.
+      connection.on("disconnect", () => {
         if (this.connection !== connection) {
           try { connection.removeAllListeners(); connection.destroy(); } catch (_) {}
           return;

@@ -40,13 +40,13 @@ export class Dashboard {
 
         case "server": {
           try {
-            const guild = this.remix.client.guilds.cache.get(data.key);
+            const guild = this.remix.client.guilds.get(data.key);
             if (!guild) return { error: "Server not found" };
             const member = await guild.members.fetch(data.accessor).catch(() => null);
             const server = Dashboard.convertServer(guild);
             if (member) {
               server.channels = server.channels.filter(c => {
-                const ch = guild.channels.cache.get(c.id);
+                const ch = guild.channels.get(c.id);
                 return ch ? ch.permissionsFor(member)?.has("ViewChannel") : false;
               });
             }
@@ -216,9 +216,22 @@ export class Dashboard {
   static convertChannel(channel) {
     const isVoice = channel.isVoiceBased?.() ?? false;
     // Collect voice members for voice channels
-    const voiceParticipants = isVoice
-      ? [...(channel.members?.values() ?? [])].map(m => Dashboard.convertUser(m.user))
-      : [];
+    let voiceParticipants = [];
+    if (isVoice) {
+      const guild = channel?.guild ?? channel?.client?.guilds?.get(channel?.guildId);
+      if (guild?.voice_states) {
+        const vs = Array.isArray(guild.voice_states) ? guild.voice_states :
+          typeof guild.voice_states.values === "function" ? [...guild.voice_states.values()] : Object.values(guild.voice_states);
+        for (const state of vs) {
+          const scId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
+          const chId = String(channel?.id ?? "").replace(/\D/g, "");
+          if (scId === chId) {
+            const user = guild.members?.get?.(state?.userId ?? state?.user_id)?.user;
+            if (user && !user.bot) voiceParticipants.push(Dashboard.convertUser(user));
+          }
+        }
+      }
+    }
 
     return {
       name: channel.name,
@@ -237,11 +250,7 @@ export class Dashboard {
    * @param {import("discord.js").Guild} guild
    */
   static convertServer(guild) {
-    // Defensively handle guild.channels — @fluxerjs/core may not always
-    // populate .cache (e.g. during recovery or for partial guild objects),
-    // or guild.channels itself may be a Map/Collection without a .cache
-    // wrapper. Fallback to guild.channels directly if .cache is absent.
-    const channelStore = guild.channels?.cache ?? guild.channels;
+    const channelStore = guild.channels;
     const channelIds = channelStore && typeof channelStore.keys === "function"
         ? [...channelStore.keys()]
         : [];
@@ -265,8 +274,8 @@ export class Dashboard {
    */
   static convertPlayer(player) {
     const channelId = player._channelId;
-    const channel = channelId ? player.client?.channels?.cache?.get(channelId) : null;
-    const guild = channel?.guild ?? (player._guildId ? player.client?.guilds?.cache?.get(player._guildId) : null);
+    const channel = channelId ? player.client?.channels?.get(channelId) : null;
+    const guild = channel?.guild ?? (player._guildId ? player.client?.guilds?.get(player._guildId) : null);
 
     return {
       loop: (player.queue.loop ? 1 : 0) + (player.queue.songLoop ? 2 : 0),
@@ -276,7 +285,23 @@ export class Dashboard {
         current: Dashboard.convertVideo(player.queue.current),
         data: (player.queue.data ?? []).map(v => Dashboard.convertVideo(v))
       },
-      users: channel?.members ? [...channel.members.values()].map(m => m.id) : [],
+      users: (() => {
+        if (!channel) return [];
+        const g = channel?.guild ?? channel?.client?.guilds?.get(channel?.guildId);
+        if (!g?.voice_states) return [];
+        const vs = Array.isArray(g.voice_states) ? g.voice_states :
+          typeof g.voice_states.values === "function" ? [...g.voice_states.values()] : Object.values(g.voice_states);
+        const ids = [];
+        for (const state of vs) {
+          const scId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
+          const chId = String(channel?.id ?? "").replace(/\D/g, "");
+          if (scId === chId) {
+            const memberId = String(state?.userId ?? state?.user_id ?? "");
+            if (memberId) ids.push(memberId);
+          }
+        }
+        return ids;
+      })(),
       channel: channel ? Dashboard.convertChannel(channel) : null,
       server: guild ? Dashboard.convertServer(guild) : null,
     };

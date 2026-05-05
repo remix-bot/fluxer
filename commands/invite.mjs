@@ -24,9 +24,9 @@ export async function run(message) {
             iconURL: botIcon
         })
         .setDescription(description)
-        .toJSON();
+        ;
 
-    await message.replyEmbed({
+    await message.reply({
         embeds: [embed]
     });
 }

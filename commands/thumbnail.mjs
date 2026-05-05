@@ -18,5 +18,5 @@ export async function run(msg) {
     .setDescription(data.msg);
   if (data.image) embed.setImage(data.image);
 
-  msg.replyEmbed({ embeds: [embed.toJSON()] });
+  msg.reply({ embeds: [embed] });
 }

@@ -135,7 +135,7 @@ export class Option {
         return this.userRegex.test(i) || this.idRegex.test(i);
       case "channel":
         if (i === undefined) return false;
-        return this.channelRegex.test(i) || this.idRegex.test(i) || client.channels.cache.some(c => c.name === i);
+        return this.channelRegex.test(i) || this.idRegex.test(i) || client.channels.some(c => c.name === i);
       case "voiceChannel": {
         if (!i) return false;
         const results = this.channelRegex.exec(i) ?? this.idRegex.exec(i);
@@ -145,9 +145,9 @@ export class Option {
         if (guildId === "eval") return (results) ? results.groups["id"] : i;
 
         const voiceTypes = [2, 13]; // GuildVoice and GuildStageVoice
-        const byName = msg?.guild?.channels?.cache?.find(c => c.name === i && voiceTypes.includes(c.type));
+        const byName = msg?.guild?.channels?.find(c => c.name === i && voiceTypes.includes(c.type));
         const cObj = results
-            ? client.channels.cache.get(results.groups["id"])
+            ? client.channels.get(results.groups["id"])
             : (byName ?? null);
         return cObj ? voiceTypes.includes(cObj.type) : false;
       }
@@ -178,7 +178,7 @@ export class Option {
       }
       case "channel": {
         const results = this.channelRegex.exec(i) ?? this.idRegex.exec(i);
-        const channel = client.channels.cache.find(c => c.name === i);
+        const channel = client.channels.find(c => c.name === i);
         return results ? results.groups["id"] : (channel ? channel.id : null);
       }
       case "voiceChannel": {
@@ -186,7 +186,7 @@ export class Option {
         const guildId = msg?.channel?.guildId ?? msg?.guildId;
         if (guildId === "eval") return r ? r.groups["id"] : (i || null);
         const voiceTypes = [2, 13];
-        const c = msg?.guild?.channels?.cache?.find(c => c.name === i && voiceTypes.includes(c.type));
+        const c = msg?.guild?.channels?.find(c => c.name === i && voiceTypes.includes(c.type));
         return r ? r.groups["id"] : (c ? c.id : null);
       }
     }
@@ -390,7 +390,7 @@ export class CommandHandler extends EventEmitter {
     this.helpHandler = new HelpHandler(this);
     this.helpCommand = "help";
     this.replyHandler = (message, msg) => {
-      msg.replyEmbed(this.format(message, msg.channel.channel.guildId));
+      msg.reply(this.format(message, msg.channel.channel.guildId));
     };
     this.messages.onMessage(this.messageHandler.bind(this));
   }
@@ -720,13 +720,13 @@ export class CommandLoader {
           result.catch(e => {
             const id = Utils.uid();
             logger.error("Error running command; error id #" + id, e);
-            data.message.replyEmbed("An error occurred. Error id: `#" + id + "`");
+            data.message.reply("An error occurred. Error id: `#" + id + "`");
           });
         }
       } catch (e) {
         const id = Utils.uid();
         logger.error("Error running command; error id #" + id, e);
-        data.message.replyEmbed("An error occurred. Error id: `#" + id + "`");
+        data.message.reply("An error occurred. Error id: `#" + id + "`");
       }
     });
   }

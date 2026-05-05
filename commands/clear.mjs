@@ -15,6 +15,6 @@ export async function run(msg) {
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
     .setDescription("🗑️ Queue cleared.")
-    .toJSON();
-  msg.replyEmbed({ embeds: [embed] });
+    ;
+  msg.reply({ embeds: [embed] });
 }

@@ -10,7 +10,7 @@ const NEXT_EMOJI    = "➡️";
 function mkEmbed(desc, title) {
   const b = new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc);
   if (title) b.setTitle(title);
-  return { embeds: [b.toJSON()] };
+  return { embeds: [b] };
 }
 
 export const command = function() {
@@ -29,7 +29,7 @@ export const command = function() {
 
 export async function run(msg, data) {
   const radios = this.config.radio;
-  if (!radios?.length) return msg.replyEmbed(mkEmbed("❌ No radio stations are configured."));
+  if (!radios?.length) return msg.reply(mkEmbed("❌ No radio stations are configured."));
 
   const input = (data.get("station")?.value ?? "").trim().toLowerCase();
 
@@ -54,7 +54,7 @@ export async function run(msg, data) {
     };
 
     let { payload, pickable } = buildPage();
-    const listMsg = await msg.replyEmbed(payload);
+    const listMsg = await msg.reply(payload);
     if (!listMsg) return;
 
     const baseEmojis = [...NUMBER_EMOJIS, PREV_EMOJI, NEXT_EMOJI, CANCEL_EMOJI];
@@ -78,7 +78,7 @@ export async function run(msg, data) {
       settled = true;
       unobserve();
       clearReactions().catch(() => {});
-      listMsg.editEmbed(mkEmbed("📻 Radio selection timed out.")).catch(() => {});
+      listMsg.edit(mkEmbed("📻 Radio selection timed out.")).catch(() => {});
     }, 60_000);
 
     const normalize = (s) => s.replace(/\uFE0F/g, "");
@@ -92,7 +92,7 @@ export async function run(msg, data) {
         clearTimeout(timeout);
         unobserve();
         await clearReactions();
-        listMsg.editEmbed(mkEmbed("❌ Radio selection cancelled.")).catch(() => {});
+        listMsg.edit(mkEmbed("❌ Radio selection cancelled.")).catch(() => {});
         return;
       }
       if (emoji === normalize(NEXT_EMOJI)) page = (page + 1) % totalPages;
@@ -111,7 +111,7 @@ export async function run(msg, data) {
 
       const next = buildPage();
       pickable = next.pickable;
-      await listMsg.editEmbed(next.payload).catch(() => {});
+      await listMsg.edit(next.payload).catch(() => {});
     }, msg.author);
 
     return;
@@ -121,7 +121,7 @@ export async function run(msg, data) {
     const radio = radios.find(r => r.name.toLowerCase() === input);
     if (!radio) {
       const names = radios.map(r => `\`${r.name}\``).join(", ");
-      return msg.replyEmbed(mkEmbed(`❌ Unknown station \`${input}\`. Available: ${names}\n\nUse \`%radio list\` to browse.`));
+      return msg.reply(mkEmbed(`❌ Unknown station \`${input}\`. Available: ${names}\n\nUse \`%radio list\` to browse.`));
     }
     return playStation(this, msg, radio);
   }
@@ -146,8 +146,8 @@ async function playStation(ctx, msg, radio, editTarget = null) {
       `${radio.description}\n\n` +
       `_Use \`%skip\` to stop the radio, or \`%radio list\` to switch stations._`
     )
-    .toJSON();
+    ;
 
-  if (editTarget) editTarget.editEmbed({ embeds: [embed] }).catch(() => {});
-  else msg.replyEmbed({ embeds: [embed] }).catch(() => {});
+  if (editTarget) editTarget.edit({ embeds: [embed] }).catch(() => {});
+  else msg.reply({ embeds: [embed] }).catch(() => {});
 }

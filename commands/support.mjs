@@ -17,6 +17,6 @@ export function run(msg) {
       "[Remix HQ](https://fluxer.gg/remix)\n\n" +
       "If you don't want to join, feel free to contact the team members listed in the server."
     )
-    .toJSON();
-  msg.replyEmbed({ embeds: [embed] });
+    ;
+  msg.reply({ embeds: [embed] });
 }

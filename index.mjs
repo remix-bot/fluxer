@@ -249,7 +249,7 @@ export class Remix {
       pendingSpawns.add(cleanChannelId);
 
       try {
-        let channel = client.channels.cache.get(cleanChannelId);
+        let channel = client.channels.get(cleanChannelId);
         if (!channel) {
           // voiceAdapterCreator is a concept and not meaningful in Fluxer.
           // A simple cache-miss check is sufficient — fetch only when not already cached.
@@ -261,7 +261,7 @@ export class Remix {
           }
         }
         if (!channel) { logger.warn("[PlayerSpawn] Channel not found:", cleanChannelId); return; }
-        client.channels.cache.set(cleanChannelId, channel);
+        client.channels.set(cleanChannelId, channel);
 
         const p = new Player(this.config.token, {
           client:           client,
@@ -306,8 +306,8 @@ export class Remix {
             // 24/7 is off — send inactivity message with hint to enable 247
             try {
               const prefix = this.handler?.getPrefix?.(guildId) ?? "%";
-              const guild  = this.client.guilds.cache.get(guildId);
-              const ch = guild?.channels?.cache?.find(c =>
+              const guild  = this.client.guilds.get(guildId);
+              const ch = guild?.channels?.find(c =>
                   (c.isTextBased?.() ?? c.channel_type === "TextChannel" ?? true) &&
                   (c.permissionsFor?.(this.client.user)?.has?.("SendMessages") ?? true)
               );
@@ -332,7 +332,7 @@ export class Remix {
           const disabled = raw === false || raw === 0 ||
               ["false", "0", "no", "off", "disable"].includes(String(raw).toLowerCase().trim());
           if (disabled) return;
-          const guild = this.client.guilds.cache.get(guildId);
+          const guild = this.client.guilds.get(guildId);
           // Announcement channel lookup order:
           //   1. In-memory cache (fastest — populated on first find after startup)
           //   2. Persisted setting "announcementChannelId" (survives restarts)
@@ -341,14 +341,14 @@ export class Remix {
           const cachedChId = this._announcementChannelCache.get(guildId)
               ?? serverSet.get("announcementChannelId")
               ?? null;
-          let ch = cachedChId ? guild?.channels?.cache?.get(String(cachedChId)) : null;
+          let ch = cachedChId ? guild?.channels?.get(String(cachedChId)) : null;
           // if cached channel is gone (deleted/uncached), clear the stale
           // entry immediately so we don't re-scan on every subsequent message event.
           if (cachedChId && !ch) {
             this._announcementChannelCache.delete(guildId);
           }
           if (!ch) {
-            ch = guild?.channels?.cache?.find(c =>
+            ch = guild?.channels?.find(c =>
                 (c.isTextBased?.() ?? c.channel_type === "TextChannel" ?? true) &&
                 (c.permissionsFor?.(this.client.user)?.has?.("SendMessages") ?? true)
             );
@@ -377,7 +377,7 @@ export class Remix {
           // ==== RESTORE STATE IF RECOVERING ====
           if (recoveryData) {
             if (recoveryData.textChannelId) {
-              p.textChannel = client.channels.cache.get(recoveryData.textChannelId);
+              p.textChannel = client.channels.get(recoveryData.textChannelId);
             }
             if (recoveryData.home247ChannelId) {
               p._home247Channel = normalizeChannelId(recoveryData.home247ChannelId) || cleanChannelId;
@@ -567,13 +567,11 @@ export class Remix {
         }
       }
 
-      for (const [gId, guild] of client.guilds.cache) {
+      for (const [gId, guild] of client.guilds) {
         // guild.voice_states — raw snake_case array from @fluxerjs/core gateway payload (preferred).
-        // guild.voiceStates?.cache — voiceStateManager collection (fallback, may not exist).
-        // guild.voiceStates — bare iterable fallback if cache sub-property is absent.
+        // guild.voiceStates — voiceStateManager collection (fallback).
         const voiceStatesRaw =
             guild.voice_states ??
-            guild.voiceStates?.cache ??
             guild.voiceStates ??
             null;
         if (!voiceStatesRaw) continue;
@@ -804,7 +802,6 @@ export class Remix {
 
       const voiceStatesRaw =
           guild.voice_states ??
-          guild.voiceStates?.cache ??
           guild.voiceStates ??
           null;
       if (voiceStatesRaw) {
@@ -908,7 +905,7 @@ export class Remix {
       logger.guild(`[GuildDelete] Removed from server ${guildId} — cleaning up.`);
 
       // Use player._guildId directly instead of resolving the channel from
-      // client.channels.cache (which may already be evicted at this point).
+      // client.channels (which may already be evicted at this point).
       // The old approach fell through 4 property-chain guesses and silently leaked the
       // player when all of them were undefined (e.g. after a partial cache eviction).
       for (const [channelId, player] of this.players.playerMap) {
@@ -1102,7 +1099,7 @@ export class Remix {
           // wrong decisions. The player's own _channelId is updated inside
           // join(), but the map key has to be manually migrated here.
           const existingPlayer = this.players.playerMap.get(cleanOld);
-          const targetChannel = this.client.channels.cache.get(cleanId)
+          const targetChannel = this.client.channels.get(cleanId)
             ?? this.client.channels.get?.(cleanId)
             ?? null;
           const targetGuildId = String(targetChannel?.guildId ?? targetChannel?.guild?.id ?? guildId ?? "").replace(/\D/g, "");
@@ -1282,8 +1279,8 @@ export class Remix {
 
           const cleanGuildId = String(guildId).replace(/\D/g, "");
           const channelGuildId = String(
-              this.client?.channels?.cache?.get?.(channelId)?.guildId ??
-              this.client?.channels?.cache?.get?.(channelId)?.guild_id ??
+              this.client?.channels?.get?.(channelId)?.guildId ??
+              this.client?.channels?.get?.(channelId)?.guild_id ??
               ""
           ).replace(/\D/g, "");
           if (channelGuildId && channelGuildId !== cleanGuildId) {
@@ -1392,9 +1389,9 @@ export class Remix {
       if (memberVoice) return seed(memberVoice);
 
       try {
-        const guild = client.guilds.cache.get(guildId) ?? client.guilds.cache.get(cleanGuild);
+        const guild = client.guilds.get(guildId) ?? client.guilds.get(cleanGuild);
         logger.voice(`[checkVC] guild=${guild?.id ?? guild?._id ?? "null"}`);
-        const voiceStates = guild?.voice_states ?? guild?.voiceStates?.cache ?? guild?.voiceStates ?? null;
+        const voiceStates = guild?.voice_states ?? guild?.voiceStates ?? null;
         logger.voice(`[checkVC] voiceStates=${Array.isArray(voiceStates) ? "array["+voiceStates.length+"]" : typeof voiceStates}`);
         if (voiceStates) {
           // Strategy A: direct key lookup — Fluxer may store as { [userId]: channelId }
@@ -1527,7 +1524,7 @@ export class Remix {
     // guild.members.cache.has() only works for cached members (requires privileged intents).
     // Instead, use the settings guilds map — any guild the bot is in and has settings for
     // is one we actually serve, which is a reliable proxy for "shared server".
-    const mutualGuilds = this.client.guilds.cache.filter(g =>
+    const mutualGuilds = this.client.guilds.filter(g =>
         this.settingsMgr.guilds.has(g.id)
     );
     return Promise.resolve([...mutualGuilds.values()].map(guild => ({
@@ -1536,7 +1533,7 @@ export class Remix {
       icon:          guild.icon
           ? `https://cdn.fluxer.app/icons/${guild.id}/${guild.icon}.webp`
           : null,
-      voiceChannels: guild.channels.cache
+      voiceChannels: guild.channels
           .filter(c => c.isVoiceBased())
           .map(c => ({ name: c.name, id: c.id, icon: null })),
     })));

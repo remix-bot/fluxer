@@ -24,8 +24,8 @@ export async function run(message, data) {
   const totalTracks = p.queue.size();
 
   if (!current && totalTracks === 0) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("📭 The queue is empty. Use `%play` to add songs!").toJSON();
-    return message.replyEmbed({ embeds: [embed] });
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("📭 The queue is empty. Use `%play` to add songs!");
+    return message.reply({ embeds: [embed] });
   }
 
   const totalPages = totalTracks > 0
@@ -85,7 +85,7 @@ export async function run(message, data) {
         .setAuthor({ name: "🎧 Queue" })
         .setDescription(desc.trim())
         .setFooter({ text: `Page ${safePage}/${totalPages} • ${loopState}` })
-        .toJSON();
+        ;
   };
 
   new QueuePaginator(message, this.messages, this.client)

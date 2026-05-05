@@ -12,7 +12,7 @@ export const command = new CommandBuilder()
 const EMOJI_REMOVE_TIMEOUT = 60000;
 
 export async function run(msg) {
-  const guilds = [...this.client.guilds.cache.values()];
+  const guilds = [...this.client.guilds.values()];
 
   // Fallback if the bot is in 0 servers
   if (guilds.length === 0) {
@@ -20,8 +20,8 @@ export async function run(msg) {
         .setColor(getGlobalColor())
         .setTitle("🌐 Servers (0)")
         .setDescription("_No servers found._")
-        .toJSON();
-    return msg.replyEmbed({ embeds: [emptyEmbed] });
+        ;
+    return msg.reply({ embeds: [emptyEmbed] });
   }
 
   const itemsPerPage = 50;
@@ -50,13 +50,13 @@ export async function run(msg) {
                   ? "💡 ⬅️ ➡️ Navigate"
                   : "List complete"
         })
-        .toJSON();
+        ;
 
     return { embeds: [embed] };
   };
 
   // Send the initial message using the framework's wrapper
-  const replyMsg = await msg.replyEmbed(buildPageContent(0));
+  const replyMsg = await msg.reply(buildPageContent(0));
 
   // Safety check and single-page exit
   if (!replyMsg?.message) return;
@@ -90,7 +90,7 @@ export async function run(msg) {
     emojiTimeout = setTimeout(async () => {
       if (unobserve) unobserve();
       await clearReactions();
-      await replyMsg.editEmbed(buildPageContent(currentPage, true)).catch(() => {});
+      await replyMsg.edit(buildPageContent(currentPage, true)).catch(() => {});
     }, EMOJI_REMOVE_TIMEOUT);
   };
 
@@ -107,7 +107,7 @@ export async function run(msg) {
     }
 
     // Update the embed using the framework's native edit method
-    await replyMsg.editEmbed(buildPageContent(currentPage)).catch(() => {});
+    await replyMsg.edit(buildPageContent(currentPage)).catch(() => {});
   });
 
   // Start the initial countdown

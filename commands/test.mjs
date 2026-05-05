@@ -10,8 +10,8 @@ export const command = new CommandBuilder()
 export async function run(msg, data) {
   const guild = msg.channel?.channel?.guild ?? msg.message?.guild;
   if (!guild) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("❌ Must be used in a server.").toJSON();
-    return msg.replyEmbed({ embeds: [embed] });
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("❌ Must be used in a server.");
+    return msg.reply({ embeds: [embed] });
   }
 
   const channelCounts = new Map();
@@ -26,14 +26,14 @@ export async function run(msg, data) {
   }
 
   if (channelCounts.size === 0) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("No one is in voice.").toJSON();
-    return msg.replyEmbed({ embeds: [embed] });
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("No one is in voice.");
+    return msg.reply({ embeds: [embed] });
   }
 
   const getChannelName = async (channelId) => {
-    const cached = this.client.channels.cache.get(channelId);
+    const cached = this.client.channels.get(channelId);
     if (cached?.name) return cached.name;
-    const guildCached = guild.channels?.cache?.get?.(channelId) ?? guild.channels?.get?.(channelId);
+    const guildCached = guild.channels?.get?.(channelId);
     if (guildCached?.name) return guildCached.name;
     if (guild.channels) {
       const all = typeof guild.channels.values === "function"
@@ -58,6 +58,6 @@ export async function run(msg, data) {
     .setColor(getGlobalColor())
     .setTitle("🎙️ Voice Channel Members")
     .setDescription(desc.trim())
-    .toJSON();
-  msg.replyEmbed({ embeds: [embed] });
+    ;
+  msg.reply({ embeds: [embed] });
 }

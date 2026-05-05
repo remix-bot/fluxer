@@ -17,7 +17,7 @@ export const command = new CommandBuilder()
     .setRequirement(r => r.setOwnerOnly(true));
 
 function embed(desc) {
-  return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).toJSON()] };
+  return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] };
 }
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
@@ -101,11 +101,11 @@ async function showPaged(msg, title, lines, pageSize = 14) {
           .setColor(getGlobalColor())
           .setTitle(title)
           .setDescription(pages[n].join("\n") + (pages.length > 1 ? `\n\nPage **${n + 1}** / **${pages.length}**` : ""))
-          .toJSON()
+          
     ]
   });
 
-  const m = await msg.replyEmbed(mkEmbed(0));
+  const m = await msg.reply(mkEmbed(0));
   if (!m || pages.length <= 1) return;
 
   m.message.react(arrows[0]).catch(() => {});
@@ -114,7 +114,7 @@ async function showPaged(msg, title, lines, pageSize = 14) {
   const unsub = m.onReaction(arrows, (e) => {
     if (e.emoji_id === arrows[0]) curr.n = Math.max(0, curr.n - 1);
     else curr.n = Math.min(pages.length - 1, curr.n + 1);
-    m.editEmbed(mkEmbed(curr.n)).catch(() => {});
+    m.edit(mkEmbed(curr.n)).catch(() => {});
   });
 
   setTimeout(() => { unsub?.(); }, 5 * 60_000);
@@ -184,7 +184,7 @@ export async function run(msg, data) {
   // Single command by name
   if (this.handler.commands.some(c => c.name === target)) {
     const res = await reloadCommand(this, target);
-    return msg.replyEmbed(embed(res.msg));
+    return msg.reply(embed(res.msg));
   }
 
   // Single src/ or audio/ module by filename (with or without extension/subdir)
@@ -196,10 +196,10 @@ export async function run(msg, data) {
 
   if (mod) {
     const res = await reloadModule(this, mod.file, mod.label);
-    return msg.replyEmbed(embed(res.msg));
+    return msg.reply(embed(res.msg));
   }
 
-  return msg.replyEmbed(embed(
+  return msg.reply(embed(
       `❌ Unknown target \`${target}\`.\nRun \`%reload\` with no arguments to see all reloadable targets.`
   ));
 }

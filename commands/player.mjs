@@ -141,10 +141,10 @@ export async function run(msg) {
         });
     if (typeof builder.setTimestamp === "function") builder.setTimestamp();
     if (current?.thumbnail) builder.setThumbnail(current.thumbnail);
-    return builder.toJSON();
+    return builder;
   };
 
-  const message = await msg.replyEmbed({ embeds: [buildEmbed()] });
+  const message = await msg.reply({ embeds: [buildEmbed()] });
   if (!message?.message) return;
 
   for (const row of controlsLayout) {
@@ -183,7 +183,7 @@ export async function run(msg) {
       await clearReactions();
       const disabledEmbed = buildEmbed({ message: "⌛ Controls disabled (react to re-enable)" });
       disabledEmbed.footer = { text: "Controls expired • React to refresh" };
-      await message.editEmbed({ embeds: [disabledEmbed] }).catch(() => {});
+      await message.edit({ embeds: [disabledEmbed] }).catch(() => {});
     }, EMOJI_REMOVE_TIMEOUT);
   };
 
@@ -202,7 +202,7 @@ export async function run(msg) {
 
   const refresh = (extra = {}) => {
     const embed = buildEmbed(extra);
-    message.editEmbed({ embeds: [embed] }).catch(() => {});
+    message.edit({ embeds: [embed] }).catch(() => {});
     lastState = extra;
   };
 
@@ -242,7 +242,7 @@ export async function run(msg) {
     closedEmbed.footer = { text: "Session ended" };
     closedEmbed.title  = "🎧 Music Player (Inactive)";
 
-    await message.editEmbed({
+    await message.edit({
       embeds: [closedEmbed],
       content: reason === "user" ? "👋 Player controls closed" : undefined
     }).catch(() => {});
@@ -420,10 +420,10 @@ export async function run(msg) {
                 totalPages > 1 && !expired && !closed ? `\n\n💡 ⬅️ ➡️ Navigate • ❌ Close` : '',
                 '```'
               ].join('\n');
-              return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).setFooter({ text: footerText }).toJSON()] };
+              return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).setFooter({ text: footerText })] };
             };
 
-            activeLyricsMsg = await msg.replyEmbed(buildLyricsContent(0));
+            activeLyricsMsg = await msg.reply(buildLyricsContent(0));
 
             if (activeLyricsMsg?.message && totalPages > 1) {
               const navEmojis = ["⬅️", "➡️", "❌"];
@@ -435,7 +435,7 @@ export async function run(msg) {
                 clearTimeout(lyricsEmojiTimeout);
                 lyricsEmojiTimeout = setTimeout(async () => {
                   await clearLyricsReactions(activeLyricsMsg);
-                  await activeLyricsMsg.editEmbed(buildLyricsContent(currentPage, true, false)).catch(() => {});
+                  await activeLyricsMsg.edit(buildLyricsContent(currentPage, true, false)).catch(() => {});
                 }, EMOJI_REMOVE_TIMEOUT);
               };
 
@@ -444,7 +444,7 @@ export async function run(msg) {
                   lyricsUnobserve();
                   clearTimeout(lyricsEmojiTimeout);
                   await clearLyricsReactions(activeLyricsMsg);
-                  await activeLyricsMsg.editEmbed(buildLyricsContent(currentPage, false, true)).catch(() => {});
+                  await activeLyricsMsg.edit(buildLyricsContent(currentPage, false, true)).catch(() => {});
                   return;
                 }
 
@@ -456,7 +456,7 @@ export async function run(msg) {
                   currentPage = currentPage < totalPages - 1 ? currentPage + 1 : 0;
                 }
 
-                await activeLyricsMsg.editEmbed(buildLyricsContent(currentPage));
+                await activeLyricsMsg.edit(buildLyricsContent(currentPage));
               });
 
               resetLyricsTimer();
@@ -467,7 +467,7 @@ export async function run(msg) {
                 clearTimeout(lyricsEmojiTimeout);
                 lyricsEmojiTimeout = setTimeout(async () => {
                   await clearLyricsReactions(activeLyricsMsg);
-                  await activeLyricsMsg.editEmbed(buildLyricsContent(0, true, false)).catch(() => {});
+                  await activeLyricsMsg.edit(buildLyricsContent(0, true, false)).catch(() => {});
                 }, EMOJI_REMOVE_TIMEOUT);
               };
 
@@ -476,7 +476,7 @@ export async function run(msg) {
                   lyricsUnobserve();
                   clearTimeout(lyricsEmojiTimeout);
                   await clearLyricsReactions(activeLyricsMsg);
-                  await activeLyricsMsg.editEmbed(buildLyricsContent(0, false, true)).catch(() => {});
+                  await activeLyricsMsg.edit(buildLyricsContent(0, false, true)).catch(() => {});
                 }
               });
 

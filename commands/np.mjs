@@ -14,8 +14,8 @@ export async function run(msg) {
   const loadingEmbed = new EmbedBuilder()
     .setColor(getGlobalColor())
     .setDescription("⏳ Loading...")
-    .toJSON();
-  const loadingMsg = await msg.replyEmbed({ embeds: [loadingEmbed] });
+    ;
+  const loadingMsg = await msg.reply({ embeds: [loadingEmbed] });
 
   const data = await p.nowPlaying();
 
@@ -24,5 +24,5 @@ export async function run(msg) {
     .setDescription(data.msg);
   if (data.image) embed.setThumbnail(data.image);
 
-  loadingMsg.editEmbed({ embeds: [embed.toJSON()] }).catch(() => {});
+  loadingMsg.edit({ embeds: [embed] }).catch(() => {});
 }

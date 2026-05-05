@@ -15,7 +15,7 @@ export const command = new CommandBuilder()
   );
 
 function embed(desc) {
-  return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).toJSON()] };
+  return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] };
 }
 
 function cleanId(value) {
@@ -24,13 +24,13 @@ function cleanId(value) {
 
 export async function run(msg, data) {
   const cid = cleanId(data.get("channelId").value);
-  const targetChannel = this.client.channels.cache.get(cid);
-  if (!targetChannel) return msg.replyEmbed(embed("❌ Channel not found."));
+  const targetChannel = this.client.channels.get(cid);
+  if (!targetChannel) return msg.reply(embed("❌ Channel not found."));
   if (cleanId(msg.message.guildId) !== cleanId(targetChannel.guildId))
-    return msg.replyEmbed(embed("❌ This command has to be run in the same server as the voice channel."));
+    return msg.reply(embed("❌ This command has to be run in the same server as the voice channel."));
   const p = this.players.playerMap.get(cid)
     ?? [...this.players.playerMap.values()].find((player) => cleanId(player?._channelId) === cid);
-  if (!p) return msg.replyEmbed(embed("❌ Player not found."));
-  if (!p.connection) return msg.replyEmbed(embed("❌ Player not initialized."));
+  if (!p) return msg.reply(embed("❌ Player not found."));
+  if (!p.connection) return msg.reply(embed("❌ Player not initialized."));
   await this.players.leave(msg, cid);
 }
