@@ -237,14 +237,26 @@ export class Dashboard {
    * @param {import("discord.js").Guild} guild
    */
   static convertServer(guild) {
+    // Defensively handle guild.channels — @fluxerjs/core may not always
+    // populate .cache (e.g. during recovery or for partial guild objects),
+    // or guild.channels itself may be a Map/Collection without a .cache
+    // wrapper. Fallback to guild.channels directly if .cache is absent.
+    const channelStore = guild.channels?.cache ?? guild.channels;
+    const channelIds = channelStore && typeof channelStore.keys === "function"
+        ? [...channelStore.keys()]
+        : [];
+    const channelValues = channelStore && typeof channelStore.values === "function"
+        ? [...channelStore.values()]
+        : [];
+
     return {
       name: guild.name,
       id: guild.id,
-      icon: guild.iconURL() ?? null,
-      channelIds: [...guild.channels.cache.keys()],
+      icon: typeof guild.iconURL === "function" ? guild.iconURL() : null,
+      channelIds,
       description: guild.description ?? null,
       ownerId: guild.ownerId,
-      channels: [...guild.channels.cache.values()].map(Dashboard.convertChannel),
+      channels: channelValues.map(Dashboard.convertChannel),
     };
   }
 
