@@ -23,8 +23,8 @@ export async function run(message) {
   }
 
   const desc = skippedTitle
-    ? `⏭️ Skipped [${skippedTitle}](${skippedLink})`
-    : "⏭️ Skipped";
+    ? this.t(message, "responses.skip.skippedTrack", { title: skippedTitle, url: skippedLink })
+    : this.t(message, "responses.skip.skipped");
 
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())

@@ -24,15 +24,15 @@ const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const ROOT      = path.resolve(__dirname, "..");
 
 // ── Reload a single command ───────────────────────────────────────────────────
-async function reloadCommand(ctx, name) {
+async function reloadCommand(ctx, msg, name) {
   if (name === "index")
-    return { ok: false, msg: "❌ `index.mjs` cannot be hot-reloaded — do a full restart." };
+    return { ok: false, msg: ctx.t(msg, "responses.reload.indexNoReload") };
 
   const command = ctx.handler.commands.find(c => c.name === name);
-  if (!command) return { ok: false, msg: `❌ Unknown command \`${name}\`` };
+  if (!command) return { ok: false, msg: ctx.t(msg, "responses.reload.unknownCommand", { name }) };
 
   const file = ctx.commandFiles.get(command.uid);
-  if (!file)  return { ok: false, msg: `❌ No file tracked for \`${name}\`` };
+  if (!file)  return { ok: false, msg: ctx.t(msg, "responses.reload.noFileTracked", { name }) };
 
   // Unregister old
   command.subcommands.forEach(sub => ctx.runnables.delete(sub.uid));
@@ -47,7 +47,7 @@ async function reloadCommand(ctx, name) {
 
   const raw     = cData.command ?? cData.default?.command;
   const builder = typeof raw === "function" ? raw.call(ctx) : raw;
-  if (!builder) return { ok: false, msg: `❌ No builder returned from \`${name}\`` };
+  if (!builder) return { ok: false, msg: ctx.t(msg, "responses.reload.noBuilder", { name }) };
 
   const runFn     = cData.run ?? cData.default?.run;
   const exportDef = cData.exportDef ?? cData.export ?? cData.default?.exportDef ?? cData.default?.export;
@@ -60,18 +60,18 @@ async function reloadCommand(ctx, name) {
     builder.subcommands.forEach(sub => ctx.runnables.set(sub.uid, runFn));
   }
 
-  return { ok: true, msg: `✅ \`${name}\`` };
+  return { ok: true, msg: ctx.t(msg, "responses.reload.reloaded", { name }) };
 }
 
 // ── Reload a src/ or audio/ module ───────────────────────────────────────────
-async function reloadModule(ctx, filePath, label) {
+async function reloadModule(ctx, msg, filePath, label) {
   if (!fs.existsSync(filePath))
-    return { ok: false, msg: `❌ File not found: \`${label}\`` };
+    return { ok: false, msg: ctx.t(msg, "responses.reload.fileNotFound", { label }) };
   try {
     await import(pathToFileURL(filePath).href + "?t=" + Date.now());
-    return { ok: true, msg: `✅ \`${label}\`` };
+    return { ok: true, msg: ctx.t(msg, "responses.reload.reloaded", { name: label }) };
   } catch (e) {
-    return { ok: false, msg: `❌ \`${label}\`: ${e.message}` };
+    return { ok: false, msg: ctx.t(msg, "responses.reload.moduleError", { label, error: e.message }) };
   }
 }
 
@@ -139,51 +139,51 @@ export async function run(msg, data) {
     const audLines = allModuleFiles("audio").map(m => `🎵 \`${m.label}\` *(audio)*`);
 
     const lines = [
-      "Run `%reload <target>` or use a batch keyword:",
-      "`all` · `commands` · `src` · `audio`",
+      this.t(msg, "responses.reload.runHint"),
+      this.t(msg, "responses.reload.batchKeywords"),
       "",
       ...cmdLines,
       ...srcLines,
       ...audLines,
     ];
 
-    return showPaged(msg, "🔄 Reload — Available Targets", lines);
+    return showPaged(msg, this.t(msg, "responses.reload.availableTargetsTitle"), lines);
   }
 
   // Batch keywords
   if (target === "commands") {
     const results = await Promise.all(
-        this.handler.commands.map(c => reloadCommand(this, c.name))
+        this.handler.commands.map(c => reloadCommand(this, msg, c.name))
     );
     return showResults(msg, results, "Commands");
   }
 
   if (target === "src") {
     const results = await Promise.all(
-        allModuleFiles("src").map(m => reloadModule(this, m.file, m.label))
+        allModuleFiles("src").map(m => reloadModule(this, msg, m.file, m.label))
     );
     return showResults(msg, results, "src/");
   }
 
   if (target === "audio") {
     const results = await Promise.all(
-        allModuleFiles("audio").map(m => reloadModule(this, m.file, m.label))
+        allModuleFiles("audio").map(m => reloadModule(this, msg, m.file, m.label))
     );
     return showResults(msg, results, "audio/");
   }
 
   if (target === "all") {
     const results = await Promise.all([
-      ...this.handler.commands.map(c => reloadCommand(this, c.name)),
-      ...allModuleFiles("src").map(m => reloadModule(this, m.file, m.label)),
-      ...allModuleFiles("audio").map(m => reloadModule(this, m.file, m.label)),
+      ...this.handler.commands.map(c => reloadCommand(this, msg, c.name)),
+      ...allModuleFiles("src").map(m => reloadModule(this, msg, m.file, m.label)),
+      ...allModuleFiles("audio").map(m => reloadModule(this, msg, m.file, m.label)),
     ]);
     return showResults(msg, results, "Everything");
   }
 
   // Single command by name
   if (this.handler.commands.some(c => c.name === target)) {
-    const res = await reloadCommand(this, target);
+    const res = await reloadCommand(this, msg, target);
     return msg.reply(embed(res.msg));
   }
 
@@ -195,11 +195,11 @@ export async function run(msg, data) {
   );
 
   if (mod) {
-    const res = await reloadModule(this, mod.file, mod.label);
+    const res = await reloadModule(this, msg, mod.file, mod.label);
     return msg.reply(embed(res.msg));
   }
 
   return msg.reply(embed(
-      `❌ Unknown target \`${target}\`.\nRun \`%reload\` with no arguments to see all reloadable targets.`
+      this.t(msg, "responses.reload.unknownTarget", { target })
   ));
 }

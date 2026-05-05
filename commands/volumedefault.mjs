@@ -38,25 +38,26 @@ export async function run(message, data) {
     if (!volOption || raw === null || raw === undefined || isNaN(Number(raw))) {
         const currentDefault   = set?.get("volume") ?? 100;
         const currentPlayerVol = Math.round((p.preferredVolume ?? 1) * 100);
+        const pfx = set?.get("prefix") ?? "%";
         embed
-            .setTitle("🔊 Volume Settings")
+            .setTitle(this.t(message, "responses.volumedefault.title"))
             .setDescription(
-                `• Server default: \`${currentDefault}%\`\n` +
-                `• Current player volume: \`${currentPlayerVol}%\`\n\n` +
+                this.t(message, "responses.volumedefault.serverDefault", { volume: currentDefault }) + "\n" +
+                this.t(message, "responses.volumedefault.currentVolume", { volume: currentPlayerVol }) + "\n\n" +
                 (hasManage
-                    ? `To change the default, use: \`${set?.get("prefix") ?? "%"}volumedefault <0-${MAX_VOLUME}>\``
-                    : `⚠️ You need **Manage Server** permission to change the default.`)
+                    ? this.t(message, "responses.volumedefault.changeHint", { prefix: pfx, max: MAX_VOLUME })
+                    : this.t(message, "responses.volumedefault.noPermission"))
             );
     } else if (!hasManage) {
-        embed.setDescription("❌ You need **Manage Server** permission to set the server default volume.");
+        embed.setDescription(this.t(message, "responses.volumedefault.noPermissionSet"));
     } else {
         const pct = Number(raw);
         if (pct < 0 || pct > MAX_VOLUME) {
-            embed.setDescription(`❌ Volume must be between \`0\` and \`${MAX_VOLUME}%\`.`);
+            embed.setDescription(this.t(message, "responses.volumedefault.outOfRange", { max: MAX_VOLUME }));
         } else {
             p.setVolume(pct / 100);
             if (set) set.set("volume", pct);
-            embed.setDescription(`🔊 Server default volume saved as \`${pct}%\`.`);
+            embed.setDescription(this.t(message, "responses.volumedefault.saved", { volume: pct }));
         }
     }
 

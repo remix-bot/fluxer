@@ -74,7 +74,7 @@ export async function run(msg, data) {
 
   const nativeMsg = msg.message ?? msg;
   const rawMsg = await nativeMsg.reply(
-      { embeds: [makeEmbed("⏳ Loading results...", null, `Searching ${name}...`)] },
+      { embeds: [makeEmbed(this.t(msg, "responses.search.loadingResults"), this.t(msg, "responses.play.searchingProvider", { provider: name }), `Searching ${name}...`)] },
       { ping: false }
   ).catch(() => null);
   if (!rawMsg) return;
@@ -82,7 +82,7 @@ export async function run(msg, data) {
   // Fetch results
   const res = await p.fetchResults(query, msg.authorId, provider);
   if (!res?.count) {
-    rawMsg.edit({ embeds: [makeEmbed("❌ No results found.")] }).catch(() => {});
+    rawMsg.edit({ embeds: [makeEmbed(this.t(msg, "responses.search.noResults"))] }).catch(() => {});
     return;
   }
 
@@ -102,7 +102,7 @@ export async function run(msg, data) {
   await rawMsg.edit({
     embeds: [makeEmbed(
         desc,
-        "React with a number to add to queue • ❌ to cancel • 30s timeout",
+        this.t(msg, "responses.search.reactHint"),
         `${name} — Search Results`
     )]
   }).catch(() => {});
@@ -137,7 +137,7 @@ export async function run(msg, data) {
 
     if (e.emoji_id === CANCEL_EMOJI) {
       rawMsg.edit({
-        embeds: [makeEmbed("❌ Cancelled.", null, `${name} — Search Results`)]
+        embeds: [makeEmbed(this.t(msg, "responses.search.cancelled"), null, `${name} — Search Results`)]
       }).catch(() => {});
       return;
     }
@@ -150,7 +150,7 @@ export async function run(msg, data) {
 
     rawMsg.edit({
       embeds: [makeEmbed(
-          `✅ Added [${v.title}](${v.url}) to the queue!`,
+          this.t(msg, "responses.search.added", { title: v.title, url: v.url }),
           null,
           `${name} — Search Results`
       )]
@@ -163,7 +163,7 @@ export async function run(msg, data) {
     unobserve();
     clearReactions().catch(() => {});
     rawMsg.edit({
-      embeds: [makeEmbed("⏰ Search timed out.", "Session closed", `${name} — Search Results`)]
+      embeds: [makeEmbed(this.t(msg, "responses.search.timedOut"), this.t(msg, "responses.search.sessionClosed"), `${name} — Search Results`)]
     }).catch(() => {});
   }, SESSION_MS); // configurable via config.timers.searchSessionTimeout
 }

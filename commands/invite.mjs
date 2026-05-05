@@ -9,9 +9,7 @@ export const command = new CommandBuilder()
     .setCategory("util");
 
 export async function run(message) {
-    const description =
-        "Add Remix to your server directly from [FluxerList](<https://fluxerlist.com/bots/remix>).\n\n" +
-        "Join our community at [fluxer.gg/remix](https://fluxer.gg/remix) for support, updates, and direct feedback.";
+    const description = this.t(message, "responses.invite.description");
 
     const botUser = message.handler.client.user;
 
@@ -20,7 +18,7 @@ export async function run(message) {
     const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
         .setAuthor({
-            name: "Invite Remix",
+            name: this.t(message, "responses.invite.title"),
             iconURL: botIcon
         })
         .setDescription(description)

@@ -227,10 +227,8 @@ export class HelpHandler {
   commandsPerPage = 5;
 
   paginationHandler = (msg, helpHandler, cmds) => {
-    let form = "Available Commands (page $currentPage/$maxPage): \n\n$content";
-    form += "\n\nRun `$prefix$helpCmd <command>` to learn more about it. You can also include subcommands.\n";
-    form += "For example: `$prefix$helpCmd settings get`\n\n";
-    form += "Tip: Use the arrows beneath this message to turn pages, or specify the required page by using `$prefix$helpCmd <page number>`";
+    const guildId = msg.message.guildId;
+    let form = this.commands.t(guildId, "cmdHandler.help.pageStructure");
 
     const contents = cmds.map((cmd, i) => {
       return (i + 1) + ". **" + cmd.name + "**: " + (cmd.description || "").split("\n")[0];
@@ -373,6 +371,8 @@ export class CommandHandler extends EventEmitter {
   /** @type {CommandBuilder[]} */
   commands = [];
 
+  /** @type {import('./constants/Locale.mjs').Locale|null} */
+  locale = null;
   invalidFlagError = "Invalid flag `$invalidFlag`. It doesn't match any options on this command.\n`$previousCmd $invalidFlag`";
   textWrapError = "Malformed string `$value`: Missing a closing quote character (`$quote`) after the desired string.";
 
@@ -399,6 +399,20 @@ export class CommandHandler extends EventEmitter {
   setPingPrefix(bool) { this.pingPrefix = bool; }
   setPrefixManager(manager) { this.prefixes = manager; }
   setHelpHandler(handler) { this.helpHandler = handler; }
+  /** @param {import('./constants/Locale.mjs').Locale} locale */
+  setLocale(locale) { this.locale = locale; }
+
+  /**
+   * Translate a locale key for a given guild.
+   * @param {string} guildId
+   * @param {string} key
+   * @param {Object} [replacements={}]
+   * @returns {string}
+   */
+  t(guildId, key, replacements = {}) {
+    if (!this.locale) return key;
+    return this.locale.translate(guildId, key, replacements);
+  }
 
   format(text, guildId) {
     const prefix = (!guildId) ? this.prefix : this.getPrefix(guildId);
@@ -463,12 +477,14 @@ export class CommandHandler extends EventEmitter {
       }
       if (args.length > 1 && Utils.isNumber(args[1])) {
         const pageNumber = parseInt(args[1]);
-        if (pageNumber < 1 || pageNumber > this.helpHandler.pageNumber()) return this.replyHandler("`" + pageNumber + "` is not a valid page number!", msg);
+        if (pageNumber < 1 || pageNumber > this.helpHandler.pageNumber()) {
+          return this.replyHandler(this.t(guildId, "cmdHandler.page.invalid", { number: pageNumber }), msg);
+        }
         return this.replyHandler(this.helpHandler.getHelpPage(pageNumber - 1, msg), msg);
       }
       if (args.length <= 2) {
         let idx = this.commands.findIndex(e => e.aliases.some(al => al.toLowerCase() === args[1].toLowerCase()));
-        if (idx === -1) return this.replyHandler("Unknown command `$prefix" + args[1] + "`!", msg);
+        if (idx === -1) return this.replyHandler(this.t(guildId, "cmdHandler.command.invalid", { command: this.format("$prefix" + args[1], guildId) }), msg);
         return this.replyHandler(this.helpHandler.getCommandHelp(this.commands[idx], msg), msg);
       }
       let currCmd = null;
@@ -477,7 +493,7 @@ export class CommandHandler extends EventEmitter {
         let a = args.slice(1)[i];
         let curr = (currCmd) ? currCmd.subcommands : this.commands;
         let idx = curr.findIndex(e => e.aliases.some(al => al.toLowerCase() === a.toLowerCase()));
-        if (idx === -1) return this.replyHandler("Unknown command `$prefix" + prefix2 + a + "`!", msg);
+        if (idx === -1) return this.replyHandler(this.t(guildId, "cmdHandler.command.invalid", { command: this.format("$prefix" + prefix2 + a, guildId) }), msg);
         currCmd = curr[idx];
         prefix2 += a + " ";
       }
@@ -485,7 +501,7 @@ export class CommandHandler extends EventEmitter {
     }
 
     if (!this.commandNames.includes(args[0].toLowerCase())) {
-      this.replyHandler("Unknown Command. Use `$prefix$helpCmd` to view all possible commands.", msg);
+      this.replyHandler(this.t(guildId, "cmdHandler.command.invalid", { command: this.format("$prefix$helpCmd", guildId) }), msg);
       return;
     }
     return this.processCommand(this.commands.find(e => e.aliases.includes(args[0].toLowerCase())), args, msg);
@@ -507,7 +523,8 @@ export class CommandHandler extends EventEmitter {
       });
       if (idx === -1) {
         const list = cmd.subcommands.map(s => s.name).join(" | ");
-        const e = "Invalid subcommand. Try one of the following options: `$previousCmd <$cmdlist>`".replace(/\$previousCmd/gi, previous).replace(/\$cmdList/gi, list);
+        const subGuildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
+        const e = this.t(subGuildId, "cmdBuilder.subcommand.invalid").replace(/\$previousCmd/gi, previous).replace(/\$cmdList/gi, list);
         return (!external) ? this.replyHandler(e, msg) : e;
       }
       return this.processCommand(cmd.subcommands[idx], args.slice(1), msg, previous + this.format(" " + cmd.subcommands[idx].name), external);
@@ -543,7 +560,8 @@ export class CommandHandler extends EventEmitter {
         const flagName = args[argIndex].slice(1);
         const op = cmd.options.find(e => e.aliases.includes(flagName));
         if (!op) {
-          const error = this.invalidFlagError.replace(/\$previousCmd/gi, previous).replace(/\$invalidFlag/gi, "-" + flagName);
+          const flagGuildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
+          const error = this.t(flagGuildId, "cmdHandler.invalidFlag").replace(/\$previousCmd/gi, previous).replace(/\$invalidFlag/gi, "-" + flagName);
           return (!external) ? this.replyHandler(error, msg) : error;
         }
         previous += " " + args[argIndex];
@@ -631,6 +649,7 @@ export class CommandHandler extends EventEmitter {
   assertRequirements(cmd, msg) {
     const authorId = msg.message?.author?.id;
     const isOwner = this.owners.includes(authorId);
+    const permGuildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
 
     for (let i = 0; i < cmd.requirements.length; i++) {
       let req = cmd.requirements[i];
@@ -644,7 +663,7 @@ export class CommandHandler extends EventEmitter {
           // cached — check directly
           const missing = req.permissions.filter(p => !member.permissions.has(PermissionFlags[p] ?? p));
           if (missing.length > 0) {
-            this.replyHandler(req.permissionError, msg);
+            this.replyHandler(this.t(permGuildId, "cmdBuilder.requirement.permission"), msg);
             return false;
           }
         } else {
@@ -659,7 +678,7 @@ export class CommandHandler extends EventEmitter {
           fetchPromise.then(member => {
             const missing = req.permissions.filter(p => !member.permissions.has(PermissionFlags[p] ?? p));
             if (missing.length > 0) {
-              this.replyHandler(req.permissionError, msg);
+              this.replyHandler(this.t(permGuildId, "cmdBuilder.requirement.permission"), msg);
             } else {
               // Re-parse args the same way messageHandler does so quoted args survive.
               const guildId2 = msg.channel?.channel?.guildId ?? msg.message?.guildId;
@@ -671,7 +690,7 @@ export class CommandHandler extends EventEmitter {
               // re-entering the fetch loop if the member is still not cached.
               this.processCommand(cmd, args, msg, false, true);
             }
-          }).catch(() => this.replyHandler(req.permissionError, msg));
+          }).catch(() => this.replyHandler(this.t(permGuildId, "cmdBuilder.requirement.permission"), msg));
           return false;
         }
       }

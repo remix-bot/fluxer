@@ -56,7 +56,7 @@ export async function run(message, data) {
 
   const searchEmbed = new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setDescription("🔍 Searching...")
+    .setDescription(this.t(message, "responses.play.searching"))
     ;
 
   let statusMsg = null;

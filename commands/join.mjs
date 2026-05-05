@@ -21,7 +21,7 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
   if (!this.client.channels.has(cid)) {
     ecb();
     const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription("Couldn't find the channel `" + cid + "`\nUse the help command to learn more about this. (`%help join`)");
+        .setDescription(this.t(message, "responses.join.channelNotFound", { channel: cid }));
     return message.reply({ embeds: [embed] });
   }
   const cleanChannelId = cleanId(cid);
@@ -30,14 +30,14 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
   if (existing) {
     cb(existing);
     const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription("Already joined <#" + cid + ">.");
+        .setDescription(this.t(message, "responses.join.alreadyJoined", { channel: cid }));
     return message.reply({ embeds: [embed] });
   }
 
   // Guard: moonlink must be ready before we can play anything
   if (!this.moonlink) {
     const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription("⚠️ Audio node is still connecting — please try again in a few seconds.");
+        .setDescription(this.t(message, "responses.join.audioNodeConnecting"));
     ecb();
     return message.reply({ embeds: [embed] });
   }
@@ -68,8 +68,8 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
       } catch (_) { return "%"; }
     })();
     const desc = is247
-        ? `Left channel <#${activeChannelId}> because of inactivity.`
-        : `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
+        ? this.t(message, "responses.join.autoLeaveInactive", { channel: activeChannelId })
+        : this.t(message, "responses.join.autoLeaveInactive247", { channel: activeChannelId, prefix });
     const embed = new EmbedBuilder().setColor(getGlobalColor())
         .setDescription(desc);
     message.channel.send({ embeds: [embed] });
@@ -91,17 +91,17 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
 
   this.players.playerMap.set(cleanChannelId, p);
 
-  const joiningEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("⏳ Joining Channel...");
+  const joiningEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.join.joining"));
   const statusMsg = await message.reply({ embeds: [joiningEmbed] });
   try {
     await p.join(cleanChannelId);
-    const okEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(`✅ Successfully joined <#${cid}>`);
+    const okEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.join.joined", { channel: cid }));
     await statusMsg.edit({ embeds: [okEmbed] });
     cb(p);
   } catch (e) {
     this.players.playerMap.delete(cleanChannelId);
     p.destroy();
-    const errEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(`❌ Failed to join: ${e.message}`);
+    const errEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.join.joinFailed", { error: e.message }));
     await statusMsg.edit({ embeds: [errEmbed] });
     ecb(e);
   }
@@ -150,7 +150,7 @@ export function run(message, data) {
 
     if (!resolvedId) {
       const embed = new EmbedBuilder().setColor(getGlobalColor())
-          .setDescription("❌ Couldn't find that voice channel. Try using a mention like `<#channelid>` or the exact channel name.");
+          .setDescription(this.t(message, "responses.join.voiceChannelNotFound"));
       return message.reply({ embeds: [embed] });
     }
 
@@ -163,7 +163,7 @@ export function run(message, data) {
   if (!cid) {
     const prefix = this._commands?.getPrefix?.(getGuildId(message)) ?? "%";
     const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription(`❌ You're not in a voice channel. Please join one first, or specify a channel: \`${prefix}join <#channel>\``);
+        .setDescription(this.t(message, "responses.join.noVoiceChannel", { prefix }));
     return message.reply({ embeds: [embed] });
   }
 

@@ -18,8 +18,8 @@ export async function run(msg) {
   if (guilds.length === 0) {
     const emptyEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle("🌐 Servers (0)")
-        .setDescription("_No servers found._")
+        .setTitle(this.t(msg, "responses.servers.title", { count: 0 }))
+        .setDescription(this.t(msg, "responses.servers.noServers"))
         ;
     return msg.reply({ embeds: [emptyEmbed] });
   }
@@ -41,14 +41,14 @@ export async function run(msg) {
   const buildPageContent = (pageIdx, expired = false) => {
     const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(`🌐 Servers (${guilds.length}) - Page ${pageIdx + 1}/${totalPages}`)
+        .setTitle(this.t(msg, "responses.servers.pageTitle", { count: guilds.length, page: pageIdx + 1, total: totalPages }))
         .setDescription(pages[pageIdx])
         .setFooter({
           text: expired
-              ? "⌛ Controls expired"
+              ? this.t(msg, "responses._common.controlsExpired")
               : totalPages > 1
-                  ? "💡 ⬅️ ➡️ Navigate"
-                  : "List complete"
+                  ? this.t(msg, "responses._common.navigateHint")
+                  : this.t(msg, "responses.servers.listComplete")
         })
         ;
 

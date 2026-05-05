@@ -367,6 +367,7 @@ export default class Player extends EventEmitter {
     this.settings     = opts.settings ?? null;
     this.settingsMgr  = opts.settingsMgr ?? null;
     this._observedVoiceUsers = opts.observedVoiceUsers ?? null;
+    this.locale       = opts.locale ?? null;
 
     // Merge NodeLink config (for stream URL building)
     this._nl = {
@@ -1271,12 +1272,16 @@ export default class Player extends EventEmitter {
       }
       this._recoveryPending = false;
       this._isRecovering = false;
-      await this._stopMediaPlayer();
-      await Utils.sleep(100);
+      this._streamingStopped = true;
+
+      if (this._mediaPlayer) {
+        this._mediaPlayer.destroy();
+        this._mediaPlayer = null;
+      }
       await this.connection.disconnect();
+
       this.queue.reset();
       this.connection  = null;
-      this._mediaPlayer = null;
       this._paused     = false;
       this._pausedAt   = null;
       this._playingNext = false;
@@ -1779,13 +1784,22 @@ export default class Player extends EventEmitter {
     return this.getDuration(current.duration);
   }
 
+  /** Translate a locale key for this player's guild, with fallback. */
+  _t(key, replacements = {}) {
+    if (!this.locale) return key;
+    return this.locale.translate(this._guildId, key, replacements);
+  }
+
   announceSong(s) {
     if (!s) return;
 
-    const inVC = this._channelId ? ` in <#${this._channelId}>` : "";
-
     if (s.type === "radio") {
-      this.emit("message", mkEmbed(`📻 Now streaming _${Utils.escapeMarkdown(s.title)}_ by [${s.author?.name || "Unknown"}](${s.author?.url || ""})${inVC}`))
+      this.emit("message", mkEmbed(this._t("responses.radio.nowPlaying", {
+        title:  Utils.escapeMarkdown(s.title),
+        author: s.author?.name || "Unknown",
+        url:    s.author?.url || "",
+        channel: this._channelId || "",
+      })));
       return;
     }
     const author = s.artists
@@ -1793,7 +1807,12 @@ export default class Player extends EventEmitter {
         : s.author?.url
             ? `[${s.author.name}](${s.author.url})`
             : s.author?.name || "Unknown";
-    this.emit("message", mkEmbed(`🎵 Now playing [${Utils.escapeMarkdown(s.title)}](${s.spotifyUrl || s.url}) by ${author}${inVC}`))
+    this.emit("message", mkEmbed(this._t("responses.play.nowPlaying", {
+      title:   Utils.escapeMarkdown(s.title),
+      url:     s.spotifyUrl || s.url,
+      author:  author,
+      channel: this._channelId || "",
+    })));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2027,7 +2046,7 @@ export default class Player extends EventEmitter {
                 ?? "%";
           } catch (_) { return "%"; }
         })();
-        this.emit("message", mkEmbed(`🎵 The queue has ended — nothing left to play. Add more songs with \`${prefix}play\`!`));
+        this.emit("message", mkEmbed(this._t("responses._common.queueEnded", { prefix })));
       }
       this._wasRadio = false;
       return;
@@ -2052,7 +2071,7 @@ export default class Player extends EventEmitter {
     const hasValidPlayer = await this._ensureMediaPlayer();
     if (!hasValidPlayer) {
       logger.error("[Player] Failed to create healthy MediaPlayer — cannot play.");
-      this.emit("message", mkEmbed(":x: Voice connection lost. Please rejoin."))
+      this.emit("message", mkEmbed(this._t("responses._common.voiceConnectionLost")));
 
       if (!this._is247Enabled()) {
         this._startInactivityTimer();
@@ -2111,7 +2130,7 @@ export default class Player extends EventEmitter {
 
     if (!streamUrl || !Utils.isValidUrl(streamUrl)) {
       logger.error("[Player] No valid stream URL for:", songData.title);
-      this.emit("message", mkEmbed(`:x: Could not get stream URL for **${songData.title}** — skipping...`))
+      this.emit("message", mkEmbed(this._t("responses._common.couldNotGetStream", { title: songData.title })));
       this._streamingStopped = false;
       return this._doPlayNext();
     }
@@ -2136,7 +2155,7 @@ export default class Player extends EventEmitter {
       this._streamingStopped = true;
       if (!this._skipping && !this.leaving && !this._paused) {
         if (songData.type !== "radio") {
-          this.emit("message", mkEmbed(`:x: Error streaming **${songData.title}** — skipping...`))
+          this.emit("message", mkEmbed(this._t("responses._common.errorStreaming", { title: songData.title })));
         }
       }
     }

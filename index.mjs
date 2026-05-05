@@ -12,6 +12,7 @@ import { getVoiceManager } from "@fluxerjs/voice";
 import { MoonlinkManager } from "./src/MoonlinkManager.mjs";
 import mysql from "mysql";
 import { Dashboard } from "./src/dashboard/Dashboard.mjs";
+import { Locale } from "./src/constants/Locale.mjs";
 
 export class Remix {
   constructor() {
@@ -37,6 +38,10 @@ export class Remix {
 
     // Apply embed color from config globally
     setGlobalColor(config.embedColor);
+
+    // ── Locale (i18n) ────────────────────────────────────────────────────────
+    this.locale = new Locale();
+    this.locale.load();
 
     this.dashboard = new Dashboard(this, {
       mysql: config.mysql,
@@ -81,10 +86,15 @@ export class Remix {
     const settings    = new RemoteSettingsManager(config.mysql, "./storage/defaults.json");
     this.settingsMgr  = settings;
 
+    // Bind settings manager to locale so it can resolve per-guild locale settings
+    this.locale.bind(this.settingsMgr);
+
     const commands = new CommandHandler(messages);
     this.handler   = commands;
 
     commands.setPrefixManager(new PrefixManager(settings));
+    commands.setLocale(this.locale);
+    messages.setLocale(this.locale);
 
     // ── Help command ──────────────────────────────────────────────────────────
     new HelpCommand(commands, messages, (msg) => this.getSettings(msg)).register();
@@ -1250,6 +1260,7 @@ export class Remix {
       config,
       player: this.playerContext,
       dashboard: this.dashboard,
+      locale: this.locale,
     });
     this.players.observedVoiceUsers = this.observedVoiceUsers;
 
@@ -1514,6 +1525,21 @@ export class Remix {
   getSettings(message) {
     const guildId = message?.channel?.channel?.guildId ?? message?.guildId ?? null;
     return this.settingsMgr.getServer(guildId);
+  }
+
+  /**
+   * Translate a key for the guild of the given message.
+   * @param {Message} message
+   * @param {string} key      Dotted locale key, e.g. "responses.play.noResults"
+   * @param {Object} [data={}]  Replacement values, e.g. { count: 5 }
+   * @returns {string}
+   */
+  t(message, key, data = {}) {
+    const guildId = message?.channel?.channel?.guildId
+        ?? message?.message?.guildId
+        ?? message?.guildId
+        ?? null;
+    return this.locale.translate(guildId, key, data);
   }
 
   getPlayer(message, promptJoin, verifyUser, shouldJoin) {

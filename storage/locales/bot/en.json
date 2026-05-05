@@ -1,118 +1,487 @@
 {
-  "cmdBuilder" : {
-    "requirement" : {
-      "permission" : "You don't have the needed permissions to run this command!"
+  "cmdBuilder": {
+    "requirement": {
+      "permission": "You don't have the needed permissions to run this command!"
     },
-    "subcommand" : {
-      "invalid" : "Invalid subcommand. Try one of the following options: `$previousCmd <$cmdlist>`"
+    "subcommand": {
+      "invalid": "Invalid subcommand. Try one of the following options: `$previousCmd <$cmdlist>`"
     }
   },
-  "cmdHandler" : {
-    "command" : {
-      "invalid" : "Unknown command {{command}}!",
-      "suggestion" : "Did you mean {{command}}? (Type {{acceptCommand}} to run this)"
+  "cmdHandler": {
+    "command": {
+      "invalid": "Unknown command {{command}}!",
+      "suggestion": "Did you mean {{command}}? (Type {{acceptCommand}} to run this)"
     },
-    "help" : {
-      "pageStructure" : "Available Commands (page $currPage/$maxPage): \n\n$content\n\nRun `$prefix$helpCmd <command>` to learn more about it. You can also include subcommands.\nFor example: `$prefix$helpCmd settings get`\n\nTip: Use the arrows beneath this message to turn pages, or specify the required page by using `$prefix$helpCmd <page number>`"
+    "help": {
+      "pageStructure": "Available Commands (page $currPage/$maxPage): \n\n$content\n\nRun `$prefix$helpCmd <command>` to learn more about it. You can also include subcommands.\nFor example: `$prefix$helpCmd settings get`\n\nTip: Use the arrows beneath this message to turn pages, or specify the required page by using `$prefix$helpCmd <page number>`",
+      "unknownCommand": "❌ Unknown command `{{command}}`. Use `{{prefix}}help` to browse."
     },
-    "invalidFlag" : "Invalid flag `$invalidFlag`. It doesn't match any options on this command.\n`$previousCmd $invalidFlag`",
-    "page" : {
-      "invalid" : "{{number}} is not a valid page number!"
+    "invalidFlag": "Invalid flag `$invalidFlag`. It doesn't match any options on this command.\n`$previousCmd $invalidFlag`",
+    "page": {
+      "invalid": "{{number}} is not a valid page number!"
     },
-    "permissions" : {
-      "message" : "Please grant me the {{permission}} permission in {{channel}} or contact a server administrator. I am unable to operate without this."
+    "permissions": {
+      "message": "Please grant me the {{permission}} permission in {{channel}} or contact a server administrator. I am unable to operate without this."
     }
   },
-  "commands" : {
-    "clear" : "Remove all songs from the queue.",
-    "join" : "Make the bot join a specific voice channel.",
-    "leave" : "Make the bot leave your current voice channel",
-    "list" : "List the songs in the queue of your current voice channel.",
-    "login" : "Confirm the login of your account on the website",
-    "loop" : "Toggle the looping of your queue/song.",
-    "lyrics" : "Fetch the lyrics of the current song. Please note that the lyrics might differ from the actual ones, as Genius doesn't always find the right song.",
-    "np" : "Request the name and url of the currently playing song.",
-    "pause" : "Pause the playback in your voice channel",
-    "ping" : "My prefix in this server is: {{prefix}}\n\nUse {{helpCmd}} to get started!",
-    "play" : "Play a youtube video from url/query or a playlist by url. Other services are supported as well.\nSearches will be done on `Youtube Music` by default.\nIf you want to search on `YouTube` you will have to specify that with `-u yt` explicitly.",
-    "player" : "Create an emoji player control for your voice channel",
-    "playnext" : "Same as %play. The result will be added to the top of the queue.",
-    "remove" : "Remove a specific song from the queue.",
-    "resume" : "Resume the playback in your voice channel",
-    "search" : "Display the search results for a given query",
-    "settings" : "Change/Get settings in the current server.",
-    "shuffle" : "Re-orders the queue randomly.",
-    "skip" : "Skip the current playing song.",
-    "stats" : "Display stats about the bot like the uptime.",
-    "support" : "The support server for Remix. Feel free to ask help, report bugs or just chat :)",
-    "thumbnail" : "Request the thumbnail of the currently playing song.",
-    "volume" : "Change the current volume."
+  "commands": {
+    "clear": "Remove all songs from the queue.",
+    "debug": "A debug command for various purposes.",
+    "eval": "Evaluates JavaScript code (Owner Only).",
+    "filter": "Open an interactive filter picker — react with an emoji to apply an audio effect.",
+    "forceleave": "Make Remix leave a channel even if you're not in it.",
+    "invite": "Get the invite link for Remix and the support server.",
+    "join": "Make the bot join your voice channel, or specify one.",
+    "leave": "Make the bot leave your current voice channel.",
+    "list": "List the songs in the queue of your current voice channel.",
+    "login": "Confirm a login of your account on the website.",
+    "loop": "Toggle the looping of your queue/song.",
+    "lyrics": "Display synced lyrics from NodeLink.",
+    "np": "Request the name and url of the currently playing song.",
+    "pause": "Pause the playback in your voice channel.",
+    "play": "Play a song or playlist from a URL or search query.\nSupports YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, and more.\nDefault search: YouTube Music. Use `-p <provider>` or inline prefix e.g. `sp: blinding lights`.",
+    "player": "Create an interactive player control panel with live progress.",
+    "playnext": "Same as %play but adds the result to the top of the queue.",
+    "radio": "Play a radio station. Use `%radio list` to browse all stations.",
+    "reload": "Reload commands, src modules, or audio modules. Leave blank to see all targets.",
+    "remove": "Remove a specific song from the queue.",
+    "resume": "Resume the playback in your voice channel.",
+    "search": "Display search results for a query and pick one to play.\nSupports all providers — use inline prefix e.g. `sp: song` or `-p dz`.",
+    "servers": "Fetch a list of servers the bot is in.",
+    "settings": "Change/Get settings in the current server.",
+    "shuffle": "Re-orders the queue randomly.",
+    "skip": "Skip the current playing song.",
+    "stats": "Display stats about the bot like the uptime.",
+    "support": "The support server for Remix. Feel free to ask help, report bugs or just chat :)",
+    "test": "Shows how many people are in each voice channel.",
+    "thumbnail": "Request the thumbnail of the currently playing song.",
+    "volume": "Get or change the current volume.",
+    "volumedefault": "View or set the server default volume. (Requires Manage Server to set)"
   },
-  "options" : {
-    "join" : {
-      "channel" : "Specify the channel, the bot should join. This is necessary due to (current) Revolt limitations."
+  "options": {
+    "debug": {
+      "target": "The target that should be examined."
     },
-    "login" : {
-      "id" : "The id you got from logging in at the dashboard."
+    "eval": {
+      "expression": "The JavaScript expression to evaluate"
     },
-    "loop" : {
-      "type" : "Specifies what loop should be toggled."
+    "filter": {
+      "name": "Filter name"
     },
-    "play" : {
-      "query" : "A YouTube query/url, playlist url, or a link to a Spotify, SoundCloud, or YouTube Music song."
+    "forceleave": {
+      "channelId": "The channel that should be left."
     },
-    "playnext" : {
-      "query" : "A YouTube query/url, playlist url, or a link to a Spotify, SoundCloud, or YouTube Music song."
+    "join": {
+      "channel": "A voice channel mention, ID, or name to join. Defaults to your current channel."
     },
-    "remove" : {
-      "index" : "The position of the song in the queue. You can view the indices with the 'list' command"
+    "login": {
+      "id": "The id you got from logging in at the dashboard."
     },
-    "search" : {
-      "provider" : "The search result provider (YouTube or YouTube Music). Default: Youtube Music",
-      "query" : "The query to search for."
+    "loop": {
+      "type": "Specifies what loop should be toggled."
     },
-    "settings" : {
-      "get" : {
-        "setting" : "Get the current value of a setting."
+    "play": {
+      "query": "A search query, URL, or provider-prefixed query like `sp: song name`.",
+      "provider": "The search provider. Default: YouTube Music. Or use inline prefix: sp:, dz:, am:, yt:, sc: etc."
+    },
+    "playnext": {
+      "query": "A search query, URL, or provider-prefixed query like `sp: song name`.",
+      "provider": "The search provider. Default: YouTube Music."
+    },
+    "radio": {
+      "station": "Station name, 'list' to browse, or leave blank for default."
+    },
+    "reload": {
+      "target": "Command/module name, or: all | commands | src | audio"
+    },
+    "remove": {
+      "index": "The position of the song in the queue. You can view the indices with the 'list' command."
+    },
+    "search": {
+      "provider": "The search provider. Default: YouTube Music.",
+      "query": "The query to search for, or a provider-prefixed query like `sp: song name`."
+    },
+    "settings": {
+      "get": {
+        "setting": "Get the current value of a setting."
       },
-      "set" : {
-        "setting" : "The name of the setting you want to set.",
-        "value" : "The new value."
-      }
-    },
-    "volume" : {
-      "volume" : "The new volume in percentages (e.g. `30` or `100`). If you go above 100% there might be quality loss."
-    }
-  },
-  "pagination" : {
-    "embed" : {
-      "sclosedContent" : "{{content}}\nSession closed - Changing pages **won't work** from here.",
-      "sclosedTitle" : "Session Closed"
-    },
-    "error" : {
-      "perms" : {
-        "messages" : "I am unable to send messages in {{channel}}. Please contact a server administrator and grant me the \"SendMessage\" permission.",
-        "reactions" : "I need reaction permissions to work. Please contact a server administrator to address this."
-      }
-    }
-  },
-  "subcommands" : {
-    "settings" : {
-      "get" : "Get the value of a specific setting or the settings of the server.",
-      "set" : "Set the value of a specific setting."
-    }
-  },
-  "voice" : {
-    "join" : {
-      "cancelled" : "Cancelled!",
-      "error" : {
-        "dc" : "It doesn't look like we're in the same voice channel.",
-        "invalid" : "Invalid voice channel. Please try again and check capitalization! (`x` to cancel)",
-        "perms" : "Something went wrong. Unable to join {{channel}}. Do I have the needed permissions?"
+      "set": {
+        "setting": "The name of the setting you want to set.",
+        "value": "The new value."
       },
-      "warning" : {
-        "nc" : "You don't seem to be connected to {{channel}}. Did you forget to join?"
+      "reset": {
+        "setting": "Which setting to reset."
+      },
+      "help": {
+        "setting": "Omit to see all available settings."
       }
+    },
+    "volume": {
+      "volume": "The new volume in percentages (e.g. `30` or `100`). If you go above 100% there might be quality loss."
+    },
+    "volumedefault": {
+      "volume": "New volume in % (0–200) to save as server default. Leave empty to view current."
+    }
+  },
+  "pagination": {
+    "embed": {
+      "sclosedContent": "{{content}}\nSession closed - Changing pages **won't work** from here.",
+      "sclosedTitle": "Session Closed"
+    },
+    "error": {
+      "perms": {
+        "messages": "I am unable to send messages in {{channel}}. Please contact a server administrator and grant me the \"SendMessage\" permission.",
+        "reactions": "I need reaction permissions to work. Please contact a server administrator to address this."
+      }
+    }
+  },
+  "subcommands": {
+    "settings": {
+      "get": "Get the value of a specific setting or the settings of the server.",
+      "set": "Set the value of a specific setting.",
+      "reset": "Reset a setting to its default value.",
+      "help": "Show help for the settings system, or explain a specific setting."
+    }
+  },
+  "voice": {
+    "join": {
+      "cancelled": "Cancelled!",
+      "error": {
+        "dc": "It doesn't look like we're in the same voice channel.",
+        "invalid": "Invalid voice channel. Please try again and check capitalization! (`x` to cancel)",
+        "perms": "Something went wrong. Unable to join {{channel}}. Do I have the needed permissions?"
+      },
+      "warning": {
+        "nc": "You don't seem to be connected to {{channel}}. Did you forget to join?"
+      }
+    }
+  },
+  "responses": {
+    "_common": {
+      "nothingPlaying": "❌ There's nothing playing at the moment!",
+      "noVoiceChannel": "⚠️ Please join a voice channel first.",
+      "noVoiceStrict": "⚠️ You need to join a voice channel to use this command.",
+      "alreadyInChannel": "⚠️ I'm already playing in {{channels}}. Join that channel or use `{{prefix}}play` to start music in your channel.",
+      "notInVoice": "I'm not in a voice channel.",
+      "queueEmpty": "📭 The queue is empty. Use `{{prefix}}play` to add songs!",
+      "queueEnded": "🎵 The queue has ended — nothing left to play. Add more songs with `{{prefix}}play`!",
+      "notConnected": "It doesn't look like we're in the same voice channel.",
+      "controlsExpired": "⌛ Controls expired",
+      "sessionEnded": "Session ended",
+      "navigateHint": "💡 ⬅️ ➡️ Navigate",
+      "voiceSelectionPrompt": "Please select one of the following channels by clicking on the reactions below",
+      "voiceSelectionHint": "send a message with the voice channel! (Mention/Id/Name)\nSend 'x' to cancel.",
+      "voiceSelectionTimedOut": "⏱️ Voice selection timed out.",
+      "voiceConnectionLost": "❌ Voice connection lost. Please rejoin.",
+      "couldNotGetStream": "❌ Could not get stream URL for **{{title}}** — skipping.",
+      "errorStreaming": "❌ Error streaming **{{title}}** — skipping.",
+      "successfullyLeft": "✅ Successfully Left",
+      "voiceSelectionInvalid": "Invalid voice channel. Try again or type `x`.",
+      "voiceChannelRequired": "❌ Please join a **voice channel** first before using this command!"
+    },
+    "clear": {
+      "cleared": "🗑️ Queue cleared."
+    },
+    "debug": {
+      "voiceTitle": "🔧 Voice Debug"
+    },
+    "eval": {
+      "resultTitle": "Eval Result",
+      "resultTitleError": "❌ Eval Result",
+      "resultTitleSuccess": "✅ Eval Result",
+      "typeLabel": "Type:",
+      "timeLabel": "Time:",
+      "pageLabel": "Page {{page}}/{{total}}",
+      "navigateHint": "• ⬅️ ➡️ Navigate • ❌ Delete",
+      "deleteHint": "• ❌ Delete",
+      "controlsExpired": "⌛ Controls expired"
+    },
+    "filter": {
+      "pickerTitle": "🎛️ Audio Filter Picker",
+      "nothingPlaying": "❌ Nothing is playing right now.",
+      "nothingPlayingInline": "*Nothing playing*",
+      "applyFailed": "❌ Failed to apply **{{filter}}**: `{{reason}}`\n\nMake sure your NodeLink node has filters enabled.",
+      "applied": "{{emoji}} **{{label}}** applied!",
+      "removed": "{{emoji}} **{{label}}** removed.",
+      "cleared": "🔇 Filters cleared — original audio restored.",
+      "pendingCleared": "Filter cleared. Original audio will be used on the next playable track.",
+      "pendingApplied": "{{label}} saved. It will apply on the next playable track.",
+      "pendingRemoved": "{{label}} removed. The next playable track will use the updated filters.",
+      "noFilterActive": "🔇 No filter active.",
+      "filtersActive": "✅ Filters active: **{{filters}}**.",
+      "reactToToggle": "💡 React again to toggle, or ❌ to close.",
+      "sessionTimedOut": "⌛ Session timed out.",
+      "pickerClosed": "👋 Filter picker closed.",
+      "footer": "Page {{page}}/{{total}} • React with a filter emoji to toggle it",
+      "activeLabel": "**← active**",
+      "closeHint": "❌ Close"
+    },
+    "forceleave": {
+      "channelNotFound": "❌ Channel not found.",
+      "wrongServer": "❌ This command has to be run in the same server as the voice channel.",
+      "playerNotFound": "❌ Player not found.",
+      "playerNotInit": "❌ Player not initialized."
+    },
+    "invite": {
+      "title": "Invite Remix",
+      "description": "Add Remix to your server directly from [FluxerList](<https://fluxerlist.com/bots/remix>).\n\nJoin our community at [fluxer.gg/remix](https://fluxer.gg/remix) for support, updates, and direct feedback."
+    },
+    "join": {
+      "channelNotFound": "Couldn't find the channel `{{channel}}`\nUse the help command to learn more about this. (`%help join`)",
+      "alreadyJoined": "Already joined <#{{channel}}>.",
+      "audioNodeConnecting": "⚠️ Audio node is still connecting — please try again in a few seconds.",
+      "joining": "⏳ Joining Channel...",
+      "joined": "✅ Successfully joined <#{{channel}}>",
+      "joinFailed": "❌ Failed to join: {{error}}",
+      "noVoiceChannel": "❌ You're not in a voice channel. Please join one first, or specify a channel: `{{prefix}}join <#channel>`",
+      "voiceChannelNotFound": "❌ Couldn't find that voice channel. Try using a mention like `<#channelid>` or the exact channel name.",
+      "autoLeaveInactive": "Left channel <#{{channel}}> because of inactivity.",
+      "autoLeaveInactive247": "Left channel <#{{channel}}> because of inactivity.\nIf you want me to stay in voice, use `{{prefix}}247 on/auto`"
+    },
+    "leave": {
+      "noVoiceChannel": "⚠️ Please join a voice channel first.",
+      "notInVoice": "I'm not in a voice channel.",
+      "joinChannel": "⚠️ Please join {{channel}} to use this command.",
+      "multipleChannels": "⚠️ I'm playing in multiple channels! Please join one of them:\n{{channels}}",
+      "playerNotInit": "Player not initialized.",
+      "leftRejoin247": "✅ Successfully Left — rejoining <#{{channel}}> in 5 seconds.\nTo disable 24/7 mode permanently, use `%247 off`.",
+      "left247On": "✅ Successfully Left.\nℹ️ 24/7 mode is **on** — bot won't rejoin automatically. Use `%play` to bring it back, or `%247 off` to fully disable."
+    },
+    "list": {
+      "empty": "📭 The queue is empty. Use `{{prefix}}play` to add songs!",
+      "emptyInline": "_Queue is empty._",
+      "nowPlaying": "🎵 **Now Playing**",
+      "header": "📋 **{{count}} tracks in queue** • ⏱️ `{{time}}`",
+      "upNext": " ▶",
+      "queueTitle": "🎧 Queue"
+    },
+    "login": {
+      "dashboardDisabled": "❌ The dashboard is not enabled on this bot.",
+      "success": "✅ Login succeeded! You can continue to the webpage now.",
+      "failed": "❌ Login failed! Reason: `{{error}}`. If this is an error and the issue persists, please contact a team member through the server in my description."
+    },
+    "loop": {
+      "invalidChoice": "'{{choice}}' is not valid. Use `song` or `queue`",
+      "songActivated": "🔂 Song loop activated",
+      "songDisabled": "➡️ Song loop disabled",
+      "queueActivated": "🔁 Queue loop activated",
+      "queueDisabled": "➡️ Queue loop disabled"
+    },
+    "lyrics": {
+      "nothingPlaying": "❌ There's nothing playing at the moment.",
+      "searching": "Loading frame Searching lyrics for **{{title}}**...",
+      "noLyrics": "❌ No lyrics available for **{{title}}**.\n\n💡 NodeLink lyrics plugin may not have this track. Try a popular song!",
+      "error": "❌ Error: {{error}}",
+      "syncedBadge": " ⏱️ Synced",
+      "nodeLinkFooter": "NodeLink • {{lines}} lines",
+      "controlsExpired": "⌛ Controls expired • NodeLink • {{lines}} lines",
+      "sessionClosed": "Session closed • NodeLink • {{lines}} lines"
+    },
+    "np": {
+      "loading": "⏳ Loading...",
+      "nothingPlaying": "There's nothing playing at the moment.",
+      "nowPlayingIn": "🔊 **Now playing in:** <#{{channel}}>",
+      "playing": "🎵 Playing: **[{{title}}]({{url}})** ({{elapsed}}/{{duration}})",
+      "volume": "Volume: {{volume}}%",
+      "queueLoop": "Queue loop: **{{state}}**",
+      "songLoop": "Song loop: **{{state}}**",
+      "streaming": "📻 Streaming **[{{title}}]({{url}})**",
+      "playingBy": "Playing **[{{title}}]({{url}})** by [{{artist}}]({{artistUrl}})"
+    },
+    "pause": {
+      "nothingPlaying": "❌ There's nothing playing at the moment!",
+      "alreadyPaused": "❌ Already paused!",
+      "paused": "⏸️ Paused"
+    },
+    "play": {
+      "searching": "🔍 Searching...",
+      "loading": "Loading...",
+      "loadingFailed": "**Failed to load that track.**",
+      "added": "Successfully added [{{title}}]({{url}}) to the queue.",
+      "addedPlaylist": "Successfully added **{{count}}** songs to the queue.",
+      "nowPlaying": "🎵 Now playing [{{title}}]({{url}}) by {{author}} in <#{{channel}}>",
+      "noResults": "**No results found for '{{query}}'.**",
+      "searchFailed": "**Search failed. Please try again.**",
+      "noData": "Could not load track - no data returned.",
+      "loadFailed": "Failed to load track.",
+      "unexpectedResult": "Unexpected result from track loader.",
+      "loadError": "An error occurred while loading the track.",
+      "searchingProvider": "Searching {{provider}}..."
+    },
+    "playnext": {
+      "searching": "🔍 Searching..."
+    },
+    "player": {
+      "title": "🎧 Music Player Controls",
+      "inactiveTitle": "🎧 Music Player (Inactive)",
+      "nowPlayingLabel": "Now Playing",
+      "volumeLabel": "🔊 Volume: `{{volume}}%`",
+      "queueLabel": "📋 Queue: `{{count}}` tracks",
+      "loopOff": "Loop: ❌ Off",
+      "loopSong": "Loop: 🎂 Song",
+      "loopQueue": "Loop: 🔁 Queue",
+      "filterOff": "Filter: 🔇 Off",
+      "filterActive": "Filter: {{emoji}} **{{label}}**",
+      "filterStacked": "Filter: 🔥 **{{label}}**",
+      "reactHint": "💡 *React to control playback*",
+      "sessionExpires": "⏱️ Session expires in {{minutes}}m of inactivity",
+      "requestedBy": "Requested by {{username}} • Controls active",
+      "controlsDisabled": "⌛ Controls disabled (react to re-enable)",
+      "sessionClosed": "Session closed{{reason}}",
+      "closedByUser": "👋 Player controls closed",
+      "startedPlaying": "▶️ Started playing",
+      "resumed": "▶️ Resumed",
+      "pausedState": "⏸️ Paused",
+      "stopped": "⏹️ Stopped",
+      "stoppedCleared": "⏹️ Stopped and cleared",
+      "shuffled": "🔀 Queue shuffled",
+      "added": "➕ Added: {{title}}",
+      "volumeChanged": "🔊 Volume: {{volume}}%",
+      "filtersCleared": "🔇 Filters cleared",
+      "filterApplied": "{{emoji}} Filter: **{{label}}** applied",
+      "filterStackedApplied": "🔥 Filters: **{{label}}** applied",
+      "songLoopEnabled": "🔂 Song loop enabled",
+      "queueLoopEnabled": "🔁 Queue loop enabled",
+      "loopDisabled": "❌ Loop disabled",
+      "alreadyPlaying": "▶️ Already playing",
+      "startingPlayback": "▶️ Starting playback",
+      "previousNotImplemented": "⏮️ Previous track (not implemented)",
+      "openingFilterPicker": "🎛️ Opening filter picker — check the filter menu above or use the `filter` command.",
+      "filterError": "⚠️ Filter error: {{error}}",
+      "fetchingLyrics": "📜 Fetching lyrics...",
+      "noLyricsFound": "❌ No lyrics found in NodeLink",
+      "lyricsDisplayed": "Lyrics displayed ({{lines}} lines, {{pages}} pages)",
+      "lyricsError": "⚠️ Lyrics error: {{error}}"
+    },
+    "radio": {
+      "noStations": "❌ No radio stations are configured.",
+      "stationsTitle": "📻 **Radio Stations (Page {{page}}/{{total}})**",
+      "timedOut": "📻 Radio selection timed out.",
+      "cancelled": "❌ Radio selection cancelled.",
+      "unknownStation": "❌ Unknown station `{{station}}`. Available: {{stations}}\n\nUse `%radio list` to browse.",
+      "nowPlaying": "📻 Now streaming _{{title}}_ by [{{author}}]({{url}}) in <#{{channel}}>",
+      "skipHint": "_Use `%skip` to stop the radio, or `%radio list` to switch stations._",
+      "prevNext": "⬅️ Previous   ➡️ Next   ❌ Cancel"
+    },
+    "reload": {
+      "indexNoReload": "❌ `index.mjs` cannot be hot-reloaded — do a full restart.",
+      "unknownCommand": "❌ Unknown command `{{name}}`",
+      "noFileTracked": "❌ No file tracked for `{{name}}`",
+      "noBuilder": "❌ No builder returned from `{{name}}`",
+      "reloaded": "✅ `{{name}}`",
+      "fileNotFound": "❌ File not found: `{{label}}`",
+      "moduleError": "❌ `{{label}}`: {{error}}",
+      "unknownTarget": "❌ Unknown target `{{target}}`.\nRun `%reload` with no arguments to see all reloadable targets.",
+      "availableTargetsTitle": "🔄 Reload — Available Targets",
+      "runHint": "Run `%reload <target>` or use a batch keyword:",
+      "batchKeywords": "`all` · `commands` · `src` · `audio`",
+      "resultsHeader": "✅ **{{ok}}** reloaded · ❌ **{{bad}}** failed"
+    },
+    "remove": {
+      "indexOutOfBounds": "Index out of bounds",
+      "removed": "Successfully removed **{{title}}** from the queue."
+    },
+    "resume": {
+      "nothingPlaying": "❌ There's nothing playing at the moment!",
+      "notPaused": "❌ Not paused!",
+      "resumed": "▶️ Resumed"
+    },
+    "search": {
+      "loadingResults": "⏳ Loading results...",
+      "searching": "Searching {{provider}}...",
+      "noResults": "❌ No results found.",
+      "resultsTitle": "{{provider}} — Search Results",
+      "reactHint": "React with a number to add to queue • ❌ to cancel • 30s timeout",
+      "cancelled": "❌ Cancelled.",
+      "added": "✅ Added [{{title}}]({{url}}) to the queue!",
+      "timedOut": "⏰ Search timed out.",
+      "sessionClosed": "Session closed"
+    },
+    "servers": {
+      "noServers": "_No servers found._",
+      "title": "🌐 Servers ({{count}})",
+      "pageTitle": "🌐 Servers ({{count}}) - Page {{page}}/{{total}}",
+      "listComplete": "List complete"
+    },
+    "settings": {
+      "unknownSetting": "❌ Unknown setting `{{setting}}`.",
+      "availableSettings": "Available: `{{settings}}`",
+      "setSuccess": "✅ **{{label}}** set to {{value}}",
+      "resetSuccess": "🔄 `{{setting}}` has been reset to its default: {{value}}",
+      "mustBeBool": "❌ `{{setting}}` must be a boolean.\nAccepted: `true`, `false`, `on`, `off`, `enable`, `disable`",
+      "volumeRange": "❌ Volume must be a number between **1** and **200**.",
+      "invalidLocale": "❌ `{{locale}}` is not a supported locale.\nAvailable locales: {{locales}}",
+      "prefixLength": "❌ Prefix must be between **1** and **5** characters.",
+      "prefixSpaces": "❌ Prefix cannot contain spaces.",
+      "invalid247": "❌ Invalid value `{{value}}` for 24/7 mode.\n\n**Valid options:**\n• `off` — bot leaves after inactivity\n• `on` — bot stays active in the saved channel list\n• `auto` — bot stays active and keeps the saved channel list ready for recovery",
+      "noServer": "❌ Could not detect your server.",
+      "noVoice247": "❌ You're not in a voice channel. Join one first, then run `%247 {{mode}}` again.",
+      "247Disabled": "✅ 24/7 mode **disabled** for <#{{channel}}>. Bot has left.",
+      "247DisabledAll": "✅ 24/7 mode **disabled** for all channels in this server.",
+      "247Set": "✅ 24/7 mode set to **{{mode}}** for <#{{channel}}>.\n{{summary}}",
+      "247Joined": "✅ 24/7 mode set to **{{mode}}** for <#{{channel}}>. Bot joined!\n{{summary}}",
+      "247JoinFailed": "✅ 24/7 mode saved for <#{{channel}}>, but failed to join: {{error}}\n{{summary}}",
+      "247Status": "24/7 mode: {{status}}",
+      "helpTitle": "⚙️ Settings Help",
+      "helpAvailable": "**Available settings:** {{settings}}",
+      "helpSubcommands": "**Subcommands:**\n• `{{prefix}}settings get` — list all current values\n• `{{prefix}}settings get <setting>` — view a single setting\n• `{{prefix}}settings set <setting> <value>` — change a setting\n• `{{prefix}}settings reset <setting>` — restore default value\n• `{{prefix}}settings help <setting>` — describe a setting",
+      "helpShortcuts": "**Shortcuts:** `{{prefix}}prefix`, `{{prefix}}247`",
+      "serverTitle": "⚙️ Server Settings",
+      "serverHeader": "Server: **{{name}}**",
+      "shortcutsHint": "Shortcuts: `{{prefix}}247`, `{{prefix}}prefix`\nUse `{{prefix}}settings help <setting>` to learn about any setting."
+    },
+    "shuffle": {
+      "emptyQueue": "There is nothing to shuffle in the queue.",
+      "shuffled": "🔀 Shuffled queue"
+    },
+    "skip": {
+      "nothingPlaying": "❌ There's nothing playing at the moment!",
+      "skipped": "⏭️ Skipped",
+      "skippedTrack": "⏭️ Skipped [{{title}}]({{url}})",
+      "skippedToPosition": "⏭️ Skipped to position {{position}}"
+    },
+    "stats": {
+      "title": "Remix Music Bot",
+      "servers": "📂  **Servers**",
+      "users": "👥  **Users**",
+      "players": "🎧  **Players**",
+      "ping": "🏓  **Ping**",
+      "uptime": "⏱️  **Uptime**",
+      "build": "🔧  **Build**",
+      "lastRestart": "🪛  **Last restart**",
+      "supportKofi": "☕ [Support us on Ko-fi](https://ko-fi.com/remixbot)",
+      "community": "💬 [Community](https://fluxer.gg/Remix)"
+    },
+    "support": {
+      "title": "💬 Support",
+      "description": "For anything regarding Remix, head over to our server:\n[Remix HQ](https://fluxer.gg/remix)\n\nIf you don't want to join, feel free to contact the team members listed in the server."
+    },
+    "test": {
+      "notInServer": "❌ Must be used in a server.",
+      "noOneInVoice": "No one is in voice.",
+      "title": "🎙️ Voice Channel Members",
+      "channelEntry": "🔊 **{{name}}**: {{count}} members"
+    },
+    "thumbnail": {
+      "nothingPlaying": "There's nothing playing at the moment.",
+      "noThumbnail": "No thumbnail available.",
+      "thumbnail": "Thumbnail of [{{title}}]({{url}}):"
+    },
+    "volume": {
+      "current": "🔊 Current volume: `{{volume}}%`",
+      "outOfRange": "❌ Volume must be between `0` and `{{max}}%`.",
+      "changed": "🔊 Volume changed to `{{volume}}%` for this session.",
+      "setPending": "Volume set to `{{volume}}%` — will apply when connected."
+    },
+    "volumedefault": {
+      "title": "🔊 Volume Settings",
+      "serverDefault": "• Server default: `{{volume}}%`",
+      "currentVolume": "• Current player volume: `{{volume}}%`",
+      "changeHint": "To change the default, use: `{{prefix}}volumedefault <0-{{max}}>`",
+      "noPermission": "⚠️ You need **Manage Server** permission to change the default.",
+      "noPermissionSet": "❌ You need **Manage Server** permission to set the server default volume.",
+      "outOfRange": "❌ Volume must be between `0` and `{{max}}%`.",
+      "saved": "🔊 Server default volume saved as `{{volume}}%`."
     }
   }
 }

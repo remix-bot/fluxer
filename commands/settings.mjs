@@ -25,8 +25,8 @@ const BOOL_FALSE = new Set(["false", "0", "no",  "off", "disable", "disabled"]);
 /** Settings whose values should be displayed as booleans */
 const BOOL_SETTINGS = new Set(["songAnnouncements"]);
 
-/** Valid locale codes */
-const VALID_LOCALES = new Set(["en", "ar-SA", "ckb", "de-DE", "pt-BR"]);
+/** Valid locale codes — populated from Locale instance at runtime */
+let VALID_LOCALES = new Set(["en"]);
 
 /** Volume constraints */
 const VOLUME_MIN = 1;
@@ -149,17 +149,13 @@ async function handle247(ctx, message, value) {
 
   if (!["off", "on", "auto"].includes(resolved)) {
     return message.reply(embed(
-        `❌ Invalid value \`${value}\` for 24/7 mode.\n\n` +
-        `**Valid options:**\n` +
-        `• \`off\` — bot leaves after inactivity\n` +
-        `• \`on\` — bot stays active in the saved channel list\n` +
-        `• \`auto\` — bot stays active and keeps the saved channel list ready for recovery`
+        ctx.t(message, "responses.settings.invalid247", { value })
     ));
   }
 
   // ── OFF ───────────────────────────────────────────────────────────────────
   if (resolved === "off") {
-    if (!guildId) return message.reply(embed("❌ Could not detect your server."));
+    if (!guildId) return message.reply(embed(ctx.t(message, "responses.settings.noServer")));
 
     const channelId = ctx.players.checkVoiceChannels(message);
     const channels  = get247Channels(set);
@@ -186,7 +182,7 @@ async function handle247(ctx, message, value) {
       const extra = remaining.length > 0
         ? `\nSaved channels left: ${remaining.map(ch => `<#${ch}>`).join(", ")}`
         : "";
-      return message.reply(embed(`✅ 24/7 mode **disabled** for <#${id}>. Bot has left.${extra}`));
+      return message.reply(embed(ctx.t(message, "responses.settings.247Disabled", { channel: id }) + extra));
     }
 
     // Not in a channel — disable all for this guild
@@ -202,16 +198,16 @@ async function handle247(ctx, message, value) {
         player.destroy();
       }
     }
-    return message.reply(embed("✅ 24/7 mode **disabled** for all channels in this server."));
+    return message.reply(embed(ctx.t(message, "responses.settings.247DisabledAll")));
   }
 
   // ── ON / AUTO ─────────────────────────────────────────────────────────────
-  if (!guildId) return message.reply(embed("❌ Could not detect your server."));
+  if (!guildId) return message.reply(embed(ctx.t(message, "responses.settings.noServer")));
 
   const channelId = ctx.players.checkVoiceChannels(message);
   if (!channelId) {
     return message.reply(embed(
-        `❌ You're not in a voice channel. Join one first, then run \`%247 ${resolved}\` again.`
+        ctx.t(message, "responses.settings.noVoice247", { mode: resolved })
     ));
   }
 
@@ -234,14 +230,14 @@ async function handle247(ctx, message, value) {
       cleanId(p?._channelId ?? "") === id && cleanId(p?._guildId ?? "") === cleanId(guildId)
     )
   ) {
-    return message.reply(embed(`✅ 24/7 mode set to ${modeLabel} for <#${id}>.\n${savedSummary}`));
+    return message.reply(embed(ctx.t(message, "responses.settings.247Set", { mode: modeLabel, channel: id, summary: savedSummary })));
   }
 
   try {
     await ctx._spawnPlayer(guildId, id);
-    return message.reply(embed(`✅ 24/7 mode set to ${modeLabel} for <#${id}>. Bot joined!\n${savedSummary}`));
+    return message.reply(embed(ctx.t(message, "responses.settings.247Joined", { mode: modeLabel, channel: id, summary: savedSummary })));
   } catch (e) {
-    return message.reply(embed(`✅ 24/7 mode saved for <#${id}>, but failed to join: ${e.message}\n${savedSummary}`));
+    return message.reply(embed(ctx.t(message, "responses.settings.247JoinFailed", { channel: id, error: e.message, summary: savedSummary })));
   }
 }
 
@@ -257,10 +253,7 @@ async function applySet(ctx, message, set, key, rawValue) {
   if (BOOL_SETTINGS.has(key)) {
     const bool = parseBool(rawValue);
     if (bool === null) {
-      return (
-          `❌ \`${key}\` must be a boolean.\n` +
-          `Accepted: \`true\`, \`false\`, \`on\`, \`off\`, \`enable\`, \`disable\``
-      );
+      return ctx.t(message, "responses.settings.mustBeBool", { setting: key });
     }
     set.set(key, bool);
     return null;
@@ -276,7 +269,7 @@ async function applySet(ctx, message, set, key, rawValue) {
   if (key === "volume") {
     const num = parseInt(rawValue, 10);
     if (isNaN(num) || num < VOLUME_MIN || num > VOLUME_MAX) {
-      return `❌ Volume must be a number between **${VOLUME_MIN}** and **${VOLUME_MAX}**.`;
+      return ctx.t(message, "responses.settings.volumeRange");
     }
     set.set(key, num);
     return null;
@@ -285,22 +278,26 @@ async function applySet(ctx, message, set, key, rawValue) {
   // Locale
   if (key === "locale") {
     if (!VALID_LOCALES.has(rawValue)) {
-      return (
-          `❌ \`${rawValue}\` is not a supported locale.\n` +
-          `Available locales: ${[...VALID_LOCALES].map(l => `\`${l}\``).join(", ")}`
-      );
+      return ctx.t(message, "responses.settings.invalidLocale", {
+          locale: rawValue,
+          locales: [...VALID_LOCALES].map(l => `\`${l}\``).join(", ")
+      });
     }
     set.set(key, rawValue);
+    // Invalidate locale cache so the new locale takes effect immediately
+    // without requiring a bot reboot.
+    const guildId = getGuildId(message);
+    if (guildId) ctx.locale.invalidateCache(guildId);
     return null;
   }
 
   // Prefix
   if (key === "prefix") {
     if (!rawValue || rawValue.length > 5) {
-      return `❌ Prefix must be between **1** and **5** characters.`;
+      return ctx.t(message, "responses.settings.prefixLength");
     }
     if (/\s/.test(rawValue)) {
-      return `❌ Prefix cannot contain spaces.`;
+      return ctx.t(message, "responses.settings.prefixSpaces");
     }
   }
 
@@ -322,7 +319,7 @@ async function handleShortcut(ctx, message, settingKey, valueTokens) {
   // GET (no value provided)
   if (valueTokens.length === 0) {
     if (settingKey === "stay_247") {
-      return message.reply(embed(`24/7 mode: ${format247Status(set)}`));
+      return message.reply(embed(ctx.t(message, "responses.settings.247Status", { status: format247Status(set) })));
     }
     const val = set.get(settingKey);
     return message.reply(embed(`\`${settingKey}\` → ${displayValue(settingKey, val)}`));
@@ -336,13 +333,19 @@ async function handleShortcut(ctx, message, settingKey, valueTokens) {
   // handle247 replies on its own
   if (settingKey !== "stay_247") {
     const val = set.get(settingKey);
-    return message.reply(embed(`✅ \`${settingKey}\` set to ${displayValue(settingKey, val)}`));
+    return message.reply(embed(ctx.t(message, "responses.settings.setSuccess", { label: settingKey, value: displayValue(settingKey, val) })));
   }
 }
 
 // ── Command definition ────────────────────────────────────────────────────────
 
 export const command = function() {
+  // Populate valid locales from the Locale instance so the list stays
+  // in sync when new locale files are added to storage/locales/bot/.
+  if (this.locale) {
+    VALID_LOCALES = this.locale.availableLocales();
+  }
+
   if (this.loader) {
     for (const [alias, settingKey] of Object.entries(SHORTCUTS)) {
       const builder = new CommandBuilder()
@@ -470,7 +473,7 @@ export async function run(message, data) {
     if (!this.settingsMgr.isOption(settingKey)) {
       const available = Object.keys(this.settingsMgr.defaults).join("`, `");
       return message.reply(embed(
-          `❌ Unknown setting \`${settingKey}\`.\nAvailable: \`${available}\``
+          this.t(message, "responses.settings.unknownSetting", { setting: settingKey }) + "\n" + this.t(message, "responses.settings.availableSettings", { settings: available })
       ));
     }
 
@@ -480,7 +483,7 @@ export async function run(message, data) {
     if (settingKey === "stay_247") return; // handle247 replied already
 
     const newVal = set.get(settingKey);
-    return message.reply(embed(`✅ **${prettifySettingLabel(settingKey)}** set to ${displayValue(settingKey, newVal)}`));
+    return message.reply(embed(this.t(message, "responses.settings.setSuccess", { label: prettifySettingLabel(settingKey), value: displayValue(settingKey, newVal) })));
   }
 
   // ── get ───────────────────────────────────────────────────────────────────
@@ -516,22 +519,26 @@ export async function run(message, data) {
         });
 
     return message.reply(embed(
-        `Server: **${guildName}**\n\n${lines.join("\n")}\n\n` +
-        `Shortcuts: \`${prefix}247\`, \`${prefix}prefix\`\n` +
-        `Use \`${prefix}settings help <setting>\` to learn about any setting.`,
-        { title: "⚙️ Server Settings", iconURL: iconUrl }
+        this.t(message, "responses.settings.serverHeader", { name: guildName }) + "\n\n" + lines.join("\n") + "\n\n" +
+        this.t(message, "responses.settings.shortcutsHint", { prefix }),
+        { title: this.t(message, "responses.settings.serverTitle"), iconURL: iconUrl }
     ));
   }
 
   // ── reset ─────────────────────────────────────────────────────────────────
   if (cmd === "resetSettings") {
     if (!this.settingsMgr.isOption(settingKey)) {
-      return message.reply(embed(`❌ Unknown setting \`${settingKey}\`.`));
+      return message.reply(embed(this.t(message, "responses.settings.unknownSetting", { setting: settingKey })));
     }
     set.reset(settingKey);
+    // Invalidate locale cache if the locale setting was reset
+    if (settingKey === "locale") {
+      const guildId = getGuildId(message);
+      if (guildId) this.locale.invalidateCache(guildId);
+    }
     const def = set.get(settingKey);
     return message.reply(embed(
-        `🔄 \`${settingKey}\` has been reset to its default: ${displayValue(settingKey, def)}`
+        this.t(message, "responses.settings.resetSuccess", { setting: settingKey, value: displayValue(settingKey, def) })
     ));
   }
 
@@ -543,15 +550,10 @@ export async function run(message, data) {
       const keys    = Object.keys(this.settingsMgr.defaults);
       const keyList = keys.map(k => `\`${k}\``).join(", ");
       return message.reply(embed(
-          `**⚙️ Settings Help**\n\n` +
-          `**Available settings:** ${keyList}\n\n` +
-          `**Subcommands:**\n` +
-          `• \`${pfx}settings get\` — list all current values\n` +
-          `• \`${pfx}settings get <setting>\` — view a single setting\n` +
-          `• \`${pfx}settings set <setting> <value>\` — change a setting\n` +
-          `• \`${pfx}settings reset <setting>\` — restore default value\n` +
-          `• \`${pfx}settings help <setting>\` — describe a setting\n\n` +
-          `**Shortcuts:** \`${pfx}prefix\`, \`${pfx}247\``,
+          this.t(message, "responses.settings.helpTitle") + "\n\n" +
+          this.t(message, "responses.settings.helpAvailable", { settings: keyList }) + "\n\n" +
+          this.t(message, "responses.settings.helpSubcommands", { prefix: pfx }) + "\n\n" +
+          this.t(message, "responses.settings.helpShortcuts", { prefix: pfx }),
           { title: "⚙️ Settings Help" }
       ));
     }

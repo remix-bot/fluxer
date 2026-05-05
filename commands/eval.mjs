@@ -145,17 +145,20 @@ export async function run(msg, data) {
 
   // Helper to build the specific embed page
   const buildPageContent = (pageIdx, expired = false) => {
-    const icon = isError ? "❌" : "✅";
-    const title = `${icon} Eval Result`;
+    const title = isError
+        ? this.t(msg, "responses.eval.resultTitleError")
+        : this.t(msg, "responses.eval.resultTitleSuccess");
 
     // Embed description includes the metadata and the codeblock
-    const desc = `**Type:** \`${type}\` • **Time:** \`${elapsed}ms\`\n\`\`\`js\n${chunks[pageIdx]}\n\`\`\``;
+    const typeLabel = this.t(msg, "responses.eval.typeLabel");
+    const timeLabel = this.t(msg, "responses.eval.timeLabel");
+    const desc = `**${typeLabel}** \`${type}\` • **${timeLabel}** \`${elapsed}ms\`\n\`\`\`js\n${chunks[pageIdx]}\n\`\`\``;
 
     // Customize footer based on state
-    let footerText = `Page ${pageIdx + 1}/${totalPages}`;
-    if (expired) footerText = "⌛ Controls expired";
-    else if (totalPages > 1) footerText += " • ⬅️ ➡️ Navigate • ❌ Delete";
-    else footerText += " • ❌ Delete";
+    let footerText = this.t(msg, "responses.eval.pageLabel", { page: pageIdx + 1, total: totalPages });
+    if (expired) footerText = this.t(msg, "responses.eval.controlsExpired");
+    else if (totalPages > 1) footerText += " " + this.t(msg, "responses.eval.navigateHint");
+    else footerText += " " + this.t(msg, "responses.eval.deleteHint");
 
     const embed = new EmbedBuilder()
         .setColor(isError ? "#ff0000" : getGlobalColor()) // Red if error, default otherwise

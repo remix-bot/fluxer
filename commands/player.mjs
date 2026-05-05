@@ -110,10 +110,10 @@ export async function run(msg) {
 
     const nowPlaying = current
         ? `[${Utils.truncate(current.title, 45)}](${current.spotifyUrl || current.url})`
-        : "*Nothing playing*";
+        : this.t(msg, "responses.filter.nothingPlayingInline");
 
     const description = [
-      `${statusEmoji} **Now Playing**`,
+      `${statusEmoji} ${this.t(msg, "responses.player.nowPlayingLabel")}`,
       `${nowPlaying}`,
       ``,
       `${progressBar}`,
@@ -122,9 +122,9 @@ export async function run(msg) {
       `🔊 Volume: \`${volPercent}%\` ${volumeBar}`,
       `📋 Queue: \`${queueSize}\` tracks | Loop: ${loopStatus} | Filter: ${filterStatus}`,
       ``,
-      state.message ? `💬 *${state.message}*` : "💡 *React to control playback*",
+      state.message ? `💬 *${state.message}*` : `💡 *${this.t(msg, "responses.player.reactHint")}*`,
       ``,
-      `⏱️ Session expires in ${Math.ceil(timeout / 60000)}m of inactivity`
+      this.t(msg, "responses.player.sessionExpires", { minutes: Math.ceil(timeout / 60000) })
     ].join("\n");
 
     const avatarUrl = typeof msg.author?.avatarURL === "function"
@@ -133,10 +133,10 @@ export async function run(msg) {
 
     const builder = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle("🎧 Music Player Controls")
+        .setTitle(this.t(msg, "responses.player.title"))
         .setDescription(description)
         .setFooter({
-          text: `Requested by ${msg.author?.username || "Unknown"} • Controls active`,
+          text: this.t(msg, "responses.player.requestedBy", { username: msg.author?.username || "Unknown" }),
           iconURL: avatarUrl
         });
     if (typeof builder.setTimestamp === "function") builder.setTimestamp();
@@ -181,8 +181,8 @@ export async function run(msg) {
     clearTimeout(emojiRemoveTimeout);
     emojiRemoveTimeout = setTimeout(async () => {
       await clearReactions();
-      const disabledEmbed = buildEmbed({ message: "⌛ Controls disabled (react to re-enable)" });
-      disabledEmbed.footer = { text: "Controls expired • React to refresh" };
+      const disabledEmbed = buildEmbed({ message: this.t(msg, "responses.player.controlsDisabled") });
+      disabledEmbed.footer = { text: this.t(msg, "responses._common.controlsExpired") + " • React to refresh" };
       await message.edit({ embeds: [disabledEmbed] }).catch(() => {});
     }, EMOJI_REMOVE_TIMEOUT);
   };
@@ -236,15 +236,15 @@ export async function run(msg) {
     await clearReactions();
 
     const closedEmbed = buildEmbed({
-      message: `Session closed${reason !== "timeout" ? ` • ${reason}` : " due to inactivity"}`
+      message: this.t(msg, "responses.player.sessionClosed", { reason: reason !== "timeout" ? ` • ${reason}` : "" })
     });
     closedEmbed.color  = getGlobalColor();
-    closedEmbed.footer = { text: "Session ended" };
-    closedEmbed.title  = "🎧 Music Player (Inactive)";
+    closedEmbed.footer = { text: this.t(msg, "responses._common.sessionEnded") };
+    closedEmbed.title  = this.t(msg, "responses.player.inactiveTitle");
 
     await message.edit({
       embeds: [closedEmbed],
-      content: reason === "user" ? "👋 Player controls closed" : undefined
+      content: reason === "user" ? this.t(msg, "responses.player.closedByUser") : undefined
     }).catch(() => {});
   };
 
@@ -259,21 +259,21 @@ export async function run(msg) {
     }
   }, this.config?.timers?.playerUpdateInterval ?? 5000);
 
-  const onStartPlay  = ()       => refresh({ message: "▶️ Started playing" });
-  const onPlayback   = (playing) => refresh({ message: playing ? "▶️ Resumed" : "⏸️ Paused" });
-  const onStopPlay   = ()       => refresh({ message: "⏹️ Stopped" });
+  const onStartPlay  = ()       => refresh({ message: this.t(msg, "responses.player.startedPlaying") });
+  const onPlayback   = (playing) => refresh({ message: playing ? this.t(msg, "responses.player.resumed") : this.t(msg, "responses.player.pausedState") });
+  const onStopPlay   = ()       => refresh({ message: this.t(msg, "responses.player.stopped") });
   const onQueue      = (e)      => {
-    if (e.type === "shuffle") refresh({ message: "🔀 Queue shuffled" });
-    if (e.type === "add") refresh({ message: `➕ Added: ${Utils.truncate(e.data.data.title, 30)}` });
+    if (e.type === "shuffle") refresh({ message: this.t(msg, "responses.player.shuffled") });
+    if (e.type === "add") refresh({ message: this.t(msg, "responses.player.added", { title: Utils.truncate(e.data.data.title, 30) }) });
   };
-  const onVolume     = (v)      => refresh({ message: `🔊 Volume: ${Math.round(v * 100)}%` });
+  const onVolume     = (v)      => refresh({ message: this.t(msg, "responses.player.volumeChanged", { volume: Math.round(v * 100) }) });
   const onFilter     = (f)      => {
     if (!f) {
-      refresh({ message: "🔇 Filters cleared" });
+      refresh({ message: this.t(msg, "responses.player.filtersCleared") });
     } else if (f.label.includes("+")) {
-      refresh({ message: `🔥 Filters: **${f.label}** applied` });
+      refresh({ message: this.t(msg, "responses.player.filterStackedApplied", { label: f.label }) });
     } else {
-      refresh({ message: `${f.emoji ?? "🎛️"} Filter: **${f.label}** applied` });
+      refresh({ message: this.t(msg, "responses.player.filterApplied", { emoji: f.emoji ?? "🎛️", label: f.label }) });
     }
   };
   const onAutoLeave  = ()       => closeSession("disconnected");
@@ -299,7 +299,7 @@ export async function run(msg) {
     try {
       switch (control.action) {
         case "previous":
-          reply = "⏮️ Previous track (not implemented)";
+          reply = this.t(msg, "responses.player.previousNotImplemented");
           break;
 
         case "resume":
@@ -307,9 +307,9 @@ export async function run(msg) {
             reply = player.resume();
           } else if (!player.queue.getCurrent() && !player.queue.isEmpty()) {
             player.playNext();
-            reply = "▶️ Starting playback";
+            reply = this.t(msg, "responses.player.startingPlayback");
           } else {
-            reply = "▶️ Already playing";
+            reply = this.t(msg, "responses.player.alreadyPlaying");
           }
           break;
 
@@ -320,7 +320,7 @@ export async function run(msg) {
         case "stop":
           await player._stopMediaPlayer();
           player.queue.reset();
-          reply = "⏹️ Stopped and cleared";
+          reply = this.t(msg, "responses.player.stoppedCleared");
           break;
 
         case "skip":
@@ -332,14 +332,14 @@ export async function run(msg) {
           const currentSongLoop = player.queue.songLoop;
           if (!currentLoop && !currentSongLoop) {
             player.queue.setSongLoop(true);
-            reply = "🔂 Song loop enabled";
+            reply = this.t(msg, "responses.player.songLoopEnabled");
           } else if (currentSongLoop) {
             player.queue.setSongLoop(false);
             player.queue.setLoop(true);
-            reply = "🔁 Queue loop enabled";
+            reply = this.t(msg, "responses.player.queueLoopEnabled");
           } else {
             player.queue.setLoop(false);
-            reply = "❌ Loop disabled";
+            reply = this.t(msg, "responses.player.loopDisabled");
           }
           break;
         }
@@ -361,18 +361,18 @@ export async function run(msg) {
         }
 
         case "filter":
-          reply = "🎛️ Opening filter picker — check the filter menu above or use the `filter` command.";
+          reply = this.t(msg, "responses.player.openingFilterPicker");
           shouldUpdate = true;
           try {
             const { run: runFilter } = await import("./filter.mjs");
             runFilter.call(this, msg);
           } catch (err) {
-            reply = `⚠️ Filter error: ${Utils.truncate(err.message, 50)}`;
+            reply = this.t(msg, "responses.player.filterError", { error: Utils.truncate(err.message, 50) });
           }
           break;
 
         case "lyrics":
-          reply = "📜 Fetching lyrics...";
+          reply = this.t(msg, "responses.player.fetchingLyrics");
           refresh({ message: reply });
 
           try {
@@ -384,7 +384,7 @@ export async function run(msg) {
 
             const lyricsResult = await player.lyrics();
             if (!lyricsResult) {
-              reply = "❌ No lyrics found in NodeLink";
+              reply = this.t(msg, "responses.player.noLyricsFound");
               shouldUpdate = true;
               break;
             }
@@ -483,10 +483,10 @@ export async function run(msg) {
               resetLyricsTimer();
             }
 
-            reply = `Lyrics displayed (${totalLines} lines, ${totalPages} pages)`;
+            reply = this.t(msg, "responses.player.lyricsDisplayed", { lines: totalLines, pages: totalPages });
 
           } catch (err) {
-            reply = `⚠️ Lyrics error: ${Utils.truncate(err.message, 50)}`;
+            reply = this.t(msg, "responses.player.lyricsError", { error: Utils.truncate(err.message, 50) });
           }
           shouldUpdate = true;
           break;

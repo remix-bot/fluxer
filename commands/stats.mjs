@@ -89,28 +89,28 @@ function getLivePlayerCount(playerMap) {
 
 // ── Embed builder ─────────────────────────────────────────────────────────────
 
-function buildEmbed({ guildCount, userCount, playerCount, ping, uptime, comHash, comLink, reason, footer, loading }) {
+function buildEmbed(t, msg, { guildCount, userCount, playerCount, ping, uptime, comHash, comLink, reason, footer, loading }) {
   const num = (v) => Utils.formatNumber(v);
   const ld  = (v) => loading ? "..." : v;
 
   const description = [
-    `📂  **Servers** — \`${num(guildCount)}\``,
-    `👥  **Users** — \`${ld(num(userCount))}\``,
-    `🎧  **Players** — \`${num(playerCount)}\``,
-    `🏓  **Ping** — \`${ld(`${num(ping)}ms`)}\``,
-    `⏱️  **Uptime** — \`${uptime}\``,
-    `🔧  **Build** — [\`${comHash}\`](${comLink})`,
-    reason ? `🪛  **Last restart** — \`${reason}\`` : null,
+    `${t(msg, "responses.stats.servers")} — \`${num(guildCount)}\``,
+    `${t(msg, "responses.stats.users")} — \`${ld(num(userCount))}\``,
+    `${t(msg, "responses.stats.players")} — \`${num(playerCount)}\``,
+    `${t(msg, "responses.stats.ping")} — \`${ld(`${num(ping)}ms`)}\``,
+    `${t(msg, "responses.stats.uptime")} — \`${uptime}\``,
+    `${t(msg, "responses.stats.build")} — [\`${comHash}\`](${comLink})`,
+    reason ? `${t(msg, "responses.stats.lastRestart")} — \`${reason}\`` : null,
     ``,
-    `☕ [Support us on Ko-fi](https://ko-fi.com/remixbot)`,
-    `💬 [Community](https://fluxer.gg/Remix)`,
+    t(msg, "responses.stats.supportKofi"),
+    t(msg, "responses.stats.community"),
   ].filter(l => l !== null).join("\n");
 
   const builder = new EmbedBuilder()
       .setColor(getGlobalColor())
-      .setAuthor({ name: "Remix Music Bot" })
+      .setAuthor({ name: t(msg, "responses.stats.title") })
       .setDescription(description)
-      .setFooter({ text: footer || "Remix Music Bot" });
+      .setFooter({ text: footer || t(msg, "responses.stats.title") });
 
   if (typeof builder.setTimestamp === "function") builder.setTimestamp();
   return builder;
@@ -134,13 +134,13 @@ export async function run(message) {
   // Measure real round-trip latency
   const start = Date.now();
   const msg = await message.reply({
-    embeds: [buildEmbed({ ...shared, userCount: hasCached ? cachedUserCount : 0, ping: 0, loading: !hasCached })]
+    embeds: [buildEmbed((...a) => this.t(...a), message, { ...shared, userCount: hasCached ? cachedUserCount : 0, ping: 0, loading: !hasCached })]
   });
   const ping = Date.now() - start;
 
   const users = await getUserCount(this.client);
 
   await msg.edit({
-    embeds: [buildEmbed({ ...shared, userCount: users, ping, loading: false })]
+    embeds: [buildEmbed((...a) => this.t(...a), message, { ...shared, userCount: users, ping, loading: false })]
   }).catch((err) => console.error("[stats] editEmbed failed:", err));
 }

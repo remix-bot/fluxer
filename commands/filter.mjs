@@ -198,26 +198,26 @@ export const command = new CommandBuilder()
     .addAliases("filters", "fx", "effect");
 
 // ── Build page embed ──────────────────────────────────────────────────────────
-function buildPageEmbed(page, activeKeys, current) {
+function buildPageEmbed(t, msg, page, activeKeys, current) {
   const totalPages = Math.ceil(FILTERS.length / PAGE_SIZE);
   const start      = page * PAGE_SIZE;
   const pageItems  = FILTERS.slice(start, start + PAGE_SIZE);
 
   const trackLine = current
       ? `🎵 **${Utils.truncate(current.title, 45)}**`
-      : "*Nothing playing*";
+      : t(msg, "responses.filter.nothingPlayingInline");
 
   // Show active filter indicators
   const activeSet = new Set(activeKeys);
   const lines = pageItems.map(f => {
     const isActive = activeSet.has(f.key);
-    const active = isActive ? " **← active**" : "";
+    const active = isActive ? " " + t(msg, "responses.filter.activeLabel") : "";
     return `${f.emoji} **${f.label}**${active} — *${f.desc}*`;
   });
 
   const navHint = totalPages > 1
-      ? `\n\n${PREV_EMOJI} Prev  ${NEXT_EMOJI} Next  ${CANCEL_EMOJI} Close`
-      : `\n\n${CANCEL_EMOJI} Close`;
+      ? `\n\n${PREV_EMOJI} Prev  ${NEXT_EMOJI} Next  ${CANCEL_EMOJI} ${t(msg, "responses.filter.closeHint")}`
+      : `\n\n${CANCEL_EMOJI} ${t(msg, "responses.filter.closeHint")}`;
 
   // Build active summary line
   let activeSummary = "";
@@ -231,14 +231,14 @@ function buildPageEmbed(page, activeKeys, current) {
 
   return new EmbedBuilder()
       .setColor(getGlobalColor())
-      .setAuthor({ name: "🎛️ Audio Filter Picker" })
+      .setAuthor({ name: t(msg, "responses.filter.pickerTitle") })
       .setDescription(
           `${trackLine}\n${activeSummary}\n` +
           lines.join("\n") +
           navHint
       )
       .setFooter({
-        text: `Page ${page + 1}/${totalPages} • React with a filter emoji to toggle it`
+        text: t(msg, "responses.filter.footer", { page: page + 1, total: totalPages })
       })
       ;
 }
@@ -265,7 +265,7 @@ export async function run(msg) {
 
   const current = player.queue.getCurrent();
   const menuMsg = await msg.reply({
-    embeds: [buildPageEmbed(page, activeKeys, current)]
+    embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, current)]
   });
   if (!menuMsg?.message) return;
 
@@ -313,13 +313,13 @@ export async function run(msg) {
 
     const closedEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setAuthor({ name: "🎛️ Audio Filter Picker" })
+        .setAuthor({ name: this.t(msg, "responses.filter.pickerTitle") })
         .setDescription(
             activeKeys.length > 0
-                ? `✅ Filters active: **${activeKeys.map(k => FILTERS.find(f => f.key === k)?.label ?? k).join(" + ")}**.\n\n${reason}`
-                : `🔇 No filter active.\n\n${reason}`
+                ? this.t(msg, "responses.filter.filtersActive", { filters: activeKeys.map(k => FILTERS.find(f => f.key === k)?.label ?? k).join(" + ") }) + `\n\n${reason}`
+                : `${this.t(msg, "responses.filter.noFilterActive")}\n\n${reason}`
         )
-        .setFooter({ text: "Session ended" })
+        .setFooter({ text: this.t(msg, "responses._common.sessionEnded") })
         ;
 
     await menuMsg.edit({ embeds: [closedEmbed] }).catch(() => {});
@@ -327,7 +327,7 @@ export async function run(msg) {
 
   const resetTimer = () => {
     clearTimeout(sessionTimer);
-    sessionTimer = setTimeout(() => close("⌛ Session timed out."), SESSION_MS);
+    sessionTimer = setTimeout(() => close(this.t(msg, "responses.filter.sessionTimedOut")), SESSION_MS);
   };
 
   const allPossibleEmojis = [...new Set([
@@ -345,7 +345,7 @@ export async function run(msg) {
 
     // ── Navigation ──────────────────────────────────────────────────────────
     if (emoji === CANCEL_EMOJI) {
-      return close("👋 Filter picker closed.");
+      return close(this.t(msg, "responses.filter.pickerClosed"));
     }
 
     if (emoji === PREV_EMOJI) {
@@ -356,7 +356,7 @@ export async function run(msg) {
         await addReactions(page);
       }
       await menuMsg.edit({
-        embeds: [buildPageEmbed(page, activeKeys, player.queue.getCurrent())]
+        embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, player.queue.getCurrent())]
       }).catch(() => {});
       return;
     }
@@ -369,7 +369,7 @@ export async function run(msg) {
         await addReactions(page);
       }
       await menuMsg.edit({
-        embeds: [buildPageEmbed(page, activeKeys, player.queue.getCurrent())]
+        embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, player.queue.getCurrent())]
       }).catch(() => {});
       return;
     }
@@ -382,16 +382,16 @@ export async function run(msg) {
     const previousActiveKeys = [...activeKeys];
     if (!track && false) { // pending filters are allowed; keep old fallback block unreachable
       await menuMsg.edit({
-        embeds: [buildPageEmbed(page, activeKeys, null)]
+        embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, null)]
       }).catch(() => {});
       const errEmbed = new EmbedBuilder()
           .setColor(getGlobalColor())
-          .setDescription("❌ Nothing is playing right now.")
+          .setDescription(this.t(msg, "responses.filter.nothingPlaying"))
           ;
       await menuMsg.edit({ embeds: [errEmbed] }).catch(() => {});
       await Utils.sleep(2000);
       await menuMsg.edit({
-        embeds: [buildPageEmbed(page, activeKeys, null)]
+        embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, null)]
       }).catch(() => {});
       return;
     }
@@ -426,14 +426,13 @@ export async function run(msg) {
       const errEmbed = new EmbedBuilder()
           .setColor(getGlobalColor())
           .setDescription(
-              `❌ Failed to apply **${filter.label}**: \`${reason}\`\n\n` +
-              `Make sure your NodeLink node has filters enabled.`
+              this.t(msg, "responses.filter.applyFailed", { filter: filter.label, reason })
           )
           ;
       await menuMsg.edit({ embeds: [errEmbed] }).catch(() => {});
       await Utils.sleep(3000);
       await menuMsg.edit({
-        embeds: [buildPageEmbed(page, activeKeys, track)]
+        embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, track)]
       }).catch(() => {});
       return;
     }
@@ -443,22 +442,22 @@ export async function run(msg) {
 
     const successMsg = pending
         ? (filter.key === "off"
-            ? "Filter cleared. Original audio will be used on the next playable track."
+            ? this.t(msg, "responses.filter.pendingCleared")
             : activeKeys.includes(filter.key)
-                ? `${filter.label} saved. It will apply on the next playable track.`
-                : `${filter.label} removed. The next playable track will use the updated filters.`)
+                ? this.t(msg, "responses.filter.pendingApplied", { label: filter.label })
+                : this.t(msg, "responses.filter.pendingRemoved", { label: filter.label }))
         : filter.key === "off"
-        ? "🔇 Filters cleared — original audio restored."
+        ? this.t(msg, "responses.filter.cleared")
         : activeKeys.includes(filter.key)
-            ? `${filter.emoji} **${filter.label}** applied!`
-            : `${filter.emoji} **${filter.label}** removed.`;
+            ? this.t(msg, "responses.filter.applied", { emoji: filter.emoji, label: filter.label })
+            : this.t(msg, "responses.filter.removed", { emoji: filter.emoji, label: filter.label });
 
     const confirmEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
         .setDescription(
             `${successMsg}\n\n` +
             `*${filter.desc}*\n\n` +
-            `💡 React again to toggle, or ${CANCEL_EMOJI} to close.`
+            `💡 ${this.t(msg, "responses.filter.reactToToggle")}`
         )
         ;
 
@@ -468,7 +467,7 @@ export async function run(msg) {
     // Restore picker (session stays open)
     if (!settled) {
       await menuMsg.edit({
-        embeds: [buildPageEmbed(page, activeKeys, player.queue.getCurrent())]
+        embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, player.queue.getCurrent())]
       }).catch(() => {});
     }
   });

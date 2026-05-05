@@ -24,7 +24,7 @@ export async function run(message, data) {
   const totalTracks = p.queue.size();
 
   if (!current && totalTracks === 0) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("📭 The queue is empty. Use `%play` to add songs!");
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.list.empty", { prefix: "%" }));
     return message.reply({ embeds: [embed] });
   }
 
@@ -54,7 +54,7 @@ export async function run(message, data) {
       if (title.length > 50) title = title.slice(0, 47) + "...";
       const titleFmt = link ? `[${title}](${link})` : title;
 
-      desc += `\n🎵 **Now Playing**\n`;
+      desc += "\n" + this.t(message, "responses.list.nowPlaying") + "\n";
       desc += `${titleFmt} • \`${elapsed} / ${total}\`\n`;
     }
 
@@ -62,7 +62,7 @@ export async function run(message, data) {
 
     // ── Queue list ────────────────────────────────────────────────────────
     if (totalTracks === 0) {
-      desc += "_Queue is empty._";
+      desc += this.t(message, "responses.list.emptyInline");
     } else {
       const { items, start } = p.queue.getPage(safePage, PAGE_SIZE);
 
@@ -82,7 +82,7 @@ export async function run(message, data) {
 
     return new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setAuthor({ name: "🎧 Queue" })
+        .setAuthor({ name: this.t(message, "responses.list.queueTitle") })
         .setDescription(desc.trim())
         .setFooter({ text: `Page ${safePage}/${totalPages} • ${loopState}` })
         ;

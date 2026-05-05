@@ -11,11 +11,9 @@ export const command = new CommandBuilder()
 export function run(msg) {
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setTitle("💬 Support")
+    .setTitle(this.t(msg, "responses.support.title"))
     .setDescription(
-      "For anything regarding Remix, head over to our server:\n" +
-      "[Remix HQ](https://fluxer.gg/remix)\n\n" +
-      "If you don't want to join, feel free to contact the team members listed in the server."
+      this.t(msg, "responses.support.description")
     )
     ;
   msg.reply({ embeds: [embed] });

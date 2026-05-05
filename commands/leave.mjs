@@ -23,7 +23,7 @@ export async function run(msg) {
       ?? msg.message?.serverId;
 
   const userChannelId = this.players.checkVoiceChannels(msg);
-  if (!userChannelId) return msg.reply(embed("⚠️ Please join a voice channel first."));
+  if (!userChannelId) return msg.reply(embed(this.t(msg, "responses.leave.noVoiceChannel")));
 
   const cid = String(userChannelId).replace(/\D/g, "");
   const cleanGuildId = String(guildId ?? "").replace(/\D/g, "");
@@ -44,15 +44,14 @@ export async function run(msg) {
       return liveId ? `<#${liveId}>` : "`unknown voice channel`";
     });
 
-    if (guildChannels.length === 0) return msg.reply(embed("I'm not in a voice channel."));
-    if (guildChannels.length === 1) return msg.reply(embed(`⚠️ Please join ${guildChannels[0]} to use this command.`));
+    if (guildChannels.length === 0) return msg.reply(embed(this.t(msg, "responses.leave.notInVoice")));
+    if (guildChannels.length === 1) return msg.reply(embed(this.t(msg, "responses.leave.joinChannel", { channel: guildChannels[0] })));
     return msg.reply(embed(
-        `⚠️ I'm playing in multiple channels! Please join one of them:\n` +
-        guildChannels.map(c => `• ${c}`).join("\n")
+        this.t(msg, "responses.leave.multipleChannels", { channels: guildChannels.map(c => `• ${c}`).join("\n") })
     ));
   }
 
-  if (!player?.connection) return msg.reply(embed("Player not initialized."));
+  if (!player?.connection) return msg.reply(embed(this.t(msg, "responses.leave.playerNotInit")));
   const activeChannelId = String(player._channelId ?? cid).replace(/\D/g, "") || cid;
   const homeChannelId = String(player._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
 
@@ -74,7 +73,7 @@ export async function run(msg) {
     player.destroy();
 
     if (mode === "auto") {
-      msg.reply(embed(`✅ Successfully Left — rejoining <#${cid}> in 5 seconds.\nTo disable 24/7 mode permanently, use \`%247 off\`.`));
+      msg.reply(embed(this.t(msg, "responses.leave.leftRejoin247", { channel: cid })));
       const leave247Delay = this.config?.timers?.leave247RejoinDelay ?? 5000;
       setTimeout(() => {
         if (this._spawnPlayer) {
@@ -84,7 +83,7 @@ export async function run(msg) {
         }
       }, leave247Delay);
     } else {
-      msg.reply(embed(`✅ Successfully Left.\nℹ️ 24/7 mode is **on** — bot won't rejoin automatically. Use \`%play\` to bring it back, or \`%247 off\` to fully disable.`));
+      msg.reply(embed(this.t(msg, "responses.leave.left247On")));
     }
   } else {
     await this.leaveChannel(activeChannelId, guildId, msg);

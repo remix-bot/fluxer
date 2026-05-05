@@ -29,7 +29,7 @@ export const command = function() {
 
 export async function run(msg, data) {
   const radios = this.config.radio;
-  if (!radios?.length) return msg.reply(mkEmbed("❌ No radio stations are configured."));
+  if (!radios?.length) return msg.reply(mkEmbed(this.t(msg, "responses.radio.noStations")));
 
   const input = (data.get("station")?.value ?? "").trim().toLowerCase();
 
@@ -47,8 +47,7 @@ export async function run(msg, data) {
         desc += `${NUMBER_EMOJIS[i]} **${r.detailedName}** (\`${r.name}\`)\n`;
         desc += `   ${r.description.replaceAll("\n", "\n   ")}\n\n`;
       });
-      desc += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      desc += `${PREV_EMOJI} Previous   ${NEXT_EMOJI} Next   ${CANCEL_EMOJI} Cancel`;
+      desc += `⬅️ Previous   ➡️ Next   ❌ Cancel`;
 
       return { payload: mkEmbed(desc), pickable };
     };
@@ -78,7 +77,7 @@ export async function run(msg, data) {
       settled = true;
       unobserve();
       clearReactions().catch(() => {});
-      listMsg.edit(mkEmbed("📻 Radio selection timed out.")).catch(() => {});
+      listMsg.edit(mkEmbed(this.t(msg, "responses.radio.timedOut"))).catch(() => {});
     }, 60_000);
 
     const normalize = (s) => s.replace(/\uFE0F/g, "");
@@ -92,7 +91,7 @@ export async function run(msg, data) {
         clearTimeout(timeout);
         unobserve();
         await clearReactions();
-        listMsg.edit(mkEmbed("❌ Radio selection cancelled.")).catch(() => {});
+        listMsg.edit(mkEmbed(this.t(msg, "responses.radio.cancelled"))).catch(() => {});
         return;
       }
       if (emoji === normalize(NEXT_EMOJI)) page = (page + 1) % totalPages;
@@ -121,7 +120,7 @@ export async function run(msg, data) {
     const radio = radios.find(r => r.name.toLowerCase() === input);
     if (!radio) {
       const names = radios.map(r => `\`${r.name}\``).join(", ");
-      return msg.reply(mkEmbed(`❌ Unknown station \`${input}\`. Available: ${names}\n\nUse \`%radio list\` to browse.`));
+      return msg.reply(mkEmbed(this.t(msg, "responses.radio.unknownStation", { station: input, stations: names })));
     }
     return playStation(this, msg, radio);
   }

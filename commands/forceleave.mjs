@@ -25,12 +25,12 @@ function cleanId(value) {
 export async function run(msg, data) {
   const cid = cleanId(data.get("channelId").value);
   const targetChannel = this.client.channels.get(cid);
-  if (!targetChannel) return msg.reply(embed("❌ Channel not found."));
+  if (!targetChannel) return msg.reply(embed(this.t(msg, "responses.forceleave.channelNotFound")));
   if (cleanId(msg.message.guildId) !== cleanId(targetChannel.guildId))
-    return msg.reply(embed("❌ This command has to be run in the same server as the voice channel."));
+    return msg.reply(embed(this.t(msg, "responses.forceleave.wrongServer")));
   const p = this.players.playerMap.get(cid)
     ?? [...this.players.playerMap.values()].find((player) => cleanId(player?._channelId) === cid);
-  if (!p) return msg.reply(embed("❌ Player not found."));
-  if (!p.connection) return msg.reply(embed("❌ Player not initialized."));
+  if (!p) return msg.reply(embed(this.t(msg, "responses.forceleave.playerNotFound")));
+  if (!p.connection) return msg.reply(embed(this.t(msg, "responses.forceleave.playerNotInit")));
   await this.players.leave(msg, cid);
 }

@@ -20,7 +20,7 @@ export async function run(message) {
 
   const current = p.queue.getCurrent();
   if (!current) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription("❌ There's nothing playing at the moment.");
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.lyrics.nothingPlaying"));
     return message.reply({ embeds: [embed] });
   }
 
@@ -28,7 +28,7 @@ export async function run(message) {
   let frame = 0;
   const loadingMsg = await message.reply({ embeds: [
     new EmbedBuilder().setColor(getGlobalColor())
-      .setDescription(`${LOADING_FRAMES[0]} Searching lyrics for **${Utils.truncate(current.title, 40)}**...`)
+      .setDescription(`${LOADING_FRAMES[0]} ` + this.t(message, "responses.lyrics.searching", { title: Utils.truncate(current.title, 40) }))
       
   ] });
 
@@ -36,7 +36,7 @@ export async function run(message) {
     frame = (frame + 1) % LOADING_FRAMES.length;
     loadingMsg.edit({ embeds: [
       new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription(`${LOADING_FRAMES[frame]} Searching lyrics for **${Utils.truncate(current.title, 40)}**...`)
+      .setDescription(`${LOADING_FRAMES[frame]} ` + this.t(message, "responses.lyrics.searching", { title: Utils.truncate(current.title, 40) }))
         
     ] }).catch(() => {});
   }, 800);
@@ -50,15 +50,14 @@ export async function run(message) {
       return loadingMsg.edit({ embeds: [
         new EmbedBuilder().setColor(getGlobalColor())
           .setDescription(
-            `❌ No lyrics available for **${Utils.truncate(current.title, 40)}**.\n\n` +
-            `💡 NodeLink lyrics plugin may not have this track. Try a popular song!`
+            this.t(message, "responses.lyrics.noLyrics", { title: Utils.truncate(current.title, 40) })
           )
       ] });
     }
 
     try { await loadingMsg.message.delete(); } catch {}
 
-    const syncIndicator = result.synced ? " ⏱️ Synced" : "";
+    const syncIndicator = result.synced ? this.t(message, "responses.lyrics.syncedBadge") : "";
     const displayTitle  = Utils.cleanTitle(current.title);
     const artist        = current.artists?.[0]?.name || current.author?.name || "Unknown Artist";
     const lines         = result.text.split("\n").filter(l => l.trim());
@@ -79,7 +78,7 @@ export async function run(message) {
           lines.join("\n"),
           "```"
         ].join("\n"))
-        .setFooter({ text: `NodeLink • ${totalLines} lines` });
+        .setFooter({ text: this.t(message, "responses.lyrics.nodeLinkFooter", { lines: totalLines }) });
       if (current.thumbnail) singleEmbed.setThumbnail(current.thumbnail);
       return message.reply({ embeds: [singleEmbed] });
     }
@@ -105,8 +104,8 @@ export async function run(message) {
           "```"
         ].join("\n"))
         .setFooter({ text: expired
-          ? `⌛ Controls expired • NodeLink • ${totalLines} lines`
-          : `NodeLink • ${totalLines} lines total` });
+          ? this.t(message, "responses.lyrics.controlsExpired", { lines: totalLines })
+          : this.t(message, "responses.lyrics.nodeLinkFooter", { lines: totalLines }) });
       if (current.thumbnail) b.setThumbnail(current.thumbnail);
       return { embeds: [b] };
     };
@@ -163,7 +162,7 @@ export async function run(message) {
           pages[currentPage],
           "```"
         ].join("\n"))
-        .setFooter({ text: `Session closed • NodeLink • ${totalLines} lines` });
+        .setFooter({ text: this.t(message, "responses.lyrics.sessionClosed", { lines: totalLines }) });
       if (current.thumbnail) closedEmbed.setThumbnail(current.thumbnail);
       msg.edit({ embeds: [closedEmbed] }).catch(() => {});
     }, SESSION_MS);
@@ -171,6 +170,6 @@ export async function run(message) {
   } catch (err) {
     clearInterval(loadingInterval);
     logger.error("[Lyrics Command] Error:", err);
-    loadingMsg.edit({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`❌ Error: ${Utils.truncate(err.message, 100)}`)] }).catch(() => {});
+    loadingMsg.edit({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.lyrics.error", { error: Utils.truncate(err.message, 100) }))] }).catch(() => {});
   }
 }

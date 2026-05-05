@@ -66,6 +66,9 @@ export class PlayerManager {
   /** @type {Object} */
   playerConfig;
 
+  /** @type {import("./constants/Locale.mjs").Locale|null} */
+  locale = null;
+
   /** @type {import("./dashboard/Dashboard.mjs").Dashboard|null} */
   dashboard = null;
 
@@ -82,6 +85,7 @@ export class PlayerManager {
     this.config       = config.config;
     this.playerConfig = config.player;
     this.dashboard    = config.dashboard ?? null;
+    this.locale       = config.locale ?? null;
   }
 
   /**
@@ -207,6 +211,19 @@ export class PlayerManager {
     });
 
     return player;
+  }
+
+  /**
+   * Translate a locale key using the message's guild locale.
+   * @param {Object} message
+   * @param {string} key
+   * @param {Object} [replacements={}]
+   * @returns {string}
+   */
+  _t(message, key, replacements = {}) {
+    if (!this.locale) return key;
+    const guildId = getMessageGuildId(message);
+    return this.locale.translate(guildId, key, replacements);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -350,7 +367,7 @@ export class PlayerManager {
           first[1].textChannel = message.channel;
           return first[1];
         }
-        message.reply(mkEmbed(`⚠️ You need to join a voice channel to use this command.`));
+        message.reply(mkEmbed(this._t(message, "responses._common.noVoiceStrict")));
         return null;
       }
 
@@ -374,7 +391,7 @@ export class PlayerManager {
           return this.settings.getServer(guildId)?.get("prefix") ?? "%";
         } catch (_) { return "%"; }
       })();
-      message.reply(mkEmbed(`⚠️ I'm already playing in ${channelList}. Join that channel or use \`${prefix}play\` to start music in your channel.`));
+      message.reply(mkEmbed(this._t(message, "responses._common.alreadyInChannel", { channels: channelList, prefix })));
       return null;
     }
 
@@ -383,7 +400,7 @@ export class PlayerManager {
         // Auto-detect failed — fall back to interactive channel selection prompt
         return this.promptVC(message);
       }
-      message.reply(mkEmbed("⚠️ Please join a voice channel first."));
+      message.reply(mkEmbed(this._t(message, "responses._common.noVoiceChannel")));
       return null;
     }
 
@@ -427,13 +444,13 @@ export class PlayerManager {
 
     let channelSelection = "";
     if (channelArr.length > 0) {
-      channelSelection = "Please select one of the following channels by clicking on the reactions below\n\n";
+      channelSelection = this._t(msg, "responses._common.voiceSelectionPrompt") + "\n\n";
       channelArr.forEach((c, i) => { channelSelection += `${i + 1}. <#${c._id ?? c.id}>\n`; });
     }
 
+    const hint = this._t(msg, "responses._common.voiceSelectionHint");
     const selectionMsg = await msg.reply(mkEmbed(
-        (channelSelection ? channelSelection + "\n**..or**" : "Please") +
-        " send a message with the voice channel! (Mention/Id/Name)\nSend 'x' to cancel."
+        (channelSelection ? channelSelection + "\n**..or** " + hint : "Please " + hint)
     ));
 
     return new Promise(resolve => {
@@ -447,7 +464,7 @@ export class PlayerManager {
 
       const timeout = setTimeout(() => {
         cleanup();
-        msg.reply(mkEmbed("⏱️ Voice selection timed out."));
+        msg.reply(mkEmbed(this._t(msg, "responses._common.voiceSelectionTimedOut")));
         resolve(false);
       }, 30_000);
 
@@ -472,12 +489,12 @@ export class PlayerManager {
         if (content === "x") {
           clearTimeout(timeout);
           cleanup();
-          m.reply(mkEmbed("Cancelled!"));
+          m.reply(mkEmbed(this._t(m, "voice.join.cancelled")));
           resolve(false);
           return;
         }
         if (!this.commands.validateInput("voiceChannel", m.content, m)) {
-          m.reply(mkEmbed("Invalid voice channel. Try again or type `x`."));
+          m.reply(mkEmbed(this._t(m, "responses._common.voiceSelectionInvalid")));
           return;
         }
         const channel = this.commands.formatInput("voiceChannel", m.content, m);
@@ -510,12 +527,12 @@ export class PlayerManager {
     }
 
     const player = cid ? this.playerMap.get(cid) : null;
-    if (!player) return msg.reply(mkEmbed("I'm not in a voice channel."));
+    if (!player) return msg.reply(mkEmbed(this._t(msg, "responses._common.notInVoice")));
 
     const activeChannelId = String(player._channelId ?? cid).replace(/\D/g, "") || cid;
     this.playerMap.delete(activeChannelId);
     if (activeChannelId !== cid) this.playerMap.delete(cid);
-    await msg.reply(mkEmbed("✅ Successfully Left"));
+    await msg.reply(mkEmbed(this._t(msg, "responses._common.successfullyLeft")));
     await player.leave();
     player.destroy();
   }
@@ -535,14 +552,14 @@ export class PlayerManager {
 
     if (!channel) {
       return message.reply(mkEmbed(
-          `Couldn't find the channel \`${cid}\`\nUse the help command to learn more about this.`
+          this._t(message, "responses.join.channelNotFound", { channel: cid })
       ));
     }
 
     const isVoice = channel.type === 2;
 
     if (!isVoice) {
-      return message.reply(mkEmbed("❌ Please join a **voice channel** first before using this command!"));
+      return message.reply(mkEmbed(this._t(message, "responses._common.voiceChannelRequired")));
     }
 
     const cleanChannelId = cleanId(cid);
@@ -551,7 +568,7 @@ export class PlayerManager {
     if (existing) {
       existing.textChannel = message.channel;
       cb(existing);
-      return message.reply(mkEmbed(`Already joined <#${cid}>.`));
+      return message.reply(mkEmbed(this._t(message, "responses.join.alreadyJoined", { channel: cid })));
     }
 
     const player = new Player(this.config.token, {
@@ -562,6 +579,7 @@ export class PlayerManager {
       moonlink:           this.playerConfig?.moonlink ?? null,
       settingsMgr:        this.settings,
       observedVoiceUsers: this.observedVoiceUsers ?? null,
+      locale:             this.locale ?? null,
     });
 
     player.textChannel = message.channel;
@@ -587,8 +605,8 @@ export class PlayerManager {
         } catch (_) { return "%"; }
       })();
       const desc = is247
-          ? `Left channel <#${activeChannelId}> because of inactivity.`
-          : `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
+          ? this.locale?.translate(guildId, "responses.join.autoLeaveInactive", { channel: `<#${activeChannelId}>` }) ?? `Left channel <#${activeChannelId}> because of inactivity.`
+          : this.locale?.translate(guildId, "responses.join.autoLeaveInactive247", { channel: `<#${activeChannelId}>`, prefix }) ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
       ch?.send(mkEmbed(desc));
       this.playerMap.delete(activeChannelId);
       if (activeChannelId !== cleanChannelId) this.playerMap.delete(cleanChannelId);
@@ -611,10 +629,10 @@ export class PlayerManager {
     this.playerMap.set(cleanChannelId, player);
 
     (async () => {
-      const statusMsg = await message.reply(mkEmbed("⏳ Joining Channel..."));
+      const statusMsg = await message.reply(mkEmbed(this._t(message, "responses.join.joining")));
       try {
         await player.join(cid);
-        await statusMsg.edit(mkEmbed(`✅ Successfully joined <#${cid}>`));
+        await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joined", { channel: cid })));
 
         const guildId = cleanId(channel.guildId ?? getMessageGuildId(message));
         if (guildId) {
@@ -627,7 +645,7 @@ export class PlayerManager {
 
         cb(player);
       } catch (err) {
-        await statusMsg.edit(mkEmbed(`❌ Failed to join: ${err.message}`)).catch(() => {});
+        await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joinFailed", { error: err.message }))).catch(() => {});
         this.playerMap.delete(cleanChannelId);
         player.destroy();
       }
@@ -650,12 +668,12 @@ export class PlayerManager {
       ? this.playerMap.get(cleanChannelId) ??
         [...this.playerMap.values()].find((entry) => getPlayerChannelId(entry) === cleanChannelId)
       : null;
-    if (!player) return msg.reply(mkEmbed("I'm not in a voice channel."));
+    if (!player) return msg.reply(mkEmbed(this._t(msg, "responses._common.notInVoice")));
 
     const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;
     this.playerMap.delete(activeChannelId);
     if (activeChannelId !== cleanChannelId) this.playerMap.delete(cleanChannelId);
-    await msg.reply(mkEmbed("âœ… Successfully Left"));
+    await msg.reply(mkEmbed(this._t(msg, "responses._common.successfullyLeft")));
     await player.leave();
     player.destroy();
   }

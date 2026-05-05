@@ -27,6 +27,9 @@ export class MessageHandler {
   observedReactions;
   /** @type {Map<string, string[]>} */
   observedChannels;
+  /** @type {import('./constants/Locale.mjs').Locale} */
+  locale;
+
   /**
    * @param {Client} client
    */
@@ -45,6 +48,21 @@ export class MessageHandler {
       if (d.length === 0) return;
       d.forEach(e => e.cb(new Message(m, this)));
     });
+  }
+
+  /** @param {import('./constants/Locale.mjs').Locale} locale */
+  setLocale(locale) { this.locale = locale; }
+
+  /**
+   * Translate a locale key for a given guild.
+   * @param {string} guildId
+   * @param {string} key
+   * @param {Object} [replacements={}]
+   * @returns {string}
+   */
+  t(guildId, key, replacements = {}) {
+    if (!this.locale) return key;
+    return this.locale.translate(guildId, key, replacements);
   }
 
   setupEvents() {
@@ -99,7 +117,7 @@ export class MessageHandler {
       try {
         const dm = await message.author.createDM();
         dm.send({
-          embeds: [this.#embedify("I am unable to send messages in <#" + message.channelId + ">. Please contact a server administrator and grant me the \"SendMessages\" permission.")]
+          embeds: [this.#embedify(this.t(message.guildId, "pagination.error.perms.messages", { channel: "<#" + message.channelId + ">" }))]
         });
       } catch (e) {
         logger.warn("[MessageHandler] Error sending message in DMs (" + message.author.id + "):", e.message);
@@ -255,7 +273,13 @@ export class MessageHandler {
    */
   async reply(replyingTo, message, mention = false) {
     if (!(await this.assertPermissions(["SendMessages"], replyingTo))) return null;
-    const opts = typeof message === "string" ? { content: message } : { ...message };
+    let opts;
+    if (typeof message === "string") {
+      // Auto-wrap plain text in an embed (matches old replyEmbed behavior)
+      opts = this.#createEmbed(message, replyingTo);
+    } else {
+      opts = { ...message };
+    }
     return new Message(await replyingTo.reply(opts, { ping: false }), this);
   }
 
@@ -297,7 +321,14 @@ export class MessageHandler {
       logger.warn("[MessageHandler] Missing SendMessages permission in channel", channel.id);
       return;
     }
-    return new Message(await channel.send(typeof message === "string" ? { content: message } : message), this);
+    let opts;
+    if (typeof message === "string") {
+      // Auto-wrap plain text in an embed (matches old sendEmbed behavior)
+      opts = this.#createEmbed(message, channel);
+    } else {
+      opts = message;
+    }
+    return new Message(await channel.send(opts), this);
   }
 
   /**
@@ -400,9 +431,10 @@ export class MessageHandler {
     });
 
     // Auto-close after 5 minutes
+    const guildId = msg.message?.guildId ?? null;
     setTimeout(() => {
       unobserve();
-      m.edit(send() + "\nSession closed - Changing pages **won't work** from here.").catch(() => {});
+      m.edit(this.t(guildId, "pagination.embed.sclosedContent", { content: send() })).catch(() => {});
     }, 5 * 60 * 1000);
   }
 
@@ -768,6 +800,8 @@ export class RichPaginator {
 
     if (!rawMsg) return null;
 
+    const guildId = (this._msg.channel?.guildId) ?? (this._msg.guildId) ?? null;
+
     // Add reactions
     for (const emoji of allReactions) {
       await rawMsg.react(emoji).catch(() => {});
@@ -820,7 +854,8 @@ export class RichPaginator {
       unobserve();
       // Update footer to show session closed
       const currentEmbed = buildEmbed(state.tab, state.page);
-      currentEmbed.footer.text += " • Session closed";
+      if (!currentEmbed.footer) currentEmbed.footer = { text: "" };
+      currentEmbed.footer.text += " • " + this._handler.t(guildId, "pagination.embed.sclosedTitle");
       rawMsg.edit({ embeds: [currentEmbed] }).catch(() => {});
       await clearReactions();
     };
@@ -891,6 +926,8 @@ export class QueuePaginator {
 
     if (!rawMsg) return null;
 
+    const guildId = (this._msg.channel?.guildId) ?? (this._msg.guildId) ?? null;
+
     // No arrows needed for single page
     if (totalPages <= 1) return rawMsg;
 
@@ -919,7 +956,7 @@ export class QueuePaginator {
     const closeSession = async () => {
       unobserve();
       const embed = buildEmbed(state.page);
-      embed.footer.text += " • Session closed";
+      embed.footer.text += " • " + this._handler.t(guildId, "pagination.embed.sclosedTitle");
       rawMsg.edit({ embeds: [embed] }).catch(() => {});
       await clearReactions();
     };
@@ -1080,7 +1117,7 @@ export class HelpCommand {
     // that CommandHandler emits when it sees %help but can't find it.
     const _reply = this._commands.replyHandler.bind(this._commands);
     this._commands.replyHandler = (message, msg) => {
-      if (typeof message === "string" && message.includes("Unknown Command")) {
+      if (typeof message === "string" && message.toLowerCase().includes("unknown command")) {
         // Check if the triggering command was a help alias — if so, drop it silently
         const content = msg?.content ?? msg?.message?.content ?? "";
         const guildId = msg?.channel?.channel?.guildId ?? msg?.message?.guildId;
@@ -1158,7 +1195,8 @@ export class HelpCommand {
             c.aliases.some(a => a.toLowerCase() === word.toLowerCase())
         );
         if (!found) {
-          msg.reply(`❌ Unknown command \`${word}\`. Use \`${prefix}help\` to browse.`);
+          const guildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
+          msg.reply(this._commands.t(guildId, "cmdHandler.help.unknownCommand", { command: word, prefix }));
           return;
         }
         currCmd = found;

@@ -14,7 +14,7 @@ export async function run(msg) {
   p.clear();
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setDescription("🗑️ Queue cleared.")
+    .setDescription(this.t(msg, "responses.clear.cleared"))
     ;
   msg.reply({ embeds: [embed] });
 }

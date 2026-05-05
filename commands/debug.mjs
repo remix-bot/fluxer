@@ -28,7 +28,7 @@ export function run(msg, data) {
       });
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle("🔧 Voice Debug")
+        .setTitle(this.t(msg, "responses.debug.voiceTitle"))
         .setDescription("```json\n" + JSON.stringify(servers, null, 2) + "\n```")
         ;
       msg.reply({ embeds: [embed] });

@@ -13,7 +13,7 @@ export async function run(msg) {
 
   const loadingEmbed = new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setDescription("⏳ Loading...")
+    .setDescription(this.t(msg, "responses.np.loading"))
     ;
   const loadingMsg = await msg.reply({ embeds: [loadingEmbed] });
 

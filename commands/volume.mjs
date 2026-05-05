@@ -26,14 +26,14 @@ export async function run(message, data) {
 
   if (!volOption || raw == null || isNaN(Number(raw))) {
     const current = Math.round((p.preferredVolume ?? 1) * 100);
-    embed.setDescription(`🔊 Current volume: \`${current}%\``);
+    embed.setDescription(this.t(message, "responses.volume.current", { volume: current }));
   } else {
     const pct = Number(raw);
     if (pct < 0 || pct > MAX_VOLUME) {
-      embed.setDescription(`❌ Volume must be between \`0\` and \`${MAX_VOLUME}%\`.`);
+      embed.setDescription(this.t(message, "responses.volume.outOfRange", { max: MAX_VOLUME }));
     } else {
       p.setVolume(pct / 100);
-      embed.setDescription(`🔊 Volume changed to \`${pct}%\` for this session.`);
+      embed.setDescription(this.t(message, "responses.volume.changed", { volume: pct }));
     }
   }
 
