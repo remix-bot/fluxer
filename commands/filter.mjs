@@ -320,7 +320,7 @@ export async function run(msg) {
                 : `🔇 No filter active.\n\n${reason}`
         )
         .setFooter({ text: "Session ended" })
-    ;
+        ;
 
     await menuMsg.edit({ embeds: [closedEmbed] }).catch(() => {});
   };
@@ -387,7 +387,7 @@ export async function run(msg) {
       const errEmbed = new EmbedBuilder()
           .setColor(getGlobalColor())
           .setDescription("❌ Nothing is playing right now.")
-      ;
+          ;
       await menuMsg.edit({ embeds: [errEmbed] }).catch(() => {});
       await Utils.sleep(2000);
       await menuMsg.edit({
@@ -429,7 +429,7 @@ export async function run(msg) {
               `❌ Failed to apply **${filter.label}**: \`${reason}\`\n\n` +
               `Make sure your NodeLink node has filters enabled.`
           )
-      ;
+          ;
       await menuMsg.edit({ embeds: [errEmbed] }).catch(() => {});
       await Utils.sleep(3000);
       await menuMsg.edit({
@@ -448,10 +448,10 @@ export async function run(msg) {
                 ? `${filter.label} saved. It will apply on the next playable track.`
                 : `${filter.label} removed. The next playable track will use the updated filters.`)
         : filter.key === "off"
-            ? "🔇 Filters cleared — original audio restored."
-            : activeKeys.includes(filter.key)
-                ? `${filter.emoji} **${filter.label}** applied!`
-                : `${filter.emoji} **${filter.label}** removed.`;
+        ? "🔇 Filters cleared — original audio restored."
+        : activeKeys.includes(filter.key)
+            ? `${filter.emoji} **${filter.label}** applied!`
+            : `${filter.emoji} **${filter.label}** removed.`;
 
     const confirmEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
@@ -460,7 +460,7 @@ export async function run(msg) {
             `*${filter.desc}*\n\n` +
             `💡 React again to toggle, or ${CANCEL_EMOJI} to close.`
         )
-    ;
+        ;
 
     await menuMsg.edit({ embeds: [confirmEmbed] }).catch(() => {});
     await Utils.sleep(2500);

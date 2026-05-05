@@ -883,7 +883,7 @@ export default class Player extends EventEmitter {
   // Audio Streaming (revoice.js)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  async _streamViaRevoice(url, options = {}) {
+  async _streamViaRevoice(url, inputOptions = []) {
     if (this._streamingStopped) return;
 
     this._streamingStopped = false;
@@ -951,7 +951,7 @@ export default class Player extends EventEmitter {
         };
 
         try {
-          const playResult = this._mediaPlayer.playStream(audioStream, options);
+          const playResult = this._mediaPlayer.playStream(audioStream, inputOptions);
           if (playResult && typeof playResult.catch === "function") {
             playResult.catch((e) => {
               if (isIgnorableMediaStateError(e) || this._streamingStopped || this._skipping || this.leaving) {
@@ -1030,8 +1030,10 @@ export default class Player extends EventEmitter {
 
     if (url.includes("/v4/loadstream")) {
       logger.player(`[Player] NodeLink loadStream PCM active`);
+      // Raw PCM from NodeLink — tell FFmpeg the input format
+      const pcmInputOpts = ["-f", "s16le", "-ar", "48000", "-ac", "2"];
       try {
-        return await this._streamViaRevoice(url, { rawPcm: true });
+        return await this._streamViaRevoice(url, pcmInputOpts);
       } catch (err) {
         const msg = err?.message ?? String(err ?? "");
         if (msg.includes("HTTP ")) {
@@ -1474,6 +1476,19 @@ export default class Player extends EventEmitter {
       this.activeFilter = meta ?? null;
       this.activeFilterPayload = meta ? filterPayload : null;
       this.emit("filter", this.activeFilter);
+
+      // Restart the current stream so the loadstream URL picks up the new filters.
+      // The PATCH only updates NodeLink's player state — it does NOT modify the
+      // currently-streaming PCM pipe. Without restarting, the audio won't change.
+      if (current?.encoded && this.connection && !this.leaving && !this._streamingStopped) {
+        const elapsed = this.startedPlaying ? (Date.now() - this.startedPlaying) : 0;
+        const positionMs = Math.max(0, elapsed);
+        logger.player(`[Player] Filter applied — restarting stream from ${positionMs}ms`);
+        this._replayWithFilters(positionMs).catch((e) => {
+          logger.warn("[Player] Filter replay failed (non-fatal):", e.message);
+        });
+      }
+
       return { ok: true };
     } catch (e) {
       const errMsg = e.message ?? "";
@@ -1486,6 +1501,50 @@ export default class Player extends EventEmitter {
         }
       }
       return { ok: false, reason: sanitizeError(errMsg, this._nl) };
+    }
+  }
+
+  /**
+   * Restart playback of the current track from a given position with the
+   * currently active filters baked into the loadstream URL.
+   */
+  async _replayWithFilters(positionMs = 0) {
+    const current = this.queue.getCurrent();
+    if (!current?.encoded || !this.connection || this.leaving) return;
+
+    // Stop the current stream (kills FFmpeg + passthrough)
+    this._streamingStopped = true;
+    await this._stopMediaPlayer().catch(() => {});
+    this._streamingStopped = false;
+
+    // Small delay to let the old pipe fully drain
+    await Utils.sleep(100);
+
+    // _stopMediaPlayer sets _mediaPlayer to null — must recreate before streaming
+    const hasPlayer = await this._ensureMediaPlayer();
+    if (!hasPlayer) {
+      logger.warn("[Player] _replayWithFilters: could not recreate MediaPlayer");
+      return;
+    }
+
+    // Restore volume on the fresh player
+    if (this.preferredVolume !== 1) {
+      this._mediaPlayer.setVolume(this.preferredVolume);
+    }
+
+    // Build a fresh loadstream URL — include filters so NodeLink applies them server-side
+    const nlBase = `http://${this._nl.host}:${this._nl.port}`;
+    let streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(current.encoded)}&position=${positionMs}&volume=100`;
+
+    // Append active filter payload to the URL so NodeLink processes them
+    if (this.activeFilterPayload) {
+      streamUrl += `&filters=${encodeURIComponent(JSON.stringify(this.activeFilterPayload))}`;
+    }
+
+    try {
+      await this._streamUrl(streamUrl);
+    } catch (e) {
+      logger.warn("[Player] _replayWithFilters stream error:", e.message);
     }
   }
 
@@ -2018,12 +2077,12 @@ export default class Player extends EventEmitter {
     } else if (songData.encoded) {
       const nlBase = `http://${this._nl.host}:${this._nl.port}`;
       const positionMs = 0;
-      const filters = this.activeFilterPayload ?? {};
-      const filtersParam =
-          Object.keys(filters).length > 0
-              ? `&filters=${encodeURIComponent(JSON.stringify(filters))}`
-              : "";
-      streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(songData.encoded)}&position=${positionMs}&volume=100${filtersParam}`;
+      streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(songData.encoded)}&position=${positionMs}&volume=100`;
+
+      // Append active filters so NodeLink applies them server-side
+      if (this.activeFilterPayload) {
+        streamUrl += `&filters=${encodeURIComponent(JSON.stringify(this.activeFilterPayload))}`;
+      }
     } else if (songData.url && Utils.isValidUrl(songData.url)) {
       streamUrl = songData.url;
     } else {
