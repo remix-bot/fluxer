@@ -244,7 +244,7 @@ Remix includes a web dashboard for controlling the bot through a browser interfa
    }
    ```
 
-2. Create a Fluxer OAuth2 application at [https://fluxer.app/developers/applications](https://fluxer.app/developers/applications).
+2. Create a Fluxer OAuth2 application at Settings > application.
 
 3. Create the additional database tables required by the dashboard:
    ```sql
