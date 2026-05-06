@@ -388,17 +388,16 @@ To add a new language, place a JSON file in `storage/locales/bot/` following the
 
 ## Credits & License
 
-**Design & Development:**
-- [ShadowLp174](https://github.com/ShadowLp174) — Lead developer, audio engine, moonlink.js
-- NoLogicAlan — Dashboard design
-- ophx — Dashboard design
-- Fantic — Contributions
+**Development:**
+- [ShadowLp174](https://github.com/ShadowLp174) — Lead developer
+- [NoLogicAlan](https://github.com/NoLogicAlan) — Lead developer
+- [Fantic](https://github.com/fanticwastaken) — Community Manager
 
 **Powered by:**
 - [`@fluxerjs/core`](https://github.com/fluxerjs/core) — Fluxer API client
 - [`@fluxerjs/voice`](https://github.com/fluxerjs/voice) — Native voice integration
 - [`moonlink.js`](https://github.com/ShadowLp174/moonlink.js) — Lavalink proxy
-- [NodeLink](https://github.com/PerformanC/NodeLink) — Audio node manager
+- [`NodeLink`](https://github.com/PerformanC/NodeLink) — Audio node manager
 
 <p align="center">
   &copy; 2026 Remix. Code licensed under the <a href="LICENSE">MIT License</a>.<br>
