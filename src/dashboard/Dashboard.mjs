@@ -385,7 +385,7 @@ export class Dashboard {
    * Bot owners are always allowed. Otherwise the user must be physically in the
    * player's voice channel to control it.
    *
-   * @param {import("discord.js").User|null} user
+   * @param {import("fluxer.js").User|null} user
    * @param {Player} player
    * @returns {string|null} Error message, or null if authorized
    */
@@ -418,7 +418,7 @@ export class Dashboard {
    * Verify the user has permission to perform an action in the target guild.
    * Bot owners are always allowed. Otherwise the user must be a member of the guild.
    *
-   * @param {import("discord.js").User} user
+   * @param {import("fluxer.js").User} user
    * @param {string} guildId
    * @returns {Promise<string|null>} Error message, or null if authorized
    */
@@ -460,7 +460,7 @@ export class Dashboard {
    * @property {string} avatar.url
    */
   /**
-   * @param {import("discord.js").User} user
+   * @param {import("fluxer.js").User} user
    * @returns {APIUser}
    */
   static convertUser(user) {
@@ -499,7 +499,7 @@ export class Dashboard {
   }
 
   /**
-   * @param {import("discord.js").GuildChannel} channel
+   * @param {import("fluxer.js").GuildChannel} channel
    */
   static convertChannel(channel) {
     const isVoice = channel.isVoiceBased?.() ?? false;
@@ -535,7 +535,7 @@ export class Dashboard {
   }
 
   /**
-   * @param {import("discord.js").Guild} guild
+   * @param {import("fluxer.js").Guild} guild
    */
   static convertServer(guild) {
     const channelStore = guild.channels;
@@ -561,7 +561,7 @@ export class Dashboard {
    * Lightweight server summary for player payloads.
    * Unlike convertServer(), this omits the full channels array to keep
    * per-player Redis messages small (especially for large guilds).
-   * @param {import("discord.js").Guild} guild
+   * @param {import("fluxer.js").Guild} guild
    */
   static convertServerSummary(guild) {
     return {
@@ -696,7 +696,7 @@ export class Dashboard {
   /**
    * Global user update
    * @param {Object} details
-   * @param {import("discord.js").User} user
+   * @param {import("fluxer.js").User} user
    */
   userUpdate(details, user) {
     if (!this.enabled) return;
