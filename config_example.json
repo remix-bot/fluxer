@@ -112,6 +112,8 @@
     "playerUpdateInterval":   5000,
     "searchSessionTimeout":  30000,
     "playerSessionTimeout":  300000,
-    "intentionalLeaveTTL":   10000
+    "intentionalLeaveTTL":   10000,
+    "recoveryStaggerMs":     2000,
+    "recoveryConcurrency":   2
   }
 }

@@ -59,6 +59,15 @@ export class Remix {
       rejoin247Delay:      timers.rejoin247Delay       ?? 3_000,
       leave247RejoinDelay: timers.leave247RejoinDelay  ?? 5_000,
       intentionalLeaveTTL: timers.intentionalLeaveTTL  ?? 10_000,
+      // ── Recovery tuning ──────────────────────────────────────────────────────
+      // Stagger delay between each session join during recovery / 247 auto-join.
+      // Prevents hammering the LiveKit server with concurrent room + MediaPlayer
+      // creation, which causes "track publication timed out" errors.
+      recoveryStaggerMs:   timers.recoveryStaggerMs    ?? 2_000,
+      // Max concurrent recovery joins.  Keeps resource usage bounded on bots
+      // with many 247 channels.  2 is a safe default — 3 works if the
+      // LiveKit server is on the same network.
+      recoveryConcurrency:  timers.recoveryConcurrency   ?? 2,
     };
 
     const client = new Client({
@@ -468,15 +477,64 @@ export class Remix {
     let botReady      = false;
     let settingsReady = false;
 
+    /**
+     * Run async tasks with bounded concurrency and optional stagger.
+     * @param {Array<{guildId, channelId, recoveryData?}>} items
+     * @param {number} concurrency
+     * @param {number} staggerMs — delay between dispatching each task
+     * @param {(item) => Promise} fn
+     */
+    const runWithConcurrency = async (items, concurrency, staggerMs, fn) => {
+      let idx = 0;
+      let active = 0;
+      let settled = 0;
+      const total = items.length;
+      const errors = [];
+
+      return new Promise((resolve) => {
+        const tryNext = () => {
+          while (active < concurrency && idx < total) {
+            const item = items[idx++];
+            // Stagger: delay before starting each subsequent batch item
+            if (idx > 1 || active > 0) {
+              const stagger = staggerMs;
+              // We don't await the stagger inside the worker — instead we
+              // schedule the next spawn after the stagger using setTimeout
+              // so the concurrency slot is only taken after the delay.
+              setTimeout(() => runOne(item), stagger);
+            } else {
+              runOne(item);
+            }
+          }
+          // All done when nothing left and nothing in flight
+          if (settled === total) resolve(errors);
+        };
+
+        const runOne = (item) => {
+          active++;
+          fn(item)
+            .catch((e) => errors.push({ ...item, error: e.message }))
+            .finally(() => {
+              active--;
+              settled++;
+              tryNext();
+            });
+        };
+
+        tryNext();
+      });
+    };
+
     const tryAutoJoin = async () => {
       if (!botReady || !settingsReady) return;
       await new Promise(r => setTimeout(r, 2000));
 
-      // 1. Recover standard reboots first
+      // Build a unified join list: recovery sessions + 24/7 channels
+      const joinList = [];
+
+      // Recover standard reboot sessions
       if (fs.existsSync(recoveryPath)) {
         logger.recovery("[Recovery] Found previous session data, restoring...");
-        // Delete the file BEFORE processing so a crash during restore doesn't
-        // cause an infinite boot-loop replaying the same bad recovery data.
         let data = null;
         try {
           data = JSON.parse(fs.readFileSync(recoveryPath, "utf8"));
@@ -486,31 +544,68 @@ export class Remix {
           try { fs.unlinkSync(recoveryPath); } catch (_) {}
         }
         const sessions = normalizeRecoverySessions(data);
-        if (sessions.length > 0) {
-          for (const session of sessions) {
-            try {
-              await spawnPlayer(session.guildId, session.channelId, 500, session);
-            } catch (e) {
-              logger.error("[Recovery] Failed to restore session", session.channelId, e);
-            }
-          }
-          logger.recovery(`[Recovery] Processed ${sessions.length} session(s).`);
+        for (const session of sessions) {
+          joinList.push({
+            guildId: session.guildId,
+            channelId: session.channelId,
+            recoveryData: session,
+          });
         }
       }
 
-      // 2. Check traditional 24/7 channels
+      // Collect 24/7 channels (skip channels already covered by recovery)
+      const recoveryChannels = new Set(joinList.map(j => j.channelId));
       for (const [guildId, serverSettings] of this.settingsMgr.guilds) {
-        const raw  = serverSettings.get("stay_247");
+        const raw = serverSettings.get("stay_247");
         if (!raw || raw === "none") continue;
         const mode = serverSettings.get("stay_247_mode") ?? "auto";
-
         if (mode !== "auto" && mode !== "on") continue;
 
         const channelIds = Array.isArray(raw)
             ? raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
             : [String(raw).replace(/\D/g, "")].filter(Boolean);
-        for (const channelId of channelIds) await spawnPlayer(guildId, channelId);
+
+        for (const channelId of channelIds) {
+          const clean = String(channelId).replace(/\D/g, "");
+          if (clean && !recoveryChannels.has(clean)) {
+            joinList.push({ guildId, channelId: clean, recoveryData: null });
+          }
+        }
       }
+
+      if (joinList.length === 0) return;
+
+      const startTime = Date.now();
+      logger.recovery(
+        `[Recovery] Joining ${joinList.length} session(s) ` +
+        `(concurrency: ${T.recoveryConcurrency}, stagger: ${T.recoveryStaggerMs}ms)...`
+      );
+
+      const errors = await runWithConcurrency(
+        joinList,
+        T.recoveryConcurrency,
+        T.recoveryStaggerMs,
+        async (item) => {
+          await spawnPlayer(
+            item.guildId,
+            item.channelId,
+            0, // stagger is handled by runWithConcurrency
+            item.recoveryData,
+          );
+        },
+      );
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      const ok = joinList.length - errors.length;
+      if (errors.length > 0) {
+        for (const err of errors) {
+          logger.error("[Recovery] Failed to join channel", err.channelId, "guild", err.guildId, err.error);
+        }
+      }
+      logger.recovery(
+        `[Recovery] Processed ${joinList.length} session(s) in ${elapsed}s ` +
+        `(${ok} ok, ${errors.length} failed).`
+      );
     };
 
     settings.on("ready", () => {
