@@ -173,7 +173,11 @@
       "errorStreaming": "❌ Error streaming **{{title}}** — skipping.",
       "successfullyLeft": "✅ Successfully Left",
       "voiceSelectionInvalid": "Invalid voice channel. Try again or type `x`.",
-      "voiceChannelRequired": "❌ Please join a **voice channel** first before using this command!"
+      "voiceChannelRequired": "❌ Please join a **voice channel** first before using this command!",
+      "joinPermissionError": "❌ I don't have permission to join <#{{channel}}>. Please give me the **Connect** permission in that channel.",
+      "joinFailedPermissions": "❌ Failed to join voice channel — missing permissions. Please make sure I have **Connect** and **Speak** permissions.",
+      "joinFailedGeneric": "❌ Failed to join voice channel. Please try again.",
+      "joinFailedNotFound": "❌ Could not find that voice channel."
     },
     "clear": {
       "cleared": "🗑️ Queue cleared."
@@ -232,7 +236,9 @@
       "noVoiceChannel": "❌ You're not in a voice channel. Please join one first, or specify a channel: `{{prefix}}join <#channel>`",
       "voiceChannelNotFound": "❌ Couldn't find that voice channel. Try using a mention like `<#channelid>` or the exact channel name.",
       "autoLeaveInactive": "Left channel <#{{channel}}> because of inactivity.",
-      "autoLeaveInactive247": "Left channel <#{{channel}}> because of inactivity.\nIf you want me to stay in voice, use `{{prefix}}247 on/auto`"
+      "autoLeaveInactive247": "Left channel <#{{channel}}> because of inactivity.\nIf you want me to stay in voice, use `{{prefix}}247 on/auto`",
+      "joinFailedPerms": "❌ I don't have permission to join <#{{channel}}>. Please check that I have the **Connect** permission.",
+      "voiceChannelUnknown": "unknown voice channel"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Please join a voice channel first.",
@@ -257,6 +263,15 @@
       "songDisabled": "➡️ Song loop disabled",
       "queueActivated": "🔁 Queue loop activated",
       "queueDisabled": "➡️ Queue loop disabled"
+    },
+    "queue": {
+      "empty": "The queue is empty.",
+      "indexOutOfBounds": "Index out of bounds",
+      "removed": "Successfully removed **{{title}}** from the queue.",
+      "sourceOutOfBounds": "Source index out of bounds",
+      "targetOutOfBounds": "Target index out of bounds",
+      "alreadyInPosition": "Track is already in that position",
+      "moved": "Moved **{{title}}** from position {{from}} to {{to}}."
     },
     "lyrics": {
       "nothingPlaying": "❌ There's nothing playing at the moment.",

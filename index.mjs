@@ -132,7 +132,7 @@ export class Remix {
 
     // ── Gateway Handler ─────────────────────────────────────────────────────
     // Handles raw WS gateway events, voice-state tracking, presence rotation,
-    // and high-level Discord event handlers (GuildCreate, GuildDelete,
+    // and high-level Fluxer event handlers (GuildCreate, GuildDelete,
     // VoiceStateUpdate).
     this.gatewayHandler = new GatewayHandler(this, this.recoveryManager);
 
@@ -147,14 +147,23 @@ export class Remix {
       for (const [guildId, serverSettings] of settings.guilds) {
         const val = serverSettings.get("stay_247");
         if (!val || val === "none") continue;
-        if (Array.isArray(val)) {
-          const cleaned = val.map(id => String(id).replace(/\D/g, "")).filter(Boolean);
-          if (JSON.stringify(cleaned) !== JSON.stringify(val)) {
-            serverSettings.set("stay_247", cleaned.length > 0 ? cleaned : "none");
+        // ── Sanitise stay_247 values ────────────────────────────────────────
+        // Strip any value that isn't a valid Fluxer ID (>= 15 digits).
+        // This catches corruption from old JSON_SET paths or bad data.
+        const rawArr = Array.isArray(val) ? val : [val];
+        const cleaned = rawArr
+            .map(id => String(id).replace(/\D/g, ""))
+            .filter(id => id.length >= 15 && id.length <= 22);
+        const needsSave = JSON.stringify(cleaned) !== JSON.stringify(val);
+        if (needsSave || !Array.isArray(val)) {
+          const newVal = cleaned.length > 0 ? cleaned : "none";
+          serverSettings.set("stay_247", newVal);
+          if (cleaned.length === 0 && (val && val !== "none")) {
+            serverSettings.set("stay_247_mode", "off");
           }
-        } else {
-          const clean = String(val).replace(/\D/g, "");
-          serverSettings.set("stay_247", clean ? [clean] : "none");
+          logger.settings(
+            `[settings] Cleaned stay_247 for guild ${guildId}: ${JSON.stringify(val)} → ${JSON.stringify(newVal)}`
+          );
         }
       }
       this.recoveryManager.settingsReady = true;

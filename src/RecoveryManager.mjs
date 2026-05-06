@@ -75,6 +75,28 @@ export class RecoveryManager {
         const channelId = this.normalizeChannelId(player._channelId ?? channelKey);
         if (!guildId || !channelId) continue;
 
+        // ── Skip 24/7 channels ───────────────────────────────────────────
+        // 24/7 on/auto already handles rejoin on boot via tryAutoJoin() which
+        // reads the stay_247 setting from MySQL. No need to save/restore
+        // these sessions in recovery.json — that's only for regular voice
+        // sessions where users had active queues.
+        try {
+          const set = remix.settingsMgr.getServer(guildId);
+          if (set) {
+            const raw247 = set.get("stay_247");
+            if (raw247 && raw247 !== "none") {
+              const homeChannel = this.normalizeChannelId(player._home247Channel) || channelId;
+              const channels247 = Array.isArray(raw247)
+                  ? raw247.map(id => this.normalizeChannelId(id)).filter(Boolean)
+                  : [this.normalizeChannelId(raw247)].filter(Boolean);
+              if (channels247.includes(channelId) || channels247.includes(homeChannel)) {
+                logger.recovery(`[Recovery] Skipping 24/7 channel ${channelId} — auto-join handles this on boot.`);
+                continue;
+              }
+            }
+          }
+        } catch (_) {}
+
         const dedupeKey = `${guildId}:${channelId}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
@@ -429,12 +451,13 @@ export class RecoveryManager {
         }
 
         // Retry if the failure is a transient LiveKit race (with max retries + backoff)
+        // NOTE: "401 Unauthorized" is NOT transient — it means missing permissions or
+        // bot kicked from guild. It is handled above by the guild membership check.
         const isTransient = e.message?.includes("engine is closed") ||
             e.message?.includes("MediaPlayer after retry") ||
             e.message?.includes("LiveKit connection timeout") ||
             e.message?.includes("LiveKit failed") ||
             e.message?.includes("No room available") ||
-            e.message?.includes("401 Unauthorized") ||
             e.message?.includes("signal failure");
 
         // Use the retryCount passed into spawnPlayer from scheduleSpawn's closure.

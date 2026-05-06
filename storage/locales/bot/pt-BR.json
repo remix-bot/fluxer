@@ -173,7 +173,11 @@
       "errorStreaming": "❌ Erro ao transmitir **{{title}}** — pulando.",
       "successfullyLeft": "✅ Saiu com sucesso",
       "voiceSelectionInvalid": "Canal de voz inválido. Tente novamente ou digite `x`.",
-      "voiceChannelRequired": "❌ Por favor, entre em um **canal de voz** primeiro antes de usar este comando!"
+      "voiceChannelRequired": "❌ Por favor, entre em um **canal de voz** primeiro antes de usar este comando!",
+      "joinPermissionError": "❌ Não tenho permissão para entrar em <#{{channel}}>. Por favor, me dê a permissão de **Conectar** nesse canal.",
+      "joinFailedPermissions": "❌ Falha ao entrar no canal de voz — permissões ausentes. Por favor, certifique-se de que tenho as permissões de **Conectar** e **Falar**.",
+      "joinFailedGeneric": "❌ Falha ao entrar no canal de voz. Por favor, tente novamente.",
+      "joinFailedNotFound": "❌ Não foi possível encontrar esse canal de voz."
     },
     "clear": {
       "cleared": "🗑️ Fila limpa."
@@ -232,7 +236,9 @@
       "noVoiceChannel": "❌ Você não está em um canal de voz. Entre em um primeiro ou especifique um canal: `{{prefix}}join <#canal>`",
       "voiceChannelNotFound": "❌ Não foi possível encontrar esse canal de voz. Tente usar uma menção como `<#id_do_canal>` ou o nome exato do canal.",
       "autoLeaveInactive": "Sai do canal <#{{channel}}> por inatividade.",
-      "autoLeaveInactive247": "Sai do canal <#{{channel}}> por inatividade.\nSe quiser que eu permaneça no canal de voz, use `{{prefix}}247 on/auto`"
+      "autoLeaveInactive247": "Sai do canal <#{{channel}}> por inatividade.\nSe quiser que eu permaneça no canal de voz, use `{{prefix}}247 on/auto`",
+      "joinFailedPerms": "❌ Não tenho permissão para entrar em <#{{channel}}>. Por favor, verifique se tenho a permissão de **Conectar**.",
+      "voiceChannelUnknown": "canal de voz desconhecido"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Por favor, entre em um canal de voz primeiro.",
@@ -250,6 +256,15 @@
       "header": "📋 **{{count}} faixas na fila** • ⏱️ `{{time}}`",
       "upNext": " ▶",
       "queueTitle": "🎧 Fila"
+    },
+    "queue": {
+      "empty": "A fila está vazia.",
+      "indexOutOfBounds": "Índice fora do intervalo",
+      "removed": "**{{title}}** removido da fila com sucesso.",
+      "sourceOutOfBounds": "Índice de origem fora do intervalo",
+      "targetOutOfBounds": "Índice de destino fora do intervalo",
+      "alreadyInPosition": "A faixa já está nessa posição",
+      "moved": "**{{title}}** movido da posição {{from}} para {{to}}."
     },
     "loop": {
       "invalidChoice": "'{{choice}}' é inválido. Use `song` ou `queue`",
@@ -419,7 +434,34 @@
       "helpShortcuts": "**Atalhos:** `{{prefix}}prefix`, `{{prefix}}247`",
       "serverTitle": "⚙️ Configurações do Servidor",
       "serverHeader": "Servidor: **{{name}}**",
-      "shortcutsHint": "Atalhos: `{{prefix}}247`, `{{prefix}}prefix`\nUse `{{prefix}}settings help <config>` para saber mais sobre qualquer configuração."
+      "shortcutsHint": "Atalhos: `{{prefix}}247`, `{{prefix}}prefix`\nUse `{{prefix}}settings help <config>` para saber mais sobre qualquer configuração.",
+      "enabled": "✅ ativado",
+      "disabled": "❌ desativado",
+      "label247": "Modo 24/7",
+      "labelPrefix": "Prefixo",
+      "labelSongAnnouncements": "Anúncios de música",
+      "labelPfp": "Estilo do avatar do bot",
+      "labelLocale": "Idioma",
+      "labelVolume": "Volume padrão",
+      "labelAnnouncementChannel": "Canal de anúncios",
+      "labelRestrictVolume": "Restringir volume",
+      "labelAutojoinChannel": "Canal de auto-entrada",
+      "noDescription": "Nenhuma descrição disponível.",
+      "validValues": "**Valores válidos:** {{values}}",
+      "validRange": "**Intervalo válido:** {{min}}–{{max}}",
+      "currentValue": "**Valor atual:**",
+      "defaultValue": "**Padrão:**",
+      "settingTitle": "⚙️ {{setting}}",
+      "savedChannel": "Canal salvo: <#{{channel}}>",
+      "savedChannels": "Canais salvos ({{count}}): {{channels}}",
+      "statusDisabled": "❌ desativado",
+      "savedChannelsNone": "Canais salvos: nenhum",
+      "modeAuto": "🔄 automático",
+      "modeOn": "✅ ligado",
+      "modeOff": "❌ desligado",
+      "channelsLabel": "{{count}} canal",
+      "channelsLabelPlural": "{{count}} canais",
+      "thisServer": "este servidor"
     },
     "shuffle": {
       "emptyQueue": "Não há nada para embaralhar na fila.",

@@ -5,7 +5,7 @@ import mysql from "mysql2";
 
 /**
  * GatewayHandler — manages raw WebSocket gateway events, voice-state tracking,
- * presence rotation, and high-level Discord event handlers (GuildCreate,
+ * presence rotation, and high-level Fluxer event handlers (GuildCreate,
  * GuildDelete, VoiceStateUpdate).
  *
  * Extracted from index.mjs to reduce the Remix constructor footprint.
@@ -277,10 +277,10 @@ export class GatewayHandler {
     this.presenceTimer = setInterval(setPresence, this.presenceInterval);
   }
 
-  // ── Discord event handlers ───────────────────────────────────────────────────
+  // ── Fluxer event handlers ─────────────────────────────────────────────────────
 
   /**
-   * Register all high-level Discord event listeners on the Fluxer client.
+   * Register all high-level Fluxer event listeners on the Fluxer client.
    * Call once during bot startup.
    */
   setupEventHandlers() {
@@ -599,9 +599,9 @@ export class GatewayHandler {
         const raw = set.get("stay_247");
         if ((rekeyed || existingPlayer) && raw && raw !== "none") {
           const channels = Array.isArray(raw)
-              ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
-              : new Set([String(raw).replace(/\D/g, "")]);
-          if (channels.has(cleanOld) && cleanOld !== cleanId) {
+              ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15))
+              : new Set();
+          if (channels.has(cleanOld) && cleanOld !== cleanId && cleanId.length >= 15) {
             channels.delete(cleanOld);
             channels.add(cleanId);
             set.set("stay_247", [...channels]);
@@ -624,8 +624,8 @@ export class GatewayHandler {
           const raw = set.get("stay_247");
           if (raw && raw !== "none") {
             const channels = Array.isArray(raw)
-                ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
-                : new Set([String(raw).replace(/\D/g, "")]);
+                ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15))
+                : new Set();
             if (channels.has(cleanOld)) {
               const mode = set.get("stay_247_mode") ?? "auto";
               if (mode === "on" || mode === "auto") {

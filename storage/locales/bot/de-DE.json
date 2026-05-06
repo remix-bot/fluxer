@@ -173,7 +173,11 @@
       "errorStreaming": "❌ Fehler beim Streamen von **{{title}}** — wird übersprungen.",
       "successfullyLeft": "✅ Erfolgreich verlassen",
       "voiceSelectionInvalid": "Ungültiger Sprachkanal. Versuche es erneut oder tippe `x`.",
-      "voiceChannelRequired": "❌ Bitte trete zuerst einem **Sprachkanal** bei, bevor du diesen Befehl verwendest!"
+      "voiceChannelRequired": "❌ Bitte trete zuerst einem **Sprachkanal** bei, bevor du diesen Befehl verwendest!",
+      "joinPermissionError": "❌ Ich habe keine Berechtigung, <#{{channel}}> beizutreten. Bitte gib mir die **Verbinden**-Berechtigung in diesem Kanal.",
+      "joinFailedPermissions": "❌ Beitritt zum Sprachkanal fehlgeschlagen — fehlende Berechtigungen. Bitte stelle sicher, dass ich die **Verbinden**- und **Sprechen**-Berechtigungen habe.",
+      "joinFailedGeneric": "❌ Beitritt zum Sprachkanal fehlgeschlagen. Bitte versuche es erneut.",
+      "joinFailedNotFound": "❌ Dieser Sprachkanal wurde nicht gefunden."
     },
     "clear": {
       "cleared": "🗑️ Warteschlange geleert."
@@ -232,7 +236,9 @@
       "noVoiceChannel": "❌ Du bist in keinem Sprachkanal. Bitte trete zuerst einem bei oder gib einen Kanal an: `{{prefix}}join <#Kanal>`",
       "voiceChannelNotFound": "❌ Konnte diesen Sprachkanal nicht finden. Versuche eine Erwähnung wie `<#Kanal-ID>` oder den genauen Kanalnamen.",
       "autoLeaveInactive": "Kanal <#{{channel}}> wegen Inaktivität verlassen.",
-      "autoLeaveInactive247": "Kanal <#{{channel}}> wegen Inaktivität verlassen.\nWenn ich im Sprachkanal bleiben soll, nutze `{{prefix}}247 on/auto`"
+      "autoLeaveInactive247": "Kanal <#{{channel}}> wegen Inaktivität verlassen.\nWenn ich im Sprachkanal bleiben soll, nutze `{{prefix}}247 on/auto`",
+      "joinFailedPerms": "❌ Ich habe keine Berechtigung, <#{{channel}}> beizutreten. Bitte prüfe, ob ich die **Verbinden**-Berechtigung habe.",
+      "voiceChannelUnknown": "unbekannter Sprachkanal"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Bitte trete zuerst einem Sprachkanal bei.",
@@ -250,6 +256,15 @@
       "header": "📋 **{{count}} Tracks in der Warteschlange** • ⏱️ `{{time}}`",
       "upNext": " ▶",
       "queueTitle": "🎧 Warteschlange"
+    },
+    "queue": {
+      "empty": "Die Warteschlange ist leer.",
+      "indexOutOfBounds": "Index außerhalb des Bereichs",
+      "removed": "**{{title}}** erfolgreich aus der Warteschlange entfernt.",
+      "sourceOutOfBounds": "Quellindex außerhalb des Bereichs",
+      "targetOutOfBounds": "Zielindex außerhalb des Bereichs",
+      "alreadyInPosition": "Der Track ist bereits an dieser Position",
+      "moved": "**{{title}}** von Position {{from}} nach {{to}} verschoben."
     },
     "loop": {
       "invalidChoice": "'{{choice}}' ist ungültig. Nutze `song` oder `queue`",
@@ -419,7 +434,34 @@
       "helpShortcuts": "**Abkürzungen:** `{{prefix}}prefix`, `{{prefix}}247`",
       "serverTitle": "⚙️ Server-Einstellungen",
       "serverHeader": "Server: **{{name}}**",
-      "shortcutsHint": "Abkürzungen: `{{prefix}}247`, `{{prefix}}prefix`\nNutze `{{prefix}}settings help <Einstellung>` für mehr Infos über jede Einstellung."
+      "shortcutsHint": "Abkürzungen: `{{prefix}}247`, `{{prefix}}prefix`\nNutze `{{prefix}}settings help <Einstellung>` für mehr Infos über jede Einstellung.",
+      "enabled": "✅ aktiviert",
+      "disabled": "❌ deaktiviert",
+      "label247": "24/7-Modus",
+      "labelPrefix": "Präfix",
+      "labelSongAnnouncements": "Song-Ankündigungen",
+      "labelPfp": "Bot-Avatar-Stil",
+      "labelLocale": "Sprache",
+      "labelVolume": "Standardlautstärke",
+      "labelAnnouncementChannel": "Ankündigungskanal",
+      "labelRestrictVolume": "Lautstärke einschränken",
+      "labelAutojoinChannel": "Autojoin-Kanal",
+      "noDescription": "Keine Beschreibung verfügbar.",
+      "validValues": "**Gültige Werte:** {{values}}",
+      "validRange": "**Gültiger Bereich:** {{min}}–{{max}}",
+      "currentValue": "**Aktueller Wert:**",
+      "defaultValue": "**Standard:**",
+      "settingTitle": "⚙️ {{setting}}",
+      "savedChannel": "Kanal gespeichert: <#{{channel}}>",
+      "savedChannels": "Gespeicherte Kanäle ({{count}}): {{channels}}",
+      "statusDisabled": "❌ deaktiviert",
+      "savedChannelsNone": "Gespeicherte Kanäle: keine",
+      "modeAuto": "🔄 automatisch",
+      "modeOn": "✅ an",
+      "modeOff": "❌ aus",
+      "channelsLabel": "{{count}} Kanal",
+      "channelsLabelPlural": "{{count}} Kanäle",
+      "thisServer": "dieser Server"
     },
     "shuffle": {
       "emptyQueue": "Es gibt nichts zum Mischen in der Warteschlange.",

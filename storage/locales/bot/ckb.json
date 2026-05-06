@@ -173,7 +173,11 @@
       "errorStreaming": "❌ هەڵە لە پەخشکردنی **{{title}}** — تێپەڕاندن.",
       "successfullyLeft": "✅ بە سەرکەوتوویی دەرچوو",
       "voiceSelectionInvalid": "کەناڵی دەنگی نادروست. دووبارە هەوڵبدەرەوە یان 'x' بنێرە.",
-      "voiceChannelRequired": "❌ تکایە سەرەتا بەشداری **کەناڵێکی دەنگی** بکە پێش بەکارهێنانی ئەم فەرمانە!"
+      "voiceChannelRequired": "❌ تکایە سەرەتا بەشداری **کەناڵێکی دەنگی** بکە پێش بەکارهێنانی ئەم فەرمانە!",
+      "joinPermissionError": "❌ مۆڵەتی پێوەستبوون بە <#{{channel}}>م نییە. تکایە مۆڵەتی **پەیوەستبوون**م لەو کەناڵەدا بدە.",
+      "joinFailedPermissions": "❌ سەرکەوتوو نەبوو لە پەیوەستبوون بە کەناڵی دەنگی — مۆڵەتی پێویست نییە. تکایە دڵنیا ببەرەوە لەوەی مۆڵەتی **پەیوەستبوون** و **دەنگدان**م هەیە.",
+      "joinFailedGeneric": "❌ سەرکەوتوو نەبوو لە پەیوەستبوون بە کەناڵی دەنگی. تکایە دووبارە هەوڵبدەرەوە.",
+      "joinFailedNotFound": "❌ ئەو کەناڵە دەنگییە نەدۆزرایەوە."
     },
     "clear": {
       "cleared": "🗑️ ڕیزبەندییەکە پاککرایەوە."
@@ -232,7 +236,9 @@
       "noVoiceChannel": "❌ تۆ لە کەناڵێکی دەنگیدا نیت. تکایە سەرەتا بەشداری یەکێک بکە، یان کەناڵێک دیاریبکە: `{{prefix}}join <#کەناڵ>`",
       "voiceChannelNotFound": "❌ نەتوانرا ئەو کەناڵی دەنگییە بدۆزرێتەوە. مەنتشنێک وەک `<#channelid>` یان ناوی کەناڵەکەی تەواو تاقی بکەرەوە.",
       "autoLeaveInactive": "لە کەناڵی <#{{channel}}> دەرچوو بەهۆی بێچالاکبوون.",
-      "autoLeaveInactive247": "لە کەناڵی <#{{channel}}> دەرچوو بەهۆی بێچالاکبوون.\nئەگەر دەتەوێت لە دەنگ بمێنیتەوە، `{{prefix}}247 on/auto` بەکاربهێنە"
+      "autoLeaveInactive247": "لە کەناڵی <#{{channel}}> دەرچوو بەهۆی بێچالاکبوون.\nئەگەر دەتەوێت لە دەنگ بمێنیتەوە، `{{prefix}}247 on/auto` بەکاربهێنە",
+      "joinFailedPerms": "❌ مۆڵەتی پێوەستبوون بە <#{{channel}}>م نییە. تکایە دڵنیا ببەرەوە لەوەی مۆڵەتی **پەیوەستبوون**م هەیە.",
+      "voiceChannelUnknown": "کەناڵی دەنگی نەناسراو"
     },
     "leave": {
       "noVoiceChannel": "⚠️ تکایە سەرەتا بەشداری کەناڵێکی دەنگی بکە.",
@@ -250,6 +256,15 @@
       "header": "📋 **{{count}} تراک لە ڕیزبەندییەکەدا** • ⏱️ `{{time}}`",
       "upNext": " ▶",
       "queueTitle": "🎧 ڕیزبەندی"
+    },
+    "queue": {
+      "empty": "ڕیزبەندییەکە بەتاڵە.",
+      "indexOutOfBounds": "ئیندێکس لە دەرەوەی سنوورە",
+      "removed": "**{{title}}** بە سەرکەوتوویی لە ڕیزبەندییەکە لابرا.",
+      "sourceOutOfBounds": "ئیندێکسی سەرچاوە لە دەرەوەی سنوورە",
+      "targetOutOfBounds": "ئیندێکسی ئامانج لە دەرەوەی سنوورە",
+      "alreadyInPosition": "تراکەکە پێشتر لەو شوێنەدایە",
+      "moved": "**{{title}}** لە شوێنی {{from}} گواسترایەوە بۆ شوێنی {{to}}."
     },
     "loop": {
       "invalidChoice": "'{{choice}}' دروست نییە. `song` یان `queue` بەکاربهێنە",
@@ -419,7 +434,34 @@
       "helpShortcuts": "**کورتکراوەکان:** `{{prefix}}prefix`، `{{prefix}}247`",
       "serverTitle": "⚙️ ڕێکخستنەکانی سێرڤەر",
       "serverHeader": "سێرڤەر: **{{name}}**",
-      "shortcutsHint": "کورتکراوەکان: `{{prefix}}247`، `{{prefix}}prefix`\n`{{prefix}}settings help <ڕێکخستن>` بەکاربهێنە بۆ زانینی زیاتر دەربارەی هەر ڕێکخستنێک."
+      "shortcutsHint": "کورتکراوەکان: `{{prefix}}247`، `{{prefix}}prefix`\n`{{prefix}}settings help <ڕێکخستن>` بەکاربهێنە بۆ زانینی زیاتر دەربارەی هەر ڕێکخستنێک.",
+      "enabled": "✅ چالاک",
+      "disabled": "❌ ناچالاک",
+      "label247": "دۆخی 24/7",
+      "labelPrefix": "پێشگر",
+      "labelSongAnnouncements": "ڕاگەیاندنی گۆرانی",
+      "labelPfp": "شێوازی وێنەی بۆت",
+      "labelLocale": "زمان",
+      "labelVolume": "ئاستی دەنگی بنەڕەتی",
+      "labelAnnouncementChannel": "کەنالی ڕاگەیاندن",
+      "labelRestrictVolume": "سنووردارکردنی ئاستی دەنگ",
+      "labelAutojoinChannel": "کەنالی خۆکار بەشداریکردن",
+      "noDescription": "هیچ وەسفێک بەردەست نییە.",
+      "validValues": "**بەهای دروست:** {{values}}",
+      "validRange": "**مەودای دروست:** {{min}}–{{max}}",
+      "currentValue": "**بەهای ئێستا:**",
+      "defaultValue": "**بنەڕەتی:**",
+      "settingTitle": "⚙️ {{setting}}",
+      "savedChannel": "کەنالی پاشەکەوتکراو: <#{{channel}}>",
+      "savedChannels": "کەناڵە پاشەکەوتکراوەکان ({{count}}): {{channels}}",
+      "statusDisabled": "❌ ناچالاک",
+      "savedChannelsNone": "کەناڵە پاشەکەوتکراوەکان: هیچ",
+      "modeAuto": "🔄 خۆکار",
+      "modeOn": "✅ چالاک",
+      "modeOff": "❌ ناچالاک",
+      "channelsLabel": "{{count}} کەناڵ",
+      "channelsLabelPlural": "{{count}} کەناڵ",
+      "thisServer": "ئەم سێرڤەرە"
     },
     "shuffle": {
       "emptyQueue": "هیچ شتێک نییە لە ڕیزبەندییەکەدا بۆ تێکەڵکردن.",

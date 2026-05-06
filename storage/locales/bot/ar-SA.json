@@ -173,7 +173,11 @@
       "errorStreaming": "❌ خطأ في بث **{{title}}** — يتم التخطي.",
       "successfullyLeft": "✅ تم المغادرة بنجاح",
       "voiceSelectionInvalid": "قناة صوتية غير صالحة. حاول مرة أخرى أو اكتب `x`.",
-      "voiceChannelRequired": "❌ يرجى الانضمام إلى **قناة صوتية** أولاً قبل استخدام هذا الأمر!"
+      "voiceChannelRequired": "❌ يرجى الانضمام إلى **قناة صوتية** أولاً قبل استخدام هذا الأمر!",
+      "joinPermissionError": "❌ ليس لدي إذن للانضمام إلى <#{{channel}}>. يرجى إعطائي إذن **الاتصال** في ذلك القناة.",
+      "joinFailedPermissions": "❌ فشل الانضمام إلى القناة الصوتية — أذونات مفقودة. يرجى التأكد من أن لدي أذونات **الاتصال** و**التحدث**.",
+      "joinFailedGeneric": "❌ فشل الانضمام إلى القناة الصوتية. يرجى المحاولة مرة أخرى.",
+      "joinFailedNotFound": "❌ لم يتم العثور على تلك القناة الصوتية."
     },
     "clear": {
       "cleared": "🗑️ تم مسح قائمة الانتظار."
@@ -232,7 +236,9 @@
       "noVoiceChannel": "❌ أنت لست في قناة صوتية. يرجى الانضمام إلى واحدة أولاً، أو حدد قناة: `{{prefix}}join <#قناة>`",
       "voiceChannelNotFound": "❌ لم أتمكن من العثور على تلك القناة الصوتية. جرّب استخدام إشارة مثل `<#معرف_قناة>` أو اسم القناة الدقيق.",
       "autoLeaveInactive": "غادرت القناة <#{{channel}}> بسبب عدم النشاط.",
-      "autoLeaveInactive247": "غادرت القناة <#{{channel}}> بسبب عدم النشاط.\nإذا كنت تريدني أن أبقى في الصوت، استخدم `{{prefix}}247 on/auto`"
+      "autoLeaveInactive247": "غادرت القناة <#{{channel}}> بسبب عدم النشاط.\nإذا كنت تريدني أن أبقى في الصوت، استخدم `{{prefix}}247 on/auto`",
+      "joinFailedPerms": "❌ ليس لدي إذن للانضمام إلى <#{{channel}}>. يرجى التأكد من أن لدي إذن **الاتصال**.",
+      "voiceChannelUnknown": "قناة صوتية غير معروفة"
     },
     "leave": {
       "noVoiceChannel": "⚠️ يرجى الانضمام إلى قناة صوتية أولاً.",
@@ -250,6 +256,15 @@
       "header": "📋 **{{count}} مقطع في قائمة الانتظار** • ⏱️ `{{time}}`",
       "upNext": " ▶",
       "queueTitle": "🎧 قائمة الانتظار"
+    },
+    "queue": {
+      "empty": "قائمة الانتظار فارغة.",
+      "indexOutOfBounds": "الفهرس خارج النطاق",
+      "removed": "تمت إزالة **{{title}}** من قائمة الانتظار بنجاح.",
+      "sourceOutOfBounds": "فهرس المصدر خارج النطاق",
+      "targetOutOfBounds": "فهرس الهدف خارج النطاق",
+      "alreadyInPosition": "المقطع موجود بالفعل في هذا الموضع",
+      "moved": "تم نقل **{{title}}** من الموضع {{from}} إلى {{to}}."
     },
     "loop": {
       "invalidChoice": "'{{choice}}' غير صالح. استخدم `song` أو `queue`",
@@ -419,7 +434,34 @@
       "helpShortcuts": "**الاختصارات:** `{{prefix}}prefix`، `{{prefix}}247`",
       "serverTitle": "⚙️ إعدادات الخادم",
       "serverHeader": "الخادم: **{{name}}**",
-      "shortcutsHint": "الاختصارات: `{{prefix}}247`، `{{prefix}}prefix`\nاستخدم `{{prefix}}settings help <إعداد>` لمعرفة المزيد عن أي إعداد."
+      "shortcutsHint": "الاختصارات: `{{prefix}}247`، `{{prefix}}prefix`\nاستخدم `{{prefix}}settings help <إعداد>` لمعرفة المزيد عن أي إعداد.",
+      "enabled": "✅ مفعّل",
+      "disabled": "❌ معطّل",
+      "label247": "وضع 24/7",
+      "labelPrefix": "البادئة",
+      "labelSongAnnouncements": "إعلانات الأغاني",
+      "labelPfp": "نمط صورة البوت",
+      "labelLocale": "اللغة",
+      "labelVolume": "مستوى الصوت الافتراضي",
+      "labelAnnouncementChannel": "قناة الإعلانات",
+      "labelRestrictVolume": "تقييد مستوى الصوت",
+      "labelAutojoinChannel": "قناة الانضمام التلقائي",
+      "noDescription": "لا يوجد وصف متاح.",
+      "validValues": "**القيم الصالحة:** {{values}}",
+      "validRange": "**النطاق الصالح:** {{min}}–{{max}}",
+      "currentValue": "**القيمة الحالية:**",
+      "defaultValue": "**الافتراضي:**",
+      "settingTitle": "⚙️ {{setting}}",
+      "savedChannel": "تم حفظ القناة: <#{{channel}}>",
+      "savedChannels": "القنوات المحفوظة ({{count}}): {{channels}}",
+      "statusDisabled": "❌ معطّل",
+      "savedChannelsNone": "القنوات المحفوظة: لا يوجد",
+      "modeAuto": "🔄 تلقائي",
+      "modeOn": "✅ تشغيل",
+      "modeOff": "❌ إيقاف",
+      "channelsLabel": "{{count}} قناة",
+      "channelsLabelPlural": "{{count}} قنوات",
+      "thisServer": "هذا الخادم"
     },
     "shuffle": {
       "emptyQueue": "لا يوجد شيء لخلطه في قائمة الانتظار.",

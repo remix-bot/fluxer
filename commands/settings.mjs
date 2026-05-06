@@ -39,6 +39,17 @@ function cleanId(raw) {
   return String(raw).replace(/\D/g, "");
 }
 
+/**
+ * Validate that a value looks like a real Fluxer ID.
+ * Fluxer IDs are large numeric snowflakes (typically 17-20 digits).
+ * We accept >= 15 digits to be safe, but reject anything shorter
+ * (which would be garbage like "3", "42", "move", etc.).
+ */
+function isValidFluxerId(id) {
+  const cleaned = String(id).replace(/\D/g, "");
+  return cleaned.length >= 15 && cleaned.length <= 22;
+}
+
 /** Parse "true/false" and their aliases → boolean | null */
 function parseBool(str) {
   const s = String(str).toLowerCase().trim();
@@ -77,16 +88,18 @@ function get247Channels(set) {
   if (!raw || raw === "none") return new Set();
   if (typeof raw === "string") {
     const id = cleanId(raw);
-    return id ? new Set([id]) : new Set();
+    return (id && isValidFluxerId(id)) ? new Set([id]) : new Set();
   }
   if (Array.isArray(raw)) {
-    return new Set(raw.map(id => cleanId(id)).filter(Boolean));
+    return new Set(raw.map(id => cleanId(id)).filter(id => id && isValidFluxerId(id)));
   }
   return new Set();
 }
 
 function save247Channels(set, channels) {
-  const arr = [...channels];
+  // Only keep valid Fluxer IDs — strip anything that isn't
+  // a proper channel ID (e.g. garbage from DB corruption).
+  const arr = [...channels].filter(id => id && isValidFluxerId(id));
   set.set("stay_247", arr.length > 0 ? arr : "none");
 }
 

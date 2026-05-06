@@ -50,6 +50,28 @@ function getPlayerChannelId(player, fallbackChannelId = null) {
   return cleanId(player?._channelId ?? player?._home247Channel ?? fallbackChannelId);
 }
 
+/**
+ * Sanitize raw voice-join error messages into user-friendly text.
+ * Raw errors like "401 Unauthorized - no permissions to access the room"
+ * are confusing to users — map them to clear, translatable messages.
+ */
+function sanitizeJoinError(err) {
+  const msg = String(err?.message ?? err ?? "");
+  if (msg.includes("401") || msg.includes("Unauthorized")) {
+    return "PERMISSION";
+  }
+  if (msg.includes("permission") || msg.includes("Permission")) {
+    return "PERMISSION";
+  }
+  if (msg.includes("not found") || msg.includes("Unknown channel")) {
+    return "NOT_FOUND";
+  }
+  if (msg.includes("timeout") || msg.includes("timed out")) {
+    return "TIMEOUT";
+  }
+  return null; // unknown — fall back to raw message
+}
+
 export class PlayerManager {
   /** @type {SettingsManager} */
   settings;
@@ -673,7 +695,18 @@ export class PlayerManager {
 
         cb(player);
       } catch (err) {
-        await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joinFailed", { error: err.message }))).catch(() => {});
+        const errCode = sanitizeJoinError(err);
+        let errorMsg;
+        if (errCode === "PERMISSION") {
+          errorMsg = this._t(message, "responses.join.joinFailedPerms", { channel: `<#${cleanChannelId}>` });
+        } else if (errCode === "NOT_FOUND") {
+          errorMsg = this._t(message, "responses.join.joinFailedNotFound");
+        } else if (errCode === "TIMEOUT") {
+          errorMsg = this._t(message, "responses.join.joinFailed");
+        } else {
+          errorMsg = this._t(message, "responses.join.joinFailed", { error: err.message });
+        }
+        await statusMsg.edit(mkEmbed(errorMsg)).catch(() => {});
         this.playerMap.delete(cleanChannelId);
         player.destroy();
       }
