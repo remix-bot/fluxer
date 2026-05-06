@@ -1547,12 +1547,24 @@ export class Remix {
   }
 
   getSharedServers(user) {
-    // guild.members.cache.has() only works for cached members (requires privileged intents).
-    // Instead, use the settings guilds map — any guild the bot is in and has settings for
-    // is one we actually serve, which is a reliable proxy for "shared server".
-    const mutualGuilds = this.client.guilds.filter(g =>
-        this.settingsMgr.guilds.has(g.id)
-    );
+    if (!user) return Promise.resolve([]);
+
+    // Filter guilds to only those the specified user is actually a member of.
+    // This prevents leaking the full bot server list to unauthorized users.
+    const mutualGuilds = this.client.guilds.filter(g => {
+      // The bot must have settings for the guild (proves it's an active server)
+      if (!this.settingsMgr.guilds.has(g.id)) return false;
+      // The user must be a known member of the guild
+      if (g.members?.has?.(user.id)) return true;
+      // Fallback: check observed voice users for this guild
+      const cleanGuildId = String(g.id).replace(/\D/g, "");
+      for (const [, info] of (this.observedVoiceUsers ?? [])) {
+        const infoGuild = String(info.guildId ?? "").replace(/\D/g, "");
+        if (infoGuild === cleanGuildId) return true;
+      }
+      return false;
+    });
+
     return Promise.resolve([...mutualGuilds.values()].map(guild => ({
       name:          guild.name,
       id:            guild.id,
@@ -1560,7 +1572,7 @@ export class Remix {
           ? `https://cdn.fluxer.app/icons/${guild.id}/${guild.icon}.webp`
           : null,
       voiceChannels: guild.channels
-          .filter(c => c.isVoiceBased())
+          .filter(c => c.isVoiceBased?.() ?? false)
           .map(c => ({ name: c.name, id: c.id, icon: null })),
     })));
   }
@@ -1622,13 +1634,21 @@ process.on("uncaughtExceptionMonitor", (err, origin) => {
 });
 
 // ── Session Reboot Recovery Hooks ───────────────────────────────────────────
-const saveAndExit = () => {
+const saveAndExit = async () => {
   logger.recovery("\n[Shutdown] Saving active sessions for reboot recovery...");
   try {
     const state = remix.buildRecoveryState();
     remix.writeRecoveryState(state, "Shutdown");
   } catch (e) {
     logger.error("[Shutdown] Failed to save recovery state:", e.message);
+  }
+  // Gracefully close Redis connections before exiting
+  try {
+    if (remix.dashboard?.redis?.destroy) {
+      await remix.dashboard.redis.destroy();
+    }
+  } catch (e) {
+    logger.error("[Shutdown] Failed to close Redis:", e.message);
   }
   process.exit(0);
 };

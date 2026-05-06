@@ -24,6 +24,12 @@ const FLUXER_API_DEFAULTS = {
 export class Dashboard {
   enabled = false;
 
+  // Rate limiter for token exchange — prevents abuse of the OAuth2 code→token endpoint.
+  // Tracks recent exchange timestamps per IP/request and rejects if exceeded.
+  _tokenExchangeTimestamps = [];
+  _tokenExchangeMaxPerWindow = 10; // max exchanges
+  _tokenExchangeWindowMs = 60_000; // per 60s window
+
   /**
    * @param {Remix} remix
    * @param {Object} opts
@@ -63,10 +69,11 @@ export class Dashboard {
           return Dashboard.convertUser(user);
         }
 
-        case "sharedServers":
-          return await this.remix.getSharedServers(
-            await this.remix.client.users.fetch(data.key).catch(() => null)
-          );
+        case "sharedServers": {
+          const sharedUser = await this.remix.client.users.fetch(data.key).catch(() => null);
+          if (!sharedUser) return { error: "User not found" };
+          return await this.remix.getSharedServers(sharedUser);
+        }
 
         case "server": {
           try {
@@ -123,11 +130,10 @@ export class Dashboard {
 
         case "fluxerToken": {
           // Backend sends an authorization code — bot exchanges it for tokens.
-          // This is useful if the bot wants to perform the code→token exchange
-          // itself rather than relying on the backend to do it.
+          // Rate-limited to prevent token exchange abuse.
           const code = data.code;
           if (!code) return { error: "Missing authorization code" };
-          return await this.exchangeFluxerCode(code);
+          return await this.rateLimitedExchange(code);
         }
       }
     });
@@ -185,6 +191,33 @@ export class Dashboard {
       console.log("[Dashboard] Fluxer verify error:", e.message);
       return { error: "Failed to verify with Fluxer API: " + e.message };
     }
+  }
+
+  /**
+   * Exchange an OAuth2 authorization code for access/refresh tokens.
+   * This calls the Fluxer token endpoint directly.
+   *
+   * @param {string} code Authorization code from the OAuth2 redirect
+   * @returns {Promise<Object>} Token data or error
+   */
+  /**
+   * Rate-limited wrapper around exchangeFluxerCode.
+   * Allows a maximum of _tokenExchangeMaxPerWindow exchanges per sliding window.
+   * @param {string} code Authorization code
+   * @returns {Promise<Object>} Token data or error
+   */
+  async rateLimitedExchange(code) {
+    const now = Date.now();
+    // Prune timestamps outside the current window
+    this._tokenExchangeTimestamps = this._tokenExchangeTimestamps.filter(
+      ts => now - ts < this._tokenExchangeWindowMs
+    );
+    if (this._tokenExchangeTimestamps.length >= this._tokenExchangeMaxPerWindow) {
+      console.log("[Dashboard] Token exchange rate limit hit");
+      return { error: "Rate limit exceeded. Try again later." };
+    }
+    this._tokenExchangeTimestamps.push(now);
+    return await this.exchangeFluxerCode(code);
   }
 
   /**
@@ -256,6 +289,7 @@ export class Dashboard {
     }
     switch (params.func) {
       case "join": {
+        if (!user) return { error: "Invalid user" };
         let voiceChannel, textChannel;
         try {
           voiceChannel = await this.remix.client.channels.fetch(params.data.channel);
@@ -264,7 +298,9 @@ export class Dashboard {
           console.log(e);
           return { error: "Invalid Channel" };
         }
-        if (!user) return { error: "Invalid user" };
+        // Verify the user has permission to join the voice channel
+        const authErr = await this._authorizeUserInGuild(user, voiceChannel.guildId);
+        if (authErr) return { error: authErr };
         if (this.remix.players.playerMap.has(voiceChannel.id)) return { message: "Already Connected" };
         const fakeMsg = { channel: { channel: textChannel, guildId: voiceChannel.guildId }, message: { guildId: voiceChannel.guildId } };
         this.remix.players.initPlayer(fakeMsg, voiceChannel.id);
@@ -272,44 +308,62 @@ export class Dashboard {
       }
 
       case "pausePlayback": {
-        let player = this._getPlayerById(params.data.player);
+        const player = this._getPlayerById(params.data.player);
         if (!player) return { error: "Player not found" };
-        let msg = player.pause() || "Paused successfully";
+        const authErr = this._authorizePlayerControl(user, player);
+        if (authErr) return { error: authErr };
+        const msg = player.pause() || "Paused successfully";
         return { message: msg };
       }
 
       case "resumePlayback": {
-        let player = this._getPlayerById(params.data.player);
+        const player = this._getPlayerById(params.data.player);
         if (!player) return { error: "Player not found" };
-        let msg = player.resume() || "Resumed successfully";
+        const authErr = this._authorizePlayerControl(user, player);
+        if (authErr) return { error: authErr };
+        const msg = player.resume() || "Resumed successfully";
         return { message: msg };
       }
 
       case "skip": {
-        let player = this._getPlayerById(params.data.player);
+        const player = this._getPlayerById(params.data.player);
         if (!player) return { error: "Player not found" };
-        let msg = player.skip() || "Skipped song";
+        const authErr = this._authorizePlayerControl(user, player);
+        if (authErr) return { error: authErr };
+        const msg = player.skip() || "Skipped song";
         return { message: msg };
       }
 
       case "volume": {
-        let player = this._getPlayerById(params.data.player);
+        const player = this._getPlayerById(params.data.player);
         if (!player) return { error: "Player not found" };
-        let msg = player.setVolume(params.data.volume);
+        const authErr = this._authorizePlayerControl(user, player);
+        if (authErr) return { error: authErr };
+        const vol = Number(params.data.volume);
+        if (isNaN(vol) || vol < 0 || vol > 150) return { error: "Volume must be between 0 and 150" };
+        const msg = player.setVolume(vol);
         return { message: msg };
       }
 
       case "addToQueue": {
-        let player = this._getPlayerById(params.data.player);
+        const player = this._getPlayerById(params.data.player);
         if (!player) return { error: "Player not found" };
         if (!user) return { error: "Invalid user" };
+        const authErr = this._authorizePlayerControl(user, player);
+        if (authErr) return { error: authErr };
         const type = params.data.type;
         const query = params.data.query;
+        if (!query || typeof query !== "string") return { error: "Missing or invalid query" };
+        if (query.length > 500) return { error: "Query too long (max 500 characters)" };
         if (type === "radio") {
           const radio = this.remix.config.radio.find(e => e.name === query);
           if (!radio) return { error: "Invalid radio station" };
           player.playRadio(radio);
           return { message: "Adding radio station" };
+        }
+        // Sanitize: reject obviously malicious patterns (JavaScript URLs, data URIs)
+        if (/^(javascript|data|vbscript):/i.test(query.trim())) {
+          return { error: "Invalid query protocol" };
         }
         player.play(query);
         return { message: "Adding to queue" };
@@ -318,6 +372,67 @@ export class Dashboard {
       case "testConnection": {
         return { success: true };
       }
+
+      default:
+        return { error: "Unknown function: " + (params.func ?? "(none)") };
+    }
+  }
+
+  // ── Authorization helpers ──────────────────────────────────────────────
+
+  /**
+   * Check if a user is a bot owner, or is in the same voice channel as the player.
+   * Bot owners are always allowed. Otherwise the user must be physically in the
+   * player's voice channel to control it.
+   *
+   * @param {import("discord.js").User|null} user
+   * @param {Player} player
+   * @returns {string|null} Error message, or null if authorized
+   */
+  _authorizePlayerControl(user, player) {
+    // Bot owners bypass all checks
+    if (user && this.remix.handler?.owners?.includes?.(user.id)) return null;
+
+    if (!user) return "User not provided";
+
+    const cleanUserId = String(user.id).replace(/\D/g, "");
+    const cleanChanId = String(player._channelId ?? "").replace(/\D/g, "");
+    if (!cleanChanId) return "Player has no active channel";
+
+    // Check observed voice users — the authoritative voice state map.
+    // Map key is userId, value is { channelId, guildId }.
+    const observed = this.remix.observedVoiceUsers;
+    if (observed) {
+      for (const [mapUserId, info] of observed) {
+        if (String(mapUserId).replace(/\D/g, "") === cleanUserId) {
+          const infoChannelId = String(info.channelId ?? "").replace(/\D/g, "");
+          if (infoChannelId === cleanChanId) return null; // authorized
+        }
+      }
+    }
+
+    return "You must be in the same voice channel as the bot to control playback";
+  }
+
+  /**
+   * Verify the user has permission to perform an action in the target guild.
+   * Bot owners are always allowed. Otherwise the user must be a member of the guild.
+   *
+   * @param {import("discord.js").User} user
+   * @param {string} guildId
+   * @returns {Promise<string|null>} Error message, or null if authorized
+   */
+  async _authorizeUserInGuild(user, guildId) {
+    if (this.remix.handler?.owners?.includes?.(user.id)) return null;
+
+    try {
+      const guild = this.remix.client.guilds.get(guildId);
+      if (!guild) return "Server not found";
+      const member = await guild.members.fetch(user.id).catch(() => null);
+      if (!member) return "You are not a member of this server";
+      return null;
+    } catch (e) {
+      return "Failed to verify membership: " + e.message;
     }
   }
 
@@ -443,6 +558,22 @@ export class Dashboard {
   }
 
   /**
+   * Lightweight server summary for player payloads.
+   * Unlike convertServer(), this omits the full channels array to keep
+   * per-player Redis messages small (especially for large guilds).
+   * @param {import("discord.js").Guild} guild
+   */
+  static convertServerSummary(guild) {
+    return {
+      name: guild.name,
+      id: guild.id,
+      icon: typeof guild.iconURL === "function" ? guild.iconURL() : null,
+      description: guild.description ?? null,
+      ownerId: guild.ownerId,
+    };
+  }
+
+  /**
    * @param {Player} player
    */
   static convertPlayer(player) {
@@ -476,7 +607,10 @@ export class Dashboard {
         return ids;
       })(),
       channel: channel ? Dashboard.convertChannel(channel) : null,
-      server: guild ? Dashboard.convertServer(guild) : null,
+      // Use lightweight server summary to avoid serializing hundreds of channels
+      // per player update. The frontend should fetch full server details via
+      // the "server" request type when needed.
+      server: guild ? Dashboard.convertServerSummary(guild) : null,
     };
   }
 
@@ -518,18 +652,34 @@ export class Dashboard {
 
   // ── Pub/Sub broadcast helpers ─────────────────────────────────────────────
 
+  // Debounce map for playerUpdate — prevents flooding Redis with rapid updates.
+  _playerUpdateTimers = new Map();
+
   /**
    * Global player update (broadcast to all dashboard listeners)
+   * Debounced: rapid successive calls for the same player are coalesced
+   * into a single publish every 500ms.
    * @param {Object} details
    * @param {Player} player
    */
   playerUpdate(details, player) {
     if (!this.enabled) return;
-    const serialised = Dashboard.convertPlayer(player);
-    this.redis.send(this.redis.platform + ":players", JSON.stringify({
-      ...details,
-      player: serialised,
-    }));
+    const key = player._channelId ?? player._guildId ?? "unknown";
+    if (this._playerUpdateTimers.has(key)) {
+      clearTimeout(this._playerUpdateTimers.get(key));
+    }
+    this._playerUpdateTimers.set(key, setTimeout(() => {
+      this._playerUpdateTimers.delete(key);
+      try {
+        const serialised = Dashboard.convertPlayer(player);
+        this.redis.send(this.redis.platform + ":players", JSON.stringify({
+          ...details,
+          player: serialised,
+        }));
+      } catch (e) {
+        console.log("[Dashboard] playerUpdate error:", e.message);
+      }
+    }, 500));
   }
 
   /**
