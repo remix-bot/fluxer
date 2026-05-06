@@ -34,7 +34,6 @@
     "join": "Lass den Bot deinem Sprachkanal beitreten oder gib einen bestimmten an.",
     "leave": "Lass den Bot deinen aktuellen Sprachkanal verlassen.",
     "list": "Liste die Songs in der Warteschlange deines aktuellen Sprachkanals auf.",
-    "login": "Bestätige die Anmeldung deines Kontos auf der Website.",
     "loop": "Aktiviere/Deaktiviere die Schleife deiner Warteschlange/des Songs.",
     "lyrics": "Zeige synchronisierte Songtexte von NodeLink an.",
     "np": "Frage den Namen und die URL des aktuell spielenden Songs ab.",
@@ -73,9 +72,6 @@
     },
     "join": {
       "channel": "Eine Sprachkanal-Erwähnung, ID oder Name zum Beitreten. Standard: dein aktueller Kanal."
-    },
-    "login": {
-      "id": "Die ID, die du beim Login im Dashboard erhalten hast."
     },
     "loop": {
       "type": "Bestimmt, welche Schleife umgeschaltet werden soll."
@@ -254,11 +250,6 @@
       "header": "📋 **{{count}} Tracks in der Warteschlange** • ⏱️ `{{time}}`",
       "upNext": " ▶",
       "queueTitle": "🎧 Warteschlange"
-    },
-    "login": {
-      "dashboardDisabled": "❌ Das Dashboard ist auf diesem Bot nicht aktiviert.",
-      "success": "✅ Login erfolgreich! Du kannst jetzt auf der Webseite fortfahren.",
-      "failed": "❌ Login fehlgeschlagen! Grund: `{{error}}`. Wenn dies ein Fehler ist und das Problem besteht, wende dich an ein Teammitglied über den Server in meiner Beschreibung."
     },
     "loop": {
       "invalidChoice": "'{{choice}}' ist ungültig. Nutze `song` oder `queue`",

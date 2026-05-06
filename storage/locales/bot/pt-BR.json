@@ -34,7 +34,6 @@
     "join": "Faça o bot entrar no seu canal de voz ou especifique um.",
     "leave": "Faça o bot sair do seu canal de voz atual.",
     "list": "Liste as músicas na fila do seu canal de voz atual.",
-    "login": "Confirme o login da sua conta no site.",
     "loop": "Ative/desative o loop da fila/música.",
     "lyrics": "Exiba letras sincronizadas do NodeLink.",
     "np": "Solicite o nome e a URL da música que está tocando atualmente.",
@@ -73,9 +72,6 @@
     },
     "join": {
       "channel": "Menção, ID ou nome de um canal de voz para entrar. Padrão: seu canal atual."
-    },
-    "login": {
-      "id": "O ID que você obteve ao fazer login no painel."
     },
     "loop": {
       "type": "Especifica qual loop deve ser alternado."
@@ -254,11 +250,6 @@
       "header": "📋 **{{count}} faixas na fila** • ⏱️ `{{time}}`",
       "upNext": " ▶",
       "queueTitle": "🎧 Fila"
-    },
-    "login": {
-      "dashboardDisabled": "❌ O painel não está habilitado neste bot.",
-      "success": "✅ Login bem-sucedido! Você pode continuar para a página web agora.",
-      "failed": "❌ Falha no login! Motivo: `{{error}}`. Se isso for um erro e o problema persistir, entre em contato com um membro da equipe através do servidor na minha descrição."
     },
     "loop": {
       "invalidChoice": "'{{choice}}' é inválido. Use `song` ou `queue`",

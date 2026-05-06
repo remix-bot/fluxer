@@ -44,8 +44,8 @@ export class Remix {
     this.locale.load();
 
     this.dashboard = new Dashboard(this, {
-      mysql: config.mysql,
       ...config.dashboard,
+      fluxer: config.dashboard?.fluxer,
     });
 
     const presenceContents = config.presenceContents ?? [];

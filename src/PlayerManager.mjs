@@ -516,22 +516,25 @@ export class PlayerManager {
    */
   async leave(msg, cid) {
     if (!cid) {
-      const serverId = msg.channel?.server_id ?? msg.channel?.serverId ??
-          msg.message?.server_id ?? msg.message?.serverId;
-      if (serverId) {
+      const guildId = getMessageGuildId(msg);
+      if (guildId) {
         const matchedEntry = [...this.playerMap.entries()].find(([, player]) =>
-          String(player?._guildId ?? "").replace(/\D/g, "") === String(serverId).replace(/\D/g, "")
+          getPlayerGuildId(player) === cleanId(guildId)
         );
-        cid = matchedEntry?.[0] ?? null;
+        cid = getPlayerChannelId(matchedEntry?.[1], matchedEntry?.[0]) || matchedEntry?.[0] || null;
       }
     }
 
-    const player = cid ? this.playerMap.get(cid) : null;
+    const cleanChannelId = cleanId(cid);
+    const player = cleanChannelId
+      ? this.playerMap.get(cleanChannelId) ??
+        [...this.playerMap.values()].find((entry) => getPlayerChannelId(entry) === cleanChannelId)
+      : null;
     if (!player) return msg.reply(mkEmbed(this._t(msg, "responses._common.notInVoice")));
 
-    const activeChannelId = String(player._channelId ?? cid).replace(/\D/g, "") || cid;
+    const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;
     this.playerMap.delete(activeChannelId);
-    if (activeChannelId !== cid) this.playerMap.delete(cid);
+    if (activeChannelId !== cleanChannelId) this.playerMap.delete(cleanChannelId);
     await msg.reply(mkEmbed(this._t(msg, "responses._common.successfullyLeft")));
     await player.leave();
     player.destroy();
@@ -652,29 +655,4 @@ export class PlayerManager {
     })();
   }
 
-  async leave(msg, cid) {
-    if (!cid) {
-      const guildId = getMessageGuildId(msg);
-      if (guildId) {
-        const matchedEntry = [...this.playerMap.entries()].find(([, player]) =>
-          getPlayerGuildId(player) === cleanId(guildId)
-        );
-        cid = getPlayerChannelId(matchedEntry?.[1], matchedEntry?.[0]) || matchedEntry?.[0] || null;
-      }
-    }
-
-    const cleanChannelId = cleanId(cid);
-    const player = cleanChannelId
-      ? this.playerMap.get(cleanChannelId) ??
-        [...this.playerMap.values()].find((entry) => getPlayerChannelId(entry) === cleanChannelId)
-      : null;
-    if (!player) return msg.reply(mkEmbed(this._t(msg, "responses._common.notInVoice")));
-
-    const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;
-    this.playerMap.delete(activeChannelId);
-    if (activeChannelId !== cleanChannelId) this.playerMap.delete(cleanChannelId);
-    await msg.reply(mkEmbed(this._t(msg, "responses._common.successfullyLeft")));
-    await player.leave();
-    player.destroy();
-  }
 }

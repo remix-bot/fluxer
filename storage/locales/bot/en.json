@@ -34,7 +34,6 @@
     "join": "Make the bot join your voice channel, or specify one.",
     "leave": "Make the bot leave your current voice channel.",
     "list": "List the songs in the queue of your current voice channel.",
-    "login": "Confirm a login of your account on the website.",
     "loop": "Toggle the looping of your queue/song.",
     "lyrics": "Display synced lyrics from NodeLink.",
     "np": "Request the name and url of the currently playing song.",
@@ -73,9 +72,6 @@
     },
     "join": {
       "channel": "A voice channel mention, ID, or name to join. Defaults to your current channel."
-    },
-    "login": {
-      "id": "The id you got from logging in at the dashboard."
     },
     "loop": {
       "type": "Specifies what loop should be toggled."
@@ -254,11 +250,6 @@
       "header": "📋 **{{count}} tracks in queue** • ⏱️ `{{time}}`",
       "upNext": " ▶",
       "queueTitle": "🎧 Queue"
-    },
-    "login": {
-      "dashboardDisabled": "❌ The dashboard is not enabled on this bot.",
-      "success": "✅ Login succeeded! You can continue to the webpage now.",
-      "failed": "❌ Login failed! Reason: `{{error}}`. If this is an error and the issue persists, please contact a team member through the server in my description."
     },
     "loop": {
       "invalidChoice": "'{{choice}}' is not valid. Use `song` or `queue`",
