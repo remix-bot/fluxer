@@ -246,25 +246,7 @@ Remix includes a web dashboard for controlling the bot through a browser interfa
 
 2. Create a Fluxer OAuth2 application at Settings > application.
 
-3. Create the additional database tables required by the dashboard:
-   ```sql
-   CREATE TABLE `ksiTokens` (
-     `user` varchar(26) NOT NULL,
-     `id` varchar(50) NOT NULL,
-     `token` varchar(70) NOT NULL,
-     `createdAt` datetime NOT NULL
-   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
-
-   CREATE TABLE `logins` (
-     `user` text NOT NULL,
-     `id` varchar(50) NOT NULL,
-     `token` varchar(70) NOT NULL,
-     `verified` tinyint(1) NOT NULL,
-     `createdAt` datetime NOT NULL
-   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
-   ```
-
-4. For HTTPS support, configure SSL in `config.json`:
+3. For HTTPS support, configure SSL in `config.json`:
    ```json
    "ssl": {
      "private": "/etc/letsencrypt/live/your.domain/privkey.pem",
