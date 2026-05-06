@@ -478,50 +478,63 @@ export class Remix {
     let settingsReady = false;
 
     /**
-     * Run async tasks with bounded concurrency and optional stagger.
-     * @param {Array<{guildId, channelId, recoveryData?}>} items
+     * Run async tasks with bounded concurrency and staggered dispatch.
+     *
+     * Guarantees:
+     *   - At most `concurrency` tasks in-flight at any time.
+     *   - Minimum `staggerMs` gap between dispatching two consecutive tasks.
+     *   - When a task finishes and a slot opens, the next dispatch happens
+     *     after the remaining stagger time elapses (not immediately).
+     *
+     * @param {Array} items
      * @param {number} concurrency
-     * @param {number} staggerMs — delay between dispatching each task
+     * @param {number} staggerMs
      * @param {(item) => Promise} fn
      */
-    const runWithConcurrency = async (items, concurrency, staggerMs, fn) => {
+    const runWithConcurrency = (items, concurrency, staggerMs, fn) => {
+      const errors = [];
       let idx = 0;
       let active = 0;
-      let settled = 0;
+      let lastDispatchTime = -Infinity;
+      let dispatchTimer = null;
       const total = items.length;
-      const errors = [];
+
+      if (total === 0) return Promise.resolve(errors);
 
       return new Promise((resolve) => {
-        const tryNext = () => {
+        const tryDispatch = () => {
+          // Clear any pending stagger timer (a faster completion may have
+          // made it obsolete, or the resolve path was reached).
+          if (dispatchTimer) { clearTimeout(dispatchTimer); dispatchTimer = null; }
+
           while (active < concurrency && idx < total) {
-            const item = items[idx++];
-            // Stagger: delay before starting each subsequent batch item
-            if (idx > 1 || active > 0) {
-              const stagger = staggerMs;
-              // We don't await the stagger inside the worker — instead we
-              // schedule the next spawn after the stagger using setTimeout
-              // so the concurrency slot is only taken after the delay.
-              setTimeout(() => runOne(item), stagger);
-            } else {
-              runOne(item);
+            const now = Date.now();
+            const elapsed = now - lastDispatchTime;
+
+            // Enforce minimum gap between dispatches (skip for the very first).
+            if (elapsed < staggerMs) {
+              dispatchTimer = setTimeout(tryDispatch, staggerMs - elapsed);
+              return; // spin-wait via timer — do NOT dispatch now
             }
+
+            const item = items[idx++];
+            lastDispatchTime = Date.now();
+            active++;
+
+            fn(item)
+              .catch((e) => errors.push({ ...item, error: e.message }))
+              .finally(() => {
+                active--;
+                tryDispatch(); // a slot opened — try to fill it
+              });
           }
-          // All done when nothing left and nothing in flight
-          if (settled === total) resolve(errors);
+
+          // All items dispatched and all in-flight tasks settled.
+          if (idx >= total && active === 0) resolve(errors);
         };
 
-        const runOne = (item) => {
-          active++;
-          fn(item)
-            .catch((e) => errors.push({ ...item, error: e.message }))
-            .finally(() => {
-              active--;
-              settled++;
-              tryNext();
-            });
-        };
-
-        tryNext();
+        // Kick off the first dispatch immediately.
+        tryDispatch();
       });
     };
 
@@ -532,7 +545,7 @@ export class Remix {
       // Build a unified join list: recovery sessions + 24/7 channels
       const joinList = [];
 
-      // Recover standard reboot sessions
+      // 1. Recover standard reboot sessions
       if (fs.existsSync(recoveryPath)) {
         logger.recovery("[Recovery] Found previous session data, restoring...");
         let data = null;
@@ -553,7 +566,7 @@ export class Remix {
         }
       }
 
-      // Collect 24/7 channels (skip channels already covered by recovery)
+      // 2. Collect 24/7 channels (skip channels already covered by recovery)
       const recoveryChannels = new Set(joinList.map(j => j.channelId));
       for (const [guildId, serverSettings] of this.settingsMgr.guilds) {
         const raw = serverSettings.get("stay_247");
