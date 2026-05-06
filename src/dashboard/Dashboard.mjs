@@ -302,7 +302,13 @@ export class Dashboard {
         const authErr = await this._authorizeUserInGuild(user, voiceChannel.guildId);
         if (authErr) return { error: authErr };
         if (this.remix.players.playerMap.has(voiceChannel.id)) return { message: "Already Connected" };
-        const fakeMsg = { channel: { channel: textChannel, guildId: voiceChannel.guildId }, message: { guildId: voiceChannel.guildId } };
+        // Build a minimal fake message that satisfies PlayerManager.initPlayer().
+        // initPlayer calls message.reply() for status updates (joining, errors).
+        const fakeMsg = {
+          channel: { channel: textChannel, guildId: voiceChannel.guildId },
+          message: { guildId: voiceChannel.guildId },
+          reply: async () => ({ catch: () => {} }),
+        };
         this.remix.players.initPlayer(fakeMsg, voiceChannel.id);
         return { message: "Joining" };
       }

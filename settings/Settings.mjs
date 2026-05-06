@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { logger } from "../src/constants/Logger.mjs";
 import * as fs from "node:fs";
-import * as mysql from "mysql";
+import * as mysql from "mysql2";
 
 export class ServerSettings {
   /** @type {string} */
@@ -69,7 +69,10 @@ export class MySqlSettingsManager extends SettingsManager {
     this._loadAttempts = 0;
     res.results.forEach((r) => {
       const server = new ServerSettings(r.id, this);
-      server.deserialize(JSON.parse(r.data));
+      // mysql2 may return JSON columns as already-parsed objects;
+      // only JSON.parse when the value is still a string.
+      const parsed = (typeof r.data === "string") ? JSON.parse(r.data) : r.data;
+      server.deserialize(parsed);
       server.checkDefaults(this.defaults);
       this.guilds.set(server.id, server);
     });

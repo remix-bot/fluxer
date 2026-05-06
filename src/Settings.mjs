@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import { logger } from "./constants/Logger.mjs";
-import mysql from "mysql";
+import mysql from "mysql2";
 import { EventEmitter } from "node:events";
+
+// Re-export the abstract SettingsManager base class so JSDoc type hints and
+// the migrate script can import it from a single canonical path.
+export { SettingsManager } from "../settings/Settings.mjs";
 
 export class ServerSettings {
   id;
@@ -26,66 +30,6 @@ export class ServerSettings {
   get serializationData() { return { ...this.data, id: this.id }; }
   serialize() { return this.serializationData; }
   serializeObject() { return this.serializationData; }
-}
-
-/** @deprecated Use RemoteSettingsManager instead */
-export class SettingsManager {
-  guilds = new Map();
-  storagePath = "./storage/settings.json";
-  defaults = {};
-  descriptions = {};
-
-  constructor(storagePath = null) {
-    if (storagePath) this.storagePath = storagePath;
-    this.load();
-  }
-  loadDefaultsSync(filePath) {
-    const d = fs.readFileSync(filePath, "utf8");
-    const parsed = JSON.parse(d);
-    this.descriptions = parsed.descriptions;
-    this.defaults = parsed.values;
-  }
-  load() {
-    if (!fs.existsSync(this.storagePath)) {
-      fs.writeFileSync(this.storagePath, JSON.stringify({ guilds: [] }));
-    }
-    const json = JSON.parse(fs.readFileSync(this.storagePath, "utf8"));
-    const entries = json.guilds || json.servers || [];
-    entries.forEach((s) => {
-      const server = new ServerSettings(s.id, this);
-      server.deserialize(s);
-      server.checkDefaults(this.defaults);
-      this.guilds.set(s.id, server);
-    });
-  }
-  save() {
-    const s = [];
-    this.guilds.forEach((val) => { s.push(val.serialize()); });
-    fs.writeFileSync(this.storagePath, JSON.stringify({ guilds: s }));
-  }
-  saveAsync() {
-    return new Promise((res) => {
-      const s = [];
-      this.guilds.forEach((val) => { s.push(val.serializeObject()); });
-      fs.writeFile(this.storagePath, JSON.stringify({ guilds: s }), () => { res(); });
-    });
-  }
-  update(server, key) {
-    if (!this.guilds.has(server.id)) this.guilds.set(server.id, server);
-    const s = this.guilds.get(server.id);
-    s.data[key] = server.data[key];
-  }
-  isOption(key) { return key in this.defaults; }
-  hasServer(id) { return this.guilds.has(id); }
-  getServer(id) {
-    if (this.guilds.has(id)) return this.guilds.get(id);
-    // Create AND store so any .set() calls on the returned object are persisted.
-    // Previously this returned a detached instance, causing settings writes to silently disappear.
-    const server = new ServerSettings(id, this);
-    server.checkDefaults(this.defaults);
-    this.guilds.set(id, server);
-    return server;
-  }
 }
 
 export class RemoteSettingsManager extends EventEmitter {
@@ -132,7 +76,10 @@ export class RemoteSettingsManager extends EventEmitter {
     this._loadAttempts = 0;
     res.results.forEach((r) => {
       const server = new ServerSettings(r.id, this);
-      server.deserialize(JSON.parse(r.data));
+      // mysql2 may return JSON columns as already-parsed objects;
+      // only JSON.parse when the value is still a string.
+      const parsed = (typeof r.data === "string") ? JSON.parse(r.data) : r.data;
+      server.deserialize(parsed);
       server.checkDefaults(this.defaults);
       this.guilds.set(server.id, server);
     });

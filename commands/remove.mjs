@@ -14,7 +14,7 @@ export const command = new CommandBuilder()
 export async function run(message, data) {
   const p = await this.getPlayer(message, false, false, false);
   if (!p) return;
-  const res = p.remove(data.options[0].value);
+  const res = p.remove(data.options[0].value - 1);
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
     .setDescription(res)

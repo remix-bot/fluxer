@@ -111,7 +111,13 @@ export class MoonlinkManager extends EventEmitter {
   }
 
   /**
-   * Send voice payload to Fluxer's WebSocket
+   * Send voice payload to Fluxer's WebSocket.
+   *
+   * moonlink.js v5 passes the full gateway payload object (with `op` and `d` keys).
+   * Fluxer's client-level `ws.send()` handles serialization internally, so we
+   * pass the raw object. The native-WebSocket fallback path (line with
+   * `JSON.stringify`) is kept for edge cases where only the raw ws is available.
+   *
    * @param {string} guildId
    * @param {{ op: number, d: object }} payload
    * @private
@@ -142,7 +148,16 @@ export class MoonlinkManager extends EventEmitter {
   }
 
   /**
-   * Forward voice state updates from Fluxer to moonlink
+   * Forward voice state updates from Fluxer to moonlink.
+   *
+   * moonlink.js v5 expects raw gateway payloads via `packetUpdate()`:
+   *   - VOICE_STATE_UPDATE  → { op: 0, t: "VOICE_STATE_UPDATE", d: {...} }
+   *   - VOICE_SERVER_UPDATE → { op: 0, t: "VOICE_SERVER_UPDATE", d: {...} }
+   *
+   * VOICE_STATE_UPDATE comes from the Fluxer `VoiceStateUpdate` event.
+   * VOICE_SERVER_UPDATE must be intercepted from the raw WebSocket stream because
+   * Fluxer does not emit a dedicated event for it.
+   *
    * @param {import("@fluxerjs/core").Client} client
    * @private
    */
@@ -269,7 +284,7 @@ export class MoonlinkManager extends EventEmitter {
 
   destroy() {
     try {
-      for (const node of this.manager.nodes.nodes.values()) {
+      for (const node of this.manager.nodes?.nodes?.values?.() ?? []) {
         node.socket?.close?.();
       }
     } catch (_) {}

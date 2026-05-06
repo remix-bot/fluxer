@@ -2058,8 +2058,8 @@ export default class Player extends EventEmitter {
     if (!this.connection || this.leaving) return;
 
     const room = this.connection.room;
-    if (!room || room.state === "disconnected" || room.state === 0) {
-      logger.mediaplayer("[Player] Room disconnected, recovering connection before playing.");
+    if (!room || room.state === "disconnected" || room.state === "failed" || room.state === 0) {
+      logger.mediaplayer("[Player] Room disconnected/failed, recovering connection before playing.");
       if (songData) {
         this.queue.data.unshift(songData);
         this.queue.current = null;

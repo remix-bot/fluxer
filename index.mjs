@@ -1,21 +1,22 @@
 import * as fs from "fs";
 import path from "path";
 import { initLogger, logger } from "./src/constants/Logger.mjs";
-import { Client, Events, GatewayOpcodes, EmbedBuilder } from "@fluxerjs/core";
+import { Client, Events } from "@fluxerjs/core";
 import { CommandHandler, CommandLoader, PrefixManager } from "./src/CommandHandler.mjs";
-import { MessageHandler, PageBuilder, HelpCommand, setGlobalColor, getGlobalColor } from "./src/MessageHandler.mjs";
-import { RemoteSettingsManager, ServerSettings } from "./src/Settings.mjs";
+import { MessageHandler, PageBuilder, HelpCommand, setGlobalColor } from "./src/MessageHandler.mjs";
+import { RemoteSettingsManager } from "./src/Settings.mjs";
 import { PlayerManager } from "./src/PlayerManager.mjs";
-import Player from "./src/Player.mjs";
 import childProcess from "node:child_process";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { MoonlinkManager } from "./src/MoonlinkManager.mjs";
-import mysql from "mysql";
 import { Dashboard } from "./src/dashboard/Dashboard.mjs";
 import { Locale } from "./src/constants/Locale.mjs";
+import { RecoveryManager } from "./src/RecoveryManager.mjs";
+import { GatewayHandler } from "./src/GatewayHandler.mjs";
 
 export class Remix {
   constructor() {
+    // ── Config ───────────────────────────────────────────────────────────────
     let config;
     try {
       config = JSON.parse(fs.readFileSync("config.json", "utf8"));
@@ -26,7 +27,6 @@ export class Remix {
       console.error(`[Startup] FATAL: ${reason}`);
       process.exit(1);
     }
-    // Validate required top-level keys so missing config fails fast with a clear message
     const REQUIRED_KEYS = ["token", "mysql"];
     for (const key of REQUIRED_KEYS) {
       if (config[key] == null) {
@@ -34,7 +34,7 @@ export class Remix {
         process.exit(1);
       }
     }
-    this.config  = config;
+    this.config = config;
 
     // Apply embed color from config globally
     setGlobalColor(config.embedColor);
@@ -53,28 +53,16 @@ export class Remix {
 
     // ── Timers config ─────────────────────────────────────────────────────────
     const timers = config.timers ?? {};
-    const T = {
+    this.T = {
       aloneCheckInterval:  timers.aloneCheckInterval  ?? 30_000,
       aloneCheckDebounce:  timers.aloneCheckDebounce  ?? 500,
       rejoin247Delay:      timers.rejoin247Delay       ?? 3_000,
       leave247RejoinDelay: timers.leave247RejoinDelay  ?? 5_000,
       intentionalLeaveTTL: timers.intentionalLeaveTTL  ?? 10_000,
-      // ── Recovery tuning ──────────────────────────────────────────────────────
-      // Stagger delay between each session join during recovery / 247 auto-join.
-      // Prevents hammering the LiveKit server with concurrent room + MediaPlayer
-      // creation, which causes "track publication timed out" errors.
-      recoveryStaggerMs:   timers.recoveryStaggerMs    ?? 2_000,
-      // Max concurrent recovery joins.  Keeps resource usage bounded on bots
-      // with many 247 channels.  2 is a safe default — 3 works if the
-      // LiveKit server is on the same network.
-      recoveryConcurrency:  timers.recoveryConcurrency   ?? 2,
     };
 
+    // ── Fluxer Client ────────────────────────────────────────────────────────
     const client = new Client({
-      // Fluxer uses server-side intent declarations; intents here are informational.
-      // Set to the bitmask your bot actually has enabled on the developer dashboard so
-      // that a missing-intent failure is visible at startup rather than silently breaking
-      // voice state tracking.  0 = inherit from gateway (Fluxer default).
       intents: config["fluxer.js"]?.intents ?? 0,
       ...config["fluxer.js"],
       presence: presenceContents.length > 0 ? {
@@ -86,18 +74,18 @@ export class Remix {
     });
 
     client.setMaxListeners(50);
-
     this.client = client;
 
+    // ── Message & Settings handlers ──────────────────────────────────────────
     const messages = new MessageHandler(this.client);
     this.messages  = messages;
 
     const settings    = new RemoteSettingsManager(config.mysql, "./storage/defaults.json");
     this.settingsMgr  = settings;
 
-    // Bind settings manager to locale so it can resolve per-guild locale settings
     this.locale.bind(this.settingsMgr);
 
+    // ── Command handler ──────────────────────────────────────────────────────
     const commands = new CommandHandler(messages);
     this.handler   = commands;
 
@@ -125,502 +113,34 @@ export class Remix {
     };
     commands.owners = config.owners ?? [];
 
-    // ── MoonlinkManager ───────────────────────────────────────────────────────
+    // ── MoonlinkManager (placeholder) ───────────────────────────────────────
     this.moonlink = null;
-
-    // Guards for one-time setup inside Events.Ready (which fires on every reconnect).
-    // Without these, each reconnect stacks another listener / interval.
-    let wsListenerAttached  = false;
     let moonlinkInitialised = false;
-    let presenceTimer       = null;
 
-    // track presence rotation index outside the Ready handler so it
-    // persists across reconnects instead of resetting to 0 each time.
-    let presenceIndex = 0;
+    // ── Voice state tracking maps (created early so all modules can reference) ──
+    this.observedVoiceUsers = new Map();
+    this.observedVoiceBots  = new Map();
 
-    // Per-channel spawn mutex — prevents two rapid calls both passing the
-    // playerMap.has() guard before either has inserted, creating zombie players.
-    const pendingSpawns = new Set();
-    const scheduledSpawns = new Map();
-    const recoveryPath = "./storage/recovery.json";
-    const normalizeChannelId = (value) => String(value ?? "").replace(/\D/g, "");
-    const cloneRecoveryTrack = (track) => {
-      try { return JSON.parse(JSON.stringify(track)); } catch { return track; }
-    };
-    const buildRecoveryState = () => {
-      const sessions = [];
-      const seen = new Set();
+    // ── Caches ───────────────────────────────────────────────────────────────
+    this._announcementChannelCache = new Map();
+    this.intentionalLeaves = new Map();
 
-      for (const [channelKey, player] of this.players.playerMap.entries()) {
-        try {
-          if (!player || player._destroyed || player.leaving) continue;
+    // ── Recovery Manager ────────────────────────────────────────────────────
+    // Handles session persistence, boot recovery, 24/7 auto-join, and player
+    // spawning with concurrency control.
+    this.recoveryManager = new RecoveryManager(this);
 
-          const guildId = normalizeChannelId(player._guildId);
-          const channelId = normalizeChannelId(player._channelId ?? channelKey);
-          if (!guildId || !channelId) continue;
+    // ── Gateway Handler ─────────────────────────────────────────────────────
+    // Handles raw WS gateway events, voice-state tracking, presence rotation,
+    // and high-level Discord event handlers (GuildCreate, GuildDelete,
+    // VoiceStateUpdate).
+    this.gatewayHandler = new GatewayHandler(this, this.recoveryManager);
 
-          const dedupeKey = `${guildId}:${channelId}`;
-          if (seen.has(dedupeKey)) continue;
-          seen.add(dedupeKey);
+    // Register GuildCreate, GuildDelete, VoiceStateUpdate handlers now so they
+    // are active before the first Ready event fires.
+    this.gatewayHandler.setupEventHandlers();
 
-          const current = player.queue.getCurrent();
-          const queueData = player.queue.getQueue();
-          const tracksToSave = [];
-          if (current) tracksToSave.push(cloneRecoveryTrack(current));
-          for (const track of queueData) tracksToSave.push(cloneRecoveryTrack(track));
-
-          sessions.push({
-            guildId,
-            channelId,
-            home247ChannelId: normalizeChannelId(player._home247Channel) || channelId,
-            textChannelId: player.textChannel?.id ?? player.textChannel?._id ?? null,
-            queue: tracksToSave,
-            loopQueue: !!player.queue.loop,
-            loopSong: !!player.queue.songLoop,
-            preferredVolume: player.preferredVolume ?? 1,
-            savedAt: Date.now(),
-          });
-        } catch (_) {}
-      }
-
-      return sessions;
-    };
-    const writeRecoveryState = (state, sourceLabel) => {
-      if (!Array.isArray(state) || state.length === 0) {
-        logger.recovery(`[${sourceLabel}] No active sessions to save.`);
-        return false;
-      }
-
-      const tmpPath = `${recoveryPath}.tmp`;
-      fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2));
-      fs.renameSync(tmpPath, recoveryPath);
-      logger.recovery(`[${sourceLabel}] Saved ${state.length} active session(s) to ${recoveryPath}`);
-      return true;
-    };
-    const normalizeRecoverySessions = (rawSessions) => {
-      if (!Array.isArray(rawSessions)) return [];
-
-      const deduped = new Map();
-      for (const session of rawSessions) {
-        const guildId = normalizeChannelId(session?.guildId);
-        const channelId = normalizeChannelId(session?.channelId ?? session?.home247ChannelId);
-        if (!guildId || !channelId) continue;
-
-        deduped.set(`${guildId}:${channelId}`, {
-          ...session,
-          guildId,
-          channelId,
-          home247ChannelId: normalizeChannelId(session?.home247ChannelId) || channelId,
-          queue: Array.isArray(session?.queue) ? session.queue : [],
-          loopQueue: !!session?.loopQueue,
-          loopSong: !!session?.loopSong,
-        });
-      }
-
-      return [...deduped.values()];
-    };
-    this._buildRecoveryState = buildRecoveryState;
-    this._writeRecoveryState = writeRecoveryState;
-    const scheduleSpawn = (guildId, channelId, delayMs = 0, recoveryData = null, reason = "spawn") => {
-      const cleanChannelId = normalizeChannelId(channelId);
-      if (!cleanChannelId) return;
-
-      const existing = scheduledSpawns.get(cleanChannelId);
-      if (existing) clearTimeout(existing.timer);
-
-      const timer = setTimeout(() => {
-        scheduledSpawns.delete(cleanChannelId);
-        spawnPlayer(guildId, cleanChannelId, 0, recoveryData).catch(e => {
-          logger.warn(`[PlayerSpawn] Scheduled ${reason} failed for ${cleanChannelId}:`, e?.message ?? e);
-        });
-      }, Math.max(0, delayMs));
-
-      scheduledSpawns.set(cleanChannelId, { timer, guildId, recoveryData, reason });
-    };
-
-    // ── spawnPlayer ───────────────────────────────────────────────────────────
-    const spawnPlayer = async (guildId, channelId, delayMs = 0, recoveryData = null) => {
-      if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
-
-      const cleanChannelId = normalizeChannelId(channelId);
-      if (!cleanChannelId) return;
-
-      const scheduled = scheduledSpawns.get(cleanChannelId);
-      if (scheduled) {
-        clearTimeout(scheduled.timer);
-        scheduledSpawns.delete(cleanChannelId);
-      }
-
-      // Only enforce 24/7 check if we are NOT recovering from a reboot
-      if (!recoveryData) {
-        const set = this.settingsMgr.getServer(guildId);
-        const raw = set.get("stay_247");
-        if (!raw || raw === "none") return;
-
-        const channels = Array.isArray(raw)
-            ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
-            : new Set([String(raw).replace(/\D/g, "")]);
-        if (!channels.has(cleanChannelId)) return;
-      }
-
-      // Atomic mutex check — blocks concurrent spawns for the same channel.
-      if (this.players.playerMap.has(cleanChannelId) || pendingSpawns.has(cleanChannelId)) return;
-      pendingSpawns.add(cleanChannelId);
-
-      try {
-        let channel = client.channels.get(cleanChannelId);
-        if (!channel) {
-          // voiceAdapterCreator is a concept and not meaningful in Fluxer.
-          // A simple cache-miss check is sufficient — fetch only when not already cached.
-          try {
-            channel = await client.channels.fetch(cleanChannelId);
-          } catch (e) {
-            logger.warn("[PlayerSpawn] Could not fetch channel", cleanChannelId, e.message);
-            return;
-          }
-        }
-        if (!channel) { logger.warn("[PlayerSpawn] Channel not found:", cleanChannelId); return; }
-        client.channels.set(cleanChannelId, channel);
-
-        const p = new Player(this.config.token, {
-          client:           client,
-          config:           config,
-          nodelink:         config.nodelink,
-          moonlink:         this.moonlink,
-          settingsMgr:      this.settingsMgr,
-          observedVoiceUsers: this.observedVoiceUsers,
-        });
-        this.players.setupEvents(p, { channelId: cleanChannelId, guildId });
-
-        p.on("autoleave", async () => {
-          const activeChannelId = String(p._channelId ?? cleanChannelId).replace(/\D/g, "") || cleanChannelId;
-          const homeChannelId = String(p._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
-          // Read 247 state BEFORE destroying the player so we can decide
-          // whether to rejoin. Destroying first, then checking, means the
-          // check always runs against a clean state — which is correct —
-          // but the old code called p.destroy() before the spawnPlayer mutex
-          // check, which could race with a concurrent spawn.
-          const raw2      = this.settingsMgr.getServer(guildId).get("stay_247");
-          const channels2 = (!raw2 || raw2 === "none")
-              ? []
-              : Array.isArray(raw2)
-                  ? raw2.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
-                  : [String(raw2).replace(/\D/g, "")].filter(Boolean);
-          const mode2 = this.settingsMgr.getServer(guildId).get("stay_247_mode") ?? "auto";
-
-          // Remove player from map and destroy it now that we've read the state.
-          this.players.playerMap.delete(activeChannelId);
-          if (activeChannelId !== cleanChannelId) this.players.playerMap.delete(cleanChannelId);
-          p.destroy();
-
-          if (channels2.includes(homeChannelId) || channels2.includes(activeChannelId)) {
-            // "on"  = always stay in voice, rejoin even when queue ends
-            // "auto" = stay while people are around / queue is active, rejoin
-            // Both modes should rejoin on autoleave — the difference is only
-            // whether the inactivity timer fires at all (handled in Player).
-            if (mode2 === "on" || mode2 === "auto") {
-              scheduleSpawn(guildId, homeChannelId, T.rejoin247Delay, null, "247-autoleave");
-            }
-          } else {
-            // 24/7 is off — send inactivity message with hint to enable 247
-            try {
-              const prefix = this.handler?.getPrefix?.(guildId) ?? "%";
-              const guild  = this.client.guilds.get(guildId);
-              const ch = guild?.channels?.find(c =>
-                  (c.isTextBased?.() ?? c.channel_type === "TextChannel" ?? true) &&
-                  (c.permissionsFor?.(this.client.user)?.has?.("SendMessages") ?? true)
-              );
-                if (ch) {
-                  const embed = new EmbedBuilder()
-                      .setColor(getGlobalColor())
-                      .setDescription(
-                          `Left channel <#${activeChannelId}> because of inactivity.\n` +
-                          `If you want me to stay in voice, use \`${prefix}247 on/auto\``
-                      )
-                      .toJSON();
-                ch.send({ embeds: [embed] }).catch(() => {});
-              }
-            } catch (_) {}
-          }
-        });
-
-        p.on("message", (m) => {
-          const raw      = this.settingsMgr.getServer(guildId).get("songAnnouncements");
-          // Centralised falsy check — mirrors the canonical list in settings/runnables.mjs
-          // so both places stay in sync if valid values ever change.
-          const disabled = raw === false || raw === 0 ||
-              ["false", "0", "no", "off", "disable"].includes(String(raw).toLowerCase().trim());
-          if (disabled) return;
-          const guild = this.client.guilds.get(guildId);
-          // Announcement channel lookup order:
-          //   1. In-memory cache (fastest — populated on first find after startup)
-          //   2. Persisted setting "announcementChannelId" (survives restarts)
-          //   3. Channel scan (expensive — only on first use per guild per process lifetime)
-          const serverSet  = this.settingsMgr.getServer(guildId);
-          const cachedChId = this._announcementChannelCache.get(guildId)
-              ?? serverSet.get("announcementChannelId")
-              ?? null;
-          let ch = cachedChId ? guild?.channels?.get(String(cachedChId)) : null;
-          // if cached channel is gone (deleted/uncached), clear the stale
-          // entry immediately so we don't re-scan on every subsequent message event.
-          if (cachedChId && !ch) {
-            this._announcementChannelCache.delete(guildId);
-          }
-          if (!ch) {
-            ch = guild?.channels?.find(c =>
-                (c.isTextBased?.() ?? c.channel_type === "TextChannel" ?? true) &&
-                (c.permissionsFor?.(this.client.user)?.has?.("SendMessages") ?? true)
-            );
-            if (ch) {
-              this._announcementChannelCache.set(guildId, ch.id);
-              // Persist so future restarts skip the expensive channel scan
-              if (serverSet.get("announcementChannelId") !== ch.id) {
-                serverSet.set("announcementChannelId", ch.id);
-              }
-            }
-          }
-          ch?.send({ embeds: [{ description: String(m), color: getGlobalColor() }] }).catch(() => {});
-        });
-
-        this.players.playerMap.set(cleanChannelId, p);
-
-        try {
-          await p.join(cleanChannelId);
-
-          // Record the intended 247 home channel for this player.
-          // This is the channel spawnPlayer was called with — it doesn't
-          // change when the bot is temporarily moved to a transit channel,
-          // so _is247Enabled() can always check the right channel per-player.
-          p._home247Channel = cleanChannelId;
-
-          // ==== RESTORE STATE IF RECOVERING ====
-          if (recoveryData) {
-            if (recoveryData.textChannelId) {
-              p.textChannel = client.channels.get(recoveryData.textChannelId);
-            }
-            if (recoveryData.home247ChannelId) {
-              p._home247Channel = normalizeChannelId(recoveryData.home247ChannelId) || cleanChannelId;
-            }
-            if (recoveryData.loopQueue) p.queue.setLoop(true);
-            if (recoveryData.loopSong)  p.queue.setSongLoop(true);
-            if (typeof recoveryData.preferredVolume === "number") {
-              p.preferredVolume = recoveryData.preferredVolume;
-            }
-
-            if (recoveryData.queue && recoveryData.queue.length > 0) {
-              // Restore queue preserving original position order.
-              // The saved array is [currentTrack, ...remainingTracks], so
-              // addMany keeps the exact same order and playNext() resumes
-              // from the track that was playing before the crash/reload.
-              p.queue.addMany(recoveryData.queue);
-
-              // Wait until Moonlink is ready before starting playback so
-              // the first play attempt doesn't fail silently on a slow node.
-              const startPlayback = () => p.playNext().catch(e =>
-                logger.warn("[Recovery] playNext failed:", e?.message)
-              );
-
-              if (this.moonlink?._sessionId || this.moonlink?.sessionId) {
-                // Moonlink already has an active session — start immediately.
-                startPlayback();
-              } else if (this.moonlink) {
-                // Moonlink exists but session not yet confirmed — wait for it.
-                this.moonlink.once("ready", () => startPlayback());
-              } else {
-                // No moonlink at all (nodelink-only setup) — start immediately.
-                startPlayback();
-              }
-            }
-            logger.recovery(`[Recovery] Restored session in ${cleanChannelId} (${recoveryData.queue?.length ?? 0} track(s)).`);
-          }
-        } catch (e) {
-          this.players.playerMap.delete(cleanChannelId);
-          // destroy() removes the moonlink "ready" listener attached in the Player constructor.
-          // Without this, every failed join permanently leaks a listener on the moonlink manager.
-          try { p.destroy(); } catch (_) {}
-          logger.warn("[PlayerSpawn] Failed to join channel", cleanChannelId, "guild", guildId, e.message);
-
-          // Retry if the failure is a transient LiveKit race (engine closed mid-join)
-          // and this is a 247 channel or a recovery session. These failures are
-          // expected when LiveKit disconnects at the exact moment we try to join —
-          // waiting longer gives the room time to fully tear down before we retry.
-          const isTransient = e.message?.includes("engine is closed") ||
-              e.message?.includes("MediaPlayer after retry") ||
-              e.message?.includes("LiveKit connection timeout") ||
-              e.message?.includes("LiveKit failed") ||
-              e.message?.includes("No room available");
-          const shouldRetry = isTransient && !recoveryData?.queue?.length
-              ? (() => {
-                  try {
-                    const raw = this.settingsMgr.getServer(guildId)?.get("stay_247");
-                    return raw && raw !== "none";
-                  } catch (_) { return false; }
-                })()
-              : isTransient && !!recoveryData;
-          if (shouldRetry) {
-            const retryDelay = T.rejoin247Delay * 3; // longer than normal rejoin
-            logger.warn(`[PlayerSpawn] Transient join failure — retrying in ${retryDelay}ms`);
-            scheduleSpawn(guildId, cleanChannelId, retryDelay, recoveryData ?? null, "transient-join-retry");
-          }
-        }
-
-        return p;
-      } finally {
-        // Always release the mutex so future spawns aren't permanently blocked.
-        pendingSpawns.delete(cleanChannelId);
-      }
-    };
-
-    this._spawnPlayer = spawnPlayer;
-
-    // ── Auto-join & Recovery ──────────────────────────────────────────────────
-    let botReady      = false;
-    let settingsReady = false;
-
-    /**
-     * Run async tasks with bounded concurrency and staggered dispatch.
-     *
-     * Guarantees:
-     *   - At most `concurrency` tasks in-flight at any time.
-     *   - Minimum `staggerMs` gap between dispatching two consecutive tasks.
-     *   - When a task finishes and a slot opens, the next dispatch happens
-     *     after the remaining stagger time elapses (not immediately).
-     *
-     * @param {Array} items
-     * @param {number} concurrency
-     * @param {number} staggerMs
-     * @param {(item) => Promise} fn
-     */
-    const runWithConcurrency = (items, concurrency, staggerMs, fn) => {
-      const errors = [];
-      let idx = 0;
-      let active = 0;
-      let lastDispatchTime = -Infinity;
-      let dispatchTimer = null;
-      const total = items.length;
-
-      if (total === 0) return Promise.resolve(errors);
-
-      return new Promise((resolve) => {
-        const tryDispatch = () => {
-          // Clear any pending stagger timer (a faster completion may have
-          // made it obsolete, or the resolve path was reached).
-          if (dispatchTimer) { clearTimeout(dispatchTimer); dispatchTimer = null; }
-
-          while (active < concurrency && idx < total) {
-            const now = Date.now();
-            const elapsed = now - lastDispatchTime;
-
-            // Enforce minimum gap between dispatches (skip for the very first).
-            if (elapsed < staggerMs) {
-              dispatchTimer = setTimeout(tryDispatch, staggerMs - elapsed);
-              return; // spin-wait via timer — do NOT dispatch now
-            }
-
-            const item = items[idx++];
-            lastDispatchTime = Date.now();
-            active++;
-
-            fn(item)
-              .catch((e) => errors.push({ ...item, error: e.message }))
-              .finally(() => {
-                active--;
-                tryDispatch(); // a slot opened — try to fill it
-              });
-          }
-
-          // All items dispatched and all in-flight tasks settled.
-          if (idx >= total && active === 0) resolve(errors);
-        };
-
-        // Kick off the first dispatch immediately.
-        tryDispatch();
-      });
-    };
-
-    const tryAutoJoin = async () => {
-      if (!botReady || !settingsReady) return;
-      await new Promise(r => setTimeout(r, 2000));
-
-      // Build a unified join list: recovery sessions + 24/7 channels
-      const joinList = [];
-
-      // 1. Recover standard reboot sessions
-      if (fs.existsSync(recoveryPath)) {
-        logger.recovery("[Recovery] Found previous session data, restoring...");
-        let data = null;
-        try {
-          data = JSON.parse(fs.readFileSync(recoveryPath, "utf8"));
-          fs.unlinkSync(recoveryPath);
-        } catch (e) {
-          logger.error("[Recovery] Failed to read/parse recovery file:", e);
-          try { fs.unlinkSync(recoveryPath); } catch (_) {}
-        }
-        const sessions = normalizeRecoverySessions(data);
-        for (const session of sessions) {
-          joinList.push({
-            guildId: session.guildId,
-            channelId: session.channelId,
-            recoveryData: session,
-          });
-        }
-      }
-
-      // 2. Collect 24/7 channels (skip channels already covered by recovery)
-      const recoveryChannels = new Set(joinList.map(j => j.channelId));
-      for (const [guildId, serverSettings] of this.settingsMgr.guilds) {
-        const raw = serverSettings.get("stay_247");
-        if (!raw || raw === "none") continue;
-        const mode = serverSettings.get("stay_247_mode") ?? "auto";
-        if (mode !== "auto" && mode !== "on") continue;
-
-        const channelIds = Array.isArray(raw)
-            ? raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
-            : [String(raw).replace(/\D/g, "")].filter(Boolean);
-
-        for (const channelId of channelIds) {
-          const clean = String(channelId).replace(/\D/g, "");
-          if (clean && !recoveryChannels.has(clean)) {
-            joinList.push({ guildId, channelId: clean, recoveryData: null });
-          }
-        }
-      }
-
-      if (joinList.length === 0) return;
-
-      const startTime = Date.now();
-      logger.recovery(
-        `[Recovery] Joining ${joinList.length} session(s) ` +
-        `(concurrency: ${T.recoveryConcurrency}, stagger: ${T.recoveryStaggerMs}ms)...`
-      );
-
-      const errors = await runWithConcurrency(
-        joinList,
-        T.recoveryConcurrency,
-        T.recoveryStaggerMs,
-        async (item) => {
-          await spawnPlayer(
-            item.guildId,
-            item.channelId,
-            0, // stagger is handled by runWithConcurrency
-            item.recoveryData,
-          );
-        },
-      );
-
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      const ok = joinList.length - errors.length;
-      if (errors.length > 0) {
-        for (const err of errors) {
-          logger.error("[Recovery] Failed to join channel", err.channelId, "guild", err.guildId, err.error);
-        }
-      }
-      logger.recovery(
-        `[Recovery] Processed ${joinList.length} session(s) in ${elapsed}s ` +
-        `(${ok} ok, ${errors.length} failed).`
-      );
-    };
-
+    // ── Settings ready callback ──────────────────────────────────────────────
     settings.on("ready", () => {
       initLogger(config);
       logger.settings("[settings] Loaded from DB.");
@@ -637,8 +157,8 @@ export class Remix {
           serverSettings.set("stay_247", clean ? [clean] : "none");
         }
       }
-      settingsReady = true;
-      tryAutoJoin();
+      this.recoveryManager.settingsReady = true;
+      this.recoveryManager.tryAutoJoin();
     });
 
     // ── Bot ready ─────────────────────────────────────────────────────────────
@@ -654,10 +174,9 @@ export class Remix {
 
       const botId = client.user?.id ?? "0";
 
-      // Guard Moonlink creation exactly like wsListenerAttached guards the WS listener.
-      // Previously new MoonlinkManager() + .on("ready") ran on every gateway reconnect,
-      // creating a fresh instance each time and stacking an extra "ready" listener on it.
-      // The old orphaned instance kept its listener alive → duplicate session updates + memory leak.
+      // MoonlinkManager initialisation — stays here because it's audio
+      // infrastructure, not gateway handling.  The guard prevents stacking
+      // listeners on reconnect.
       if (!moonlinkInitialised) {
         moonlinkInitialised = true;
         this.moonlink = new MoonlinkManager(config.nodelink ?? {}, client);
@@ -676,7 +195,6 @@ export class Remix {
           logger.error("[Moonlink] Init failed:", e.message);
         }
       } else {
-        // On reconnect, re-announce the node so Moonlink re-establishes its WS session.
         logger.moonlink("[Moonlink] Reconnected — re-initialising node session.");
         try {
           await this.moonlink.init(botId);
@@ -685,679 +203,12 @@ export class Remix {
         }
       }
 
-      for (const [gId, guild] of client.guilds) {
-        // guild.voice_states — raw snake_case array from @fluxerjs/core gateway payload (preferred).
-        // guild.voiceStates — voiceStateManager collection (fallback).
-        const voiceStatesRaw =
-            guild.voice_states ??
-            guild.voiceStates ??
-            null;
-        if (!voiceStatesRaw) continue;
-        // Handle plain {[userId]: channelId} object, {[userId]: stateObj}, array, or Map
-        if (!Array.isArray(voiceStatesRaw) && typeof voiceStatesRaw === "object"
-            && typeof voiceStatesRaw.values !== "function") {
-          for (const [uid, val] of Object.entries(voiceStatesRaw)) {
-            const channelId = typeof val === "string" ? val
-                : val?.channelId ?? val?.channel_id ?? null;
-            if (!uid || !channelId) continue;
-            const isBot = val?.member?.user?.bot ?? false;
-            const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
-            target.set(uid, { channelId, guildId: gId });
-          }
-        } else {
-          const entries = Array.isArray(voiceStatesRaw)
-              ? voiceStatesRaw
-              : [...voiceStatesRaw.values()];
-          for (const state of entries) {
-            const userId    = state?.userId ?? state?.user_id ?? state?.id;
-            const channelId = state?.channelId ?? state?.channel_id;
-            if (!userId || !channelId) continue;
-            const isBot  = state?.member?.user?.bot ?? false;
-            const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
-            target.set(userId, { channelId, guildId: gId });
-          }
-        }
-      }
-
-      try {
-        const shard0     = client.ws?.shards?.get?.(0);
-        const wsObj      = shard0?.ws ?? null;
-
-        // Remove listener from the previous socket if it's a different object
-        if (wsListenerAttached && this._rawGatewayWsObj && this._rawGatewayWsObj !== wsObj) {
-          try {
-            if (typeof this._rawGatewayWsObj.removeEventListener === "function") {
-              this._rawGatewayWsObj.removeEventListener("message", this._rawGatewayMessageListener ?? this._rawGatewayHandler);
-              this._rawGatewayWsObj.removeEventListener("error",   this._rawGatewayErrorHandler);
-            } else if (typeof this._rawGatewayWsObj.off === "function") {
-              this._rawGatewayWsObj.off("message", this._rawGatewayMessageListener ?? this._rawGatewayHandler);
-              this._rawGatewayWsObj.off("error",   this._rawGatewayErrorHandler);
-            }
-          } catch (_) {}
-        }
-
-        if (wsObj && wsObj !== this._rawGatewayWsObj) {
-          this._rawGatewayHandler = (data) => {
-            try {
-              const payload = typeof data === "string" ? JSON.parse(data) : data;
-
-              if (payload?.op === GatewayOpcodes.GatewayError || payload?.op === 12) {
-                logger.warn("[Gateway] GatewayError (12) received from Fluxer:", payload.d);
-              }
-
-              if (payload?.op === GatewayOpcodes.Hello || payload?.op === 10) {
-                logger.player(`[Gateway] HELLO received (heartbeat ${payload.d?.heartbeat_interval ?? "unknown"}ms)`);
-              }
-              if (payload?.op === GatewayOpcodes.Reconnect || payload?.op === 7) {
-                logger.warn("[Gateway] RECONNECT requested by gateway.");
-              }
-              if (payload?.op === GatewayOpcodes.InvalidSession || payload?.op === 9) {
-                logger.warn("[Gateway] INVALID_SESSION received from gateway.");
-              }
-
-              if (payload?.op !== 0) return;
-
-              // READY payload contains an unavailable-guilds summary, but some
-              // Fluxer gateway implementations include voice_states inside each
-              // guild object in the READY d.guilds array — seed them here so the
-              // bot knows who is in voice immediately on reboot, before the
-              // individual GUILD_CREATE bursts complete.
-              if (payload.t === "READY") {
-                logger.player(`[Gateway] READY received (session ${payload.d?.session_id ?? "unknown"})`);
-                const readyGuilds = payload.d?.guilds;
-                if (Array.isArray(readyGuilds)) {
-                  for (const g of readyGuilds) {
-                    const gId = g?.id;
-                    if (!gId || !Array.isArray(g.voice_states)) continue;
-                    for (const state of g.voice_states) {
-                      const userId    = state.user_id;
-                      const channelId = state.channel_id;
-                      if (!userId || !channelId) continue;
-                      const isBot  = state.member?.user?.bot ?? false;
-                      const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
-                      target.set(isBot ? getObservedVoiceBotKey(userId, gId) : userId, { channelId, guildId: gId });
-                    }
-                  }
-                }
-              }
-
-              if (payload.t === "RESUMED") {
-                logger.player("[Gateway] RESUMED received from gateway.");
-              }
-
-              if (payload.t === "GUILD_CREATE") {
-                const d           = payload.d;
-                const gId         = d?.id;
-                const voiceStates = d?.voice_states;
-                if (gId && Array.isArray(voiceStates) && voiceStates.length > 0) {
-                  for (const state of voiceStates) {
-                    const userId    = state.user_id;
-                    const channelId = state.channel_id;
-                    if (!userId || !channelId) continue;
-                    const isBot  = state.member?.user?.bot ?? false;
-                    const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
-                    target.set(isBot ? getObservedVoiceBotKey(userId, gId) : userId, { channelId, guildId: gId });
-                  }
-                }
-              }
-
-              if (payload.t === "VOICE_SERVER_UPDATE") {
-                logger.voiceState(`[Gateway] VOICE_SERVER_UPDATE guild=${payload.d?.guild_id ?? "dm"} endpoint=${payload.d?.endpoint ?? "unknown"}`);
-              }
-
-              if (payload.t === "VOICE_STATE_UPDATE") {
-                const d         = payload.d;
-                const userId    = d?.user_id;
-                const channelId = d?.channel_id ?? null;
-                const guildId   = d?.guild_id;
-                const isBot     = d?.member?.user?.bot ?? false;
-                if (!userId) return;
-                const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
-                const voiceKey = isBot ? getObservedVoiceBotKey(userId, guildId) : userId;
-                // WS path correctly deletes on channelId=null,
-                // keeping observedVoice* from growing unbounded.
-                if (channelId) target.set(voiceKey, { channelId, guildId });
-                else if (voiceKey) target.delete(voiceKey);
-              }
-            } catch (_) {}
-          };
-
-          // Absorb socket-level errors so they don't bubble to uncaughtException.
-          // The gateway will emit Ready again once it reconnects — we re-attach then.
-          this._rawGatewayErrorHandler = (err) => {
-            logger.warn("[Gateway] Raw WS socket error (will reconnect):", err?.message ?? err);
-          };
-          this._rawGatewayMessageListener = (event) => this._rawGatewayHandler(event?.data ?? event);
-
-          if (typeof wsObj.addEventListener === "function") {
-            wsObj.addEventListener("message", this._rawGatewayMessageListener);
-            wsObj.addEventListener("error",   this._rawGatewayErrorHandler);
-          } else if (typeof wsObj.on === "function") {
-            wsObj.on("message", this._rawGatewayMessageListener);
-            wsObj.on("error",   this._rawGatewayErrorHandler);
-          }
-
-          this._rawGatewayWsObj = wsObj;
-          wsListenerAttached    = true;
-          logger.player("[Gateway] Raw WS listener attached to new socket.");
-        }
-      } catch (_) {}
-
-      botReady = true;
-      tryAutoJoin();
-
-      if (presenceContents.length > 0) {
-        // setPresence now uses the outer presenceIndex so rotation
-        // continues from where it left off after a reconnect instead of
-        // restarting from 0 each time.
-        const setPresence = () => {
-          const presence = {
-            status:        "online",
-            mobile:        false,
-            afk:           false,
-            custom_status: { text: presenceContents[presenceIndex] },
-          };
-          // Use the public ws.send(shardId, payload) API instead of accessing the
-          // private shards Map directly — shards is declared private in @fluxerjs/ws
-          // and accessing it works at runtime but breaks on any internal refactor.
-          if (client.ws?.send) {
-            client.ws.send(0, { op: GatewayOpcodes.PresenceUpdate, d: presence });
-          } else {
-            // Fallback: access shards directly only if public API is unavailable
-            const shard = client.ws?.shards?.get?.(0);
-            if (shard) shard.send({ op: GatewayOpcodes.PresenceUpdate, d: presence });
-          }
-          presenceIndex = (presenceIndex + 1) % presenceContents.length;
-        };
-        setPresence();
-        // Clear any existing interval before creating a new one.
-        // Without this, each reconnect stacks another setInterval, eventually
-        // spamming the gateway with duplicate presence updates.
-        if (presenceTimer) clearInterval(presenceTimer);
-        presenceTimer = setInterval(setPresence, presenceInterval);
-      }
+      // Delegate remaining Ready work to the gateway handler (voice-state
+      // seeding, raw WS listener, presence rotation, tryAutoJoin).
+      this.gatewayHandler.onReady();
     });
 
-    // ── Voice state tracking ──────────────────────────────────────────────────
-    // Both maps are cleaned up in the WS handleRaw VOICE_STATE_UPDATE path
-    // (channelId=null → delete) and in GuildDelete, so they don't grow unbounded.
-    this.observedVoiceUsers = new Map();
-    this.observedVoiceBots  = new Map();
-    const getObservedVoiceBotKey = (userId, guildId) => {
-      const cleanUserId = String(userId ?? "").replace(/\D/g, "");
-      const cleanGuildId = String(guildId ?? "").replace(/\D/g, "");
-      return cleanUserId && cleanGuildId ? `${cleanGuildId}:${cleanUserId}` : cleanUserId || null;
-    };
-    // initialise announcement channel cache eagerly alongside other caches
-    // so the hot path never needs a null-check allocation.
-    this._announcementChannelCache = new Map();
-
-    /**
-     * Channels the bot is intentionally leaving.
-     * @type {Map<string, ReturnType<typeof setTimeout>>}
-     */
-    this.intentionalLeaves = new Map();
-
-    // Merged the two separate GuildCreate handlers into one.
-    // Previously there were two client.on(Events.GuildCreate) registrations.
-    // Every GuildCreate event was firing both handlers — doubling voice-state work and
-    // triggering a burst of parallel DB queries on startup for every guild.
-    client.on(Events.GuildCreate, async (guild) => {
-      const guildId = guild?.id ?? guild?._id;
-      if (!guildId) return;
-
-      // ── Part 1: Voice state population ──────────────────────────────────────
-      // Purge stale entries for this guild first so old voice state from a previous
-      // READY cycle or an offline period doesn't persist after reconnect.
-      for (const [uid, info] of [...this.observedVoiceUsers]) {
-        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, ""))
-          this.observedVoiceUsers.delete(uid);
-      }
-      for (const [uid, info] of [...this.observedVoiceBots]) {
-        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, ""))
-          this.observedVoiceBots.delete(uid);
-      }
-
-      const voiceStatesRaw =
-          guild.voice_states ??
-          guild.voiceStates ??
-          null;
-      if (voiceStatesRaw) {
-        // Fluxer may store voiceStates as { [userId]: channelId } plain object,
-        // { [userId]: stateObject }, an array of state objects, or a Map.
-        // Handle all shapes.
-        if (!Array.isArray(voiceStatesRaw) && typeof voiceStatesRaw === "object"
-            && typeof voiceStatesRaw.values !== "function") {
-          // Plain object — keys are userIds
-          for (const [uid, val] of Object.entries(voiceStatesRaw)) {
-            const channelId = typeof val === "string" ? val
-                : val?.channelId ?? val?.channel_id ?? null;
-            if (!uid || !channelId) continue;
-            const isBot = val?.member?.user?.bot ?? false;
-            const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
-            target.set(isBot ? getObservedVoiceBotKey(uid, guildId) : uid, { channelId, guildId });
-          }
-        } else {
-          const entries = Array.isArray(voiceStatesRaw)
-              ? voiceStatesRaw
-              : [...voiceStatesRaw.values()];
-
-          for (const state of entries) {
-            const channelId = state?.channelId ?? state?.channel_id;
-            const userId    = state?.userId    ?? state?.user_id ?? state?.id;
-            const sgid      = state?.guildId   ?? state?.guild_id ?? guildId;
-            const isBot     = state?.member?.user?.bot ?? false;
-            if (!channelId || !userId) continue;
-            const target = isBot ? this.observedVoiceBots : this.observedVoiceUsers;
-            target.set(isBot ? getObservedVoiceBotKey(userId, sgid) : userId, { channelId, guildId: sgid });
-          }
-        }
-      }
-
-      // ── Part 2: Settings init for new/re-joined servers ──────────────────────
-      // GuildCreate fires on initial join AND on gateway resume for existing servers.
-      // Only act when the guild is missing from our cache (new join or post-GuildDelete).
-      if (!this.settingsMgr.guilds.has(guildId)) {
-        logger.guild(`[GuildCreate] (Re-)joined server ${guildId} — initialising settings.`);
-        try {
-          // Validate guildId is a non-empty snowflake string before using in query
-          const cleanGuildId = String(guildId).replace(/\D/g, "");
-          if (!cleanGuildId) throw new Error("Invalid guildId: " + guildId);
-          const res = await this.settingsMgr.query(
-              `SELECT * FROM settings WHERE id=${mysql.escape(cleanGuildId)}`
-          );
-          if (res?.results?.length) {
-            const row    = res.results[0];
-            const server = new ServerSettings(guildId, this.settingsMgr);
-            server.deserialize(JSON.parse(row.data));
-            server.checkDefaults(this.settingsMgr.defaults);
-            this.settingsMgr.guilds.set(guildId, server);
-            logger.guild(`[GuildCreate] Restored existing settings for server ${guildId}.`);
-          } else {
-            const server = new ServerSettings(guildId, this.settingsMgr);
-            server.checkDefaults(this.settingsMgr.defaults);
-            this.settingsMgr.guilds.set(guildId, server);
-            // Persist the new row so settings survive restarts from the first join.
-            await this.settingsMgr.create(guildId, server);
-            logger.guild(`[GuildCreate] Fresh settings initialised for server ${guildId}.`);
-          }
-        } catch (err) {
-          logger.warn("[GuildCreate] Settings init failed for", guildId, err.message);
-        }
-      }
-    });
-
-    // Track previous voice state per-user so we can detect channel moves.
-    // @fluxerjs/core fires VoiceStateUpdate with ONE arg (raw gateway data),
-    // not two args (oldState, newState) We maintain prev state manually.
-    // Declared before GuildDelete so the delete handler can purge stale entries.
-    const _prevVoiceState = new Map(); // guildId:userId → { channelId, guildId }
-    const getPrevVoiceStateKey = (userId, guildId) => {
-      const cleanUserId = String(userId ?? "").replace(/\D/g, "");
-      const cleanGuildId = String(guildId ?? "").replace(/\D/g, "");
-      return cleanUserId && cleanGuildId ? `${cleanGuildId}:${cleanUserId}` : null;
-    };
-    const findPrevVoiceStateEntry = (userId, guildId = null) => {
-      const directKey = getPrevVoiceStateKey(userId, guildId);
-      if (directKey && _prevVoiceState.has(directKey)) {
-        return { key: directKey, value: _prevVoiceState.get(directKey) };
-      }
-
-      const cleanUserId = String(userId ?? "").replace(/\D/g, "");
-      if (!cleanUserId) return { key: null, value: null };
-
-      for (const [key, value] of _prevVoiceState) {
-        if (key.endsWith(`:${cleanUserId}`)) {
-          return { key, value };
-        }
-      }
-
-      return { key: null, value: null };
-    };
-
-    // ── Bot kicked / banned / server deleted ─────────────────────────────────
-    client.on(Events.GuildDelete, (guild) => {
-      const guildId = guild?.id ?? guild?._id;
-      if (!guildId) return;
-
-      logger.guild(`[GuildDelete] Removed from server ${guildId} — cleaning up.`);
-
-      // Use player._guildId directly instead of resolving the channel from
-      // client.channels (which may already be evicted at this point).
-      // The old approach fell through 4 property-chain guesses and silently leaked the
-      // player when all of them were undefined (e.g. after a partial cache eviction).
-      for (const [channelId, player] of this.players.playerMap) {
-        if (!player._guildId || player._guildId === guildId) {
-          this.players.playerMap.delete(channelId);
-          try { player.leave().catch(() => {}); } catch (_) {}
-          try { player.destroy();               } catch (_) {}
-          logger.guild(`[GuildDelete] Destroyed player for channel ${channelId}.`);
-        }
-      }
-
-      // Clear voice-state tracking for this server
-      for (const [userId, info] of [...this.observedVoiceUsers]) {
-        if (info.guildId === guildId) this.observedVoiceUsers.delete(userId);
-      }
-      for (const [userId, info] of [...this.observedVoiceBots]) {
-        if (info.guildId === guildId) this.observedVoiceBots.delete(userId);
-      }
-      // Also purge _prevVoiceState entries for this guild so the Map doesn't grow unbounded
-      for (const [stateKey, info] of [..._prevVoiceState]) {
-        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, ""))
-          _prevVoiceState.delete(stateKey);
-      }
-
-      // Drop the cached settings so stale data can't be read back
-      this.settingsMgr.removeServer(guildId);
-
-      // Clear announcement channel cache for this guild
-      this._announcementChannelCache.delete(guildId);
-
-      logger.guild(`[GuildDelete] Cleanup complete for server ${guildId}.`);
-    });
-
-    client.on(Events.VoiceStateUpdate, async (data) => {
-      // data is the raw GatewayVoiceStateUpdateDispatchData — always snake_case
-      const userId = data?.user_id;
-      if (!userId) return;
-
-      const channelId = data?.channel_id ?? null;
-      const guildId   = data?.guild_id;
-      const isBot     = data?.member?.user?.bot ?? null;
-
-      // Capture old channel BEFORE updating prev state
-      const prevEntry    = findPrevVoiceStateEntry(userId, guildId);
-      const prev         = prevEntry.value;
-      const oldChannelId = prev?.channelId ?? null;
-      const prevKey      = prevEntry.key;
-
-      // Update prev state — evict oldest entry if Map exceeds 10,000 entries
-      // (one per user who has ever touched voice since last restart) to prevent
-      // unbounded growth on large bots that never restart.
-      const nextKey = getPrevVoiceStateKey(userId, guildId ?? prev?.guildId);
-      if (channelId) {
-        if (prevKey && prevKey !== nextKey) _prevVoiceState.delete(prevKey);
-        if (nextKey && _prevVoiceState.size >= 10_000 && !_prevVoiceState.has(nextKey)) {
-          // Remove the oldest inserted entry (Maps preserve insertion order)
-          _prevVoiceState.delete(_prevVoiceState.keys().next().value);
-        }
-        if (nextKey) _prevVoiceState.set(nextKey, { channelId, guildId: guildId ?? prev?.guildId });
-      } else {
-        if (prevKey) _prevVoiceState.delete(prevKey);
-      }
-
-      // Always update/delete the voice maps so they never accumulate stale entries
-      const target = isBot === true ? this.observedVoiceBots : this.observedVoiceUsers;
-      const voiceKey = isBot === true ? getObservedVoiceBotKey(userId, guildId ?? prev?.guildId) : userId;
-      if (channelId) {
-        if (voiceKey) target.set(voiceKey, { channelId, guildId });
-      } else {
-        // On leave, delete from BOTH maps — isBot can be null/inconsistent
-        // between join and leave events, so the user may be in either map.
-        this.observedVoiceUsers.delete(userId);
-        if (voiceKey) this.observedVoiceBots.delete(voiceKey);
-        const fallbackBotKey = getObservedVoiceBotKey(userId, prev?.guildId);
-        if (fallbackBotKey && fallbackBotKey !== voiceKey) this.observedVoiceBots.delete(fallbackBotKey);
-      }
-
-      const isBotUser = isBot === true && userId === client.user?.id;
-
-      if (!isBotUser) {
-        // Resolve guildId from prev state too — leave events may have null guild_id
-        const resolvedGuildId = guildId ?? prev?.guildId;
-        if (!resolvedGuildId) return;
-
-        if (channelId) {
-          try {
-            // Always cancel any pending inactivity timer when a human joins —
-            // even in 247 mode. The old code returned early here which meant
-            // the "_stopInactivityTimer" block below never ran, so the bot
-            // could leave a 247 channel right after a human joined if the
-            // queue had just ended.
-            const cleanId247 = String(channelId).replace(/\D/g, "");
-            const player247  = this.players.playerMap.get(cleanId247);
-            if (player247 && typeof player247._stopInactivityTimer === "function") {
-              logger.voiceState(`[VoiceState] Human joined 247 channel ${cleanId247}, stopping inactivity timer`);
-              player247._stopInactivityTimer();
-            }
-          } catch (_) {}
-        }
-
-        // Human LEFT a voice channel → check if bot is now alone
-        if (oldChannelId && oldChannelId !== channelId) {
-          try {
-            const cleanOld = String(oldChannelId).replace(/\D/g, "");
-            const player   = this.players.playerMap.get(cleanOld);
-            if (player && typeof player._startInactivityTimer === "function") {
-              setTimeout(() => {
-                if (!player._hasHumansInChannel()) {
-                  logger.voiceState(`[VoiceState] Last human left ${cleanOld}, starting inactivity timer`);
-                  player._startInactivityTimer();
-                }
-              }, T.aloneCheckDebounce);
-            }
-          } catch (_) {}
-        }
-
-        // Human JOINED the bot's channel → cancel inactivity timer
-        if (channelId) {
-          try {
-            const cleanId = String(channelId).replace(/\D/g, "");
-            const player  = this.players.playerMap.get(cleanId);
-            if (player && typeof player._stopInactivityTimer === "function") {
-              logger.voiceState(`[VoiceState] Human joined ${cleanId}, stopping inactivity timer`);
-              player._stopInactivityTimer();
-            }
-          } catch (_) {}
-        }
-
-        // Notify dashboard of per-user voice-state change (join / leave / move)
-        if (this.dashboard?.enabled) {
-          try {
-            const userObj = data?.member?.user ?? await client.users.fetch(userId).catch(() => null);
-            if (userObj) {
-              const details = {
-                event: "voiceStateUpdate",
-                userId,
-                guildId: resolvedGuildId,
-                channelId: channelId ?? null,
-                oldChannelId: oldChannelId ?? null,
-              };
-              this.dashboard.updateUser(details, userObj);
-            }
-
-            const refChannel = channelId ?? oldChannelId;
-            const cleanId = refChannel ? String(refChannel).replace(/\D/g, "") : null;
-
-            if (cleanId) {
-              const player = this.players.playerMap.get(cleanId);
-
-              if (player) {
-                this.dashboard.updatePlayer({
-                  guildId: player._guildId,
-                  channelId: player._channelId,
-                  playing: player.playing ?? false,
-                  paused: player.paused ?? false,
-                  queueLength: player.queue?.length ?? 0,
-                });
-              }
-            }
-
-          } catch (_) {}
-        }
-
-        return;
-      }
-
-      // ── Bot-only logic below ─────────────────────────────────────────────
-
-      const activeGuildPlayers = [...this.players.playerMap.entries()].filter(([, player]) =>
-        String(player?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
-      );
-      const multiVoiceGuild = activeGuildPlayers.length > 1;
-
-      // Auto-save channel when bot moves (247 active)
-      if (channelId && guildId && oldChannelId && oldChannelId !== channelId) {
-        try {
-          if (multiVoiceGuild) {
-            logger.voice247(
-              `[247] Skipping bot move gateway auto-save ${oldChannelId} → ${channelId} ` +
-              `(guild ${guildId} has ${activeGuildPlayers.length} active players)`
-            );
-            return;
-          }
-
-          const cleanId  = String(channelId).replace(/\D/g, "");
-          const cleanOld = String(oldChannelId).replace(/\D/g, "");
-
-          // Re-key the playerMap so the player is findable by its new channel.
-          // Without this, every lookup by channel ID (AloneCheck, inactivity
-          // timer, _is247Enabled) uses the stale old key and fails or makes
-          // wrong decisions. The player's own _channelId is updated inside
-          // join(), but the map key has to be manually migrated here.
-          const existingPlayer = this.players.playerMap.get(cleanOld);
-          const targetChannel = this.client.channels.get(cleanId)
-            ?? this.client.channels.get?.(cleanId)
-            ?? null;
-          const targetGuildId = String(targetChannel?.guildId ?? targetChannel?.guild?.id ?? guildId ?? "").replace(/\D/g, "");
-          const playerGuildId = String(existingPlayer?._guildId ?? "").replace(/\D/g, "");
-          const guildPlayers = [...this.players.playerMap.entries()].filter(([, player]) =>
-            String(player?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
-          );
-          const guildIsAmbiguous = guildPlayers.length > 1;
-
-          let rekeyed = false;
-          if (existingPlayer && cleanId !== cleanOld) {
-            if (guildIsAmbiguous) {
-              logger.voice247(
-                `[247] Skipping bot move auto-rekey ${cleanOld} → ${cleanId} ` +
-                `(guild ${guildId} has ${guildPlayers.length} active players)`
-              );
-            } else if (playerGuildId && targetGuildId && playerGuildId !== targetGuildId) {
-              logger.warn(
-                `[247] Refused cross-guild re-key ${cleanOld} → ${cleanId} ` +
-                `(playerGuild=${playerGuildId} targetGuild=${targetGuildId})`
-              );
-            } else {
-              this.players.playerMap.delete(cleanOld);
-              this.players.playerMap.set(cleanId, existingPlayer);
-              // Update both _channelId and _home247Channel so _recoverConnection
-              // and _is247Enabled always reference the correct current channel.
-              existingPlayer._channelId = cleanId;
-              existingPlayer._home247Channel = cleanId;
-              if (targetGuildId) existingPlayer._guildId = targetGuildId;
-              rekeyed = true;
-              logger.voice247(`[247] Re-keyed playerMap ${cleanOld} → ${cleanId}`);
-            }
-          }
-
-          const set = this.settingsMgr.getServer(guildId);
-          const raw = set.get("stay_247");
-          if (rekeyed && raw && raw !== "none") {
-            const channels = Array.isArray(raw)
-                ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
-                : new Set([String(raw).replace(/\D/g, "")]);
-            if (channels.has(cleanOld) && cleanOld !== cleanId) {
-              channels.delete(cleanOld);
-              channels.add(cleanId);
-              set.set("stay_247", [...channels]);
-            }
-          }
-        } catch (e) {
-          logger.warn("[247] Failed to auto-save channel:", e.message);
-        }
-      }
-
-      // Bot disconnected unexpectedly — rejoin if 247 active
-      if (!channelId && oldChannelId && guildId) {
-        try {
-          if (multiVoiceGuild) {
-            logger.voice247(
-              `[247] Skipping bot disconnect gateway recovery for ${oldChannelId} ` +
-              `(guild ${guildId} has ${activeGuildPlayers.length} active players)`
-            );
-            return;
-          }
-
-          const cleanOld = String(oldChannelId).replace(/\D/g, "");
-          if (this.intentionalLeaves.has(cleanOld)) {
-            logger.voice247(`[247] Skipping rejoin for ${cleanOld} — intentional leave.`);
-          } else {
-            const set = this.settingsMgr.getServer(guildId);
-            const raw = set.get("stay_247");
-            if (raw && raw !== "none") {
-              const channels = Array.isArray(raw)
-                  ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
-                  : new Set([String(raw).replace(/\D/g, "")]);
-              if (channels.has(cleanOld)) {
-                const mode = set.get("stay_247_mode") ?? "auto";
-                if (mode === "on" || mode === "auto") {
-                  // Both "on" and "auto" should rejoin after an unexpected
-                  // disconnect — never silently drop the channel from 247.
-                  const player = this.players.playerMap.get(cleanOld);
-                  if (player && !player.leaving) {
-                    logger.voice247("[247] Fluxer gateway disconnected us. Forcing player recovery...");
-                    if (typeof player._recoverConnection === "function") {
-                      player._recoverConnection();
-                    } else {
-                      // No _recoverConnection — destroy stale player and respawn.
-                      this.players.playerMap.delete(cleanOld);
-                      try { player.destroy(); } catch (_) {}
-                      scheduleSpawn(guildId, cleanOld, T.rejoin247Delay, null, "gateway-disconnect");
-                    }
-                  } else {
-                    scheduleSpawn(guildId, cleanOld, T.rejoin247Delay, null, "gateway-disconnect");
-                  }
-                } else {
-                  // mode === "off" or unknown — user explicitly disabled 247,
-                  // so do NOT rejoin and clean up the stale channel entry.
-                  logger.voice247(`[247] stay_247_mode='${mode}' — not rejoining.`);
-                  channels.delete(cleanOld);
-                  set.set("stay_247", channels.size > 0 ? [...channels] : "none");
-                }
-              }
-            }
-          }
-        } catch (e) {
-          logger.warn("[247] Rejoin on disconnect failed:", e.message);
-        }
-      }
-    });
-
-    // ── Commands ──────────────────────────────────────────────────────────────
-    const loader    = new CommandLoader(commands, this);
-    const __dirname = import.meta.dirname;
-    const dir       = path.join(__dirname, "commands");
-    logger.commands("Started loading commands.");
-    loader.loadFromDir(dir)
-        .then(() => logger.commands("Commands loaded."))
-        .catch(e => logger.error("Failed to load commands:", e));
-
-    // ── Modules ───────────────────────────────────────────────────────────────
-    logger.commands("Loading Modules.");
-    this.loadedModules = new Map();
-    this.modules       = JSON.parse(fs.readFileSync("./storage/modules.json"));
-    Promise.all(this.modules.map(async m => {
-      if (!m.enabled) return;
-      const exported = await import(m.index);
-      const ModClass = exported.default;
-      this.loadedModules.set(m.name, { instance: new ModClass(this), c: ModClass });
-    }))
-        .then(() => logger.commands("Modules loaded."))
-        .catch(e => logger.error("Failed to load modules:", e));
-
-    // ── Git commit hash ───────────────────────────────────────────────────────
-    try {
-      this.comHash     = childProcess.execSync("git rev-parse --short HEAD", { cwd: __dirname, timeout: 3000 }).toString().trim();
-      this.comHashLong = childProcess.execSync("git rev-parse HEAD",         { cwd: __dirname, timeout: 3000 }).toString().trim();
-    } catch {
-      logger.warn("[Git] comhash error");
-      this.comHash     = "Newest";
-      this.comHashLong = null;
-    }
-
-    // ── Player ────────────────────────────────────────────────────────────────
+    // ── Player Manager ───────────────────────────────────────────────────────
     this.playerContext = {
       client:   this.client,
       config,
@@ -1373,25 +224,15 @@ export class Remix {
     this.players.observedVoiceUsers = this.observedVoiceUsers;
 
     // ── Periodic alone-check ───────────────────────────────────────────────────
-    // Every 30 seconds, scan all active players. If the bot is alone in a voice
-    // channel (no humans) and 247 is NOT on/auto, leave immediately.
-    // This is the authoritative leave mechanism — does not rely on voice state events.
-    const ALONE_CHECK_INTERVAL = T.aloneCheckInterval;
+    const ALONE_CHECK_INTERVAL = this.T.aloneCheckInterval;
     setInterval(() => {
       for (const [mapKey, player] of this.players.playerMap) {
         try {
           const guildId = player._guildId;
           if (!guildId) continue;
 
-          // Skip if player is mid-join or mid-recovery — _is247Enabled() and
-          // _channelId/_guildId may not be populated yet, causing a false
-          // "not 247" result that immediately leaves a freshly spawned 247 player.
           if (player._isJoining || player._isRecovering) continue;
 
-          // Use the player's actual current _channelId — NOT the playerMap key.
-          // When the bot moves channels the playerMap key stays as the old channel
-          // but _channelId is updated inside join(). Using the stale key means
-          // _is247Enabled() checks the wrong channel against stay_247.
           const channelId   = player._channelId ?? mapKey;
           const cleanChanId = String(channelId).replace(/\D/g, "");
           if (!cleanChanId) continue;
@@ -1407,10 +248,8 @@ export class Remix {
             continue;
           }
 
-          // Skip if 247 is on or auto
           if (player._is247Enabled()) continue;
 
-          // Read directly from observedVoiceUsers — bypass any cache issues
           let hasHuman = false;
           for (const [, info] of this.observedVoiceUsers) {
             const infoChannel = String(info.channelId ?? "").replace(/\D/g, "");
@@ -1424,10 +263,6 @@ export class Remix {
           logger.aloneCheck(`[AloneCheck] channel=${channelId} guild=${guildId} hasHuman=${hasHuman} paused=${player._paused}`);
 
           if (!hasHuman && !player._paused) {
-            // If the bot is playing (queue has a current track), start the
-            // inactivity timer so it waits the configured timeout before leaving.
-            // _startInactivityTimer is a no-op if the timer is already running,
-            // so this is safe to call on every interval tick.
             if (player.queue?.getCurrent() || !player.queue?.isEmpty()) {
               logger.aloneCheck(`[AloneCheck] Bot alone in ${channelId} (guild ${guildId}) with songs in queue — starting inactivity timer.`);
               player._startInactivityTimer?.();
@@ -1437,7 +272,6 @@ export class Remix {
               player.emit("autoleave");
             }
           } else if (hasHuman) {
-            // A human rejoined — cancel any pending inactivity leave.
             player._stopInactivityTimer?.();
           }
         } catch (e) {
@@ -1446,10 +280,10 @@ export class Remix {
       }
     }, ALONE_CHECK_INTERVAL);
 
+    // ── Voice channel detection ──────────────────────────────────────────────
     const self = this;
     this.players.checkVoiceChannels = function (message) {
       const userId  = message?.author?.id   ?? message?.message?.author?.id;
-      // Fluxer uses server_id (snake_case); uses guildId; probe all known shapes.
       const guildId =
           message?.channel?.server_id    ??
           message?.channel?.serverId     ??
@@ -1462,7 +296,6 @@ export class Remix {
           message?.message?.channel?.serverId  ??
           message?.message?.channel?.guildId;
 
-      // ── DEBUG: dump state so voice-detection failures are diagnosable ──────
       logger.voice(`[checkVC] userId=${userId} guildId=${guildId}`);
       logger.voice(`[checkVC] channel keys: ${Object.keys(message?.channel ?? {}).join(",")}`);
       logger.voice(`[checkVC] observedVoiceUsers size=${self.observedVoiceUsers.size}`);
@@ -1475,8 +308,6 @@ export class Remix {
         return null;
       }
 
-      // Normalise to digits-only for all comparisons so "123" === "123" regardless
-      // of how the platform formatted the snowflake.
       const cleanGuild = String(guildId).replace(/\D/g, "");
 
       const seed = (channelId) => {
@@ -1513,8 +344,6 @@ export class Remix {
         const voiceStates = guild?.voice_states ?? guild?.voiceStates ?? null;
         logger.voice(`[checkVC] voiceStates=${Array.isArray(voiceStates) ? "array["+voiceStates.length+"]" : typeof voiceStates}`);
         if (voiceStates) {
-          // Strategy A: direct key lookup — Fluxer may store as { [userId]: channelId }
-          // or { [userId]: { channel_id, ... } }
           if (!Array.isArray(voiceStates) && typeof voiceStates === "object") {
             const direct = voiceStates[userId];
             logger.voice(`[checkVC] direct lookup voiceStates[userId]=${JSON.stringify(direct)}`);
@@ -1523,13 +352,11 @@ export class Remix {
                   : direct?.channelId ?? direct?.channel_id ?? null;
               if (sch) { logger.voice(`[checkVC] HIT direct obj lookup → ${sch}`); return seed(sch); }
             }
-            // Also dump first key/value so we understand the shape
             const firstKey = Object.keys(voiceStates)[0];
             if (firstKey) {
               logger.voice(`[checkVC] shape sample: key=${firstKey} val=${JSON.stringify(voiceStates[firstKey])}`);
             }
           }
-          // Strategy B: iterate entries (array, Map, or plain object values)
           const entries = Array.isArray(voiceStates)
               ? voiceStates
               : typeof voiceStates.values === "function"
@@ -1565,6 +392,39 @@ export class Remix {
 
     this.comLink = "https://github.com/remix-bot/fluxer/commit/" + (this.comHashLong ?? "");
 
+    // ── Commands ──────────────────────────────────────────────────────────────
+    const loader    = new CommandLoader(commands, this);
+    const __dirname = import.meta.dirname;
+    const dir       = path.join(__dirname, "commands");
+    logger.commands("Started loading commands.");
+    loader.loadFromDir(dir)
+        .then(() => logger.commands("Commands loaded."))
+        .catch(e => logger.error("Failed to load commands:", e));
+
+    // ── Modules ───────────────────────────────────────────────────────────────
+    logger.commands("Loading Modules.");
+    this.loadedModules = new Map();
+    this.modules       = JSON.parse(fs.readFileSync("./storage/modules.json"));
+    Promise.all(this.modules.map(async m => {
+      if (!m.enabled) return;
+      const exported = await import(m.index);
+      const ModClass = exported.default;
+      this.loadedModules.set(m.name, { instance: new ModClass(this), c: ModClass });
+    }))
+        .then(() => logger.commands("Modules loaded."))
+        .catch(e => logger.error("Failed to load modules:", e));
+
+    // ── Git commit hash ───────────────────────────────────────────────────────
+    try {
+      this.comHash     = childProcess.execSync("git rev-parse --short HEAD", { cwd: __dirname, timeout: 3000 }).toString().trim();
+      this.comHashLong = childProcess.execSync("git rev-parse HEAD",         { cwd: __dirname, timeout: 3000 }).toString().trim();
+    } catch {
+      logger.warn("[Git] comhash error");
+      this.comHash     = "Newest";
+      this.comHashLong = null;
+    }
+
+    // ── Login ─────────────────────────────────────────────────────────────────
     client.login(config.token);
   }
 
@@ -1593,7 +453,6 @@ export class Remix {
             ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
             : new Set([String(raw).replace(/\D/g, "")]);
 
-    // If mode is auto, block the leave command
     if (channels.has(cleanId) && !force) {
       if (mode === "auto") {
         if (message) {
@@ -1606,13 +465,9 @@ export class Remix {
       }
     }
 
-    // If mode is 'on' or it's forced, allow leaving & remove from 24/7 list
     if (channels.has(cleanId)) {
       channels.delete(cleanId);
       set.set("stay_247", channels.size > 0 ? [...channels] : "none");
-      // Only reset the mode to "off" when ALL 247 channels have been removed
-      // AND the current mode is "on" (explicit user action). If mode is "auto"
-      // and we still have other channels, preserve the mode for those channels.
       if (channels.size === 0) set.set("stay_247_mode", "off");
     }
 
@@ -1629,7 +484,7 @@ export class Remix {
     return true;
   }
 
-  /** @param {Message} message */
+  /** @param {import("./src/MessageHandler.mjs").Message} message */
   getSettings(message) {
     const guildId = message?.channel?.channel?.guildId ?? message?.guildId ?? null;
     return this.settingsMgr.getServer(guildId);
@@ -1637,9 +492,9 @@ export class Remix {
 
   /**
    * Translate a key for the guild of the given message.
-   * @param {Message} message
-   * @param {string} key      Dotted locale key, e.g. "responses.play.noResults"
-   * @param {Object} [data={}]  Replacement values, e.g. { count: 5 }
+   * @param {import("./src/MessageHandler.mjs").Message} message
+   * @param {string} key
+   * @param {Object} [data={}]
    * @returns {string}
    */
   t(message, key, data = {}) {
@@ -1657,14 +512,9 @@ export class Remix {
   getSharedServers(user) {
     if (!user) return Promise.resolve([]);
 
-    // Filter guilds to only those the specified user is actually a member of.
-    // This prevents leaking the full bot server list to unauthorized users.
     const mutualGuilds = this.client.guilds.filter(g => {
-      // The bot must have settings for the guild (proves it's an active server)
       if (!this.settingsMgr.guilds.has(g.id)) return false;
-      // The user must be a known member of the guild
       if (g.members?.has?.(user.id)) return true;
-      // Fallback: check observed voice users for this guild
       const cleanGuildId = String(g.id).replace(/\D/g, "");
       for (const [, info] of (this.observedVoiceUsers ?? [])) {
         const infoGuild = String(info.guildId ?? "").replace(/\D/g, "");
@@ -1701,12 +551,15 @@ export class Remix {
   }
 }
 
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
 const remix = new Remix();
+
+// ── Error handling ────────────────────────────────────────────────────────────
 
 const isIgnorableWsCrash = (err) => {
   const message = String(err?.message ?? err ?? "");
   const stack = String(err?.stack ?? "");
-
   return message === "WebSocket error" &&
       (
         stack.includes("@fluxerjs/ws/dist/index.mjs") ||
@@ -1727,9 +580,6 @@ process.on("uncaughtException", (err, origin) => {
   }
   logger.error("[Error_Handling] Uncaught Exception/Catch");
   logger.error("Error:", err, origin);
-  // Node.js is in an undefined state after an uncaughtException.
-  // Continuing execution is unsafe and causes random silent failures.
-  // Attempt a synchronous recovery snapshot then always exit.
   try {
     const state = remix.buildRecoveryState();
     remix.writeRecoveryState(state, "Shutdown/Crash");
@@ -1750,7 +600,6 @@ const saveAndExit = async () => {
   } catch (e) {
     logger.error("[Shutdown] Failed to save recovery state:", e.message);
   }
-  // Gracefully close Redis connections before exiting
   try {
     if (remix.dashboard?.redis?.destroy) {
       await remix.dashboard.redis.destroy();

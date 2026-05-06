@@ -53,7 +53,7 @@ class StreamMerger extends Transform {
   addStream(s) {
     if (!this.ffmpeg) this.setupBaseFfmpeg();
     const open = this.findOpenNode();
-    if (!open) throw "Impossible case detected. No free merge node found.";
+    if (!open) throw new Error("Impossible case detected. No free merge node found.");
     const p = this.spawnFfmpeg();
     const node = { process: p, pipes: [4], available: true, parent: open, children: [] };
     open.children.push(node);
@@ -61,14 +61,14 @@ class StreamMerger extends Transform {
     p.stderr.on("data", (c) => { logger.mediaplayer("[ffmpeg]", c.toString().trim()); });
     p.stdio[4].write(Buffer.alloc(1024, 0));
     p.stdout.pipe(open.process.stdio[open.pipes[0]]);
-    const pipeNumber = open.pipes[0].valueOf();
+    const pipeNumber = open.pipes[0];
     open.pipes.splice(0, 1);
     if (open.pipes.length === 0) open.available = false;
     p.on("exit", () => {
       open.pipes.push(pipeNumber);
       open.available = true;
       const idx = open.children.findIndex(c => c === node);
-      if (idx === -1) throw "Impossible case detected. Damaged node structure.";
+      if (idx === -1) throw new Error("Impossible case detected. Damaged node structure.");
       open.children.splice(idx, 1);
     });
   }

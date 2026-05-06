@@ -21,8 +21,18 @@ class Tuna {
       var req = https.request(options, function(res) {
         var chunks = [];
         res.on("data", (chunk) => { chunks.push(chunk); });
-        res.on("end", () => { resolve(JSON.parse(Buffer.concat(chunks).toString())); });
-        res.on("error", (error) => { rej(error); });
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(Buffer.concat(chunks).toString()));
+          } catch (e) {
+            rej(new Error(`Tuna API JSON parse error: ${e.message}`));
+          }
+        });
+      });
+      req.on("error", (error) => { rej(error); });
+      req.setTimeout(15_000, () => {
+        req.destroy();
+        rej(new Error("Tuna API request timeout"));
       });
       req.end();
     });
