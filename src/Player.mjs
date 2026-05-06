@@ -504,13 +504,36 @@ export default class Player extends EventEmitter {
       this.emit("autoleave");
       return;
     }
-    const backoffMs = Math.min(2000 * this._recoveryAttempts, 30_000);
+    // Exponential backoff: 2s, 4s, 8s, 16s, 32s (was linear: 2s, 4s, 6s, 8s, 10s)
+    const backoffMs = Math.min(2000 * Math.pow(2, this._recoveryAttempts - 1), 30_000);
     logger.mediaplayer(`[Player] Recovery attempt ${this._recoveryAttempts}/${MAX_RECOVERY} for ${this._guildId} (backoff ${backoffMs}ms)`);
     await Utils.sleep(backoffMs);
 
     // re-check after await — player may have been destroyed during backoff
     if (this._destroyed) {
       this._isRecovering = false;
+      return;
+    }
+
+    // Wait for _isJoining to clear — if another operation (e.g. spawnPlayer or
+    // a concurrent _recoverConnection from a different event path) is currently
+    // calling join(), we must not race against it.  Poll every 500ms for up to
+    // 15s, then give up on this attempt and schedule a retry.
+    let waited = 0;
+    while (this._isJoining && waited < 15_000) {
+      logger.mediaplayer(`[Player] Waiting for _isJoining to clear before recovery attempt...`);
+      await Utils.sleep(500);
+      waited += 500;
+    }
+    if (this._isJoining) {
+      logger.warn("[Player] _isJoining still busy after 15s — deferring recovery attempt.");
+      this._isRecovering = false;
+      this._recoveryPending = false;
+      // Schedule a retry via setTimeout so we don't stack synchronous calls
+      this._recoveryTimer = setTimeout(() => {
+        this._recoveryTimer = null;
+        this._recoverConnection().catch(() => {});
+      }, 2000);
       return;
     }
 
@@ -1114,57 +1137,100 @@ export default class Player extends EventEmitter {
 
       const room = connection.room;
       if (room) {
-        logger.mediaplayer("[Player] Waiting for LiveKit room to connect...");
+        logger.mediaplayer(`[Player] Room obtained (state: ${room.state}), settling...`);
 
+        // ── connectionStateChanged is unreliable on this LiveKit build ───────
+        // The native lk-rtc layer connects and logs "connected to room", but
+        // the JS wrapper often NEVER fires "connectionStateChanged" with
+        // "connected" and room.state does not reflect the live state.
+        // Waiting for that event causes a guaranteed 15 s timeout.
+        //
+        // Strategy: listen for the event as a best-effort fast path (resolves
+        // instantly if it works), but also poll room.state every 500 ms.
+        // If NEITHER detects "connected" within a short window, check whether
+        // the room is in an obviously-dead state.  If not, assume connected
+        // and let _ensureMediaPlayer (publishToRoom) be the real gate — it
+        // will throw if the room is genuinely unusable.
         let connected = false;
+        let settled   = false;
 
-        if (room.state === "connected" || room.state === 1) {
-          logger.mediaplayer("[Player] Room already connected");
-          connected = true;
-        } else {
-          try {
-            await new Promise((resolve, reject) => {
-              const timeout = setTimeout(() => {
-                room.off("connectionStateChanged", onStateChange);
-                reject(new Error("LiveKit connection timeout"));
-              }, 15_000);
+        try {
+          await new Promise((resolve, reject) => {
+            const cleanup = () => {
+              clearTimeout(timeout);
+              clearInterval(poll);
+              try { room.off("connectionStateChanged", onStateChange); } catch (_) {}
+            };
 
-              const onStateChange = (state) => {
-                logger.mediaplayer(`[Player] LiveKit state changed: ${state}`);
-                // only resolve on "connected" — never on "connecting".
-                // "connecting" is a transient state and the engine may collapse
-                // before publishToRoom can run, causing the "engine is closed" error.
-                if (state === "connected" || state === 1) {
-                  clearTimeout(timeout);
-                  room.off("connectionStateChanged", onStateChange);
-                  connected = true;
-                  resolve();
-                } else if (state === "disconnected" || state === 0 || state === "failed") {
-                  clearTimeout(timeout);
-                  room.off("connectionStateChanged", onStateChange);
-                  reject(new Error(`LiveKit failed: ${state}`));
-                }
-              };
+            const timeout = setTimeout(() => {
+              // Timeout — not necessarily a failure.  The room may be connected
+              // at the native level with no JS event/state propagation.
+              logger.mediaplayer("[Player] connectionStateChanged not detected, checking state...");
+              cleanup();
+              const s = room.state;
+              if (s === "disconnected" || s === 0 || s === "failed") {
+                reject(new Error(`LiveKit failed: ${s}`));
+              } else {
+                // Indeterminate state (undefined, "connecting", etc.)
+                // — optimistically proceed; MediaPlayer will validate.
+                connected = true;
+                settled   = true;
+                resolve();
+              }
+            }, 3_000); // 3 s instead of 15 s — avoid blocking recovery
 
-              room.on("connectionStateChanged", onStateChange);
-            });
-          } catch (err) {
-            logger.error("[Player] LiveKit connection failed:", err.message);
-            throw err;
-          }
+            const onStateChange = (state) => {
+              if (settled) return;
+              logger.mediaplayer(`[Player] LiveKit state changed: ${state}`);
+              if (state === "connected" || state === 1) {
+                connected = true;
+                cleanup();
+                resolve();
+              } else if (state === "disconnected" || state === 0 || state === "failed") {
+                cleanup();
+                reject(new Error(`LiveKit failed: ${state}`));
+              }
+            };
+
+            room.on("connectionStateChanged", onStateChange);
+
+            // Poll room.state every 500 ms as a fallback for builds where
+            // the event never fires but the getter eventually updates.
+            const poll = setInterval(() => {
+              if (settled) return;
+              const s = room.state;
+              if (s === "connected" || s === 1) {
+                connected = true;
+                cleanup();
+                resolve();
+              } else if (s === "disconnected" || s === 0 || s === "failed") {
+                cleanup();
+                reject(new Error(`LiveKit failed: ${s}`));
+              }
+            }, 500);
+
+            // Immediate check after listener is registered.
+            const currentState = room.state;
+            if (currentState === "connected" || currentState === 1) {
+              connected = true;
+              cleanup();
+              logger.mediaplayer("[Player] Room already connected (immediate check)");
+              resolve();
+            } else if (currentState === "disconnected" || currentState === 0 || currentState === "failed") {
+              cleanup();
+              reject(new Error(`LiveKit failed: ${currentState}`));
+            }
+          });
+        } catch (err) {
+          logger.error("[Player] LiveKit connection failed:", err.message);
+          throw err;
         }
 
-        await Utils.sleep(300);
-
-        // re-check liveness using the `connected` flag set by the event
-        // handler rather than re-reading room.state — on some LiveKit builds the
-        // state getter returns undefined outside of the event callback even when
-        // the room is healthy (the property is not persistently stored).
-        if (!connected) {
+        if (connected) {
+          logger.mediaplayer("[Player] Room ready, proceeding to MediaPlayer");
+        } else {
           throw new Error("LiveKit room did not reach connected state");
         }
-
-        logger.mediaplayer("[Player] Proceeding to create MediaPlayer (room confirmed alive)");
       } else {
         // connection.room is null — this happens when joinVoiceChannel returns
         // a stale/recycled connection object before the LiveKit room is assigned,

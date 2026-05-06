@@ -30,10 +30,14 @@ export class RecoveryManager {
     // ── Internal state ────────────────────────────────────────────────────────
     /** @type {Set<string>} Per-channel spawn mutex */
     this.pendingSpawns = new Set();
-    /** @type {Map<string, {timer, guildId, recoveryData, reason}>} Scheduled delayed spawns */
+    /** @type {Map<string, {timer, guildId, recoveryData, reason, retryCount}>} Scheduled delayed spawns */
     this.scheduledSpawns = new Map();
     /** @type {string} Path to the recovery JSON file */
     this.recoveryPath = "./storage/recovery.json";
+    /** @type {number} Maximum transient retry attempts per channel before giving up */
+    this.maxTransientRetries = remix.config.timers?.maxTransientRetries ?? 5;
+    /** @type {number} Base delay multiplier for exponential backoff (ms) */
+    this.retryBaseDelay = remix.config.timers?.retryBaseDelay ?? 15_000;
 
     // ── Ready flags ───────────────────────────────────────────────────────────
     this.botReady = false;
@@ -92,7 +96,9 @@ export class RecoveryManager {
           preferredVolume: player.preferredVolume ?? 1,
           savedAt: Date.now(),
         });
-      } catch (_) {}
+      } catch (e) {
+        logger.warn(`[Recovery] Failed to serialize session for channel ${channelKey}:`, e?.message ?? e);
+      }
     }
 
     return sessions;
@@ -125,7 +131,9 @@ export class RecoveryManager {
         guildId,
         channelId,
         home247ChannelId: this.normalizeChannelId(session?.home247ChannelId) || channelId,
-        queue: Array.isArray(session?.queue) ? session.queue : [],
+        queue: Array.isArray(session?.queue)
+            ? session.queue.filter(t => t && (t.encoded || t.uri || t.url))
+            : [],
         loopQueue: !!session?.loopQueue,
         loopSong: !!session?.loopSong,
       });
@@ -134,27 +142,90 @@ export class RecoveryManager {
     return [...deduped.values()];
   }
 
+  /**
+   * Clean up all state for a guild the bot is no longer a member of.
+   * Mirrors the GUILD_DELETE handler in GatewayHandler so that servers
+   * kicked while offline are fully purged on the next boot.
+   *
+   * @param {string} guildId
+   * @param {string} [reason="bot no longer in guild"]
+   */
+  cleanStaleGuild(guildId, reason = "bot no longer in guild") {
+    const { remix } = this;
+    const cleanId = String(guildId).replace(/\D/g, "");
+    logger.recovery(`[Recovery] Cleaning stale guild ${cleanId} (${reason}).`);
+
+    // Destroy any active players for this guild
+    for (const [channelId, player] of remix.players.playerMap) {
+      if (!player._guildId || String(player._guildId).replace(/\D/g, "") === cleanId) {
+        remix.players.playerMap.delete(channelId);
+        try { player.leave().catch(() => {}); } catch (_) {}
+        try { player.destroy();               } catch (_) {}
+      }
+    }
+
+    // Cancel any scheduled spawns for this guild
+    for (const [channelId, entry] of this.scheduledSpawns) {
+      if (String(entry.guildId).replace(/\D/g, "") === cleanId) {
+        clearTimeout(entry.timer);
+        this.scheduledSpawns.delete(channelId);
+      }
+    }
+
+    // Clean voice-user observations
+    for (const [userId, info] of [...remix.observedVoiceUsers]) {
+      if (String(info.guildId).replace(/\D/g, "") === cleanId) remix.observedVoiceUsers.delete(userId);
+    }
+    for (const [userId, info] of [...remix.observedVoiceBots]) {
+      if (String(info.guildId).replace(/\D/g, "") === cleanId) remix.observedVoiceBots.delete(userId);
+    }
+
+    // Remove from settings cache
+    remix.settingsMgr.removeServer(cleanId);
+    remix._announcementChannelCache?.delete?.(cleanId);
+  }
+
   // ── Spawn scheduling ─────────────────────────────────────────────────────────
 
   /**
    * Schedule a delayed player spawn.  Cancels any previous scheduled spawn for
    * the same channel.
+   *
+   * @param {string} guildId
+   * @param {string} channelId
+   * @param {number} [delayMs=0]
+   * @param {Object|null} [recoveryData=null]
+   * @param {string} [reason="spawn"]
+   * @param {number} [retryCount=0]  Current retry attempt number (0 = first try).
    */
-  scheduleSpawn(guildId, channelId, delayMs = 0, recoveryData = null, reason = "spawn") {
+  scheduleSpawn(guildId, channelId, delayMs = 0, recoveryData = null, reason = "spawn", retryCount = 0) {
     const cleanChannelId = this.normalizeChannelId(channelId);
     if (!cleanChannelId) return;
 
     const existing = this.scheduledSpawns.get(cleanChannelId);
     if (existing) clearTimeout(existing.timer);
 
+    // Capture retryCount in the closure BEFORE the entry is deleted,
+    // so spawnPlayer receives the correct count for exponential backoff.
+    const capturedRetryCount = retryCount;
     const timer = setTimeout(() => {
       this.scheduledSpawns.delete(cleanChannelId);
-      this.spawnPlayer(guildId, cleanChannelId, 0, recoveryData).catch(e => {
+      this.spawnPlayer(guildId, cleanChannelId, 0, recoveryData, capturedRetryCount).catch(e => {
         logger.warn(`[PlayerSpawn] Scheduled ${reason} failed for ${cleanChannelId}:`, e?.message ?? e);
       });
     }, Math.max(0, delayMs));
 
-    this.scheduledSpawns.set(cleanChannelId, { timer, guildId, recoveryData, reason });
+    this.scheduledSpawns.set(cleanChannelId, { timer, guildId, recoveryData, reason, retryCount });
+  }
+
+  /**
+   * Calculate the exponential backoff delay for a given retry attempt.
+   * Delay doubles each attempt: base, base*2, base*4, base*8, …
+   * Capped at 5 minutes to avoid excessive waits.
+   */
+  getRetryDelay(retryCount) {
+    const delay = this.retryBaseDelay * Math.pow(2, retryCount);
+    return Math.min(delay, 300_000); // cap at 5 minutes
   }
 
   // ── Player spawning ──────────────────────────────────────────────────────────
@@ -163,7 +234,7 @@ export class RecoveryManager {
    * Create a new Player, join the target voice channel, and optionally restore
    * recovery state.
    */
-  async spawnPlayer(guildId, channelId, delayMs = 0, recoveryData = null) {
+  async spawnPlayer(guildId, channelId, delayMs = 0, recoveryData = null, retryCount = 0) {
     const { remix } = this;
 
     if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
@@ -171,11 +242,15 @@ export class RecoveryManager {
     const cleanChannelId = this.normalizeChannelId(channelId);
     if (!cleanChannelId) return;
 
+    // Clean up any previously scheduled spawn for this channel.
     const scheduled = this.scheduledSpawns.get(cleanChannelId);
     if (scheduled) {
       clearTimeout(scheduled.timer);
       this.scheduledSpawns.delete(cleanChannelId);
     }
+
+    // Use the passed-in retryCount (from scheduleSpawn's closure) rather
+    // than reading from the now-deleted scheduledSpawns entry.
 
     // Only enforce 24/7 check if we are NOT recovering from a reboot
     if (!recoveryData) {
@@ -292,11 +367,14 @@ export class RecoveryManager {
         ch?.send({ embeds: [{ description: String(m), color: getGlobalColor() }] }).catch(() => {});
       });
 
-      remix.players.playerMap.set(cleanChannelId, p);
-
       // ── Join channel ───────────────────────────────────────────────────────
+      // NOTE: playerMap.set happens AFTER join() succeeds so that other code
+      // (alone-check, voice state handlers) never sees a non-connected player.
       try {
         await p.join(cleanChannelId);
+
+        // Only add to playerMap once the join is confirmed successful.
+        remix.players.playerMap.set(cleanChannelId, p);
 
         // Record the intended 247 home channel for this player.
         p._home247Channel = cleanChannelId;
@@ -337,24 +415,55 @@ export class RecoveryManager {
         try { p.destroy(); } catch (_) {}
         logger.warn("[PlayerSpawn] Failed to join channel", cleanChannelId, "guild", guildId, e.message);
 
-        // Retry if the failure is a transient LiveKit race
+        // ── Guild membership check for 401 errors ───────────────────────────
+        // If the bot was kicked while offline (or between retries), the 401 will
+        // keep repeating.  Verify the bot is still in the guild — if not, clean
+        // up all state and skip retries entirely.
+        if (e.message?.includes("401 Unauthorized") && !remix.client.guilds.has(guildId)) {
+          logger.warn(
+            `[PlayerSpawn] 401 on guild ${guildId} — bot no longer in server. ` +
+            `Cleaning up and skipping retries.`
+          );
+          this.cleanStaleGuild(guildId, "401 and bot not in guild");
+          return;
+        }
+
+        // Retry if the failure is a transient LiveKit race (with max retries + backoff)
         const isTransient = e.message?.includes("engine is closed") ||
             e.message?.includes("MediaPlayer after retry") ||
             e.message?.includes("LiveKit connection timeout") ||
             e.message?.includes("LiveKit failed") ||
-            e.message?.includes("No room available");
-        const shouldRetry = isTransient && !recoveryData?.queue?.length
-            ? (() => {
-                try {
-                  const raw = remix.settingsMgr.getServer(guildId)?.get("stay_247");
-                  return raw && raw !== "none";
-                } catch (_) { return false; }
-              })()
-            : isTransient && !!recoveryData;
+            e.message?.includes("No room available") ||
+            e.message?.includes("401 Unauthorized") ||
+            e.message?.includes("signal failure");
+
+        // Use the retryCount passed into spawnPlayer from scheduleSpawn's closure.
+        const prevRetryCount = retryCount;
+
+        const shouldRetry = isTransient && prevRetryCount < this.maxTransientRetries
+            && (
+                !recoveryData?.queue?.length
+                    ? (() => {
+                        try {
+                            const raw = remix.settingsMgr.getServer(guildId)?.get("stay_247");
+                            return raw && raw !== "none";
+                        } catch (_) { return false; }
+                    })()
+                    : !!recoveryData
+            );
         if (shouldRetry) {
-          const retryDelay = this.T.rejoin247Delay * 3;
-          logger.warn(`[PlayerSpawn] Transient join failure — retrying in ${retryDelay}ms`);
-          this.scheduleSpawn(guildId, cleanChannelId, retryDelay, recoveryData ?? null, "transient-join-retry");
+          const nextRetry = prevRetryCount + 1;
+          const retryDelay = this.getRetryDelay(prevRetryCount);
+          logger.warn(
+            `[PlayerSpawn] Transient join failure — retry ${nextRetry}/${this.maxTransientRetries} ` +
+            `in ${retryDelay}ms (channel=${cleanChannelId})`
+          );
+          this.scheduleSpawn(guildId, cleanChannelId, retryDelay, recoveryData ?? null, "transient-join-retry", nextRetry);
+        } else if (isTransient) {
+          logger.error(
+            `[PlayerSpawn] Giving up on channel ${cleanChannelId} after ${prevRetryCount} retry(es). ` +
+            `Last error: ${e.message}`
+          );
         }
       }
 
@@ -439,16 +548,18 @@ export class RecoveryManager {
     const joinList = [];
 
     // 1. Recover standard reboot sessions
+    let recoveryFileExisted = false;
     if (fs.existsSync(this.recoveryPath)) {
       logger.recovery("[Recovery] Found previous session data, restoring...");
+      recoveryFileExisted = true;
       let data = null;
       try {
         data = JSON.parse(fs.readFileSync(this.recoveryPath, "utf8"));
-        fs.unlinkSync(this.recoveryPath);
       } catch (e) {
         logger.error("[Recovery] Failed to read/parse recovery file:", e);
-        try { fs.unlinkSync(this.recoveryPath); } catch (_) {}
       }
+      // NOTE: File is deleted AFTER all spawns complete (see below).
+      // This prevents data loss if the process crashes mid-recovery.
       const sessions = this.normalizeRecoverySessions(data);
       for (const session of sessions) {
         joinList.push({
@@ -479,16 +590,29 @@ export class RecoveryManager {
       }
     }
 
-    if (joinList.length === 0) return;
+    // ── Filter out guilds the bot is no longer a member of ────────────────
+    const filteredList = [];
+    for (const item of joinList) {
+      if (!remix.client.guilds.has(item.guildId)) {
+        logger.recovery(
+          `[Recovery] Skipping guild ${item.guildId} channel ${item.channelId} — bot is no longer in the server.`
+        );
+        this.cleanStaleGuild(item.guildId);
+      } else {
+        filteredList.push(item);
+      }
+    }
+
+    if (filteredList.length === 0) return;
 
     const startTime = Date.now();
     logger.recovery(
-      `[Recovery] Joining ${joinList.length} session(s) ` +
+      `[Recovery] Joining ${filteredList.length} session(s) ` +
       `(concurrency: ${this.T.recoveryConcurrency}, stagger: ${this.T.recoveryStaggerMs}ms)...`
     );
 
     const errors = await this.runWithConcurrency(
-      joinList,
+      filteredList,
       this.T.recoveryConcurrency,
       this.T.recoveryStaggerMs,
       async (item) => {
@@ -502,15 +626,21 @@ export class RecoveryManager {
     );
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    const ok = joinList.length - errors.length;
+    const ok = filteredList.length - errors.length;
     if (errors.length > 0) {
       for (const err of errors) {
         logger.error("[Recovery] Failed to join channel", err.channelId, "guild", err.guildId, err.error);
       }
     }
     logger.recovery(
-      `[Recovery] Processed ${joinList.length} session(s) in ${elapsed}s ` +
+      `[Recovery] Processed ${filteredList.length} session(s) in ${elapsed}s ` +
       `(${ok} ok, ${errors.length} failed).`
     );
+
+    // Delete recovery file AFTER all spawns have been attempted (success or fail).
+    // If the process crashes mid-recovery, the file still exists for next boot.
+    if (recoveryFileExisted) {
+      try { fs.unlinkSync(this.recoveryPath); } catch (_) {}
+    }
   }
 }

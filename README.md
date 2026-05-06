@@ -11,25 +11,68 @@
 </p>
 
 <p align="center">
-  <a href="https://web.fluxer.app/oauth2/authorize?client_id=1478084469635211806&scope=bot&permissions=3206208">Invite to Server</a> · 
-  <a href="https://fluxer.gg/Remix">Report a Bug</a> · 
+  <a href="https://web.fluxer.app/oauth2/authorize?client_id=1478084469635211806&scope=bot&permissions=3206208">Invite to Server</a> &middot;
+  <a href="https://fluxer.gg/Remix">Report a Bug</a> &middot;
   <a href="https://fluxer.gg/Remix">Request a Feature</a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/Fluxer-Bot-7289DA.svg" alt="Fluxer Bot">
-  <img src="https://img.shields.io/badge/Audio-revoice.js-orange.svg" alt="revoice.js">
+  <img src="https://img.shields.io/badge/Node.js-%3E%3D22.0.0-339933.svg" alt="Node.js">
+  <img src="https://img.shields.io/badge/ESM-Modules-yellow.svg" alt="ESM">
+  <img src="https://img.shields.io/badge/Audio-moonlink.js-orange.svg" alt="moonlink.js">
+  <img src="https://img.shields.io/badge/Database-MySQL-4479A1.svg" alt="MySQL">
   <img src="https://img.shields.io/badge/Maintained%3F-Yes-green.svg" alt="Maintained">
 </p>
 
 ---
 
-## 🎵 About The Project
+## Table of Contents
 
-Remix is a free and open-source music bot for Fluxer, built using [fluxerjs](https://github.com/fluxerjs/core) and powered by [revoice.js](https://github.com/ShadowLp174/revoice.js) for seamless, high-quality audio playback. We believe music features shouldn't be locked behind paywalls—**all commands on Remix are 100% free and always will be.**
+- [About The Project](#-about-the-project)
+- [Features](#-features)
+- [Getting Started (Users)](#-getting-started-users)
+- [Commands](#-commands)
+- [Self-Hosting](#-self-hosting-the-bot)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Database Setup](#-database-setup)
+  - [Dashboard Setup (Optional)](#-dashboard-setup-optional)
+  - [Configuration Reference](#-configuration-reference)
+- [Project Architecture](#-project-architecture)
+- [Localization](#-localization)
+- [Scripts](#-npm-scripts)
+- [Credits](#-credits--license)
 
-## 🚀 Getting Started
+---
+
+## About The Project
+
+Remix is a free and open-source music bot for [Fluxer](https://fluxer.app), built with [`@fluxerjs/core`](https://github.com/fluxerjs/core) and powered by [`moonlink.js`](https://github.com/ShadowLp174/moonlink.js) for seamless, high-quality audio streaming. It uses `@fluxerjs/voice` for native voice integration alongside the Moonlink Lavalink proxy.
+
+We believe music features shouldn't be locked behind paywalls — **all commands on Remix are 100% free and always will be.**
+
+---
+
+## Features
+
+- **High-quality audio playback** via moonlink.js (Lavalink proxy) and `@fluxerjs/voice`
+- **Multi-source search** — YouTube, Spotify, SoundCloud, and direct URL support
+- **24/7 mode** — keep the bot in a voice channel permanently, with auto-recovery on restart
+- **Session recovery** — active players and queues survive bot restarts and crash recovery
+- **Interactive emoji player** — reaction-based control panel with play, pause, skip, volume, shuffle, and more
+- **Lyrics** — fetch song lyrics via the Genius API
+- **Radio stations** — built-in support for custom radio streams with keyword-based search
+- **Server settings** — per-guild configuration for prefix, volume, locale, 24/7 channels, and more
+- **Web dashboard** — optional browser-based control panel with Redis-backed sessions and Fluxer OAuth2 login
+- **Multi-language support** — available in English, Arabic, German, Kurdish (Sorani), and Brazilian Portuguese
+- **Configurable logging** — granular control over which log categories appear in the console
+- **Graceful shutdown** — saves active session state on SIGINT/SIGTERM for seamless reboot recovery
+- **Module system** — pluggable module architecture for extending bot functionality
+
+---
+
+## Getting Started (Users)
 
 Want to use Remix in your server right away?
 
@@ -39,43 +82,79 @@ Want to use Remix in your server right away?
 
 ---
 
-## 📜 Commands
+## Commands
 
-Below is a complete list of Remix's commands. The default prefix is `%`.
+Below is the complete list of Remix's commands. The default prefix is `%`.
 
-| Command | Description | Usage Example | Aliases |
+### Music
+
+| Command | Description | Usage | Aliases |
 | :--- | :--- | :--- | :--- |
-| `play` | Play a song from a URL/query, or a playlist. | `%play Never Gonna Give You Up` | `p` |
-| `playnext` | Play a song/playlist, adding it to the *top* of the queue. | `%playnext 'query: text'` | `pn` |
-| `pause` | Pause the current playback. | `%pause` | |
-| `resume` | Resume the paused playback. | `%resume` | |
-| `skip` | Skip the currently playing song. | `%skip` | |
-| `list` | View the upcoming queue for your voice channel. | `%list` | `queue` |
-| `np` | See the name and URL of the currently playing song. | `%np` | `current`, `nowplaying` |
-| `loop` | Toggle looping for the current song or the whole queue. | `%loop queue` | |
-| `shuffle` | Re-orders the queue randomly. | `%shuffle` | |
-| `remove` | Remove a specific song from the queue by its index number. | `%remove 3` | |
-| `clear` | Remove all songs from the queue. | `%clear` | `c` |
-| `volume` | Change the volume of the bot. | `%volume 50` | `v` |
-| `join` | Make the bot join a specific voice channel. | `%join 123456789` | |
-| `leave` | Make the bot leave your current voice channel. | `%leave` | `l` |
-| `player` | Create an interactive emoji player control panel. | `%player` | |
-| `search` | Display search results for a given query to choose from. | `%search 'query'` | |
-| `settings`| Change or view bot settings for the current server. | `%settings set` | `s` |
-| `stats` | Display bot statistics, like uptime and ping. | `%stats` | `info` |
-| `thumbnail`| Get the thumbnail image of the currently playing song. | `%thumbnail` | `thumb` |
-| `test` | A developer testing command. | `%test 1` | |
+| `play` | Play a song from a URL, search query, or playlist | `%play Never Gonna Give You Up` | `p` |
+| `playnext` | Add a song/playlist to the *top* of the queue | `%playnext query: text` | `pn` |
+| `pause` | Pause the current playback | `%pause` | |
+| `resume` | Resume the paused playback | `%resume` | |
+| `skip` | Skip the currently playing song | `%skip` | |
+| `np` | Show the currently playing song | `%np` | `current`, `nowplaying` |
+| `list` | View the upcoming queue | `%list` | `queue` |
+| `loop` | Toggle loop mode (song or queue) | `%loop queue` | |
+| `shuffle` | Randomize the queue order | `%shuffle` | |
+| `remove` | Remove a specific song by its queue index | `%remove 3` | |
+| `clear` | Clear the entire queue | `%clear` | `c` |
+| `volume` | Change the playback volume (1–200) | `%volume 50` | `v` |
+| `volumedefault` | Set the default volume for the server | `%volumedefault 80` | |
+| `search` | Search for a track and pick from results | `%search query` | |
+| `lyrics` | Fetch lyrics for the current or specified song | `%lyrics` | |
+| `thumbnail` | Get the thumbnail of the current track | `%thumbnail` | `thumb` |
+| `radio` | Play a built-in or custom radio station | `%radio` | |
+
+### Voice Channel
+
+| Command | Description | Usage | Aliases |
+| :--- | :--- | :--- | :--- |
+| `join` | Make the bot join a specific voice channel | `%join 123456789` | |
+| `leave` | Make the bot leave the current voice channel | `%leave` | `l` |
+| `forceleave` | Force the bot to leave any channel (owner only) | `%forceleave` | |
+
+### Player & UI
+
+| Command | Description | Usage | Aliases |
+| :--- | :--- | :--- | :--- |
+| `player` | Create an interactive emoji control panel | `%player` | |
+
+### Settings & Server
+
+| Command | Description | Usage | Aliases |
+| :--- | :--- | :--- | :--- |
+| `settings` | View or change server settings | `%settings set` | `s` |
+| `filter` | Manage audio filters (bass, speed, nightcore, etc.) | `%filter bass 50` | |
+
+### Utility
+
+| Command | Description | Usage | Aliases |
+| :--- | :--- | :--- | :--- |
+| `stats` | Display bot stats (uptime, ping, node info) | `%stats` | `info` |
+| `invite` | Get the bot invite link | `%invite` | |
+| `support` | Get an invite to the support server | `%support` | |
+| `reload` | Reload commands or settings at runtime (owner) | `%reload` | |
+| `servers` | List servers the bot is in (owner) | `%servers` | |
+| `eval` | Evaluate JavaScript (owner only) | `%eval 1+1` | |
+| `debug` | Debugging utilities (owner only) | `%debug` | |
+| `test` | Developer testing command | `%test 1` | |
 
 ---
 
-## 🛠️ Self-Hosting The Bot
+## Self-Hosting The Bot
 
-If you prefer to host Remix yourself, please note: **You must make it clear that your bot is an instance of Remix.** Please change the bot's name and give credit in the bot's profile (e.g., *"Powered by [Remix](https://github.com/remix-bot/fluxer)"*).
+If you prefer to host Remix yourself, please note: **You must make it clear that your bot is an instance of Remix.** Change the bot's name and give credit in the bot's profile (e.g., *"Powered by [Remix](https://github.com/remix-bot/fluxer)"*).
 
 ### Prerequisites
-- Node.js installed
-- A MySQL Database
-- A [NodeLink](https://github.com/PerformanC/NodeLink) instance
+
+- **Node.js** >= 22.0.0 (required by moonlink.js v5)
+- **MySQL** 8.0+ with JSON column support
+- **[NodeLink](https://github.com/PerformanC/NodeLink)** instance (Lavalink proxy for audio)
+- **FFmpeg** (installed automatically via `ffmpeg-static`)
+- **Redis** (optional, required for the web dashboard)
 
 ### Installation
 
@@ -91,50 +170,235 @@ If you prefer to host Remix yourself, please note: **You must make it clear that
    ```
 
 3. **Configure the bot:**
-    - Rename `config.example.json` to `config.json`.
-    - Fill out the missing values (Bot Token, DB credentials, etc.).
-    - *Note: You can generate Spotify credentials [here](https://developer.spotify.com/).*
-    - Configure your NodeLink instance inside the `config.json` file:
-      ```json
-      "nodelink": {
-        "host": "localhost",
-        "port": 3000,
-        "password": "youshallnotpass"
-      }
-      ```
+   ```bash
+   cp config_example.json config.json
+   ```
+   Open `config.json` and fill in the required values:
+   - `token` — your Fluxer bot token
+   - `mysql` — your MySQL connection details (host, port, user, password, database)
+   - `prefix` — the command prefix (default: `%`)
+   - `nodelink` — your NodeLink instance connection details
+   - `spotify` — (optional) Spotify API credentials for Spotify track support
+   - `geniusToken` — (optional) Genius API token for lyrics support
+   - `owners` — array of Fluxer user IDs with owner-only command access
 
-4. **Setup the Database:** *(See instructions below)*
+4. **Set up the database:** *(See [Database Setup](#-database-setup) below)*
 
 5. **Start the bot:**
    ```bash
-   node index.mjs
+   npm start
    ```
 
-### 🗄️ Database Setup
+   For development with inspector:
+   ```bash
+   npm run dev
+   ```
 
-Remix requires a MySQL database to function properly.
+### Database Setup
 
-1. Create a dedicated database for Remix to prevent data collisions with other apps.
-2. Enter your MySQL connection details into `config.json`.
-3. Run the following SQL query to create the necessary tables:
+Remix requires a MySQL database to store per-guild settings.
 
+1. Create a dedicated database for Remix:
+   ```sql
+   CREATE DATABASE remix;
+   ```
+
+2. Enter your MySQL connection details into `config.json`:
+   ```json
+   "mysql": {
+     "host": "localhost",
+     "port": 3306,
+     "user": "remix",
+     "password": "your-password",
+     "database": "remix"
+   }
+   ```
+
+3. Create the required table:
    ```sql
    CREATE TABLE `settings` (
      `id` varchar(70) NOT NULL,
      `data` json NOT NULL
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
    ```
-*(Note: If you used the legacy settings system and want to migrate your data, please check the README inside the `settings` folder).*
+
+4. *(Optional)* If migrating from the legacy settings system, run:
+   ```bash
+   npm run migrate
+   ```
+
+### Dashboard Setup (Optional)
+
+Remix includes a web dashboard for controlling the bot through a browser interface.
+
+1. Enable the dashboard in `config.json`:
+   ```json
+   "dashboard": {
+     "enabled": true,
+     "redis": { "url": "redis://localhost:6379" },
+     "fluxer": {
+       "id": "your-fluxer-oauth2-app-id",
+       "secret": "your-fluxer-oauth2-client-secret",
+       "redirectUri": "https://your-backend.com/auth/fluxer"
+     }
+   }
+   ```
+
+2. Create a Fluxer OAuth2 application at [https://fluxer.app/developers/applications](https://fluxer.app/developers/applications).
+
+3. Create the additional database tables required by the dashboard:
+   ```sql
+   CREATE TABLE `ksiTokens` (
+     `user` varchar(26) NOT NULL,
+     `id` varchar(50) NOT NULL,
+     `token` varchar(70) NOT NULL,
+     `createdAt` datetime NOT NULL
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
+
+   CREATE TABLE `logins` (
+     `user` text NOT NULL,
+     `id` varchar(50) NOT NULL,
+     `token` varchar(70) NOT NULL,
+     `verified` tinyint(1) NOT NULL,
+     `createdAt` datetime NOT NULL
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
+   ```
+
+4. For HTTPS support, configure SSL in `config.json`:
+   ```json
+   "ssl": {
+     "private": "/etc/letsencrypt/live/your.domain/privkey.pem",
+     "cert": "/etc/letsencrypt/live/your.domain/fullchain.pem",
+     "useSSL": true,
+     "httpPort": 80
+   }
+   ```
+
+### Configuration Reference
+
+Key configuration options in `config.json`:
+
+| Option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `token` | string | — | **Required.** Fluxer bot token |
+| `prefix` | string | `%` | Default command prefix |
+| `embedColor` | string | `0xe9196c` | Hex color for embed messages |
+| `owners` | string[] | `[]` | User IDs with owner privileges |
+| `playerAFKTimeout` | number | `60000` | Inactivity timeout in ms before bot leaves |
+| `webPort` | number | `80` | Port for the web dashboard |
+| `helpCatalog` | bool | `true` | Enable categorized help command |
+| `helpPagination` | bool | `true` | Enable paginated help output |
+| `mysql` | object | — | **Required.** MySQL connection settings |
+| `nodelink` | object | — | NodeLink connection (host, port, password) |
+| `spotify` | object | — | Spotify API credentials |
+| `geniusToken` | string | — | Genius API token for lyrics |
+| `dashboard` | object | — | Dashboard, Redis, and OAuth2 settings |
+| `logging` | object | — | Per-category log toggle (see config example) |
+| `timers` | object | — | Timing values for inactivity, recovery, etc. |
+| `cache` | object | — | Guild and member cache limits |
+| `radio` | array | `[]` | Custom radio station definitions |
+| `ssl` | object | — | SSL certificate paths and HTTPS toggle |
 
 ---
 
-## 💬 Contact & Support
+## Project Architecture
 
-If you have any questions, need help setting up, or just want to hang out with other Remix users, join our official Fluxer server:
-
-👉 **[Join the Remix Support Server](https://fluxer.gg/Remix)**
+```
+fluxer/
+├── index.mjs                    # Entry point — Remix class, boot sequence, error handling
+├── config_example.json          # Configuration template
+├── package.json
+├── commands/                    # Command modules (one file per command)
+│   ├── play.mjs                 # Play a track or playlist
+│   ├── player.mjs               # Interactive emoji control panel
+│   ├── settings.mjs             # Per-guild settings management
+│   ├── lyrics.mjs               # Genius lyrics fetcher
+│   ├── filter.mjs               # Audio filter controls
+│   ├── radio.mjs                # Radio station management
+│   └── ...                      # All other commands
+├── src/
+│   ├── CommandHandler.mjs       # Command loader, prefix manager, registry
+│   ├── MessageHandler.mjs       # Message parsing, embed builder, pagination, help
+│   ├── PlayerManager.mjs        # Spawns and manages per-channel Player instances
+│   ├── Player.mjs               # Core player — queue, playback, filters, events
+│   ├── MoonlinkManager.mjs      # Moonlink.js (Lavalink) node session manager
+│   ├── Settings.mjs             # RemoteSettingsManager + ServerSettings export
+│   ├── GatewayHandler.mjs       # Raw WS events, voice-state tracking, presence rotation
+│   ├── RecoveryManager.mjs      # Session persistence, crash recovery, 24/7 auto-join
+│   ├── Utils.mjs                # Shared utilities
+│   ├── worker.mjs               # Background task worker
+│   ├── probe.mjs                # FFprobe wrapper for audio stream info
+│   ├── constants/
+│   │   ├── Logger.mjs           # Structured logger with per-category control
+│   │   ├── Locale.mjs           # i18n translation engine
+│   │   ├── providers.mjs        # Audio source provider definitions
+│   │   └── audio/
+│   │       ├── StreamMerger.mjs # Audio stream merging utilities
+│   │       └── Tuna.mjs         # Audio filter/effect processing
+│   └── dashboard/
+│       ├── Dashboard.mjs        # Web dashboard server (Express + WebSocket)
+│       └── RedisHandler.mjs     # Redis session and pub/sub handler
+├── settings/
+│   ├── Settings.mjs             # Abstract SettingsManager base class
+│   ├── migrate.mjs              # Legacy-to-remote settings migration script
+│   └── runnables.mjs            # Runnable task definitions
+└── storage/
+    ├── defaults.json            # Default per-guild settings template
+    ├── modules.json             # Plugin module registry
+    ├── stats.json               # Runtime statistics
+    └── locales/bot/             # Translation files
+        ├── en.json
+        ├── ar-SA.json
+        ├── de-DE.json
+        ├── ckb.json
+        └── pt-BR.json
+```
 
 ---
+
+## Localization
+
+Remix supports multiple languages out of the box. The locale system loads JSON translation files from `storage/locales/bot/` and serves the appropriate language based on each guild's `locale` setting.
+
+Currently supported languages:
+
+| Code | Language |
+| :--- | :--- |
+| `en` | English (default) |
+| `ar-SA` | Arabic |
+| `de-DE` | German |
+| `ckb` | Kurdish (Sorani) |
+| `pt-BR` | Brazilian Portuguese |
+
+To add a new language, place a JSON file in `storage/locales/bot/` following the same key structure as `en.json`, then set the locale per guild with `%settings set locale <code>`.
+
+---
+
+## npm Scripts
+
+| Script | Command | Description |
+| :--- | :--- | :--- |
+| `npm start` | `node index.mjs` | Start the bot |
+| `npm run dev` | `node --inspect index.mjs --trace-warnings` | Start with Node.js inspector |
+| `npm run commands` | `node index.mjs usage` | Generate command usage documentation |
+| `npm run defaultsSync` | `node index.mjs sreload` | Sync default settings to all guilds |
+| `npm run migrate` | `node settings/migrate.mjs` | Run the legacy settings migration |
+
+---
+
+## Credits & License
+
+**Design & Development:**
+- [ShadowLp174](https://github.com/ShadowLp174) — Lead developer, audio engine, moonlink.js
+- NoLogicAlan — Dashboard design
+- ophx — Dashboard design
+- Fantic — Contributions
+
+**Powered by:**
+- [`@fluxerjs/core`](https://github.com/fluxerjs/core) — Fluxer API client
+- [`@fluxerjs/voice`](https://github.com/fluxerjs/voice) — Native voice integration
+- [`moonlink.js`](https://github.com/ShadowLp174/moonlink.js) — Lavalink proxy
+- [NodeLink](https://github.com/PerformanC/NodeLink) — Audio node manager
 
 <p align="center">
   &copy; 2026 Remix. Code licensed under the <a href="LICENSE">MIT License</a>.<br>

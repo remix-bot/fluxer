@@ -1,4 +1,5 @@
 {
+  "Comment": "Fluxer music bot configuration. IMPORTANT: Node.js >= 22.0.0 is required (moonlink.js v5 dependency). Run 'node --version' to verify.",
   "token": "your bot token",
   "fluxer.js": {
     "Comment": "Configuration data for @fluxerjs/core Client options. See: https://github.com/fluxerjs/core",
@@ -114,6 +115,8 @@
     "playerSessionTimeout":  300000,
     "intentionalLeaveTTL":   10000,
     "recoveryStaggerMs":     2000,
-    "recoveryConcurrency":   2
+    "recoveryConcurrency":   2,
+    "maxTransientRetries":    5,
+    "retryBaseDelay":        15000
   }
 }

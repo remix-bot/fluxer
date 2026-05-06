@@ -86,6 +86,8 @@ export class PlayerManager {
     this.playerConfig = config.player;
     this.dashboard    = config.dashboard ?? null;
     this.locale       = config.locale ?? null;
+    this.spawnPlayer  = config.spawnPlayer ?? null;   // RecoveryManager.spawnPlayer — for 24/7 rejoin on autoleave
+    this.timers       = config.timers ?? {};
   }
 
   /**
@@ -596,25 +598,48 @@ export class PlayerManager {
       const homeChannelId = cleanId(player._home247Channel) || activeChannelId;
       const ch       = player.textChannel;
       const guildId = cleanId(player._guildId ?? ch?.guildId ?? ch?.guild?.id ?? getMessageGuildId({ channel: ch }));
-      const is247 = (() => {
-        try {
-          const raw = this.settings.getServer(guildId)?.get("stay_247");
-          return raw && raw !== "none";
-        } catch (_) { return false; }
+
+      // Check 24/7 settings for this channel
+      const raw247 = (() => {
+        try { return this.settings.getServer(guildId)?.get("stay_247"); } catch (_) { return null; }
       })();
-      const prefix = (() => {
-        try {
-          return this.settings.getServer(guildId)?.get("prefix") ?? "%";
-        } catch (_) { return "%"; }
+      const mode247 = (() => {
+        try { return this.settings.getServer(guildId)?.get("stay_247_mode") ?? "off"; } catch (_) { return "off"; }
       })();
-      const desc = is247
-          ? this.locale?.translate(guildId, "responses.join.autoLeaveInactive", { channel: `<#${activeChannelId}>` }) ?? `Left channel <#${activeChannelId}> because of inactivity.`
-          : this.locale?.translate(guildId, "responses.join.autoLeaveInactive247", { channel: `<#${activeChannelId}>`, prefix }) ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
-      ch?.send(mkEmbed(desc));
+      const isIn247List = (() => {
+        if (!raw247 || raw247 === "none") return false;
+        const channels = Array.isArray(raw247)
+            ? raw247.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
+            : [String(raw247).replace(/\D/g, "")].filter(Boolean);
+        return channels.includes(homeChannelId) || channels.includes(activeChannelId);
+      })();
+
+      // Remove player from map and destroy
       this.playerMap.delete(activeChannelId);
       if (activeChannelId !== cleanChannelId) this.playerMap.delete(cleanChannelId);
       if (homeChannelId !== activeChannelId) this.playerMap.delete(homeChannelId);
       player.destroy();
+
+      if (isIn247List && (mode247 === "on" || mode247 === "auto")) {
+        // 24/7 is active — rejoin after a short delay (same as RecoveryManager.spawnPlayer autoleave)
+        const delay = this.timers?.rejoin247Delay ?? 3000;
+        if (this.spawnPlayer) {
+          logger.recovery(`[AutoLeave] 24/7 rejoin scheduled for ${homeChannelId} in ${delay}ms`);
+          setTimeout(() => {
+            this.spawnPlayer(guildId, homeChannelId, 0, null, "initplayer-autoleave").catch(e =>
+              logger.warn("[AutoLeave] 24/7 rejoin failed for", homeChannelId, e.message)
+            );
+          }, delay);
+        }
+      } else {
+        // Not 24/7 — send inactivity message
+        const prefix = (() => {
+          try { return this.settings.getServer(guildId)?.get("prefix") ?? "%"; } catch (_) { return "%"; }
+        })();
+        const desc = this.locale?.translate(guildId, "responses.join.autoLeaveInactive247", { channel: `<#${activeChannelId}>`, prefix })
+          ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
+        ch?.send(mkEmbed(desc));
+      }
     });
 
     player.on("leave", () => {});

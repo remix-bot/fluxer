@@ -548,14 +548,9 @@ export class GatewayHandler {
     // Bot moved channels — auto-save 247 setting
     if (channelId && guildId && oldChannelId && oldChannelId !== channelId) {
       try {
-        if (multiVoiceGuild) {
-          logger.voice247(
-            `[247] Skipping bot move gateway auto-save ${oldChannelId} → ${channelId} ` +
-            `(guild ${guildId} has ${activeGuildPlayers.length} active players)`
-          );
-          return;
-        }
-
+        // For multi-voice guilds, only re-key if we can unambiguously match
+        // the player by oldChannelId. Previously this skipped entirely for
+        // multi-voice guilds, which broke recovery for all channels.
         const cleanId  = String(channelId).replace(/\D/g, "");
         const cleanOld = String(oldChannelId).replace(/\D/g, "");
 
@@ -573,9 +568,16 @@ export class GatewayHandler {
         let rekeyed = false;
         if (existingPlayer && cleanId !== cleanOld) {
           if (guildIsAmbiguous) {
+            // Multi-voice guild: can't safely re-key the playerMap (another player
+            // might already use cleanId), but still update the moved player's
+            // home channel so 24/7 recovery targets the right channel.
+            existingPlayer._channelId = cleanId;
+            existingPlayer._home247Channel = cleanId;
+            if (targetGuildId) existingPlayer._guildId = targetGuildId;
+            rekeyed = false; // keep false — don't touch playerMap keys
             logger.voice247(
-              `[247] Skipping bot move auto-rekey ${cleanOld} → ${cleanId} ` +
-              `(guild ${guildId} has ${guildPlayers.length} active players)`
+              `[247] Updated player channel ${cleanOld} → ${cleanId} ` +
+              `(guild ${guildId} has ${guildPlayers.length} active players, skipped re-key)`
             );
           } else if (playerGuildId && targetGuildId && playerGuildId !== targetGuildId) {
             logger.warn(
@@ -595,7 +597,7 @@ export class GatewayHandler {
 
         const set = remix.settingsMgr.getServer(guildId);
         const raw = set.get("stay_247");
-        if (rekeyed && raw && raw !== "none") {
+        if ((rekeyed || existingPlayer) && raw && raw !== "none") {
           const channels = Array.isArray(raw)
               ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
               : new Set([String(raw).replace(/\D/g, "")]);
@@ -603,6 +605,7 @@ export class GatewayHandler {
             channels.delete(cleanOld);
             channels.add(cleanId);
             set.set("stay_247", [...channels]);
+            logger.voice247(`[247] Updated stay_247: ${cleanOld} → ${cleanId}`);
           }
         }
       } catch (e) {
@@ -613,14 +616,6 @@ export class GatewayHandler {
     // Bot disconnected unexpectedly — rejoin if 247 active
     if (!channelId && oldChannelId && guildId) {
       try {
-        if (multiVoiceGuild) {
-          logger.voice247(
-            `[247] Skipping bot disconnect gateway recovery for ${oldChannelId} ` +
-            `(guild ${guildId} has ${activeGuildPlayers.length} active players)`
-          );
-          return;
-        }
-
         const cleanOld = String(oldChannelId).replace(/\D/g, "");
         if (remix.intentionalLeaves.has(cleanOld)) {
           logger.voice247(`[247] Skipping rejoin for ${cleanOld} — intentional leave.`);
@@ -634,6 +629,8 @@ export class GatewayHandler {
             if (channels.has(cleanOld)) {
               const mode = set.get("stay_247_mode") ?? "auto";
               if (mode === "on" || mode === "auto") {
+                // For multi-voice guilds, match the specific player by channel ID
+                // instead of skipping recovery entirely (was: if multiVoiceGuild return)
                 const player = remix.players.playerMap.get(cleanOld);
                 if (player && !player.leaving) {
                   logger.voice247("[247] Fluxer gateway disconnected us. Forcing player recovery...");
