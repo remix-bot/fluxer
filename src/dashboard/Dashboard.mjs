@@ -58,7 +58,7 @@ export class Dashboard {
     this.redis = new RedisHandler(opts.redis);
     this.redis.setRequestHandler(async (data) => {
       switch (data.type) {
-        // ── Existing request types ─────────────────────────────────────────────
+          // ── Existing request types ─────────────────────────────────────────────
 
         case "fetchPlayers":
           return [...this.remix.players.playerMap.values()].map(p => Dashboard.convertPlayer(p));
@@ -97,13 +97,13 @@ export class Dashboard {
 
         case "commands":
           return this.remix.handler.commands.map(c =>
-            Dashboard.convertCommand(c, this.remix.handler)
+              Dashboard.convertCommand(c, this.remix.handler)
           );
 
         case "function":
           return await this.runFunction(data.params);
 
-        // ── Fluxer OAuth2 request types ─────────────────────────────────────────
+          // ── Fluxer OAuth2 request types ─────────────────────────────────────────
 
         case "fluxerAuthorizeUrl": {
           // Returns the full OAuth2 authorize URL for the dashboard frontend to redirect to
@@ -181,8 +181,8 @@ export class Dashboard {
         displayName:   fluxerUser.displayName ?? fluxerUser.globalName ?? fluxerUser.username,
         avatar: {
           url: fluxerUser.avatar
-            ? `https://cdn.fluxer.app/avatars/${fluxerUser.id}/${fluxerUser.avatar}.webp`
-            : null,
+              ? `https://cdn.fluxer.app/avatars/${fluxerUser.id}/${fluxerUser.avatar}.webp`
+              : null,
         },
         knownToBot:    !!botUser,
         botUser:        botUser ? Dashboard.convertUser(botUser) : null,
@@ -210,7 +210,7 @@ export class Dashboard {
     const now = Date.now();
     // Prune timestamps outside the current window
     this._tokenExchangeTimestamps = this._tokenExchangeTimestamps.filter(
-      ts => now - ts < this._tokenExchangeWindowMs
+        ts => now - ts < this._tokenExchangeWindowMs
     );
     if (this._tokenExchangeTimestamps.length >= this._tokenExchangeMaxPerWindow) {
       console.log("[Dashboard] Token exchange rate limit hit");
@@ -385,7 +385,7 @@ export class Dashboard {
    * Bot owners are always allowed. Otherwise the user must be physically in the
    * player's voice channel to control it.
    *
-   * @param {import("fluxer.js").User|null} user
+   * @param {import("@fluxerjs/core").User|null} user
    * @param {Player} player
    * @returns {string|null} Error message, or null if authorized
    */
@@ -418,7 +418,7 @@ export class Dashboard {
    * Verify the user has permission to perform an action in the target guild.
    * Bot owners are always allowed. Otherwise the user must be a member of the guild.
    *
-   * @param {import("fluxer.js").User} user
+   * @param {import("@fluxerjs/core").User} user
    * @param {string} guildId
    * @returns {Promise<string|null>} Error message, or null if authorized
    */
@@ -443,10 +443,10 @@ export class Dashboard {
    */
   _getPlayerById(id) {
     return this.remix.players.playerMap.get(id)
-      ?? [...this.remix.players.playerMap.values()].find(
-        p => p._channelId === id || p._guildId === id
-      )
-      ?? null;
+        ?? [...this.remix.players.playerMap.values()].find(
+            p => p._channelId === id || p._guildId === id
+        )
+        ?? null;
   }
 
   // ── Static converters ─────────────────────────────────────────────────────
@@ -460,7 +460,7 @@ export class Dashboard {
    * @property {string} avatar.url
    */
   /**
-   * @param {import("fluxer.js").User} user
+   * @param {import("@fluxerjs/core").User} user
    * @returns {APIUser}
    */
   static convertUser(user) {
@@ -480,9 +480,9 @@ export class Dashboard {
   static convertVideo(vid) {
     if (!vid) return null;
     const durationMs =
-      typeof vid.duration === "number" ? vid.duration :
-      typeof vid.duration === "object" && vid.duration?.seconds != null ? vid.duration.seconds * 1000 :
-      0;
+        typeof vid.duration === "number" ? vid.duration :
+            typeof vid.duration === "object" && vid.duration?.seconds != null ? vid.duration.seconds * 1000 :
+                0;
     return {
       title: vid.title,
       url: vid.type === "radio" ? vid.author?.url : vid.url,
@@ -499,7 +499,7 @@ export class Dashboard {
   }
 
   /**
-   * @param {import("fluxer.js").GuildChannel} channel
+   * @param {import("@fluxerjs/core").GuildChannel} channel
    */
   static convertChannel(channel) {
     const isVoice = channel.isVoiceBased?.() ?? false;
@@ -509,7 +509,7 @@ export class Dashboard {
       const guild = channel?.guild ?? channel?.client?.guilds?.get(channel?.guildId);
       if (guild?.voice_states) {
         const vs = Array.isArray(guild.voice_states) ? guild.voice_states :
-          typeof guild.voice_states.values === "function" ? [...guild.voice_states.values()] : Object.values(guild.voice_states);
+            typeof guild.voice_states.values === "function" ? [...guild.voice_states.values()] : Object.values(guild.voice_states);
         for (const state of vs) {
           const scId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
           const chId = String(channel?.id ?? "").replace(/\D/g, "");
@@ -535,7 +535,7 @@ export class Dashboard {
   }
 
   /**
-   * @param {import("fluxer.js").Guild} guild
+   * @param {import("@fluxerjs/core").Guild} guild
    */
   static convertServer(guild) {
     const channelStore = guild.channels;
@@ -561,7 +561,7 @@ export class Dashboard {
    * Lightweight server summary for player payloads.
    * Unlike convertServer(), this omits the full channels array to keep
    * per-player Redis messages small (especially for large guilds).
-   * @param {import("fluxer.js").Guild} guild
+   * @param {import("@fluxerjs/core").Guild} guild
    */
   static convertServerSummary(guild) {
     return {
@@ -594,7 +594,7 @@ export class Dashboard {
         const g = channel?.guild ?? channel?.client?.guilds?.get(channel?.guildId);
         if (!g?.voice_states) return [];
         const vs = Array.isArray(g.voice_states) ? g.voice_states :
-          typeof g.voice_states.values === "function" ? [...g.voice_states.values()] : Object.values(g.voice_states);
+            typeof g.voice_states.values === "function" ? [...g.voice_states.values()] : Object.values(g.voice_states);
         const ids = [];
         for (const state of vs) {
           const scId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
@@ -696,7 +696,7 @@ export class Dashboard {
   /**
    * Global user update
    * @param {Object} details
-   * @param {import("fluxer.js").User} user
+   * @param {import("@fluxerjs/core").User} user
    */
   userUpdate(details, user) {
     if (!this.enabled) return;
