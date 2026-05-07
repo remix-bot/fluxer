@@ -67,45 +67,7 @@ export class Dashboard {
           try {
             const guilds = [...this.remix.client.guilds.values()];
             logger.dashboard("[Dashboard] allServers: returning", guilds.length, "bot guilds");
-            return guilds.map(guild => ({
-              name:   guild.name,
-              id:     guild.id,
-              icon:   guild.icon
-                  ? `https://cdn.fluxer.app/icons/${guild.id}/${guild.icon}.webp`
-                  : null,
-              description: guild.description ?? null,
-              ownerId: guild.ownerId ?? null,
-              voiceChannels: guild.channels
-                  .filter(c => c.isVoiceBased?.() ?? false)
-                  .map(c => {
-                    const voiceParticipants = [];
-                    if (guild.voice_states) {
-                      const vs = Array.isArray(guild.voice_states) ? guild.voice_states :
-                          typeof guild.voice_states.values === "function" ? [...guild.voice_states.values()] : Object.values(guild.voice_states);
-                      for (const state of vs) {
-                        const scId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
-                        const chId = String(c.id ?? "").replace(/\D/g, "");
-                        if (scId === chId) {
-                          const member = guild.members?.get?.(state?.userId ?? state?.user_id);
-                          if (member?.user && !member.user.bot) {
-                            voiceParticipants.push(Dashboard.convertUser(member.user));
-                          }
-                        }
-                      }
-                    }
-                    return {
-                      name: c.name,
-                      displayName: c.name,
-                      id: c.id,
-                      icon: null,
-                      description: c.topic ?? null,
-                      isVoice: true,
-                      mature: c.nsfw ?? false,
-                      serverId: guild.id,
-                      voiceParticipants,
-                    };
-                  }),
-            }));
+            return guilds.map(guild => Dashboard.convertServerForList(guild));
           } catch (e) {
             const id = Utils.uid();
             logger.dashboard("[Dashboard] allServers error:", id, e);
@@ -415,6 +377,102 @@ export class Dashboard {
   }
 
   /**
+   * Build the CDN URL for a guild icon from the icon hash.
+   * @fluxerjs/core Guild objects expose `icon` as a hash string (e.g. "a_b1234")
+   * but do NOT expose an `iconURL()` method. Construct the URL manually.
+   * @param {import("@fluxerjs/core").Guild} guild
+   * @returns {string|null}
+   */
+  static guildIconURL(guild) {
+    if (!guild?.icon) return null;
+    // guild.icon may be "hash" or "a_hash" (animated prefix)
+    const hash = String(guild.icon);
+    const ext = hash.startsWith("a_") ? ".gif" : ".webp";
+    return `https://cdn.fluxer.app/icons/${guild.id}/${hash}${ext}`;
+  }
+
+  /**
+   * Convert a guild into a server-list item with voice channels.
+   * Used by both `allServers` and `getSharedServers` — keeps the
+   * response format consistent and avoids duplicating the channel
+   * extraction logic.
+   *
+   * @param {import("@fluxerjs/core").Guild} guild
+   * @returns {{name: string, id: string, icon: string|null, description: string|null, ownerId: string|null, voiceChannels: Object[]}}
+   */
+  static convertServerForList(guild) {
+    // ── Extract voice channels safely ────────────────────────────────────
+    // guild.channels may be a Collection (Map) or an array depending on
+    // the @fluxerjs/core version. Normalise to an array first.
+    let channelArray = [];
+    try {
+      const ch = guild.channels;
+      if (Array.isArray(ch)) {
+        channelArray = ch;
+      } else if (ch && typeof ch.values === "function") {
+        channelArray = [...ch.values()];
+      } else if (ch && typeof ch.forEach === "function") {
+        ch.forEach(c => channelArray.push(c));
+      }
+    } catch (e) {
+      logger.dashboard("[Dashboard] convertServerForList: channel extraction error:", e.message);
+    }
+
+    const voiceChannels = channelArray
+        .filter(c => {
+          // A channel is voice-based if isVoiceBased() returns true, OR
+          // if the type field indicates a voice channel (type=2 in Fluxer API)
+          if (typeof c.isVoiceBased === "function") return c.isVoiceBased();
+          if (c.isVoiceBased === true) return true;
+          // Fluxer API voice channel types: 2 = voice, 13 = stage
+          const t = c.type;
+          return t === 2 || t === 13 || t === "GUILD_VOICE" || t === "GUILD_STAGE_VOICE";
+        })
+        .map(c => {
+          // Build voice participants list for this channel
+          const voiceParticipants = [];
+          try {
+            if (guild.voice_states) {
+              const vs = Array.isArray(guild.voice_states) ? guild.voice_states :
+                  typeof guild.voice_states.values === "function" ? [...guild.voice_states.values()] : Object.values(guild.voice_states);
+              for (const state of vs) {
+                const scId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
+                const chId = String(c.id ?? "").replace(/\D/g, "");
+                if (scId === chId) {
+                  const member = guild.members?.get?.(state?.userId ?? state?.user_id);
+                  if (member?.user && !member.user.bot) {
+                    voiceParticipants.push(Dashboard.convertUser(member.user));
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            // Voice participants are optional — don't fail the whole response
+          }
+          return {
+            name: c.name,
+            displayName: c.name,
+            id: c.id,
+            icon: null,
+            description: c.topic ?? null,
+            isVoice: true,
+            mature: c.nsfw ?? false,
+            serverId: guild.id,
+            voiceParticipants,
+          };
+        });
+
+    return {
+      name:   guild.name,
+      id:     guild.id,
+      icon:   Dashboard.guildIconURL(guild),
+      description: guild.description ?? null,
+      ownerId: guild.ownerId ?? null,
+      voiceChannels,
+    };
+  }
+
+  /**
    * @param {import("@fluxerjs/core").Guild} guild
    */
   static convertServer(guild) {
@@ -429,7 +487,7 @@ export class Dashboard {
     return {
       name: guild.name,
       id: guild.id,
-      icon: typeof guild.iconURL === "function" ? guild.iconURL() : null,
+      icon: Dashboard.guildIconURL(guild),
       channelIds,
       description: guild.description ?? null,
       ownerId: guild.ownerId,
@@ -445,7 +503,7 @@ export class Dashboard {
     return {
       name: guild.name,
       id: guild.id,
-      icon: typeof guild.iconURL === "function" ? guild.iconURL() : null,
+      icon: Dashboard.guildIconURL(guild),
       description: guild.description ?? null,
       ownerId: guild.ownerId,
     };
