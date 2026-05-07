@@ -148,11 +148,23 @@ export class Dashboard {
         if (!user) return { error: "Invalid user" };
         let voiceChannel, textChannel;
         try {
-          voiceChannel = await this.remix.client.channels.fetch(params.data.channel);
-          textChannel = await this.remix.client.channels.fetch(params.data.text);
+          // Try fetch first (REST), fall back to cache
+          voiceChannel = await this.remix.client.channels.fetch(params.data.channel).catch(() =>
+            this.remix.client.channels.get(params.data.channel)
+          );
+          textChannel = await this.remix.client.channels.fetch(params.data.text).catch(() =>
+            this.remix.client.channels.get(params.data.text)
+          );
         } catch (e) {
-          logger.dashboard("[Dashboard] Error:", e);
+          logger.dashboard("[Dashboard] join: channel lookup error:", e);
           return { error: "Invalid Channel" };
+        }
+        if (!voiceChannel) return { error: "Voice channel not found" };
+        if (!textChannel) {
+          // If text channel is missing, create a minimal stub so initPlayer can still work.
+          // The text channel is only used for song announcements — missing it is non-fatal.
+          logger.dashboard("[Dashboard] join: text channel not found, using stub");
+          textChannel = { id: params.data.text, guildId: voiceChannel.guildId };
         }
         // Verify the user has permission to join the voice channel
         const authErr = await this._authorizeUserInGuild(user, voiceChannel.guildId);
@@ -257,7 +269,16 @@ export class Dashboard {
   // ── Authorization helpers ──────────────────────────────────────────────
 
   /**
-   * Check if a user is a bot owner, or is in the same voice channel as the player.
+   * Check if a user is authorized to control the player.
+   * Authorization is granted if:
+   *   1. User is a bot owner, OR
+   *   2. User is in the same voice channel as the bot, OR
+   *   3. User is a member of the same guild as the player (dashboard control)
+   *
+   * The third case is important for dashboard users who control the bot
+   * remotely — they may not be in the voice channel themselves but still
+   * need to control playback from the web interface.
+   *
    * @param {import("@fluxerjs/core").User|null} user
    * @param {Player} player
    * @returns {string|null} Error message, or null if authorized
@@ -270,6 +291,7 @@ export class Dashboard {
     const cleanChanId = String(player._channelId ?? "").replace(/\D/g, "");
     if (!cleanChanId) return "Player has no active channel";
 
+    // Check if user is in the same voice channel as the bot
     const observed = this.remix.observedVoiceUsers;
     if (observed) {
       for (const [mapUserId, info] of observed) {
@@ -277,6 +299,19 @@ export class Dashboard {
           const infoChannelId = String(info.channelId ?? "").replace(/\D/g, "");
           if (infoChannelId === cleanChanId) return null;
         }
+      }
+    }
+
+    // Dashboard control: if the user is a member of the same guild as
+    // the player, allow control. This enables web dashboard users who
+    // aren't in the voice channel to still control playback.
+    const guildId = player._guildId;
+    if (guildId) {
+      const cleanGuildId = String(guildId).replace(/\D/g, "");
+      const guild = this.remix.client?.guilds?.get?.(guildId) ??
+          this.remix.client?.guilds?.get?.(cleanGuildId);
+      if (guild?.members?.has?.(cleanUserId)) {
+        return null;
       }
     }
 
