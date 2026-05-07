@@ -416,14 +416,21 @@ export class Remix {
     logger.commands("Loading Modules.");
     this.loadedModules = new Map();
     this.modules       = JSON.parse(fs.readFileSync("./storage/modules.json"));
-    Promise.all(this.modules.map(async m => {
+    Promise.allSettled(this.modules.map(async m => {
       if (!m.enabled) return;
-      const exported = await import(m.index);
-      const ModClass = exported.default;
-      this.loadedModules.set(m.name, { instance: new ModClass(this), c: ModClass });
+      try {
+        const exported = await import(m.index);
+        const ModClass = exported.default;
+        this.loadedModules.set(m.name, { instance: new ModClass(this), c: ModClass });
+      } catch (e) {
+        logger.error(`[Module] Failed to load "${m.name}":`, e.message);
+      }
     }))
-        .then(() => logger.commands("Modules loaded."))
-        .catch(e => logger.error("Failed to load modules:", e));
+        .then(results => {
+          const succeeded = results.filter(r => r.status === "fulfilled").length;
+          const failed = results.filter(r => r.status === "rejected").length;
+          logger.commands(`Modules loaded (${succeeded} succeeded, ${failed} failed).`);
+        });
 
     // ── Git commit hash ───────────────────────────────────────────────────────
     try {
@@ -520,30 +527,62 @@ export class Remix {
     return this.players.getPlayer(message, promptJoin, verifyUser, shouldJoin);
   }
 
-  getSharedServers(user) {
-    if (!user) return Promise.resolve([]);
+  /**
+   * Return all guilds the given user shares with this bot.
+   * No longer gated behind settingsMgr — works with or without MySQL.
+   * Uses cached members first, falls back to observedVoiceUsers, then
+   * an async REST fetch for large guilds where the member cache is incomplete.
+   *
+   * @param {import("@fluxerjs/core").User} user
+   * @returns {Promise<Array<{name:string,id:string,icon:string|null,voiceChannels:Array}>>}
+   */
+  async getSharedServers(user) {
+    if (!user) return [];
 
-    const mutualGuilds = this.client.guilds.filter(g => {
-      if (!this.settingsMgr.guilds.has(g.id)) return false;
-      if (g.members?.has?.(user.id)) return true;
-      const cleanGuildId = String(g.id).replace(/\D/g, "");
-      for (const [, info] of (this.observedVoiceUsers ?? [])) {
-        const infoGuild = String(info.guildId ?? "").replace(/\D/g, "");
-        if (infoGuild === cleanGuildId) return true;
+    const shared = [];
+
+    for (const guild of this.client.guilds.values()) {
+      let isMember = false;
+
+      // 1. Fast path — check cached members
+      if (guild.members?.has?.(user.id)) {
+        isMember = true;
       }
-      return false;
-    });
 
-    return Promise.resolve([...mutualGuilds.values()].map(guild => ({
-      name:          guild.name,
-      id:            guild.id,
-      icon:          guild.icon
-          ? `https://cdn.fluxer.app/icons/${guild.id}/${guild.icon}.webp`
-          : null,
-      voiceChannels: guild.channels
-          .filter(c => c.isVoiceBased?.() ?? false)
-          .map(c => ({ name: c.name, id: c.id, icon: null })),
-    })));
+      // 2. Fallback — observed voice users (REST-less)
+      if (!isMember) {
+        const cleanGuildId = String(guild.id).replace(/\D/g, "");
+        for (const [, info] of (this.observedVoiceUsers ?? [])) {
+          if (String(info.guildId ?? "").replace(/\D/g, "") === cleanGuildId) {
+            isMember = true;
+            break;
+          }
+        }
+      }
+
+      // 3. Slow path — REST fetch for large guilds with incomplete caches
+      if (!isMember) {
+        try {
+          const member = await guild.members.fetch(user.id).catch(() => null);
+          if (member) isMember = true;
+        } catch (_) { /* not a member or fetch failed */ }
+      }
+
+      if (!isMember) continue;
+
+      shared.push({
+        name:   guild.name,
+        id:     guild.id,
+        icon:   guild.icon
+            ? `https://cdn.fluxer.app/icons/${guild.id}/${guild.icon}.webp`
+            : null,
+        voiceChannels: guild.channels
+            .filter(c => c.isVoiceBased?.() ?? false)
+            .map(c => ({ name: c.name, id: c.id, icon: null })),
+      });
+    }
+
+    return shared;
   }
 
   pagination(form, content, msg, linesPerPage) {

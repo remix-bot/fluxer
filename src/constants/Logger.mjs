@@ -14,6 +14,8 @@
  *   settings      — settings DB load, remote update errors
  *   worker        — worker URL cleaning, result logging
  *   moonlink      — moonlink node events
+ *   dashboard     — dashboard request handler, player updates
+ *   redis         — Redis pub/sub connection events
  *   errors        — always on; console.error calls (cannot be disabled)
  */
 
@@ -63,4 +65,6 @@ export const logger = {
   moonlink(...args)    { if (isEnabled("moonlink"))     console.log(`[${ts()}]`, ...args); },
   aloneCheck(...args)  { if (isEnabled("inactivity"))  console.log(`[${ts()}]`, ...args); },
   voice(...args)       { if (isEnabled("voice"))        console.log(`[${ts()}]`, ...args); },
+  dashboard(...args)   { if (isEnabled("dashboard"))    console.log(`[${ts()}]`, ...args); },
+  redis(...args)       { if (isEnabled("redis"))        console.log(`[${ts()}]`, ...args); },
 };

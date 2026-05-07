@@ -95,7 +95,9 @@
     "recovery":    true,
     "settings":    true,
     "worker":      true,
-    "moonlink":    true
+    "moonlink":    true,
+    "dashboard":   true,
+    "redis":       true
   },
   "timers": {
     "Comment": "All timing values in milliseconds (ms). 1000ms = 1 second, 60000ms = 1 minute.",

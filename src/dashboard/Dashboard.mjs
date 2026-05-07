@@ -2,6 +2,7 @@ import { CommandBuilder, CommandHandler, Option } from "../CommandHandler.mjs";
 import Player from "../Player.mjs";
 import { Utils } from "../Utils.mjs";
 import { RedisHandler } from "./RedisHandler.mjs";
+import { logger } from "../constants/Logger.mjs";
 
 export class Dashboard {
   enabled = false;
@@ -51,7 +52,7 @@ export class Dashboard {
             return server;
           } catch (e) {
             const id = Utils.uid();
-            console.log("[Dashboard] Server error:", id, e);
+            logger.dashboard("[Dashboard] Server error:", id, e);
             return { error: "An error occurred. Id: " + id };
           }
         }
@@ -79,11 +80,11 @@ export class Dashboard {
    */
   async runFunction(params) {
     let user;
-    if (!!params.data.user) {
+    if (params.data?.user) {
       try {
         user = await this.remix.client.users.fetch(params.data.user);
       } catch (e) {
-        console.log(e);
+        logger.dashboard("[Dashboard] Error:", e);
         return { error: "Invalid User" };
       }
     }
@@ -95,7 +96,7 @@ export class Dashboard {
           voiceChannel = await this.remix.client.channels.fetch(params.data.channel);
           textChannel = await this.remix.client.channels.fetch(params.data.text);
         } catch (e) {
-          console.log(e);
+          logger.dashboard("[Dashboard] Error:", e);
           return { error: "Invalid Channel" };
         }
         // Verify the user has permission to join the voice channel
@@ -483,7 +484,7 @@ export class Dashboard {
           player: serialised,
         }));
       } catch (e) {
-        console.log("[Dashboard] playerUpdate error:", e.message);
+        logger.dashboard("[Dashboard] playerUpdate error:", e.message);
       }
     }, 500));
   }

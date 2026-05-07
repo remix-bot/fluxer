@@ -1,4 +1,5 @@
 import { createClient } from "redis";
+import { logger } from "../constants/Logger.mjs";
 
 /**
  * Default retry strategy: exponential backoff starting at 500ms, max 5s, max 20 retries.
@@ -41,12 +42,12 @@ export class RedisHandler {
 
     this.client = createClient(clientOpts);
     this.client.on("error", (err) => {
-      console.log("[Redis/Main] Error:", err.message);
+      logger.warn("[Redis/Main] Error:", err.message);
     });
 
     this.subscriber = this.client.duplicate();
     this.subscriber.on("error", (err) => {
-      console.log("[Redis/Subscriber] Error:", err.message);
+      logger.warn("[Redis/Subscriber] Error:", err.message);
     });
 
     this._connect();
@@ -59,15 +60,15 @@ export class RedisHandler {
   async _connect() {
     try {
       await this.client.connect();
-      console.log("[Redis/Main] Connected");
+      logger.redis("[Redis/Main] Connected");
       this.readyMessage();
     } catch (e) {
-      console.log("[Redis/Main] Initial connection failed:", e.message);
+      logger.error("[Redis/Main] Initial connection failed:", e.message);
     }
 
     try {
       await this.subscriber.connect();
-      console.log("[Redis/Subscriber] Connected");
+      logger.redis("[Redis/Subscriber] Connected");
 
       this.subscriber.subscribe("request", async (m) => {
         if (this._destroyed) return;
@@ -81,7 +82,7 @@ export class RedisHandler {
             content: result,
           }));
         } catch (e) {
-          console.log("[Redis/Subscriber] Request handler error:", e.message);
+          logger.error("[Redis/Subscriber] Request handler error:", e.message);
         }
       });
 
@@ -93,11 +94,11 @@ export class RedisHandler {
           if (data.type !== "requestConnected") return;
           this.readyMessage();
         } catch (e) {
-          console.log("[Redis/Subscriber] Info handler error:", e.message);
+          logger.warn("[Redis/Subscriber] Info handler error:", e.message);
         }
       });
     } catch (e) {
-      console.log("[Redis/Subscriber] Initial connection failed:", e.message);
+      logger.error("[Redis/Subscriber] Initial connection failed:", e.message);
     }
   }
 
@@ -118,7 +119,7 @@ export class RedisHandler {
   send(channel, message) {
     if (this._destroyed || !this.client?.isReady) return Promise.resolve(0);
     return this.client.publish(channel, message).catch((e) => {
-      console.log("[Redis/Main] Publish error:", e.message);
+      logger.warn("[Redis/Main] Publish error:", e.message);
       return 0;
     });
   }
@@ -147,6 +148,6 @@ export class RedisHandler {
     this._destroyed = true;
     try { await this.subscriber?.quit(); } catch (_) {}
     try { await this.client?.quit(); } catch (_) {}
-    console.log("[Redis] Connections closed gracefully");
+    logger.redis("[Redis] Connections closed gracefully");
   }
 }
