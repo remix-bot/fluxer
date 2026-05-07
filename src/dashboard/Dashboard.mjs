@@ -1,23 +1,32 @@
 import { CommandBuilder, CommandHandler, Option } from "../CommandHandler.mjs";
 import Player from "../Player.mjs";
 import { Utils } from "../Utils.mjs";
+import { DatabaseManager } from "./DatabaseManager.mjs";
 import { RedisHandler } from "./RedisHandler.mjs";
 import { logger } from "../constants/Logger.mjs";
 
 export class Dashboard {
   enabled = false;
+  expiryTime = 1000 * 60 * 60 * 6; // 6 hours — login code expiry
 
   /**
    * @param {Remix} remix
    * @param {Object} opts
    * @param {boolean} opts.enabled Whether the Dashboard is enabled and connections should be attempted
    * @param {Object} opts.redis Connection options passed directly to redis createClient
+   * @param {Object} [opts.mysql] MySQL connection config for login code verification
    */
   constructor(remix, opts) {
     this.enabled = opts?.enabled;
     this.remix = remix;
 
     if (!this.enabled) return this;
+
+    // DatabaseManager for login code verification (optional — only needed if
+    // the backend uses the bot-based login flow instead of Fluxer OAuth2)
+    if (opts.mysql) {
+      this.db = new DatabaseManager(opts.mysql);
+    }
 
     this.redis = new RedisHandler(opts.redis);
     this.redis.setRequestHandler(async (data) => {
@@ -104,7 +113,6 @@ export class Dashboard {
         if (authErr) return { error: authErr };
         if (this.remix.players.playerMap.has(voiceChannel.id)) return { message: "Already Connected" };
         // Build a minimal fake message that satisfies PlayerManager.initPlayer().
-        // initPlayer calls message.reply() for status updates (joining, errors).
         const fakeMsg = {
           channel: { channel: textChannel, guildId: voiceChannel.guildId },
           message: { guildId: voiceChannel.guildId },
@@ -168,7 +176,7 @@ export class Dashboard {
           player.playRadio(radio);
           return { message: "Adding radio station" };
         }
-        // Sanitize: reject obviously malicious patterns (JavaScript URLs, data URIs)
+        // Sanitize: reject obviously malicious patterns
         if (/^(javascript|data|vbscript):/i.test(query.trim())) {
           return { error: "Invalid query protocol" };
         }
@@ -189,31 +197,24 @@ export class Dashboard {
 
   /**
    * Check if a user is a bot owner, or is in the same voice channel as the player.
-   * Bot owners are always allowed. Otherwise the user must be physically in the
-   * player's voice channel to control it.
-   *
    * @param {import("@fluxerjs/core").User|null} user
    * @param {Player} player
    * @returns {string|null} Error message, or null if authorized
    */
   _authorizePlayerControl(user, player) {
-    // Bot owners bypass all checks
     if (user && this.remix.handler?.owners?.includes?.(user.id)) return null;
-
     if (!user) return "User not provided";
 
     const cleanUserId = String(user.id).replace(/\D/g, "");
     const cleanChanId = String(player._channelId ?? "").replace(/\D/g, "");
     if (!cleanChanId) return "Player has no active channel";
 
-    // Check observed voice users — the authoritative voice state map.
-    // Map key is userId, value is { channelId, guildId }.
     const observed = this.remix.observedVoiceUsers;
     if (observed) {
       for (const [mapUserId, info] of observed) {
         if (String(mapUserId).replace(/\D/g, "") === cleanUserId) {
           const infoChannelId = String(info.channelId ?? "").replace(/\D/g, "");
-          if (infoChannelId === cleanChanId) return null; // authorized
+          if (infoChannelId === cleanChanId) return null;
         }
       }
     }
@@ -223,8 +224,6 @@ export class Dashboard {
 
   /**
    * Verify the user has permission to perform an action in the target guild.
-   * Bot owners are always allowed. Otherwise the user must be a member of the guild.
-   *
    * @param {import("@fluxerjs/core").User} user
    * @param {string} guildId
    * @returns {Promise<string|null>} Error message, or null if authorized
@@ -259,16 +258,7 @@ export class Dashboard {
   // ── Static converters ─────────────────────────────────────────────────────
 
   /**
-   * @typedef APIUser
-   * @property {string} id
-   * @property {string} username
-   * @property {string} displayName
-   * @property {Object} avatar
-   * @property {string} avatar.url
-   */
-  /**
    * @param {import("@fluxerjs/core").User} user
-   * @returns {APIUser}
    */
   static convertUser(user) {
     return {
@@ -310,7 +300,6 @@ export class Dashboard {
    */
   static convertChannel(channel) {
     const isVoice = channel.isVoiceBased?.() ?? false;
-    // Collect voice members for voice channels
     let voiceParticipants = [];
     if (isVoice) {
       const guild = channel?.guild ?? channel?.client?.guilds?.get(channel?.guildId);
@@ -366,8 +355,6 @@ export class Dashboard {
 
   /**
    * Lightweight server summary for player payloads.
-   * Unlike convertServer(), this omits the full channels array to keep
-   * per-player Redis messages small (especially for large guilds).
    * @param {import("@fluxerjs/core").Guild} guild
    */
   static convertServerSummary(guild) {
@@ -457,21 +444,68 @@ export class Dashboard {
     };
   }
 
-  // ── Pub/Sub broadcast helpers ─────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Pub/Sub broadcast helpers
+  //
+  // CRITICAL: The backend (backend-master) expects Stoat-compatible message
+  // formats on both the global :players channel and the per-player
+  // :player_{channelId} channel.  The formats are:
+  //
+  //   Global (:players):
+  //     { type: "init", player: serialisedPlayer }   — when bot joins a VC
+  //     { type: "close", player: serialisedPlayer }  — when bot leaves a VC
+  //
+  //   Per-player (:player_{channelId}):
+  //     { type: "startplay",  data: serialisedVideo }
+  //     { type: "streamStartPlay", data: timestamp }
+  //     { type: "stopplay",   data: null }
+  //     { type: "pause",      data: { elapsedTime: ms } }
+  //     { type: "resume",     data: { elapsedTime: ms } }
+  //     { type: "volume",     data: number }
+  //     { type: "queue",      data: serialisedQueueEvent }
+  //     { type: "join",       data: userId }
+  //     { type: "leave",      data: userId }
+  // ═══════════════════════════════════════════════════════════════════════════
 
   // Debounce map for playerUpdate — prevents flooding Redis with rapid updates.
   _playerUpdateTimers = new Map();
 
   /**
-   * Global player update (broadcast to all dashboard listeners)
+   * Global player update (broadcast to all dashboard listeners on {platform}:players).
+   *
+   * Used for two purposes:
+   *  1. Lifecycle events: { type: "init" } / { type: "close" } — the backend
+   *     PlayerManager uses these to add/remove Player objects.
+   *  2. Full state broadcast: any other type — the full serialised player is
+   *     included so dashboard frontends can update their UI.
+   *
    * Debounced: rapid successive calls for the same player are coalesced
    * into a single publish every 500ms.
-   * @param {Object} details
+   *
+   * @param {Object} details Must include a `type` field (e.g. "init", "close",
+   *        "startplay", "stopplay", etc.) and may include a `data` field.
    * @param {Player} player
    */
   playerUpdate(details, player) {
     if (!this.enabled) return;
     const key = player._channelId ?? player._guildId ?? "unknown";
+
+    // For "init" and "close" events, send immediately (no debounce) — the
+    // backend relies on these for player lifecycle management.
+    if (details.type === "init" || details.type === "close") {
+      try {
+        const serialised = Dashboard.convertPlayer(player);
+        this.redis.send(this.redis.platform + ":players", JSON.stringify({
+          type: details.type,
+          player: serialised,
+        }));
+      } catch (e) {
+        logger.dashboard("[Dashboard] playerUpdate error:", e.message);
+      }
+      return;
+    }
+
+    // All other events are debounced to avoid flooding Redis.
     if (this._playerUpdateTimers.has(key)) {
       clearTimeout(this._playerUpdateTimers.get(key));
     }
@@ -490,8 +524,19 @@ export class Dashboard {
   }
 
   /**
-   * Per-player channel update
-   * @param {Object} details
+   * Per-player channel update (sent to {platform}:player_{channelId}).
+   *
+   * The backend PlayerManager.setupEvents() expects messages in the format:
+   *   { type: "<eventType>", data: <payload> }
+   *
+   * This method accepts details in that Stoat-compatible format directly.
+   *
+   * @param {Object} details Must include `type` and optionally `data`.
+   *   Examples:
+   *     { type: "startplay", data: convertVideo(song) }
+   *     { type: "pause", data: { elapsedTime: 12345 } }
+   *     { type: "queue", data: serialisedQueueEvent }
+   *     { type: "join", data: userId }
    * @param {Player} player
    */
   updatePlayer(details, player) {
@@ -501,7 +546,7 @@ export class Dashboard {
   }
 
   /**
-   * Global user update
+   * Global user update (sent to {platform}:users).
    * @param {Object} details
    * @param {import("@fluxerjs/core").User} user
    */
@@ -514,9 +559,55 @@ export class Dashboard {
     }));
   }
 
+  /**
+   * Per-user channel update (sent to {platform}:user_{userId}).
+   * @param {Object} details
+   * @param {import("@fluxerjs/core").User} user
+   */
   updateUser(details, user) {
     if (!this.enabled) return;
     const channel = this.redis.platform + ":user_" + user.id;
     this.redis.send(channel, JSON.stringify(details));
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Login Confirmation (for backend-based DM code verification flow)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Verify a login code submitted by a user via DM.
+   * The backend stores the code in MySQL; this method compares the supplied
+   * code against the stored (bcrypt-hashed) value.
+   *
+   * @param {string} user User ID
+   * @param {string} code Plain-text code supplied by the user
+   * @returns {Promise<string|null>} null on success, error message on failure
+   */
+  async confirmLogin(user, code) {
+    if (!this.enabled) return "Dashboard not enabled.";
+    if (!this.db) return "Dashboard database not configured.";
+
+    let res;
+    try {
+      res = await this.db.execute("SELECT * FROM login_codes WHERE user=?", [user]);
+    } catch (e) {
+      const id = Utils.uid();
+      logger.dashboard("[Dashboard] MySQL error, id:", id, e);
+      return "An error occurred, please contact an administrator if this happens again. Error id: `" + id + "`";
+    }
+
+    if (res.length === 0) return "If this is a valid code, it was not created for your account.";
+
+    for (let i = 0; i < res.length; i++) {
+      if (await this.db.compareHash(code, res[i].token)) {
+        if (Date.now() - this.expiryTime > (new Date(res[i].createdAt)).getTime()) {
+          return "Login token expired";
+        }
+        await this.db.execute("UPDATE login_codes SET verified=true WHERE id=?", [res[i].id]);
+        return null; // success
+      }
+    }
+
+    return "Invalid code.";
   }
 }

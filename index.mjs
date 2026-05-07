@@ -46,6 +46,7 @@ export class Remix {
     this.dashboard = new Dashboard(this, {
       enabled: config.dashboard?.enabled,
       redis: config.dashboard?.redis,
+      mysql: config.mysql,
     });
 
     const presenceContents = config.presenceContents ?? [];
@@ -656,6 +657,13 @@ const saveAndExit = async () => {
     }
   } catch (e) {
     logger.error("[Shutdown] Failed to close Redis:", e.message);
+  }
+  try {
+    if (remix.dashboard?.db?.close) {
+      await remix.dashboard.db.close();
+    }
+  } catch (e) {
+    logger.error("[Shutdown] Failed to close Dashboard DB:", e.message);
   }
   process.exit(0);
 };

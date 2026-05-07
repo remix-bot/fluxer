@@ -14,6 +14,7 @@ import { logger } from "./constants/Logger.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { getGlobalColor } from "./MessageHandler.mjs";
+import { Dashboard } from "./dashboard/Dashboard.mjs";
 
 /** Helper — build a plain embed payload from a description string */
 function mkEmbed(desc) {
@@ -114,8 +115,14 @@ export class PlayerManager {
 
   /**
    * Forward player lifecycle/state events to the dashboard pub/sub channels.
-   * This keeps the event bridge in one place so both regular joins and
-   * background-spawned players can reuse it.
+   *
+   * IMPORTANT: Events are sent in Stoat-compatible { type, data } format so
+   * the backend (backend-master) PlayerManager can parse them correctly.
+   *
+   * Two channels are used:
+   *   {platform}:players         — global, for init/close lifecycle events
+   *   {platform}:player_{id}     — per-player, for playback/queue/volume events
+   *
    * @param {Player} player
    * @param {Object} [context]
    * @param {string|null} [context.channelId]
@@ -132,23 +139,35 @@ export class PlayerManager {
       writable: true,
     });
 
-    const sendDashboardUpdate = (event, details = {}) => {
+    // ── Per-player channel: Stoat-compatible { type, data } format ────────
+    // The backend PlayerManager.setupEvents() expects:
+    //   { type: "startplay",  data: serialisedVideo }
+    //   { type: "stopplay",   data: null }
+    //   { type: "pause",      data: { elapsedTime: ms } }
+    //   { type: "resume",     data: { elapsedTime: ms } }
+    //   { type: "volume",     data: number }
+    //   { type: "queue",      data: serialisedQueueEvent }
+    //   { type: "join",       data: userId }
+    //   { type: "leave",      data: userId }
+
+    const emit = (type, data) => {
       if (!this.dashboard?.enabled) return;
+      this.dashboard.updatePlayer({ type, data }, player);
+    };
 
-      const payload = {
-        event,
-        guildId: cleanId(player._guildId ?? context.guildId),
-        channelId: getPlayerChannelId(player, context.channelId),
-        ...details,
-      };
+    // ── Global channel: lifecycle events ──────────────────────────────────
+    // The backend PlayerManager.initChannels() expects:
+    //   { type: "init",  player: serialisedPlayer }  — when player connects
+    //   { type: "close", player: serialisedPlayer }  — when player disconnects
 
-      this.dashboard.playerUpdate(payload, player);
-      this.dashboard.updatePlayer(payload, player);
+    const emitGlobal = (type) => {
+      if (!this.dashboard?.enabled) return;
+      this.dashboard.playerUpdate({ type }, player);
     };
 
     // Broadcast user list changes to the global :users channel when
     // someone joins or leaves the player's voice channel.
-    const sendUserUpdates = (event) => {
+    const sendUserUpdates = (eventType) => {
       if (!this.dashboard?.enabled) return;
       const channelId = getPlayerChannelId(player, context.channelId);
       const channel = player.client?.channels?.get(channelId);
@@ -167,71 +186,135 @@ export class PlayerManager {
         if (stateChannelId !== channelId) continue;
         const member = guild.members?.get?.(state.userId ?? state.user_id);
         if (!member?.user || member.user?.bot) continue;
-        const details = {
-          event,
+        // Send per-player channel "join"/"leave" event with just the user ID
+        // (matching Stoat format where data = userId string)
+        emit(eventType, member.user.id);
+        // Also send global user update
+        this.dashboard.userUpdate({
+          type: eventType,
           guildId: cleanId(player._guildId ?? context.guildId),
           channelId,
-        };
-        this.dashboard.userUpdate(details, member.user);
+        }, member.user);
       }
     };
 
+    // ── Player event handlers ─────────────────────────────────────────────
+
     player.on("roomfetched", () => {
-      sendDashboardUpdate("roomfetched", { state: "connected" });
-      sendUserUpdates("roomfetched");
+      // Player connected — send "init" on the global channel
+      emitGlobal("init");
+      sendUserUpdates("join");
     });
 
-    player.on("startplay", () => {
-      sendDashboardUpdate("startplay", { state: "playing" });
+    player.on("startplay", (song) => {
+      // Send the serialised video to the per-player channel
+      emit("startplay", Dashboard.convertVideo(song ?? player.queue?.current));
+      // Also broadcast on global channel for full state update
+      this.dashboard.playerUpdate({ type: "startplay" }, player);
     });
 
     player.on("stopplay", () => {
-      sendDashboardUpdate("stopplay", { state: "idle" });
+      emit("stopplay", null);
+      this.dashboard.playerUpdate({ type: "stopplay" }, player);
     });
 
     player.on("playback", (playing) => {
-      sendDashboardUpdate("playback", {
-        state: playing ? "playing" : "paused",
-        playing: !!playing,
-      });
+      // Stoat sends "pause" or "resume" with { elapsedTime } — match that
+      const elapsedMs = player._pausedAt
+          ? (player._pausedAt.getTime?.() ?? Number(player._pausedAt)) -
+            (player.startedPlaying?.getTime?.() ?? Number(player.startedPlaying ?? 0))
+          : Date.now() - (player.startedPlaying?.getTime?.() ?? Number(player.startedPlaying ?? 0));
+      const type = playing ? "resume" : "pause";
+      emit(type, { elapsedTime: Math.max(0, elapsedMs) });
+      this.dashboard.playerUpdate({ type }, player);
     });
 
     player.on("volume", (volume) => {
-      sendDashboardUpdate("volume", { volume });
+      emit("volume", volume);
+      this.dashboard.playerUpdate({ type: "volume" }, player);
     });
 
     player.on("filter", (filter) => {
-      sendDashboardUpdate("filter", { filter });
+      // Filter events are Fluxer-specific — no Stoat equivalent.
+      // Send as a custom event type; the backend will ignore unknown types.
+      emit("filter", filter);
     });
 
     player.on("update", (scope) => {
-      sendDashboardUpdate("update", { scope });
+      // Generic update — send full player state on global channel
+      this.dashboard.playerUpdate({ type: "update" }, player);
     });
 
     player.on("message", (message) => {
-      sendDashboardUpdate("message", {
-        message: typeof message === "string" ? message : null,
-      });
+      // No Stoat equivalent — skip per-player, only global broadcast
     });
 
     player.on("autoleave", () => {
-      sendUserUpdates("autoleave");
-      sendDashboardUpdate("autoleave", {
-        state: "disconnected",
-        reason: "inactivity",
-      });
+      sendUserUpdates("leave");
+      // Send "close" on global channel so backend removes the player
+      emitGlobal("close");
+      emit("stopplay", null);
     });
 
     player.on("leave", () => {
       sendUserUpdates("leave");
-      sendDashboardUpdate("leave", {
-        state: "disconnected",
-        reason: "manual",
-      });
+      // Send "close" on global channel so backend removes the player
+      emitGlobal("close");
+      emit("stopplay", null);
     });
 
+    // ── Queue event handler ───────────────────────────────────────────────
+    // Queue events must be serialised with Dashboard.convertVideo() to match
+    // the format the backend Queue.update() method expects.
+
     player.queue?.on("queue", (queueEvent) => {
-      sendDashboardUpdate("queue", { queueEvent });
+      const serialised = { type: queueEvent.type };
+      switch (queueEvent.type) {
+        case "add":
+          serialised.data = {
+            append: queueEvent.data?.append,
+            data: Dashboard.convertVideo(queueEvent.data?.data),
+          };
+          break;
+        case "addMany":
+          serialised.data = {
+            append: queueEvent.data?.append,
+            tracks: (queueEvent.data?.tracks ?? []).map(v => Dashboard.convertVideo(v)),
+          };
+          break;
+        case "remove":
+          serialised.data = {
+            index: queueEvent.data?.index,
+            removed: Dashboard.convertVideo(queueEvent.data?.removed),
+            old: (queueEvent.data?.old ?? []).map(v => Dashboard.convertVideo(v)),
+            new: (queueEvent.data?.new ?? []).map(v => Dashboard.convertVideo(v)),
+          };
+          break;
+        case "move":
+          serialised.data = {
+            from: queueEvent.data?.from,
+            to: queueEvent.data?.to,
+            track: Dashboard.convertVideo(queueEvent.data?.track),
+          };
+          break;
+        case "shuffle":
+          serialised.data = (queueEvent.data ?? []).map(v => Dashboard.convertVideo(v));
+          break;
+        case "update":
+          serialised.data = {
+            current: Dashboard.convertVideo(queueEvent.data?.current),
+            old: Dashboard.convertVideo(queueEvent.data?.old),
+            loop: queueEvent.data?.loop,
+          };
+          break;
+        default:
+          // Unknown queue event — pass through as-is
+          serialised.data = queueEvent.data;
+          break;
+      }
+
+      emit("queue", serialised);
+      this.dashboard.playerUpdate({ type: "queue" }, player);
     });
 
     return player;
