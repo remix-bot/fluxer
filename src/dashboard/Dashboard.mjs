@@ -58,6 +58,61 @@ export class Dashboard {
           }
         }
 
+        case "allServers": {
+          // Returns ALL guilds the bot is in, without checking if a specific
+          // user is a member. Used by the backend's OAuth2 fast path — the
+          // backend fetches the user's guild IDs from the Fluxer API and
+          // filters on its side, avoiding expensive per-guild member checks
+          // on the bot.
+          try {
+            const guilds = [...this.remix.client.guilds.values()];
+            logger.dashboard("[Dashboard] allServers: returning", guilds.length, "bot guilds");
+            return guilds.map(guild => ({
+              name:   guild.name,
+              id:     guild.id,
+              icon:   guild.icon
+                  ? `https://cdn.fluxer.app/icons/${guild.id}/${guild.icon}.webp`
+                  : null,
+              description: guild.description ?? null,
+              ownerId: guild.ownerId ?? null,
+              voiceChannels: guild.channels
+                  .filter(c => c.isVoiceBased?.() ?? false)
+                  .map(c => {
+                    const voiceParticipants = [];
+                    if (guild.voice_states) {
+                      const vs = Array.isArray(guild.voice_states) ? guild.voice_states :
+                          typeof guild.voice_states.values === "function" ? [...guild.voice_states.values()] : Object.values(guild.voice_states);
+                      for (const state of vs) {
+                        const scId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
+                        const chId = String(c.id ?? "").replace(/\D/g, "");
+                        if (scId === chId) {
+                          const member = guild.members?.get?.(state?.userId ?? state?.user_id);
+                          if (member?.user && !member.user.bot) {
+                            voiceParticipants.push(Dashboard.convertUser(member.user));
+                          }
+                        }
+                      }
+                    }
+                    return {
+                      name: c.name,
+                      displayName: c.name,
+                      id: c.id,
+                      icon: null,
+                      description: c.topic ?? null,
+                      isVoice: true,
+                      mature: c.nsfw ?? false,
+                      serverId: guild.id,
+                      voiceParticipants,
+                    };
+                  }),
+            }));
+          } catch (e) {
+            const id = Utils.uid();
+            logger.dashboard("[Dashboard] allServers error:", id, e);
+            return { error: "Failed to fetch all servers. Id: " + id };
+          }
+        }
+
         case "server": {
           try {
             const guild = this.remix.client.guilds.get(data.key);
