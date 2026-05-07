@@ -507,9 +507,9 @@ export class GatewayHandler {
             try { await client.users.fetch(userId).catch(() => {}); } catch (_) {}
           }
           if (userObj) {
-            // Send user update on the global :users channel
             const details = {
-              type: channelId ? "join" : "leave",
+              event: "voiceStateUpdate",
+              userId,
               guildId: resolvedGuildId,
               channelId: channelId ?? null,
               oldChannelId: oldChannelId ?? null,
@@ -517,25 +517,19 @@ export class GatewayHandler {
             remix.dashboard.updateUser(details, userObj);
           }
 
-          // Send per-player channel events for join/leave
           const refChannel = channelId ?? oldChannelId;
-          const cleanId_ref = refChannel ? String(refChannel).replace(/\D/g, "") : null;
+          const cleanId = refChannel ? String(refChannel).replace(/\D/g, "") : null;
 
-          if (cleanId_ref) {
-            const player = remix.players.playerMap.get(cleanId_ref);
+          if (cleanId) {
+            const player = remix.players.playerMap.get(cleanId);
             if (player) {
-              // Send "join" or "leave" on the per-player channel
-              // (matching Stoat format: { type, data } where data = userId)
-              const eventType = channelId ? "join" : "leave";
               remix.dashboard.updatePlayer({
-                type: eventType,
-                data: userId,
-              }, player);
-
-              // Also update the global players channel with current player state
-              remix.dashboard.playerUpdate({
-                type: eventType,
-              }, player);
+                guildId: player._guildId,
+                channelId: player._channelId,
+                playing: player.playing ?? false,
+                paused: player.paused ?? false,
+                queueLength: player.queue?.length ?? 0,
+              });
             }
           }
         } catch (_) {}

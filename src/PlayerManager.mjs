@@ -189,6 +189,12 @@ export class PlayerManager {
         // Send per-player channel "join"/"leave" event with just the user ID
         // (matching Stoat format where data = userId string)
         emit(eventType, member.user.id);
+        // Send per-user channel update so the backend UserManager can track
+        // connectedTo for each dashboard user independently (not just globally)
+        this.dashboard.updateUser({
+          type: eventType,
+          channelId,
+        }, member.user);
         // Also send global user update
         this.dashboard.userUpdate({
           type: eventType,
