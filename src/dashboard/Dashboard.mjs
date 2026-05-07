@@ -84,7 +84,20 @@ export class Dashboard {
             if (member) {
               server.channels = server.channels.filter(c => {
                 const ch = guild.channels.get(c.id);
-                return ch ? ch.permissionsFor(member)?.has("ViewChannel") : false;
+                if (!ch) return false;
+                // @fluxerjs/core GuildChannel objects do NOT expose a
+                // permissionsFor() method like discord.js does.  If the method
+                // exists, use it; otherwise the user is already verified as a
+                // guild member so showing all channels is safe.
+                if (typeof ch.permissionsFor === "function") {
+                  try {
+                    const perms = ch.permissionsFor(member);
+                    return perms ? perms.has("ViewChannel") : false;
+                  } catch (_) {
+                    return true; // permission check failed — show channel anyway
+                  }
+                }
+                return true;
               });
             }
             return server;
@@ -146,10 +159,12 @@ export class Dashboard {
         if (authErr) return { error: authErr };
         if (this.remix.players.playerMap.has(voiceChannel.id)) return { message: "Already Connected" };
         // Build a minimal fake message that satisfies PlayerManager.initPlayer().
+        // The reply() returns a mock with edit() so initPlayer's statusMsg.edit
+        // calls don't crash (Fluxer doesn't expose message edit from dashboards).
         const fakeMsg = {
           channel: { channel: textChannel, guildId: voiceChannel.guildId },
           message: { guildId: voiceChannel.guildId },
-          reply: async () => ({ catch: () => {} }),
+          reply: async () => ({ edit: async () => {}, catch: () => {} }),
         };
         this.remix.players.initPlayer(fakeMsg, voiceChannel.id);
         return { message: "Joining" };
@@ -307,13 +322,29 @@ export class Dashboard {
    * @param {import("@fluxerjs/core").User} user
    */
   static convertUser(user) {
+    // Build avatar URL — @fluxerjs/core may expose displayAvatarURL() or
+    // may just have a raw hash in user.avatar.  Handle both cases.
+    let avatarUrl = null;
+    try {
+      if (typeof user.displayAvatarURL === "function") {
+        avatarUrl = user.displayAvatarURL();
+      }
+    } catch (_) { /* not available */ }
+    if (!avatarUrl && user.avatar) {
+      const hash = String(typeof user.avatar === "object" ? (user.avatar.hash ?? user.avatar) : user.avatar);
+      if (hash && hash !== "[object Object]") {
+        const ext = hash.startsWith("a_") ? ".gif" : ".webp";
+        avatarUrl = `https://cdn.fluxer.app/avatars/${user.id}/${hash}${ext}?size=128`;
+      }
+    }
+    if (!avatarUrl && typeof user.defaultAvatarURL === "string") {
+      avatarUrl = user.defaultAvatarURL;
+    }
     return {
       id: user.id,
       username: user.username,
       displayName: user.displayName ?? user.globalName ?? user.username,
-      avatar: {
-        url: user.displayAvatarURL() ?? user.defaultAvatarURL,
-      },
+      avatar: { url: avatarUrl },
     };
   }
 
@@ -345,7 +376,17 @@ export class Dashboard {
    * @param {import("@fluxerjs/core").GuildChannel} channel
    */
   static convertChannel(channel) {
-    const isVoice = channel.isVoiceBased?.() ?? false;
+    // Same voice-detection logic as convertServerForList — @fluxerjs/core may
+    // not expose isVoiceBased(), so fall back to the type field.
+    let isVoice = false;
+    if (typeof channel.isVoiceBased === "function") {
+      isVoice = channel.isVoiceBased();
+    } else if (channel.isVoiceBased === true) {
+      isVoice = true;
+    } else {
+      const t = channel.type;
+      isVoice = t === 2 || t === 13 || t === "GUILD_VOICE" || t === "GUILD_STAGE_VOICE";
+    }
     let voiceParticipants = [];
     if (isVoice) {
       const guild = channel?.guild ?? channel?.client?.guilds?.get(channel?.guildId);
@@ -383,12 +424,12 @@ export class Dashboard {
    * @param {import("@fluxerjs/core").Guild} guild
    * @returns {string|null}
    */
-  static guildIconURL(guild) {
+  static guildIconURL(guild, size = 128) {
     if (!guild?.icon) return null;
     // guild.icon may be "hash" or "a_hash" (animated prefix)
     const hash = String(guild.icon);
     const ext = hash.startsWith("a_") ? ".gif" : ".webp";
-    return `https://cdn.fluxer.app/icons/${guild.id}/${hash}${ext}`;
+    return `https://cdn.fluxer.app/icons/${guild.id}/${hash}${ext}?size=${size}`;
   }
 
   /**

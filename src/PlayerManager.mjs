@@ -765,10 +765,19 @@ export class PlayerManager {
     this.playerMap.set(cleanChannelId, player);
 
     (async () => {
-      const statusMsg = await message.reply(mkEmbed(this._t(message, "responses.join.joining")));
+      let statusMsg = null;
+      try {
+        statusMsg = await message.reply(mkEmbed(this._t(message, "responses.join.joining")));
+      } catch (_) {
+        // reply() may fail or return a non-standard object (e.g. dashboard fakeMsg)
+      }
+      const canEdit = typeof statusMsg?.edit === "function";
+
       try {
         await player.join(cid);
-        await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joined", { channel: cid })));
+        if (canEdit) {
+          await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joined", { channel: cid }))).catch(() => {});
+        }
 
         const guildId = cleanId(channel.guildId ?? getMessageGuildId(message));
         if (guildId) {
@@ -792,7 +801,12 @@ export class PlayerManager {
         } else {
           errorMsg = this._t(message, "responses.join.joinFailed", { error: err.message });
         }
-        await statusMsg.edit(mkEmbed(errorMsg)).catch(() => {});
+        if (canEdit) {
+          await statusMsg.edit(mkEmbed(errorMsg)).catch(() => {});
+        } else {
+          // Can't edit the status message — send a new reply instead
+          try { await message.reply(mkEmbed(errorMsg)); } catch (_) {}
+        }
         this.playerMap.delete(cleanChannelId);
         player.destroy();
       }

@@ -239,13 +239,14 @@ export class Remix {
     const ALONE_CHECK_INTERVAL = this.T.aloneCheckInterval;
     setInterval(() => {
       for (const [mapKey, player] of this.players.playerMap) {
+          let channelId = mapKey;
         try {
           const guildId = player._guildId;
           if (!guildId) continue;
 
           if (player._isJoining || player._isRecovering) continue;
 
-          const channelId   = player._channelId ?? mapKey;
+          channelId     = player._channelId ?? mapKey;
           const cleanChanId = String(channelId).replace(/\D/g, "");
           if (!cleanChanId) continue;
 
