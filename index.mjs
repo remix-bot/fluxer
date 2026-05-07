@@ -663,10 +663,4 @@ const saveAndExit = async () => {
 process.once("SIGINT",  saveAndExit);
 process.once("SIGTERM", saveAndExit);
 process.once("SIGUSR2", saveAndExit);
-
-// ── SIGPIPE handler ──────────────────────────────────────────────────────────
-// On some systems, writing to a broken pipe (e.g. Redis connection) raises
-// SIGPIPE which defaults to terminating the process. Ignoring it lets the
-// error surface through the normal exception/rejection handlers above so
-// recovery state is saved before exit.
 process.on("SIGPIPE", () => {});
