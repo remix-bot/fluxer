@@ -1,65 +1,26 @@
-import { Remix } from "../../index.mjs";
 import { CommandBuilder, CommandHandler, Option } from "../CommandHandler.mjs";
 import Player from "../Player.mjs";
 import { Utils } from "../Utils.mjs";
 import { RedisHandler } from "./RedisHandler.mjs";
 
-/**
- * Fluxer OAuth2 configuration (standard OAuth2 authorization code flow).
- * @typedef {Object} FluxerOAuth2Config
- * @property {string} id         OAuth2 client ID
- * @property {string} secret     OAuth2 client secret
- * @property {string} redirectUri Redirect URI registered on the Fluxer app
- * @property {string} [apiBase]   Fluxer API base URL (default: https://api.fluxer.app)
- */
-
-/** Default Fluxer API endpoints derived from the Fluxer platform docs */
-const FLUXER_API_DEFAULTS = {
-  apiBase: "https://api.fluxer.app/v1",
-  tokenEndpoint: "https://api.fluxer.app/v1/oauth2/token",
-  authorizeEndpoint: "https://fluxer.app/oauth2/authorize",
-  userinfoEndpoint: "https://api.fluxer.app/v1/users/@me",
-};
-
 export class Dashboard {
   enabled = false;
-
-  // Rate limiter for token exchange — prevents abuse of the OAuth2 code→token endpoint.
-  // Tracks recent exchange timestamps per IP/request and rejects if exceeded.
-  _tokenExchangeTimestamps = [];
-  _tokenExchangeMaxPerWindow = 10; // max exchanges
-  _tokenExchangeWindowMs = 60_000; // per 60s window
 
   /**
    * @param {Remix} remix
    * @param {Object} opts
    * @param {boolean} opts.enabled Whether the Dashboard is enabled and connections should be attempted
    * @param {Object} opts.redis Connection options passed directly to redis createClient
-   * @param {FluxerOAuth2Config} [opts.fluxer] Fluxer OAuth2 credentials
    */
   constructor(remix, opts) {
     this.enabled = opts?.enabled;
     this.remix = remix;
-
-    // Fluxer OAuth2 config
-    const fluxer = opts?.fluxer ?? {};
-    this.fluxer = {
-      clientId:     fluxer.id,
-      clientSecret: fluxer.secret,
-      redirectUri:  fluxer.redirectUri,
-      apiBase:      fluxer.apiBase  ?? FLUXER_API_DEFAULTS.apiBase,
-      tokenEndpoint:    fluxer.tokenEndpoint    ?? FLUXER_API_DEFAULTS.tokenEndpoint,
-      authorizeEndpoint: fluxer.authorizeEndpoint ?? FLUXER_API_DEFAULTS.authorizeEndpoint,
-      userinfoEndpoint:  fluxer.userinfoEndpoint  ?? FLUXER_API_DEFAULTS.userinfoEndpoint,
-    };
 
     if (!this.enabled) return this;
 
     this.redis = new RedisHandler(opts.redis);
     this.redis.setRequestHandler(async (data) => {
       switch (data.type) {
-          // ── Existing request types ─────────────────────────────────────────────
-
         case "fetchPlayers":
           return [...this.remix.players.playerMap.values()].map(p => Dashboard.convertPlayer(p));
 
@@ -102,169 +63,8 @@ export class Dashboard {
 
         case "function":
           return await this.runFunction(data.params);
-
-          // ── Fluxer OAuth2 request types ─────────────────────────────────────────
-
-        case "fluxerAuthorizeUrl": {
-          // Returns the full OAuth2 authorize URL for the dashboard frontend to redirect to
-          const scopes = (data.scopes ?? ["identify"]).join(" ");
-          const state = data.state ?? Utils.uid();
-          const url = new URL(this.fluxer.authorizeEndpoint);
-          url.searchParams.set("client_id", this.fluxer.clientId);
-          url.searchParams.set("redirect_uri", this.fluxer.redirectUri);
-          url.searchParams.set("response_type", "code");
-          url.searchParams.set("scope", scopes);
-          url.searchParams.set("state", state);
-          return { url: url.toString(), state };
-        }
-
-        case "fluxerVerify": {
-          // Backend sends a Fluxer access token — bot verifies it and returns user info.
-          // The bot calls the Fluxer API's /users/@me with the access token to
-          // confirm the user's identity, then cross-references with the bot's
-          // internal user cache to confirm the user is known.
-          const accessToken = data.accessToken;
-          if (!accessToken) return { error: "Missing access token" };
-          return await this.verifyFluxerToken(accessToken);
-        }
-
-        case "fluxerToken": {
-          // Backend sends an authorization code — bot exchanges it for tokens.
-          // Rate-limited to prevent token exchange abuse.
-          const code = data.code;
-          if (!code) return { error: "Missing authorization code" };
-          return await this.rateLimitedExchange(code);
-        }
       }
     });
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Fluxer OAuth2 Methods
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Verify a Fluxer OAuth2 access token by calling the Fluxer /users/@me endpoint.
-   * Returns the user object from the Fluxer API, plus a `knownToBot` flag
-   * indicating whether this user is cached in the bot's client.
-   *
-   * @param {string} accessToken
-   * @returns {Promise<Object>} User data or error
-   */
-  async verifyFluxerToken(accessToken) {
-    try {
-      const res = await fetch(this.fluxer.userinfoEndpoint, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        console.log("[Dashboard] Fluxer token verification failed:", res.status, body);
-        return { error: "Invalid or expired access token", status: res.status };
-      }
-
-      const fluxerUser = await res.json();
-      if (!fluxerUser?.id) {
-        return { error: "Fluxer API returned no user ID" };
-      }
-
-      // Cross-reference with the bot's cached users to check if this user
-      // shares any servers with the bot (i.e. is a potential dashboard user).
-      let botUser = null;
-      try {
-        botUser = await this.remix.client.users.fetch(fluxerUser.id).catch(() => null);
-      } catch (_) {}
-
-      return {
-        id:            fluxerUser.id,
-        username:      fluxerUser.username,
-        displayName:   fluxerUser.displayName ?? fluxerUser.globalName ?? fluxerUser.username,
-        avatar: {
-          url: fluxerUser.avatar
-              ? `https://cdn.fluxer.app/avatars/${fluxerUser.id}/${fluxerUser.avatar}.webp`
-              : null,
-        },
-        knownToBot:    !!botUser,
-        botUser:        botUser ? Dashboard.convertUser(botUser) : null,
-      };
-    } catch (e) {
-      console.log("[Dashboard] Fluxer verify error:", e.message);
-      return { error: "Failed to verify with Fluxer API: " + e.message };
-    }
-  }
-
-  /**
-   * Exchange an OAuth2 authorization code for access/refresh tokens.
-   * This calls the Fluxer token endpoint directly.
-   *
-   * @param {string} code Authorization code from the OAuth2 redirect
-   * @returns {Promise<Object>} Token data or error
-   */
-  /**
-   * Rate-limited wrapper around exchangeFluxerCode.
-   * Allows a maximum of _tokenExchangeMaxPerWindow exchanges per sliding window.
-   * @param {string} code Authorization code
-   * @returns {Promise<Object>} Token data or error
-   */
-  async rateLimitedExchange(code) {
-    const now = Date.now();
-    // Prune timestamps outside the current window
-    this._tokenExchangeTimestamps = this._tokenExchangeTimestamps.filter(
-        ts => now - ts < this._tokenExchangeWindowMs
-    );
-    if (this._tokenExchangeTimestamps.length >= this._tokenExchangeMaxPerWindow) {
-      console.log("[Dashboard] Token exchange rate limit hit");
-      return { error: "Rate limit exceeded. Try again later." };
-    }
-    this._tokenExchangeTimestamps.push(now);
-    return await this.exchangeFluxerCode(code);
-  }
-
-  /**
-   * Exchange an OAuth2 authorization code for access/refresh tokens.
-   * This calls the Fluxer token endpoint directly.
-   *
-   * @param {string} code Authorization code from the OAuth2 redirect
-   * @returns {Promise<Object>} Token data or error
-   */
-  async exchangeFluxerCode(code) {
-    try {
-      const body = new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: this.fluxer.redirectUri,
-        client_id: this.fluxer.clientId,
-        client_secret: this.fluxer.clientSecret,
-      });
-
-      const res = await fetch(this.fluxer.tokenEndpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-      });
-
-      if (!res.ok) {
-        const errorBody = await res.text().catch(() => "");
-        console.log("[Dashboard] Fluxer token exchange failed:", res.status, errorBody);
-        return { error: "Token exchange failed", status: res.status };
-      }
-
-      const tokens = await res.json();
-      if (!tokens.access_token) {
-        return { error: "No access_token in response" };
-      }
-
-      return {
-        accessToken:  tokens.access_token,
-        tokenType:   tokens.token_type ?? "Bearer",
-        expiresIn:   tokens.expires_in ?? null,
-        refreshToken: tokens.refresh_token ?? null,
-        scope:        tokens.scope ?? null,
-      };
-    } catch (e) {
-      console.log("[Dashboard] Fluxer token exchange error:", e.message);
-      return { error: "Failed to exchange code: " + e.message };
-    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

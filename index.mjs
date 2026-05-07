@@ -44,8 +44,8 @@ export class Remix {
     this.locale.load();
 
     this.dashboard = new Dashboard(this, {
-      ...config.dashboard,
-      fluxer: config.dashboard?.fluxer,
+      enabled: config.dashboard?.enabled,
+      redis: config.dashboard?.redis,
     });
 
     const presenceContents = config.presenceContents ?? [];

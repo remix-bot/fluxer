@@ -66,12 +66,6 @@
     "enabled": false,
     "redis": {
       "url": "redis://localhost:6379"
-    },
-    "Comment": "Fluxer OAuth2 credentials for dashboard login. Create an OAuth2 app at https://fluxer.app/developers/applications",
-    "fluxer": {
-      "id": "your fluxer oauth2 application id",
-      "secret": "your fluxer oauth2 client secret",
-      "redirectUri": "https://your-backend.com/auth/fluxer"
     }
   },
   "dashboardUrl": "The url the dashboard is accessible with.",
