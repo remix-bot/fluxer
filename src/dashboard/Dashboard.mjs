@@ -184,28 +184,21 @@ export class Dashboard {
         return { message: "Adding to queue" };
       }
 
+      case "testConnection": {
+        return { success: true };
+      }
+
       case "leave": {
-        if (!user) return { error: "Invalid user" };
-        const channelId = params.data.channel;
-        if (!channelId) return { error: "Missing channel ID" };
-        const player = this._getPlayerById(channelId);
+        const player = this._getPlayerById(params.data.channel);
         if (!player) return { error: "Player not found" };
-        const authErr = this._authorizePlayerControl(user, player);
+        const authErr = await this._authorizeUserInGuild(user, player._guildId);
         if (authErr) return { error: authErr };
         try {
           await player.leave();
-          player.destroy();
-          const activeChannelId = player._channelId ?? channelId;
-          this.remix.players.playerMap.delete(activeChannelId);
           return { message: "Left channel" };
         } catch (e) {
-          logger.dashboard("[Dashboard] Leave error:", e.message);
-          return { error: "Failed to leave channel: " + e.message };
+          return { error: "Failed to leave: " + e.message };
         }
-      }
-
-      case "testConnection": {
-        return { success: true };
       }
 
       default:

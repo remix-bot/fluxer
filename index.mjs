@@ -577,9 +577,39 @@ export class Remix {
         icon:   guild.icon
             ? `https://cdn.fluxer.app/icons/${guild.id}/${guild.icon}.webp`
             : null,
+        description: guild.description ?? null,
+        ownerId: guild.ownerId ?? null,
         voiceChannels: guild.channels
             .filter(c => c.isVoiceBased?.() ?? false)
-            .map(c => ({ name: c.name, id: c.id, icon: null })),
+            .map(c => {
+              // Build voice participants list for this channel
+              const voiceParticipants = [];
+              if (guild.voice_states) {
+                const vs = Array.isArray(guild.voice_states) ? guild.voice_states :
+                    typeof guild.voice_states.values === "function" ? [...guild.voice_states.values()] : Object.values(guild.voice_states);
+                for (const state of vs) {
+                  const scId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
+                  const chId = String(c.id ?? "").replace(/\D/g, "");
+                  if (scId === chId) {
+                    const member = guild.members?.get?.(state?.userId ?? state?.user_id);
+                    if (member?.user && !member.user.bot) {
+                      voiceParticipants.push(Dashboard.convertUser(member.user));
+                    }
+                  }
+                }
+              }
+              return {
+                name: c.name,
+                displayName: c.name,
+                id: c.id,
+                icon: null,
+                description: c.topic ?? null,
+                isVoice: true,
+                mature: c.nsfw ?? false,
+                serverId: guild.id,
+                voiceParticipants,
+              };
+            }),
       });
     }
 
