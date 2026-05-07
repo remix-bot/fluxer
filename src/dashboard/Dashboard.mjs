@@ -43,8 +43,14 @@ export class Dashboard {
         case "sharedServers": {
           try {
             const sharedUser = await this.remix.client.users.fetch(data.key).catch(() => null);
-            if (!sharedUser) return { error: "User not found" };
-            return await this.remix.getSharedServers(sharedUser);
+            if (!sharedUser) {
+              logger.dashboard("[Dashboard] sharedServers: user not found for key:", data.key);
+              return { error: "User not found" };
+            }
+            logger.dashboard("[Dashboard] sharedServers: fetching for user", sharedUser.id, sharedUser.username);
+            const result = await this.remix.getSharedServers(sharedUser);
+            logger.dashboard("[Dashboard] sharedServers: returning", Array.isArray(result) ? result.length + " servers" : JSON.stringify(result));
+            return result;
           } catch (e) {
             const id = Utils.uid();
             logger.dashboard("[Dashboard] sharedServers error:", id, e);

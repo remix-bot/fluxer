@@ -2,7 +2,6 @@
   "Comment": "Fluxer music bot configuration. IMPORTANT: Node.js >= 22.0.0 is required (moonlink.js v5 dependency). Run 'node --version' to verify.",
   "token": "your bot token",
   "fluxer.js": {
-    "Comment": "Configuration data for @fluxerjs/core Client options. See: https://github.com/fluxerjs/core",
     "rest": {
       "Comment": "REST client options. 'timeout' is ms before a request to api.fluxer.app is aborted (default: 15000). Raise if you see DOMException AbortError in logs.",
       "timeout": 30000,

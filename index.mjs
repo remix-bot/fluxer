@@ -540,42 +540,83 @@ export class Remix {
   async getSharedServers(user) {
     if (!user) return [];
 
+    const userId = String(user.id);
     const shared = [];
+    const guilds = [...this.client.guilds.values()];
 
-    for (const guild of this.client.guilds.values()) {
+    logger.dashboard(`[getSharedServers] Checking ${guilds.length} guilds for user ${userId}`);
+
+    for (const guild of guilds) {
       let isMember = false;
+      const guildId = guild.id;
 
       // 1. Fast path — check cached members
-      if (guild.members?.has?.(user.id)) {
+      if (guild.members?.has?.(userId)) {
         isMember = true;
+        logger.dashboard(`[getSharedServers] guild ${guild.name} (${guildId}): cache HIT`);
       }
 
-      // 2. Fallback — observed voice users (REST-less)
+      // 2. Fallback — observed voice users (no REST needed)
       if (!isMember) {
-        const cleanGuildId = String(guild.id).replace(/\D/g, "");
-        for (const [, info] of (this.observedVoiceUsers ?? [])) {
-          if (String(info.guildId ?? "").replace(/\D/g, "") === cleanGuildId) {
+        const cleanGuildId = String(guildId).replace(/\D/g, "");
+        for (const [obsUid, info] of (this.observedVoiceUsers ?? [])) {
+          if (String(obsUid).replace(/\D/g, "") === userId.replace(/\D/g, "") &&
+              String(info.guildId ?? "").replace(/\D/g, "") === cleanGuildId) {
             isMember = true;
+            logger.dashboard(`[getSharedServers] guild ${guild.name} (${guildId}): observedVoiceUsers HIT`);
             break;
           }
         }
       }
 
-      // 3. Slow path — REST fetch for large guilds with incomplete caches
+      // 3. REST lookup — use guild.members.resolve() which checks cache then API.
+      //    This is the Fluxer.js way to look up a single member.
+      //    Falls back to GET /guilds/{id}/members/{userId} if not cached.
+      //    Also try guild.members.fetch(userId) as an alternative (pagination-style fetch).
       if (!isMember) {
         try {
-          const member = await guild.members.fetch(user.id).catch(() => null);
-          if (member) isMember = true;
-        } catch (_) { /* not a member or fetch failed */ }
+          // guild.members.resolve(userId) — cache + REST fallback (Fluxer v1.2+)
+          if (typeof guild.members?.resolve === "function") {
+            const member = await guild.members.resolve(userId);
+            if (member) {
+              isMember = true;
+              logger.dashboard(`[getSharedServers] guild ${guild.name} (${guildId}): members.resolve() HIT`);
+            }
+          }
+        } catch (e) {
+          const msg = e?.message ?? String(e);
+          // "Unknown Member" / 10007 means user is genuinely not in this guild
+          if (!msg.includes("Unknown Member") && !msg.includes("10007") && !msg.includes("not found")) {
+            logger.dashboard(`[getSharedServers] guild ${guild.name} (${guildId}): resolve error: ${msg}`);
+          }
+        }
+      }
+
+      // 4. Fallback — guild.members.fetch(userId) (pagination-style single member fetch)
+      if (!isMember) {
+        try {
+          if (typeof guild.members?.fetch === "function") {
+            const member = await guild.members.fetch(userId);
+            if (member) {
+              isMember = true;
+              logger.dashboard(`[getSharedServers] guild ${guild.name} (${guildId}): members.fetch() HIT`);
+            }
+          }
+        } catch (e) {
+          const msg = e?.message ?? String(e);
+          if (!msg.includes("Unknown Member") && !msg.includes("10007") && !msg.includes("not found")) {
+            logger.dashboard(`[getSharedServers] guild ${guild.name} (${guildId}): fetch error: ${msg}`);
+          }
+        }
       }
 
       if (!isMember) continue;
 
       shared.push({
         name:   guild.name,
-        id:     guild.id,
+        id:     guildId,
         icon:   guild.icon
-            ? `https://cdn.fluxer.app/icons/${guild.id}/${guild.icon}.webp`
+            ? `https://cdn.fluxer.app/icons/${guildId}/${guild.icon}.webp`
             : null,
         description: guild.description ?? null,
         ownerId: guild.ownerId ?? null,
@@ -606,13 +647,14 @@ export class Remix {
                 description: c.topic ?? null,
                 isVoice: true,
                 mature: c.nsfw ?? false,
-                serverId: guild.id,
+                serverId: guildId,
                 voiceParticipants,
               };
             }),
       });
     }
 
+    logger.dashboard(`[getSharedServers] Found ${shared.length} mutual servers for user ${userId}`);
     return shared;
   }
 
