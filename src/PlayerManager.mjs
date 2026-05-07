@@ -186,9 +186,13 @@ export class PlayerManager {
         if (stateChannelId !== channelId) continue;
         const member = guild.members?.get?.(state.userId ?? state.user_id);
         if (!member?.user || member.user?.bot) continue;
-        // Send per-player channel "join"/"leave" event with just the user ID
-        // (matching Stoat format where data = userId string)
-        emit(eventType, member.user.id);
+        // Send per-player channel "join"/"leave" event with the full user
+        // object — matching Stoat format where data = Dashboard.convertUser(user).
+        // The backend Player.setupEvents does:
+        //   join: this.users.push(data)         — works with objects
+        //   leave: findIndex(u => u === data.id) — needs data.id
+        const convertedUser = Dashboard.convertUser(member.user);
+        emit(eventType, convertedUser);
         // Also send global user update
         this.dashboard.userUpdate({
           type: eventType,
@@ -209,6 +213,14 @@ export class PlayerManager {
     player.on("startplay", (song) => {
       // Send the serialised video to the per-player channel
       emit("startplay", Dashboard.convertVideo(song ?? player.queue?.current));
+      // The backend Player expects "streamStartPlay" with a timestamp so it
+      // can compute elapsed time for the dashboard progress bar.
+      // Player.mjs sets startedPlaying = Date.now() just before emitting
+      // "startplay", so we use the same value (or fall back to Date.now()).
+      const startedAt = player.startedPlaying instanceof Date
+          ? player.startedPlaying.getTime()
+          : Number(player.startedPlaying) || Date.now();
+      emit("streamStartPlay", startedAt);
       // Also broadcast on global channel for full state update
       this.dashboard.playerUpdate({ type: "startplay" }, player);
     });
