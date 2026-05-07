@@ -41,9 +41,15 @@ export class Dashboard {
         }
 
         case "sharedServers": {
-          const sharedUser = await this.remix.client.users.fetch(data.key).catch(() => null);
-          if (!sharedUser) return { error: "User not found" };
-          return await this.remix.getSharedServers(sharedUser);
+          try {
+            const sharedUser = await this.remix.client.users.fetch(data.key).catch(() => null);
+            if (!sharedUser) return { error: "User not found" };
+            return await this.remix.getSharedServers(sharedUser);
+          } catch (e) {
+            const id = Utils.uid();
+            logger.dashboard("[Dashboard] sharedServers error:", id, e);
+            return { error: "Failed to fetch shared servers. Id: " + id };
+          }
         }
 
         case "server": {
@@ -73,6 +79,10 @@ export class Dashboard {
 
         case "function":
           return await this.runFunction(data.params);
+
+        default:
+          logger.dashboard("[Dashboard] Unknown request type:", data.type);
+          return { error: "Unknown request type: " + (data.type ?? "(none)") };
       }
     });
   }
