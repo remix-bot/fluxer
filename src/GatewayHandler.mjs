@@ -64,12 +64,6 @@ export class GatewayHandler {
       return { key: directKey, value: this._prevVoiceState.get(directKey) };
     }
 
-    // Only do fuzzy search if guildId is null (e.g. from a gateway event
-    // that doesn't include guild context). When guildId IS provided, we
-    // must NOT match entries from other guilds — that causes false
-    // "cross-guild re-key" warnings during multi-guild recovery.
-    if (guildId) return { key: null, value: null };
-
     const cleanUserId = String(userId ?? "").replace(/\D/g, "");
     if (!cleanUserId) return { key: null, value: null };
 

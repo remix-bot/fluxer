@@ -660,16 +660,6 @@ export class RecoveryManager {
       `(${ok} ok, ${errors.length} failed).`
     );
 
-    // Re-announce readiness to the backend so it can re-initialize
-    // PlayerManager with the recovered players. Without this, the backend
-    // may have missed the "init" events published during recovery if its
-    // subscriber wasn't ready yet, or it may have initialized with empty
-    // data because the bot hadn't recovered sessions at the time.
-    if (ok > 0 && remix.dashboard?.announceReady) {
-      logger.recovery("[Recovery] Re-announcing bot readiness to backend...");
-      remix.dashboard.announceReady();
-    }
-
     // Delete recovery file AFTER all spawns have been attempted (success or fail).
     // If the process crashes mid-recovery, the file still exists for next boot.
     if (recoveryFileExisted) {

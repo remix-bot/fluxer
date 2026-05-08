@@ -519,7 +519,7 @@ export async function run(message, data) {
     // guild.iconURL() is a method that does not exist on @fluxerjs/core Guild objects.
     const rawGuild  = message.message?.guild;
     const iconUrl   = rawGuild?.icon
-        ? `https://cdn.fluxer.app/icons/${rawGuild.id}/${rawGuild.icon}.webp`
+        ? `https://fluxerusercontent.com/icons/${rawGuild.id}/${rawGuild.icon}.webp`
         : null;
 
     const lines = Object.entries(d)

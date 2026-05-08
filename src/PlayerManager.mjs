@@ -189,12 +189,6 @@ export class PlayerManager {
         // Send per-player channel "join"/"leave" event with just the user ID
         // (matching Stoat format where data = userId string)
         emit(eventType, member.user.id);
-        // Send per-user channel update so the backend UserManager can track
-        // connectedTo for each dashboard user independently (not just globally)
-        this.dashboard.updateUser({
-          type: eventType,
-          channelId,
-        }, member.user);
         // Also send global user update
         this.dashboard.userUpdate({
           type: eventType,
@@ -327,6 +321,84 @@ export class PlayerManager {
     });
 
     return player;
+  }
+
+  /**
+   * Safely send a message to a text channel.
+   *
+   * In Fluxer.js, VoiceChannel does NOT have a .send() method — only
+   * TextChannel and DMChannel do.  If player.textChannel is a voice
+   * channel (or any object without .send()), we fall back to
+   * client.channels.send(channelId, payload) which works on any
+   * channel type.
+   *
+   * @param {Object} ch - Channel object (player.textChannel)
+   * @param {Object} payload - Message payload (embed, content, etc.)
+   * @returns {Promise<any>}
+   */
+  async _sendToTextChannel(ch, payload) {
+    // ── Check if the channel is actually a text channel ────────────────
+    // Fluxer.js voice channels have a .send() method that throws
+    // CANNOT_SEND_MESSAGES_IN_NON_TEXT_CHANNEL when called. We need to
+    // detect this BEFORE calling .send() and fall back to a real text
+    // channel from the same guild.
+    const isTextChannel = (c) => {
+      if (!c) return false;
+      // type 0 = text channel in Fluxer/Discord; type 2 = voice; type 13 = stage
+      if (c.type != null) return c.type === 0 || c.type === 5 || c.type === 13;
+      // isText() method if available
+      if (typeof c.isText === "function") return c.isText();
+      // If the channel has isVoice() and it returns true, it's NOT a text channel
+      if (typeof c.isVoice === "function" && c.isVoice()) return false;
+      return false;
+    };
+
+    // Method 1: channel.send() — only if it's a real text channel
+    if (ch && isTextChannel(ch) && typeof ch.send === "function") {
+      try {
+        return await ch.send(payload);
+      } catch (e) {
+        // Send failed even though we thought it was a text channel —
+        // fall through to the guild text channel search below
+        logger.warn("[PlayerManager] _sendToTextChannel: send() failed on type-0 channel:", e.message);
+      }
+    }
+
+    // Method 2: Find a suitable text channel from the same guild
+    const channelId = ch?.id ?? ch?._id;
+    const guildId = ch?.guildId ?? ch?.guild?.id ?? ch?.server_id ?? ch?.serverId;
+
+    if (guildId && this.commands?.client) {
+      const guild = this.commands.client.guilds.get(guildId);
+      if (guild?.channels) {
+        const channelValues = typeof guild.channels.values === "function"
+            ? [...guild.channels.values()]
+            : Array.isArray(guild.channels) ? guild.channels : Object.values(guild.channels);
+
+        // Prefer: system channel > first text channel the bot can send to
+        const sysCh = guild.systemChannelId
+            ? channelValues.find(c => (c.id ?? c._id) === guild.systemChannelId)
+            : null;
+        if (sysCh && isTextChannel(sysCh) && typeof sysCh.send === "function") {
+          try { return await sysCh.send(payload); } catch (_) {}
+        }
+
+        // Fall back to the first text channel
+        const textCh = channelValues.find(c => isTextChannel(c));
+        if (textCh && typeof textCh.send === "function") {
+          try { return await textCh.send(payload); } catch (_) {}
+        }
+      }
+    }
+
+    // Method 3: client.channels.send(id, payload) — last resort
+    if (channelId && this.commands?.client?.channels?.send) {
+      try {
+        return await this.commands.client.channels.send(channelId, payload);
+      } catch (_) {}
+    }
+
+    logger.warn("[PlayerManager] _sendToTextChannel: no valid text channel found for guild", guildId ?? channelId ?? "(unknown)");
   }
 
   /**
@@ -707,7 +779,7 @@ export class PlayerManager {
       guildId: cleanId(channel.guildId ?? getMessageGuildId(message)),
     });
 
-    player.on("autoleave", () => {
+    player.on("autoleave", async () => {
       const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;
       const homeChannelId = cleanId(player._home247Channel) || activeChannelId;
       const ch       = player.textChannel;
@@ -752,37 +824,43 @@ export class PlayerManager {
         })();
         const desc = this.locale?.translate(guildId, "responses.join.autoLeaveInactive247", { channel: `<#${activeChannelId}>`, prefix })
           ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
-        ch?.send(mkEmbed(desc));
+        try {
+          await this._sendToTextChannel(ch, mkEmbed(desc));
+        } catch (e) {
+          logger.warn("[PlayerManager] autoleave send failed:", e.message);
+        }
       }
     });
 
     player.on("leave", () => {});
 
-    player.on("message", (m) => {
+    player.on("message", async (m) => {
       const ch       = player.textChannel;
       const guildId = cleanId(player._guildId ?? ch?.guildId ?? ch?.guild?.id ?? getMessageGuildId({ channel: ch }));
       const raw      = this.settings.getServer(guildId)?.get("songAnnouncements");
       const disabled = raw === false || raw === 0 ||
           ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
       if (disabled) return;
-      ch?.send(typeof m === "object" && Array.isArray(m.embeds) ? m : mkEmbed(m));
+      try {
+        await this._sendToTextChannel(ch, typeof m === "object" && Array.isArray(m.embeds) ? m : mkEmbed(m));
+      } catch (e) {
+        logger.warn("[PlayerManager] message send failed:", e.message);
+      }
     });
 
     this.playerMap.set(cleanChannelId, player);
 
     (async () => {
-      let statusMsg = null;
+      let statusMsg;
       try {
         statusMsg = await message.reply(mkEmbed(this._t(message, "responses.join.joining")));
-      } catch (_) {
-        // reply() may fail or return a non-standard object (e.g. dashboard fakeMsg)
+      } catch (e) {
+        logger.warn("[PlayerManager] statusMsg reply failed:", e.message);
       }
-      const canEdit = typeof statusMsg?.edit === "function";
-
       try {
         await player.join(cid);
-        if (canEdit) {
-          await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joined", { channel: cid }))).catch(() => {});
+        if (statusMsg?.edit) {
+          try { await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joined", { channel: cid }))); } catch (_) {}
         }
 
         const guildId = cleanId(channel.guildId ?? getMessageGuildId(message));
@@ -807,11 +885,8 @@ export class PlayerManager {
         } else {
           errorMsg = this._t(message, "responses.join.joinFailed", { error: err.message });
         }
-        if (canEdit) {
-          await statusMsg.edit(mkEmbed(errorMsg)).catch(() => {});
-        } else {
-          // Can't edit the status message — send a new reply instead
-          try { await message.reply(mkEmbed(errorMsg)); } catch (_) {}
+        if (statusMsg?.edit) {
+          try { await statusMsg.edit(mkEmbed(errorMsg)); } catch (_) {}
         }
         this.playerMap.delete(cleanChannelId);
         player.destroy();

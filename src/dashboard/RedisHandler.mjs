@@ -61,9 +61,7 @@ export class RedisHandler {
     try {
       await this.client.connect();
       logger.redis("[Redis/Main] Connected");
-      // Do NOT call readyMessage() here — the subscriber is not yet listening
-      // on the "request" channel.  If we announce before subscribing, the
-      // backend will send requests that we miss, causing a timeout.
+      this.readyMessage();
     } catch (e) {
       logger.error("[Redis/Main] Initial connection failed:", e.message);
     }
@@ -72,10 +70,7 @@ export class RedisHandler {
       await this.subscriber.connect();
       logger.redis("[Redis/Subscriber] Connected");
 
-      // CRITICAL: Await both subscriptions so they are guaranteed to be active
-      // before we announce readiness.  Without awaiting, there is a window
-      // where the backend sends requests that this bot cannot yet receive.
-      await this.subscriber.subscribe("request", async (m) => {
+      this.subscriber.subscribe("request", async (m) => {
         if (this._destroyed) return;
         try {
           const payload = JSON.parse(m);
@@ -88,20 +83,10 @@ export class RedisHandler {
           }));
         } catch (e) {
           logger.error("[Redis/Subscriber] Request handler error:", e.message);
-          // Always send a response so the backend doesn't time out.
-          // Parse the id from the raw message so we can reply even when
-          // the handler threw before producing a result.
-          try {
-            const payload = JSON.parse(m);
-            this.send("response", JSON.stringify({
-              id: payload.id,
-              content: { error: "Internal bot error: " + e.message },
-            }));
-          } catch (_) { /* payload was unparseable — nothing we can do */ }
         }
       });
 
-      await this.subscriber.subscribe("info", (m) => {
+      this.subscriber.subscribe("info", (m) => {
         if (this._destroyed) return;
         try {
           const data = JSON.parse(m);
@@ -112,22 +97,30 @@ export class RedisHandler {
           logger.warn("[Redis/Subscriber] Info handler error:", e.message);
         }
       });
-
-      // NOW announce readiness — the subscriber is guaranteed to be listening
-      // on both "request" and "info", so the backend's requests will be
-      // received and handled.
-      this.readyMessage();
     } catch (e) {
       logger.error("[Redis/Subscriber] Initial connection failed:", e.message);
     }
   }
 
+  /**
+   * Send the "connected" announcement to the backend.
+   * Delayed by 5 seconds so the bot has time to initialise players,
+   * recovery manager, and Moonlink before the backend starts sending
+   * requests like fetchPlayers. Without this delay the backend's
+   * initChannels() fires before the bot's playerMap is populated,
+   * causing "Redis request timed out" errors and a retry loop.
+   */
   readyMessage() {
     if (this._destroyed) return;
-    this.send("info", JSON.stringify({
-      platform: this.platform,
-      type: "connected",
-    }));
+    if (this._readyTimer) clearTimeout(this._readyTimer);
+    this._readyTimer = setTimeout(() => {
+      this._readyTimer = null;
+      if (this._destroyed) return;
+      this.send("info", JSON.stringify({
+        platform: this.platform,
+        type: "connected",
+      }));
+    }, 5000);
   }
 
   /**
