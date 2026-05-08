@@ -167,34 +167,88 @@ export class PlayerManager {
 
     // Broadcast user list changes to the global :users channel when
     // someone joins or leaves the player's voice channel.
+    //
+    // CRITICAL: After a bot reload, guild.voice_states may not yet contain all
+    // users who are in the channel (only the bot's own state may be present).
+    // The observedVoiceUsers map is seeded from READY/GUILD_CREATE and IS
+    // reliable — so we use it as a fallback to ensure all users are announced.
     const sendUserUpdates = (eventType) => {
       if (!this.dashboard?.enabled) return;
       const channelId = getPlayerChannelId(player, context.channelId);
+      const guildId = cleanId(player._guildId ?? context.guildId);
       const channel = player.client?.channels?.get(channelId);
-      const guild = player.client?.guilds?.get(cleanId(player._guildId ?? context.guildId));
-      if (!guild) return;
-      const voiceStates = guild.voice_states ?? guild.voiceStates ?? null;
-      if (!voiceStates) return;
-      const entries = Array.isArray(voiceStates)
-        ? voiceStates
-        : typeof voiceStates.values === "function"
-          ? [...voiceStates.values()]
-          : Object.values(voiceStates);
-      for (const state of entries) {
-        if (!state?.channelId && !state?.channel_id) continue;
-        const stateChannelId = cleanId(state.channelId ?? state.channel_id);
-        if (stateChannelId !== channelId) continue;
-        const member = guild.members?.get?.(state.userId ?? state.user_id);
-        if (!member?.user || member.user?.bot) continue;
-        // Send per-player channel "join"/"leave" event with just the user ID
-        // (matching Stoat format where data = userId string)
-        emit(eventType, member.user.id);
-        // Also send global user update
-        this.dashboard.userUpdate({
-          type: eventType,
-          guildId: cleanId(player._guildId ?? context.guildId),
-          channelId,
-        }, member.user);
+      const guild = player.client?.guilds?.get(guildId);
+      const sentUserIds = new Set(); // Deduplicate across both sources
+
+      // ── Source 1: guild.voice_states (real-time Discord data) ──────────
+      if (guild) {
+        const voiceStates = guild.voice_states ?? guild.voiceStates ?? null;
+        if (voiceStates) {
+          const entries = Array.isArray(voiceStates)
+            ? voiceStates
+            : typeof voiceStates.values === "function"
+              ? [...voiceStates.values()]
+              : Object.values(voiceStates);
+          for (const state of entries) {
+            if (!state?.channelId && !state?.channel_id) continue;
+            const stateChannelId = cleanId(state.channelId ?? state.channel_id);
+            if (stateChannelId !== channelId) continue;
+            const userId = String(state.userId ?? state.user_id ?? "");
+            if (!userId) continue;
+            const member = guild.members?.get?.(userId);
+            if (!member?.user || member.user?.bot) continue;
+            sentUserIds.add(userId);
+            emit(eventType, member.user.id);
+            this.dashboard.userUpdate({
+              type: eventType,
+              guildId,
+              channelId,
+            }, member.user);
+          }
+        }
+      }
+
+      // ── Source 2: observedVoiceUsers (seeded from READY/GUILD_CREATE) ──
+      // This catches users who were already in the channel when the bot
+      // reloaded but whose voice states aren't in guild.voice_states yet.
+      // After a bot restart, guild.voice_states may only contain the bot's
+      // own voice state, while observedVoiceUsers was populated from the
+      // READY payload and contains ALL humans who were already in voice.
+      if (eventType === "join" && this.observedVoiceUsers) {
+        const botUserId = player.client?.user?.id;
+        for (const [mapUserId, info] of this.observedVoiceUsers) {
+          if (sentUserIds.has(mapUserId)) continue; // Already sent from voice_states
+          const infoChannelId = cleanId(info.channelId ?? "");
+          const infoGuildId = cleanId(info.guildId ?? "");
+          if (infoChannelId !== channelId || infoGuildId !== guildId) continue;
+          // Skip the bot itself — it's not a "user" to announce
+          if (botUserId && String(mapUserId) === String(botUserId)) continue;
+          // Skip bots (check observedVoiceBots if available)
+          const botKey = `${infoGuildId}:${mapUserId}`;
+          if (this.observedVoiceBots?.has?.(botKey)) continue;
+          sentUserIds.add(mapUserId);
+          // Try to get user object from cache first, then fetch asynchronously
+          const cachedUser = player.client?.users?.get?.(mapUserId);
+          emit(eventType, String(mapUserId));
+          if (cachedUser) {
+            this.dashboard.userUpdate({
+              type: eventType,
+              guildId,
+              channelId,
+            }, cachedUser);
+          } else {
+            // User not in cache — fetch async and send update when available
+            player.client?.users?.fetch?.(mapUserId)?.then?.((userObj) => {
+              if (userObj) {
+                this.dashboard.userUpdate({
+                  type: eventType,
+                  guildId,
+                  channelId,
+                }, userObj);
+              }
+            })?.catch?.(() => {});
+          }
+        }
       }
     };
 

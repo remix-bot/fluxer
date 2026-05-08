@@ -604,6 +604,8 @@ export default class Player extends EventEmitter {
     if (!this._channelId || !this._guildId) return false;
     const cleanChan  = String(this._channelId).replace(/\D/g, "");
     const cleanGuild = String(this._guildId).replace(/\D/g, "");
+
+    // ── Source 1: observedVoiceUsers map (fast path) ────────────────────────
     try {
       const voiceUsers = this._observedVoiceUsers;
       if (voiceUsers) {
@@ -613,25 +615,32 @@ export default class Player extends EventEmitter {
               String(info.channelId ?? "").replace(/\D/g, "") === cleanChan
           ) return true;
         }
-        return false;
+        // Don't return false here — fall through to VoiceManager check.
+        // After a bot restart, observedVoiceUsers may be empty if the
+        // GUILD_CREATE purge bug hasn't been fully resolved, but VoiceManager
+        // receives VoiceStatesSync events and has the correct data.
       }
     } catch (_) {}
+
+    // ── Source 2: VoiceManager.voiceStates (authoritative per Fluxer.js docs) ──
     try {
-      // @fluxerjs channels do NOT have a .members property.
-      // Use the guild's member manager and filter by voice state instead.
-      const guild = this.client?.guilds?.get?.(this._guildId);
-      if (guild?.members) {
-        for (const member of guild.members.values()) {
-          // GuildMember doesn't expose voice channelId directly in @fluxerjs,
-          // so fall through to the voice_states raw data check below.
-          if (!member?.user?.bot) {
-            // We can't determine channel from member alone — skip here
-            // and rely on _observedVoiceUsers or voice_states instead.
-          }
+      const vm = getVoiceManager(this.client);
+      const participants = vm?.listParticipantsInChannel?.(cleanGuild, cleanChan);
+      if (participants && participants.length > 0) {
+        const guild = this.client?.guilds?.get?.(this._guildId);
+        for (const uid of participants) {
+          const member = guild?.members?.get?.(uid);
+          if (!member?.user?.bot) return true;
         }
       }
-      // Fallback: iterate raw voice_states on the guild object.
-      const voiceStates = guild?.voice_states;
+    } catch (_) {}
+
+    // ── Source 3: guild.voice_states (legacy fallback) ──────────────────────
+    // Fluxer.js Guild does NOT normally have a voice_states property, but
+    // check anyway for forward compatibility.
+    try {
+      const guild = this.client?.guilds?.get?.(this._guildId);
+      const voiceStates = guild?.voice_states ?? guild?.voiceStates;
       if (voiceStates) {
         const entries = Array.isArray(voiceStates)
             ? voiceStates
@@ -642,7 +651,6 @@ export default class Player extends EventEmitter {
           const stateChannelId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
           if (stateChannelId === cleanChan) {
             const userId = String(state?.userId ?? state?.user_id ?? "");
-            // Check if user is a bot — look up via members or observedVoiceUsers
             const member = guild?.members?.get?.(userId);
             const isBot = member?.user?.bot ?? false;
             if (!isBot) return true;
@@ -650,6 +658,7 @@ export default class Player extends EventEmitter {
         }
       }
     } catch (_) {}
+
     return false;
   }
 
@@ -1306,9 +1315,16 @@ export default class Player extends EventEmitter {
       if (!this.queue.isEmpty() && !this.queue.getCurrent()) {
         this.playNext();
       } else if (this.queue.isEmpty()) {
+        // Only start inactivity timer if no humans are in the channel.
+        // After a bot restart, humans may already be in the channel — don't
+        // start a timer that would cause the bot to leave immediately.
         setTimeout(() => {
           if (this.queue.isEmpty() && !this.queue.getCurrent()) {
-            this._startInactivityTimer();
+            if (this._hasHumansInChannel()) {
+              logger.inactivity(`[Player] Humans present after join — skipping inactivity timer.`);
+            } else {
+              this._startInactivityTimer();
+            }
           }
         }, 3000);
       }

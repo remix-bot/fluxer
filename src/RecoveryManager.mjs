@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import { logger } from "./constants/Logger.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
+import { getVoiceManager } from "@fluxerjs/voice";
 import { getGlobalColor } from "./MessageHandler.mjs";
 import Player from "./Player.mjs";
 
@@ -432,6 +433,52 @@ export class RecoveryManager {
           }
           logger.recovery(`[Recovery] Restored session in ${cleanChannelId} (${recoveryData.queue?.length ?? 0} track(s)).`);
         }
+
+        // ── Post-recovery voice state verification ─────────────────────────
+        // After a bot restart, voice state data may not be fully settled when
+        // the player first joins.  Schedule a delayed check to:
+        //   1. Re-seed observedVoiceUsers from VoiceManager (which receives
+        //      VoiceStatesSync events from READY/GUILD_CREATE)
+        //   2. Stop any incorrectly-started inactivity timers if humans are
+        //      present in the channel
+        setTimeout(() => {
+          if (p._destroyed) return;
+
+          // Re-seed observedVoiceUsers from VoiceManager for this guild
+          try {
+            const vm = getVoiceManager(remix.client);
+            const guildVoiceMap = vm?.voiceStates?.get?.(guildId);
+            if (guildVoiceMap) {
+              const cleanGuildId = String(guildId).replace(/\D/g, "");
+              for (const [userId, channelId] of guildVoiceMap) {
+                if (!userId || !channelId) continue;
+                const guild = remix.client.guilds.get(guildId);
+                const member = guild?.members?.get?.(userId);
+                const isBot = member?.user?.bot ?? false;
+                if (!isBot) {
+                  remix.observedVoiceUsers.set(userId, { channelId, guildId: cleanGuildId });
+                }
+              }
+            }
+          } catch (_) {}
+
+          // Check if humans are now detected in the channel
+          if (p._hasHumansInChannel()) {
+            logger.recovery(
+              `[Recovery] Post-join check: humans detected in ${cleanChannelId}, ` +
+              `stopping any inactivity timer.`
+            );
+            p._stopInactivityTimer();
+          } else if (!p._is247Enabled()) {
+            // No humans and not 24/7 — start inactivity timer if not already running
+            // (the bot may have been alone when it restarted)
+            logger.recovery(
+              `[Recovery] Post-join check: no humans in ${cleanChannelId}, ` +
+              `starting inactivity timer.`
+            );
+            p._startInactivityTimer();
+          }
+        }, 8_000); // 8s grace period for voice states to settle after join
       } catch (e) {
         remix.players.playerMap.delete(cleanChannelId);
         try { p.destroy(); } catch (_) {}
@@ -659,6 +706,34 @@ export class RecoveryManager {
       `[Recovery] Processed ${filteredList.length} session(s) in ${elapsed}s ` +
       `(${ok} ok, ${errors.length} failed).`
     );
+
+    // ── Final voice state reconciliation ────────────────────────────────────
+    // After all recovery spawns complete, do one final pass to re-seed
+    // observedVoiceUsers from VoiceManager.  This ensures that even if some
+    // guilds' VoiceStatesSync events arrived late, the data is captured.
+    try {
+      const vm = getVoiceManager(remix.client);
+      if (vm?.voiceStates) {
+        let reconciled = 0;
+        for (const [guildId, userMap] of vm.voiceStates) {
+          if (!userMap) continue;
+          const cleanGuildId = String(guildId).replace(/\D/g, "");
+          for (const [userId, channelId] of userMap) {
+            if (!userId || !channelId) continue;
+            const guild = remix.client.guilds.get(guildId);
+            const member = guild?.members?.get?.(userId);
+            const isBot = member?.user?.bot ?? false;
+            if (!isBot && !remix.observedVoiceUsers.has(userId)) {
+              remix.observedVoiceUsers.set(userId, { channelId, guildId: cleanGuildId });
+              reconciled++;
+            }
+          }
+        }
+        if (reconciled > 0) {
+          logger.recovery(`[Recovery] Final reconciliation: added ${reconciled} user(s) to observedVoiceUsers.`);
+        }
+      }
+    } catch (_) {}
 
     // Delete recovery file AFTER all spawns have been attempted (success or fail).
     // If the process crashes mid-recovery, the file still exists for next boot.

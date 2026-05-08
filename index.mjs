@@ -46,6 +46,7 @@ export class Remix {
     this.dashboard = new Dashboard(this, {
       enabled: config.dashboard?.enabled,
       redis: config.dashboard?.redis,
+      mysql: config.mysql,
     });
 
     const presenceContents = config.presenceContents ?? [];
@@ -76,6 +77,19 @@ export class Remix {
     client.setMaxListeners(50);
     this.client = client;
 
+    // ── VoiceManager — MUST be created BEFORE login ──────────────────────────
+    // Per Fluxer.js docs: "Create a VoiceManager before login so it receives
+    // VoiceStatesSync from READY/GUILD_CREATE. This lets the manager see users
+    // already in voice when the bot starts."
+    // If created after login, the VoiceStatesSync events are already fired and
+    // missed — the bot won't know who's in voice channels after a restart.
+    try {
+      getVoiceManager(client);
+      // VoiceManager will auto-register for VoiceStatesSync / VoiceStateUpdate
+    } catch (e) {
+      logger.warn("[VoiceManager] Pre-login init failed:", e.message);
+    }
+
     // ── Message & Settings handlers ──────────────────────────────────────────
     const messages = new MessageHandler(this.client);
     this.messages  = messages;
@@ -105,7 +119,7 @@ export class Remix {
           false,
           {
             icon_url: msg.channel.channel.guild?.icon
-                ? `https://cdn.fluxer.app/icons/${msg.channel.channel.guild.id}/${msg.channel.channel.guild.icon}.webp`
+                ? `https://fluxerusercontent.com/icons/${msg.channel.channel.guild.id}/${msg.channel.channel.guild.icon}.webp`
                 : null,
             title:    msg.channel.channel.guild?.name        ?? null,
           }
@@ -175,10 +189,13 @@ export class Remix {
       logger.player("Logged in as " + (client.user?.username ?? "bot"));
 
       try {
-        getVoiceManager(client);
-        logger.player("VoiceManager initialized.");
+        // VoiceManager was created before login to catch VoiceStatesSync.
+        // Ensure it's accessible and log its state.
+        const vm = getVoiceManager(client);
+        const guildCount = vm.voiceStates?.size ?? 0;
+        logger.player(`VoiceManager ready (${guildCount} guild voice-state maps).`);
       } catch (e) {
-        logger.warn("[VoiceManager] Init failed:", e.message);
+        logger.warn("[VoiceManager] Ready check failed:", e.message);
       }
 
       const botId = client.user?.id ?? "0";
@@ -233,6 +250,7 @@ export class Remix {
       timers: this.T,
     });
     this.players.observedVoiceUsers = this.observedVoiceUsers;
+    this.players.observedVoiceBots  = this.observedVoiceBots;
 
     // ── Periodic alone-check ───────────────────────────────────────────────────
     const ALONE_CHECK_INTERVAL = this.T.aloneCheckInterval;
@@ -262,6 +280,8 @@ export class Remix {
           if (player._is247Enabled()) continue;
 
           let hasHuman = false;
+
+          // Source 1: observedVoiceUsers map (seeded from READY/GUILD_CREATE + VOICE_STATE_UPDATE)
           for (const [, info] of this.observedVoiceUsers) {
             const infoChannel = String(info.channelId ?? "").replace(/\D/g, "");
             const infoGuild   = String(info.guildId   ?? "").replace(/\D/g, "");
@@ -269,6 +289,28 @@ export class Remix {
               hasHuman = true;
               break;
             }
+          }
+
+          // Source 2: VoiceManager.voiceStates (populated from VoiceStatesSync events)
+          // This is the authoritative source per Fluxer.js docs.  It catches users
+          // who were already in voice when the bot started, even if
+          // observedVoiceUsers hasn't been fully seeded yet.
+          if (!hasHuman) {
+            try {
+              const vm = getVoiceManager(this.client);
+              const participants = vm.listParticipantsInChannel?.(guildId, channelId);
+              if (participants && participants.length > 0) {
+                // Filter out bots — listParticipantsInChannel returns ALL users
+                const guild = this.client.guilds.get(guildId);
+                for (const uid of participants) {
+                  const member = guild?.members?.get?.(uid);
+                  if (!member?.user?.bot) {
+                    hasHuman = true;
+                    break;
+                  }
+                }
+              }
+            } catch (_) {}
           }
 
           logger.aloneCheck(`[AloneCheck] channel=${channelId} guild=${guildId} hasHuman=${hasHuman} paused=${player._paused}`);
@@ -574,23 +616,44 @@ export class Remix {
         name:   guild.name,
         id:     guild.id,
         icon:   guild.icon
-            ? `https://cdn.fluxer.app/icons/${guild.id}/${guild.icon}.webp`
+            ? `https://fluxerusercontent.com/icons/${guild.id}/${guild.icon}.webp`
             : null,
+        description: guild.description ?? null,
+        ownerId: guild.ownerId ?? null,
+        channelIds: guild.channels && typeof guild.channels.keys === "function"
+            ? [...guild.channels.keys()]
+            : [],
         voiceChannels: guild.channels
-            .filter(c => c.isVoiceBased?.() ?? false)
-            .map(c => ({
-              name: c.name,
-              displayName: c.name,
-              id: c.id,
-              icon: null,
-              isVoice: true,
-              type: c.type,
-              isCategory: false,
-              isText: false,
-              parentId: c.parentId ?? null,
-              serverId: guild.id,
-              voiceParticipants: [],
-            })),
+            .filter(c => c.isVoice?.() ?? (c.type === 2) ?? false)
+            .map(c => {
+              // Build voice participants list for this channel
+              const voiceParticipants = [];
+              if (guild.voice_states) {
+                const vs = Array.isArray(guild.voice_states) ? guild.voice_states :
+                    typeof guild.voice_states.values === "function" ? [...guild.voice_states.values()] : Object.values(guild.voice_states);
+                for (const state of vs) {
+                  const scId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
+                  const chId = String(c.id ?? "").replace(/\D/g, "");
+                  if (scId === chId) {
+                    const member = guild.members?.get?.(state?.userId ?? state?.user_id);
+                    if (member?.user && !member.user.bot) {
+                      voiceParticipants.push(Dashboard.convertUser(member.user));
+                    }
+                  }
+                }
+              }
+              return {
+                name: c.name,
+                displayName: c.name,
+                id: c.id,
+                icon: null,
+                description: c.topic ?? null,
+                isVoice: true,
+                mature: c.nsfw ?? false,
+                serverId: guild.id,
+                voiceParticipants,
+              };
+            }),
       });
     }
 
@@ -668,6 +731,13 @@ const saveAndExit = async () => {
     }
   } catch (e) {
     logger.error("[Shutdown] Failed to close Redis:", e.message);
+  }
+  try {
+    if (remix.dashboard?.db?.close) {
+      await remix.dashboard.db.close();
+    }
+  } catch (e) {
+    logger.error("[Shutdown] Failed to close Dashboard DB:", e.message);
   }
   process.exit(0);
 };

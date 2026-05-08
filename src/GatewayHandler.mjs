@@ -1,4 +1,5 @@
 import { Events, GatewayOpcodes } from "@fluxerjs/core";
+import { getVoiceManager } from "@fluxerjs/voice";
 import { logger } from "./constants/Logger.mjs";
 import { ServerSettings } from "./Settings.mjs";
 import mysql from "mysql2";
@@ -79,13 +80,53 @@ export class GatewayHandler {
   // ── Voice-state seeding from guild cache ─────────────────────────────────────
 
   /**
-   * Seed observedVoiceUsers / observedVoiceBots from all cached guild voice
-   * states.  Called once on Ready after the guild cache is populated.
+   * Seed observedVoiceUsers / observedVoiceBots from VoiceManager.voiceStates
+   * (populated by VoiceStatesSync events from READY/GUILD_CREATE) and from
+   * cached guild voice states as a fallback.
+   *
+   * Called once on Ready after the guild cache is populated.
    */
   seedVoiceStatesFromGuilds() {
     const { remix } = this;
     const client = remix.client;
+    let seededFromVM = 0;
+    let seededFromGuild = 0;
 
+    // ── Source 1: VoiceManager.voiceStates ──────────────────────────────────
+    // This is the authoritative source per Fluxer.js docs. The VoiceManager
+    // receives VoiceStatesSync events from READY/GUILD_CREATE and stores them
+    // as Map<guildId, Map<userId, channelId>>.
+    try {
+      const vm = getVoiceManager(client);
+      if (vm?.voiceStates) {
+        for (const [guildId, userMap] of vm.voiceStates) {
+          if (!userMap) continue;
+          const cleanGuildId = String(guildId).replace(/\D/g, "");
+          for (const [userId, channelId] of userMap) {
+            if (!userId || !channelId) continue;
+            // Determine if this user is a bot — check member cache
+            const guild = client.guilds.get(guildId);
+            const member = guild?.members?.get?.(userId);
+            const isBot = member?.user?.bot ?? false;
+            if (isBot) {
+              remix.observedVoiceBots.set(
+                this.getObservedVoiceBotKey(userId, guildId),
+                { channelId, guildId: cleanGuildId }
+              );
+            } else {
+              remix.observedVoiceUsers.set(userId, { channelId, guildId: cleanGuildId });
+              seededFromVM++;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      logger.warn("[Gateway] VoiceManager seed failed:", e.message);
+    }
+
+    // ── Source 2: guild.voice_states (legacy fallback) ──────────────────────
+    // Fluxer.js Guild does NOT have a voice_states property in the standard API,
+    // but check anyway in case a future version adds it.
     for (const [gId, guild] of client.guilds) {
       const voiceStatesRaw =
           guild.voice_states ??
@@ -99,9 +140,12 @@ export class GatewayHandler {
           const channelId = typeof val === "string" ? val
               : val?.channelId ?? val?.channel_id ?? null;
           if (!uid || !channelId) continue;
+          // Only add if not already in observedVoiceUsers (VM takes priority)
+          if (remix.observedVoiceUsers.has(uid)) continue;
           const isBot = val?.member?.user?.bot ?? false;
           const target = isBot ? remix.observedVoiceBots : remix.observedVoiceUsers;
           target.set(uid, { channelId, guildId: gId });
+          if (!isBot) seededFromGuild++;
         }
       } else {
         const entries = Array.isArray(voiceStatesRaw)
@@ -111,12 +155,20 @@ export class GatewayHandler {
           const userId    = state?.userId ?? state?.user_id ?? state?.id;
           const channelId = state?.channelId ?? state?.channel_id;
           if (!userId || !channelId) continue;
+          if (remix.observedVoiceUsers.has(userId)) continue;
           const isBot  = state?.member?.user?.bot ?? false;
           const target = isBot ? remix.observedVoiceBots : remix.observedVoiceUsers;
           target.set(userId, { channelId, guildId: gId });
+          if (!isBot) seededFromGuild++;
         }
       }
     }
+
+    logger.voiceState(
+      `[seedVoiceStates] Seeded ${seededFromVM} users from VoiceManager, ` +
+      `${seededFromGuild} from guild cache. ` +
+      `observedVoiceUsers=${remix.observedVoiceUsers.size} observedVoiceBots=${remix.observedVoiceBots.size}`
+    );
   }
 
   // ── Raw WebSocket gateway listener ───────────────────────────────────────────
@@ -294,16 +346,43 @@ export class GatewayHandler {
       if (!guildId) return;
 
       // Part 1: Voice state population
-      // Purge stale entries for this guild first.
-      for (const [uid, info] of [...remix.observedVoiceUsers]) {
-        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, ""))
-          remix.observedVoiceUsers.delete(uid);
-      }
-      for (const [uid, info] of [...remix.observedVoiceBots]) {
-        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, ""))
-          remix.observedVoiceBots.delete(uid);
-      }
+      // ── DO NOT PURGE observedVoiceUsers/observedVoiceBots for this guild. ──
+      // Previously, this handler purged all entries for the guild and then
+      // re-seeded from guild.voice_states.  However:
+      //   1) Fluxer.js Guild has NO voice_states property — the re-seed silently
+      //      failed, leaving the maps empty after every GUILD_CREATE.
+      //   2) The raw WS GUILD_CREATE handler (in attachRawListener) correctly
+      //      seeds from the raw gateway payload BEFORE this high-level event
+      //      fires, so the data is already correct.
+      //   3) The VoiceManager also receives VoiceStatesSync from GUILD_CREATE
+      //      and populates its own voiceStates map.
+      // Purging destroyed correctly-seeded data and was the root cause of the
+      // "bot leaves voice after restart" bug.
 
+      // Reconcile from VoiceManager.voiceStates for this guild (additive only)
+      try {
+        const vm = getVoiceManager(client);
+        const guildVoiceMap = vm?.voiceStates?.get?.(guildId);
+        if (guildVoiceMap) {
+          const cleanGuildId = String(guildId).replace(/\D/g, "");
+          for (const [userId, channelId] of guildVoiceMap) {
+            if (!userId || !channelId) continue;
+            const member = guild?.members?.get?.(userId);
+            const isBot = member?.user?.bot ?? false;
+            if (isBot) {
+              remix.observedVoiceBots.set(
+                this.getObservedVoiceBotKey(userId, guildId),
+                { channelId, guildId: cleanGuildId }
+              );
+            } else {
+              remix.observedVoiceUsers.set(userId, { channelId, guildId: cleanGuildId });
+            }
+          }
+        }
+      } catch (_) {}
+
+      // Legacy: try guild.voice_states (won't exist in standard Fluxer.js,
+      // but kept for forward compatibility)
       const voiceStatesRaw =
           guild.voice_states ??
           guild.voiceStates ??
