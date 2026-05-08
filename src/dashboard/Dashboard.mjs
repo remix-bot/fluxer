@@ -354,6 +354,16 @@ export class Dashboard {
   // ── Static converters ─────────────────────────────────────────────────────
 
   /**
+   * Re-publish "connected" to the info channel so the backend can
+   * re-initialize its PlayerManager with fresh data. Called after
+   * session recovery completes so the backend sees up-to-date players.
+   */
+  announceReady() {
+    if (!this.enabled) return;
+    this.redis.readyMessage();
+  }
+
+  /**
    * @param {import("@fluxerjs/core").User} user
    */
   static convertUser(user) {
