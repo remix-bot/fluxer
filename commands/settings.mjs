@@ -10,17 +10,25 @@ function embed(desc, opts = {}) {
   return { embeds: [b] };
 }
 
-/** Build a rich embed with fields for the 24/7 status panel */
+/** Build a rich embed with fields for the 24/7 status panel.
+ *  Fluxer EmbedBuilder does not have addField() (that's discord.js).
+ *  Instead, we build the base embed with EmbedBuilder, call .toJSON()
+ *  to get the raw object, then attach a `fields` array directly.
+ */
 function richEmbed(fields, opts = {}) {
   const b = new EmbedBuilder().setColor(getGlobalColor());
   if (opts.title) b.setTitle(opts.title);
   if (opts.description) b.setDescription(opts.description);
   if (opts.footer) b.setFooter({ text: opts.footer });
   if (opts.iconURL) b.setAuthor({ name: opts.title || "\u200b", iconURL: opts.iconURL });
-  for (const f of fields) {
-    b.addField(f.name, f.value, f.inline ?? false);
-  }
-  return { embeds: [b] };
+  // EmbedBuilder doesn't have addField — use .toJSON() + raw fields
+  const raw = b.toJSON();
+  raw.fields = fields.map(f => ({
+    name: f.name,
+    value: f.value,
+    inline: f.inline ?? false,
+  }));
+  return { embeds: [raw] };
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -344,14 +352,20 @@ function build247EnabledPanel(set, channelId, mode, joined, ctx, guildId) {
     ? "1 channel saved"
     : `${channels.length} channels saved`;
 
-  // Use the mode's color for the embed
+  // Use the mode's color for the embed.  EmbedBuilder doesn't have addField,
+  // so we build the base embed, .toJSON() it, then attach fields as a raw array.
   const b = new EmbedBuilder();
   b.setColor(modeColor(mode));
   b.setTitle(`♾️ 24/7 ${modeStr}`);
   b.setDescription(`**${summary}** for this server`);
   b.setFooter({ text: `${prefix}247 off to disable for a channel` });
-  for (const f of fields) b.addField(f.name, f.value, f.inline ?? false);
-  return { embeds: [b] };
+  const raw = b.toJSON();
+  raw.fields = fields.map(f => ({
+    name: f.name,
+    value: f.value,
+    inline: f.inline ?? false,
+  }));
+  return { embeds: [raw] };
 }
 
 /**
