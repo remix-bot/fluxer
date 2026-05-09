@@ -21,6 +21,7 @@
   <img src="https://img.shields.io/badge/Node.js-%3E%3D22.0.0-339933.svg" alt="Node.js">
   <img src="https://img.shields.io/badge/ESM-Modules-yellow.svg" alt="ESM">
   <img src="https://img.shields.io/badge/Audio-moonlink.js-orange.svg" alt="moonlink.js">
+  <img src="https://img.shields.io/badge/Voice-revoice.js-9b59b6.svg" alt="revoice.js">
   <img src="https://img.shields.io/badge/Database-MySQL-4479A1.svg" alt="MySQL">
   <img src="https://img.shields.io/badge/Maintained%3F-Yes-green.svg" alt="Maintained">
 </p>
@@ -48,7 +49,7 @@
 
 ## About The Project
 
-Remix is a free and open-source music bot for [Fluxer](https://fluxer.app), built with [`@fluxerjs/core`](https://github.com/fluxerjs/core) and powered by [`moonlink.js`](https://github.com/ShadowLp174/moonlink.js) for seamless, high-quality audio streaming. It uses `@fluxerjs/voice` for native voice integration alongside the Moonlink Lavalink proxy.
+Remix is a free and open-source music bot for [Fluxer](https://fluxer.app), built with [`@fluxerjs/core`](https://github.com/fluxerjs/core) and powered by [`moonlink.js`](https://github.com/ShadowLp174/moonlink.js) for seamless, high-quality audio streaming. It uses [`revoice.js`](https://github.com/ShadowLp174/revoice.js) for LiveKit voice connections and audio playback, and [`@fluxerjs/voice`](https://github.com/fluxerjs/voice) for native voice channel integration alongside the Moonlink Lavalink proxy.
 
 We believe music features shouldn't be locked behind paywalls — **all commands on Remix are 100% free and always will be.**
 
@@ -56,7 +57,7 @@ We believe music features shouldn't be locked behind paywalls — **all commands
 
 ## Features
 
-- **High-quality audio playback** via moonlink.js (Lavalink proxy) and `@fluxerjs/voice`
+- **High-quality audio playback** via moonlink.js (Lavalink proxy), revoice.js (LiveKit voice + MediaPlayer), and `@fluxerjs/voice`
 - **Multi-source search** — YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, and direct URL support
 - **24/7 mode** — keep the bot in a voice channel permanently, with auto-recovery on restart
 - **Session recovery** — active players and queues survive bot restarts and crash recovery
@@ -374,7 +375,8 @@ To add a new language, place a JSON file in `storage/locales/bot/` following the
 
 **Powered by:**
 - [`@fluxerjs/core`](https://github.com/fluxerjs/core) — Fluxer API client
-- [`@fluxerjs/voice`](https://github.com/fluxerjs/voice) — Native voice integration
+- [`revoice.js`](https://github.com/ShadowLp174/revoice.js) — LiveKit voice connection and MediaPlayer
+- [`@fluxerjs/voice`](https://github.com/fluxerjs/voice) — Native voice channel integration
 - [`moonlink.js`](https://github.com/ShadowLp174/moonlink.js) — Lavalink proxy
 - [`NodeLink`](https://github.com/PerformanC/NodeLink) — Audio node manager
 
