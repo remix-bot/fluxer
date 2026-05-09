@@ -39,8 +39,11 @@ function buildSignature(params, apiSecret) {
  * @returns {Promise<object>} Parsed JSON response
  */
 async function apiCall(params, apiSecret, post = false) {
-  const allParams = { ...params, format: "json" };
+  // Per Last.fm spec: format must NOT be included in the signature.
+  // See: https://www.last.fm/api/authspec#_8-signing-calls
+  const allParams = { ...params };
   allParams.api_sig = buildSignature(allParams, apiSecret);
+  allParams.format  = "json";   // add AFTER signature
 
   const url = post ? BASE_URL : `${BASE_URL}?${new URLSearchParams(allParams)}`;
 
