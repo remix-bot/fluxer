@@ -20,6 +20,8 @@ export async function run(msg, data) {
     case "voice": {
       const servers = [...this.players.playerMap.entries()].map(([cid, s]) => {
         const channel = this.client.channels.get(cid);
+        const guildId = s._guildId ?? channel?.guildId ?? channel?.guild_id;
+        const guild   = guildId ? this.client.guilds.get(String(guildId).replace(/\D/g, "")) : null;
         const conn = s.connection;
         const room = conn?.room;
         const roomState = room?.state ?? "no-room";
@@ -28,8 +30,8 @@ export async function run(msg, data) {
           name:      channel?.name ?? "unknown",
           id:        channel?.id ?? cid,
           channelId: s._channelId ?? cid,
-          guildId:   s._guildId ?? "unknown",
-          guildname: channel?.guild?.name ?? "unknown",
+          guildId:   guildId ?? "unknown",
+          guildname: guild?.name ?? channel?.guild?.name ?? "unknown",
           conn:      conn ? "yes" : "null",
           roomState,
           mediaPlayer: hasMediaPlayer ? "alive" : (s._mediaPlayer?.destroyed ? "destroyed" : "none"),
