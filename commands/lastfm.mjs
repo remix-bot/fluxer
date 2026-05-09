@@ -41,7 +41,7 @@ function notLinked(prefix) {
 }
 
 // Valid categories that can be played (without a sub-number)
-const SIMPLE_CATEGORIES = ["loved", "top", "recent"];
+const SIMPLE_CATEGORIES = ["loved", "top", "recent", "albums"];
 
 /**
  * Resolve a Last.fm category (loved/top/recent/playlist) into playable tracks.
@@ -68,7 +68,7 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   if (!validCategories.includes(category)) {
     return msg.reply({
       embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
-        `❌ Unknown category \`${category}\`. Use \`loved\`, \`top\`, \`recent\`, or \`playlist\`.`
+        `❌ Unknown category \`${category}\`. Use \`loved\`, \`top\`, \`recent\`, \`albums\`, or \`playlist\`.`
       )]
     });
   }
@@ -91,8 +91,8 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   if (!p) return;
 
   // Fetch tracks from Last.fm
-  const categoryEmoji = { loved: "❤️", top: "📊", recent: "🕐", playlist: "📋" }[category];
-  const categoryLabel = { loved: "Loved", top: "Top", recent: "Recent", playlist: "Playlist" }[category];
+  const categoryEmoji = { loved: "❤️", top: "📊", recent: "🕐", playlist: "📋", albums: "💿" }[category];
+  const categoryLabel = { loved: "Loved", top: "Top", recent: "Recent", playlist: "Playlist", albums: "Top Albums" }[category];
 
   let statusMsg;
   try {
@@ -466,6 +466,7 @@ export async function run(msg, data) {
             `\`loved\` — Play your loved tracks`,
             `\`top\` — Play your top tracks`,
             `\`recent\` — Play your recent tracks`,
+            `\`albums\` — Play your top albums`,
             `\`playlist <number>\` — Play a playlist (use \`${prefix}lastfm playlists\` to list)`,
             ``,
             `**Examples:**`,
@@ -570,6 +571,7 @@ export async function run(msg, data) {
             `\`${prefix}lastfm play loved\` — Play your loved tracks`,
             `\`${prefix}lastfm play top\` — Play your top tracks`,
             `\`${prefix}lastfm play recent\` — Play your recent tracks`,
+            `\`${prefix}lastfm play albums\` — Play your top albums`,
             `\`${prefix}lastfm play playlist 1\` — Play a playlist`,
             ``,
             `💡 Or use inline: \`${prefix}play lastfm:loved\``,

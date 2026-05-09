@@ -407,41 +407,69 @@ export class LastFmManager {
     return data.user;
   }
 
-  // ── Playlists ────────────────────────────────────────────────────────────────
+  // ── Playlists & Albums ────────────────────────────────────────────────────────
 
   /**
-   * Get a list of the user's Last.fm playlists.
+   * Get a list of the user's Last.fm playlists by scraping their profile page.
+   * The Last.fm API removed user.getplaylists, so we fetch the HTML page.
+   *
    * @param {string} userId
-   * @returns {Promise<Array<{ id: string, title: string, trackCount: number, url: string, created: string }>>}
+   * @returns {Promise<Array<{ title: string, trackCount: number, url: string }>>}
    */
   async getPlaylists(userId) {
     const user = await this.getUser(userId);
     if (!user) throw new Error("NOT_LINKED");
 
-    const data = await apiCall(
-      {
-        method:   "user.getplaylists",
-        api_key:  this.apiKey,
-        user:     user.username,
-      },
-      this.apiSecret
-    );
+    const profileUrl = `https://www.last.fm/user/${encodeURIComponent(user.username)}/playlists`;
+    const res = await fetch(profileUrl, {
+      headers: { "User-Agent": "RemixBot/1.0 (Last.fm Integration)" },
+    });
 
-    return (data.playlists?.playlist ?? []).map(p => ({
-      id:         String(p.id),
-      title:      p.title ?? "Untitled",
-      trackCount: +p.size ?? 0,
-      url:        p.url ?? "",
-      created:    p.date ?? "",
-    }));
+    if (!res.ok) {
+      throw new Error(`Failed to fetch profile page (HTTP ${res.status})`);
+    }
+
+    const html = await res.text();
+    const playlists = [];
+
+    // Parse playlist links from the HTML
+    // Last.fm playlist links look like: /user/USERNAME/playlists/123456
+    // Each playlist item has a .playlist-item or similar container
+    const playlistRegex = /href="\/user\/[^/]+\/playlists\/(\d+)"[^>]*>([^<]+)<\/a>/gi;
+    let match;
+    while ((match = playlistRegex.exec(html)) !== null) {
+      const id = match[1];
+      const title = match[2].trim();
+      if (title && id) {
+        playlists.push({
+          id,
+          title,
+          url: `https://www.last.fm/user/${user.username}/playlists/${id}`,
+        });
+      }
+    }
+
+    // Try to extract track counts (e.g. "12 tracks" or "1 track")
+    const countRegex = /(\d+)\s+track/gi;
+    const counts = [];
+    let cMatch;
+    while ((cMatch = countRegex.exec(html)) !== null) {
+      counts.push(+cMatch[1]);
+    }
+    // Pair counts with playlists (order should match)
+    playlists.forEach((pl, i) => {
+      pl.trackCount = counts[i] ?? 0;
+    });
+
+    return playlists;
   }
 
   /**
    * Fetch tracks from a specific Last.fm playlist.
-   * Uses the playlist.fetch API method with the playlist URL.
+   * Since the API removed playlist.fetch, we scrape the playlist page.
    *
    * @param {string} userId
-   * @param {number|string} playlistId - Playlist number (1-based index from getPlaylists) or the playlist URL
+   * @param {number|string} playlistId - Playlist number (1-based from getPlaylists) or full Last.fm playlist URL
    * @param {number} [limit=50] - Max tracks to return
    * @returns {Promise<Array<{ artist, name, url, image }>>}
    */
@@ -459,28 +487,116 @@ export class LastFmManager {
         throw new Error(`Playlist #${playlistId} not found. You have ${playlists.length} playlist(s). Use \`%lastfm playlists\` to see them.`);
       }
       playlistUrl = playlists[idx].url;
-    } else {
-      // Assume it's a URL
+    } else if (String(playlistId).startsWith("http")) {
       playlistUrl = String(playlistId);
+    } else {
+      // Assume it's a playlist ID slug — build the URL
+      playlistUrl = `https://www.last.fm/user/${user.username}/playlists/${playlistId}`;
     }
+
+    // Scrape the playlist page for track info
+    const res = await fetch(playlistUrl, {
+      headers: { "User-Agent": "RemixBot/1.0 (Last.fm Integration)" },
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch playlist page (HTTP ${res.status})`);
+    }
+
+    const html = await res.text();
+    const tracks = [];
+
+    // Last.fm playlist pages contain track items with:
+    // <a href="/music/Artist/Track" class="...">Track Name</a>
+    // We extract artist and track from the URL pattern /music/Artist+Name/Track+Name
+    const trackLinkRegex = /href="\/music\/([^"]+?)"[^>]*class="[^"]*(?:link-block-target|chartlist-name)[^"]*"[^>]*>([^<]+)<\/a>/gi;
+    let tMatch;
+    while ((tMatch = trackLinkRegex.exec(html)) !== null && tracks.length < limit) {
+      const urlPath = decodeURIComponent(tMatch[1]);
+      const name = tMatch[2].trim();
+      // URL format: /music/Artist+Name/Track+Name or /music/Artist+Name/_/Track+Name
+      const parts = urlPath.split("/");
+      let artist = "Unknown";
+      if (parts.length >= 1) {
+        artist = parts[0].replace(/\+/g, " ");
+      }
+      if (parts.length >= 3 && parts[1] === "_") {
+        // /music/Artist/_/Track format
+      } else if (parts.length >= 2) {
+        // /music/Artist/Track format — the track name from URL
+      }
+
+      if (name && name !== "Unknown") {
+        tracks.push({
+          artist,
+          name,
+          url: `https://www.last.fm/music/${urlPath}`,
+          image: "",
+        });
+      }
+    }
+
+    // Fallback: try a broader regex if the first one didn't find anything
+    if (!tracks.length) {
+      const broadRegex = /href="\/music\/([^"]+)"[^>]*>([^<]{2,80})<\/a>/gi;
+      const seen = new Set();
+      let bMatch;
+      while ((bMatch = broadRegex.exec(html)) !== null && tracks.length < limit) {
+        const urlPath = decodeURIComponent(bMatch[1]);
+        const name = bMatch[2].trim();
+        // Only include actual track links (Artist/Track or Artist/_/Track)
+        const parts = urlPath.split("/");
+        if (parts.length < 2) continue;
+        if (seen.has(urlPath)) continue;
+        seen.add(urlPath);
+
+        const artist = parts[0].replace(/\+/g, " ");
+        const trackName = parts.length >= 3 && parts[1] === "_"
+          ? parts[2].replace(/\+/g, " ")
+          : parts[1].replace(/\+/g, " ");
+
+        if (trackName && artist) {
+          tracks.push({
+            artist,
+            name: trackName,
+            url: `https://www.last.fm/music/${urlPath}`,
+            image: "",
+          });
+        }
+      }
+    }
+
+    return tracks;
+  }
+
+  /**
+   * Get the user's top albums (for %lastfm play albums).
+   * @param {string} userId
+   * @param {string} [period="overall"] - overall | 7day | 1month | 3month | 6month | 12month
+   * @param {number} [limit=20]
+   * @returns {Promise<Array<{ artist, name, url, playcount, image }>>}
+   */
+  async getTopAlbums(userId, period = "overall", limit = 20) {
+    const user = await this.getUser(userId);
+    if (!user) throw new Error("NOT_LINKED");
 
     const data = await apiCall(
       {
-        method:        "playlist.fetch",
-        api_key:       this.apiKey,
-        playlistURL:   playlistUrl,
+        method:   "user.gettopalbums",
+        api_key:  this.apiKey,
+        user:     user.username,
+        period,
+        limit,
       },
       this.apiSecret
     );
 
-    const trackList = data.playlist?.trackList?.track ?? data.playlist?.tracks?.track ?? [];
-    const tracks = (Array.isArray(trackList) ? trackList : [trackList]).slice(0, limit);
-
-    return tracks.map(t => ({
-      artist: t.artist?.name ?? t.artist?.["#text"] ?? t.creator ?? "Unknown",
-      name:   t.title ?? t.name ?? "Unknown",
-      url:    t.url ?? "",
-      image:  t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
+    return (data.topalbums?.album ?? []).map(a => ({
+      artist:    a.artist?.name ?? "Unknown",
+      name:      a.name,
+      url:       a.url ?? "",
+      playcount: a.playcount ?? 0,
+      image:     a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
     }));
   }
 
@@ -491,7 +607,7 @@ export class LastFmManager {
    * that can be resolved by the player's worker (YouTube Music search).
    *
    * @param {string} userId
-   * @param {"loved"|"top"|"recent"|"playlist"} category
+   * @param {"loved"|"top"|"recent"|"playlist"|"albums"} category
    * @param {object}  [options]
    * @param {string}  [options.period="overall"] - Period for top tracks (overall|7day|1month|3month|6month|12month)
    * @param {number}  [options.limit=20]         - Max tracks to return
@@ -521,8 +637,23 @@ export class LastFmManager {
         if (!options.playlistId) throw new Error("Playlist ID required. Use `%lastfm playlists` to see your playlists, then `%lastfm play playlist <number>`.");
         tracks = await this.getPlaylistTracks(userId, options.playlistId, limit);
         break;
+      case "albums":
+        // Top albums — we fetch albums, then for each album we use the album name + artist as search query
+        const albums = await this.getTopAlbums(userId, options.period ?? "overall", limit);
+        tracks = albums.map(a => ({
+          artist: a.artist,
+          name:   a.name,
+          url:    a.url,
+          // For albums, search the album name + artist to get the full album
+          query:  `${a.artist} ${a.name} album`,
+          image:  a.image ?? "",
+        }));
+        return {
+          username: user.username,
+          tracks,
+        };
       default:
-        throw new Error(`Unknown Last.fm category: ${category}. Use loved, top, recent, or playlist.`);
+        throw new Error(`Unknown Last.fm category: ${category}. Use loved, top, recent, playlist, or albums.`);
     }
 
     return {

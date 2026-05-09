@@ -5,7 +5,7 @@ import { PROVIDER_CHOICES } from "../src/constants/providers.mjs";
 import { playLastFmCategory } from "./lastfm.mjs";
 
 // Last.fm provider keywords that trigger special play logic
-const LASTFM_PLAY_CATEGORIES = ["loved", "top", "recent"];
+const LASTFM_PLAY_CATEGORIES = ["loved", "top", "recent", "albums"];
 
 function parseInlineProvider(raw) {
   const match = raw.match(/^([a-z]+):\s*(.+)$/i);
