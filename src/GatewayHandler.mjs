@@ -796,19 +796,20 @@ export class GatewayHandler {
               ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15))
               : new Set();
           if (channels.has(cleanOld) && cleanOld !== cleanId && cleanId.length >= 15) {
-            channels.delete(cleanOld);
+            // Keep the old channel saved AND add the new one.
+            // The bot moved from one 24/7 channel to another — both should
+            // remain in the saved list so the bot can auto-rejoin either one.
             channels.add(cleanId);
             set.set("stay_247", [...channels]);
 
-            // Also migrate the per-channel mode from old → new channel
+            // Copy the per-channel mode from old → new channel (keep old too)
             const modes = set.get("stay_247_modes");
             if (modes && typeof modes === "object" && !Array.isArray(modes) && modes[cleanOld]) {
-              modes[cleanId] = modes[cleanOld];
-              delete modes[cleanOld];
+              if (!modes[cleanId]) modes[cleanId] = modes[cleanOld];
               set.set("stay_247_modes", modes);
             }
 
-            logger.voice247(`[247] Updated stay_247: ${cleanOld} → ${cleanId}`);
+            logger.voice247(`[247] Added to stay_247: ${cleanId} (kept ${cleanOld})`);
           }
         }
       } catch (e) {

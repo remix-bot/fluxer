@@ -524,12 +524,28 @@ async function handle247(ctx, message, value) {
 
   save247Channels(set, channels);
 
+  // Check if the bot already has a player in this guild.
+  // Fluxer only supports one voice connection per guild — spawning a new player
+  // would disconnect the existing one. If the bot is already in a different
+  // channel in this guild, just save the 24/7 setting without spawning.
   const playerExists = ctx.players.playerMap.has(id) ||
       [...ctx.players.playerMap.values()].some(p =>
         cleanId(p?._channelId ?? "") === id && cleanId(p?._guildId ?? "") === cleanId(guildId)
       );
 
+  const guildHasPlayer = [...ctx.players.playerMap.values()].some(p =>
+    cleanId(p?._guildId ?? "") === cleanId(guildId) && !p._destroyed
+  );
+
   if (playerExists) {
+    return message.reply(build247EnabledPanel(set, id, resolved, false, ctx, guildId));
+  }
+
+  // If the bot is already in a different channel in this guild, save the
+  // channel for 24/7 but don't try to spawn a new player (which would
+  // disconnect the existing one). The bot will auto-rejoin when it
+  // eventually disconnects from the current channel.
+  if (guildHasPlayer) {
     return message.reply(build247EnabledPanel(set, id, resolved, false, ctx, guildId));
   }
 
