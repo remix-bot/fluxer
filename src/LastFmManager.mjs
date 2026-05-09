@@ -89,6 +89,10 @@ export class LastFmManager {
     // In-memory user cache: Map<userId, { sessionKey, username, scrobbleEnabled }>
     this._userCache = new Map();
 
+    // In-memory scrobble counter (persisted to MySQL)
+    this._storedScrobbles = 0;
+    this._scrobblesLoaded = false;
+
     if (!this.enabled) {
       logger.settings("[LastFm] Disabled — apiKey or apiSecret missing in config.");
     }
@@ -121,6 +125,19 @@ export class LastFmManager {
         \`scrobble\`    TINYINT(1)   NOT NULL DEFAULT 1,
         \`linked_at\`   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    // Stats table — single row tracking global scrobble counts
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS \`lastfm_stats\` (
+        \`id\`              TINYINT(1)  NOT NULL PRIMARY KEY DEFAULT 1,
+        \`stored_scrobbles\` BIGINT     NOT NULL DEFAULT 0,
+        \`linked_users\`    INT         NOT NULL DEFAULT 0
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+    // Ensure the single row exists
+    await pool.execute(`
+      INSERT IGNORE INTO \`lastfm_stats\` (id, stored_scrobbles, linked_users) VALUES (1, 0, 0)
     `);
   }
 
@@ -158,6 +175,17 @@ export class LastFmManager {
     );
     const data = { sessionKey, username: username ?? "", scrobbleEnabled: true };
     this._userCache.set(userId, data);
+
+    // Increment linked_users counter (only on new links, not re-links)
+    try {
+      await pool.execute(
+        "UPDATE lastfm_stats SET linked_users = linked_users + 1 WHERE id = 1 AND NOT EXISTS (SELECT 1 FROM (SELECT 1 FROM lastfm_users WHERE user_id = ? AND linked_at < NOW()) AS tmp)",
+        [String(userId)]
+      );
+    } catch {
+      // Non-critical — don't fail the save
+    }
+
     return data;
   }
 
@@ -268,6 +296,9 @@ export class LastFmManager {
         true // POST
       );
       logger.settings(`[LastFm] Scrobbled "${track.title}" for ${userId}`);
+
+      // Increment stored scrobbles counter (non-blocking)
+      this._incrementScrobbleCount();
     } catch (err) {
       logger.warn(`[LastFm] Scrobble failed for ${userId}: ${err.message}`);
     }
@@ -667,10 +698,69 @@ export class LastFmManager {
     };
   }
 
+  // ── Global stats ────────────────────────────────────────────────────────────
+
+  /**
+   * Get the total number of scrobbles the bot has stored (across all users).
+   * Uses an in-memory counter that is lazy-loaded from MySQL on first call.
+   * @returns {Promise<number>}
+   */
+  async getStoredScrobbles() {
+    if (!this.enabled) return 0;
+
+    if (!this._scrobblesLoaded) {
+      try {
+        const pool = await this._getPool();
+        const [rows] = await pool.execute(
+          "SELECT stored_scrobbles FROM lastfm_stats WHERE id = 1"
+        );
+        this._storedScrobbles = Number(rows[0]?.stored_scrobbles ?? 0);
+        this._scrobblesLoaded = true;
+      } catch {
+        // Table might not exist yet — return 0
+        this._storedScrobbles = 0;
+        this._scrobblesLoaded = true;
+      }
+    }
+
+    return this._storedScrobbles;
+  }
+
+  /**
+   * Get the total number of linked Last.fm users.
+   * @returns {Promise<number>}
+   */
+  async getLinkedUsersCount() {
+    if (!this.enabled) return 0;
+    try {
+      const pool = await this._getPool();
+      const [rows] = await pool.execute(
+        "SELECT linked_users FROM lastfm_stats WHERE id = 1"
+      );
+      return Number(rows[0]?.linked_users ?? 0);
+    } catch {
+      return 0;
+    }
+  }
+
   // ── Internal helpers ───────────────────────────────────────────────────────
 
   _assertEnabled() {
     if (!this.enabled) throw new Error("Last.fm integration is not configured (missing apiKey/apiSecret).");
+  }
+
+  /**
+   * Increment the stored scrobbles counter (in-memory + MySQL).
+   * Called after a successful scrobble. Non-blocking — fire-and-forget.
+   */
+  _incrementScrobbleCount() {
+    this._storedScrobbles++;
+    // Persist to MySQL in the background (don't await)
+    this._getPool().then(pool => {
+      pool.execute(
+        "UPDATE lastfm_stats SET stored_scrobbles = stored_scrobbles + 1 WHERE id = 1"
+      ).catch(() => {});
+    }).catch(() => {});
   }
 
   _extractArtist(track) {

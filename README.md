@@ -120,7 +120,7 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 | Command | Description | Usage | Aliases |
 | :--- | :--- | :--- | :--- |
 | `settings` | View or change server settings (requires Manage Server) | `%settings set` | `prefix`, `pfx`, `247` |
-| `stats` | Display bot stats (uptime, ping, player count) | `%stats` | `info` |
+| `stats` | Display bot stats (uptime, ping, player count, stored scrobbles) | `%stats` | `info` |
 | `invite` | Get the bot invite link | `%invite` | `addbot`, `remix` |
 | `support` | Get an invite to the support server | `%support` | `server` |
 | `lastfm` | Link Last.fm, toggle scrobbling, view profile, play tracks | `%lastfm link` / `%lastfm play loved` | `lf`, `lfm` |
@@ -306,7 +306,7 @@ fluxer/
 │   ├── Settings.mjs             # RemoteSettingsManager + ServerSettings export
 │   ├── GatewayHandler.mjs       # Raw WS events, voice-state tracking, presence rotation
 │   ├── RecoveryManager.mjs      # Session persistence, crash recovery, 24/7 auto-join
-│   ├── LastFmManager.mjs        # Last.fm API client — auth, scrobbling, user data
+│   ├── LastFmManager.mjs        # Last.fm API client — auth, scrobbling, user data, stored scrobble stats
 │   ├── Utils.mjs                # Shared utilities
 │   ├── worker.mjs               # Background task worker
 │   ├── probe.mjs                # FFprobe wrapper for audio stream info

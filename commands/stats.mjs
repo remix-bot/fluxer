@@ -115,7 +115,7 @@ function getLivePlayerCount(playerMap) {
 
 // ── Embed builder ─────────────────────────────────────────────────────────────
 
-function buildEmbed(t, msg, { guildCount, userCount, playerCount, ping, uptime, comHash, comLink, reason, footer, loading }) {
+function buildEmbed(t, msg, { guildCount, userCount, playerCount, scrobbleCount, linkedUsers, ping, uptime, comHash, comLink, reason, footer, loading, lastfmEnabled }) {
   const num = (v) => Utils.formatNumber(v);
   const ld  = (v) => loading ? "..." : v;
 
@@ -123,6 +123,15 @@ function buildEmbed(t, msg, { guildCount, userCount, playerCount, ping, uptime, 
     `${t(msg, "responses.stats.servers")} — \`${num(guildCount)}\``,
     `${t(msg, "responses.stats.users")} — \`${ld(num(userCount))}\``,
     `${t(msg, "responses.stats.players")} — \`${num(playerCount)}\``,
+  ];
+
+  // Add Last.fm stats if the integration is enabled
+  if (lastfmEnabled) {
+    description.push(`${t(msg, "responses.stats.scrobbles")} — \`${ld(num(scrobbleCount))}\``);
+    description.push(`${t(msg, "responses.stats.linkedUsers")} — \`${ld(num(linkedUsers))}\``);
+  }
+
+  description.push(
     `${t(msg, "responses.stats.ping")} — \`${ld(`${num(ping)}ms`)}\``,
     `${t(msg, "responses.stats.uptime")} — \`${uptime}\``,
     `${t(msg, "responses.stats.build")} — [\`${comHash}\`](${comLink})`,
@@ -130,12 +139,14 @@ function buildEmbed(t, msg, { guildCount, userCount, playerCount, ping, uptime, 
     ``,
     t(msg, "responses.stats.supportKofi"),
     t(msg, "responses.stats.community"),
-  ].filter(l => l !== null).join("\n");
+  );
+
+  const desc = description.filter(l => l !== null).join("\n");
 
   const builder = new EmbedBuilder()
       .setColor(getGlobalColor())
       .setAuthor({ name: t(msg, "responses.stats.title") })
-      .setDescription(description)
+      .setDescription(desc)
       .setFooter({ text: footer || t(msg, "responses.stats.title") });
 
   if (typeof builder.setTimestamp === "function") builder.setTimestamp();
@@ -145,15 +156,25 @@ function buildEmbed(t, msg, { guildCount, userCount, playerCount, ping, uptime, 
 // ── Runner ────────────────────────────────────────────────────────────────────
 
 export async function run(message) {
+  const lastfm = this.lastfm;
+  const lastfmEnabled = lastfm?.enabled ?? false;
+
   const shared = {
     guildCount:  this.client.guilds.size,
     playerCount: getLivePlayerCount(this.players.playerMap),
+    scrobbleCount: 0,
+    linkedUsers: 0,
+    lastfmEnabled,
     uptime:      Utils.prettifyMS(Math.round(process.uptime()) * 1000),
     comHash:     this.comHash,
     comLink:     this.comLink,
     reason:      this.config.restart ?? null,
     footer:      this.config.customStatsFooter || null,
   };
+
+  // Fetch Last.fm stats in the background (non-blocking for initial reply)
+  const scrobblePromise = lastfmEnabled ? lastfm.getStoredScrobbles() : Promise.resolve(0);
+  const linkedPromise   = lastfmEnabled ? lastfm.getLinkedUsersCount()  : Promise.resolve(0);
 
   const hasCached = cachedUserCount !== null;
 
@@ -164,9 +185,13 @@ export async function run(message) {
   });
   const ping = Date.now() - start;
 
-  const users = await getUserCount(this.client);
+  const [users, scrobbleCount, linkedUsers] = await Promise.all([
+    getUserCount(this.client),
+    scrobblePromise,
+    linkedPromise,
+  ]);
 
   await msg.edit({
-    embeds: [buildEmbed((...a) => this.t(...a), message, { ...shared, userCount: users, ping, loading: false })]
+    embeds: [buildEmbed((...a) => this.t(...a), message, { ...shared, userCount: users, scrobbleCount, linkedUsers, ping, loading: false })]
   }).catch((err) => console.error("[stats] editEmbed failed:", err));
 }

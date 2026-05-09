@@ -483,6 +483,8 @@
       "servers": "📂  **Servers**",
       "users": "👥  **Users**",
       "players": "🎧  **Players**",
+      "scrobbles": "🎵  **Scrobbles**",
+      "linkedUsers": "🔗  **Linked Last.fm**",
       "ping": "🏓  **Ping**",
       "uptime": "⏱️  **Uptime**",
       "build": "🔧  **Build**",
