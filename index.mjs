@@ -2,6 +2,7 @@ import * as fs from "fs";
 import path from "path";
 import { initLogger, logger } from "./src/constants/Logger.mjs";
 import { Client, Events } from "@fluxerjs/core";
+import { get247ChannelMode, remove247ChannelMode } from "./src/constants/Helpers247.mjs";
 import { CommandHandler, CommandLoader, PrefixManager } from "./src/CommandHandler.mjs";
 import { MessageHandler, PageBuilder, HelpCommand, setGlobalColor } from "./src/MessageHandler.mjs";
 import { RemoteSettingsManager } from "./src/Settings.mjs";
@@ -519,7 +520,6 @@ export class Remix {
     const cleanId = String(channelId).replace(/\D/g, "");
     const set     = this.settingsMgr.getServer(guildId);
     const raw     = set.get("stay_247");
-    const mode    = set.get("stay_247_mode") ?? "auto";
 
     const channels = (!raw || raw === "none")
         ? new Set()
@@ -527,8 +527,11 @@ export class Remix {
             ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
             : new Set([String(raw).replace(/\D/g, "")]);
 
+    // Use per-channel mode (not the guild-wide legacy mode)
+    const channelMode = channels.has(cleanId) ? get247ChannelMode(set, cleanId) : "off";
+
     if (channels.has(cleanId) && !force) {
-      if (mode === "auto") {
+      if (channelMode === "auto") {
         if (message) {
           message.replyEmbed(
               `⚠️ 24/7 mode is enabled (auto) — I'll rejoin <#${cleanId}> in a few seconds.\n` +
@@ -542,7 +545,8 @@ export class Remix {
     if (channels.has(cleanId)) {
       channels.delete(cleanId);
       set.set("stay_247", channels.size > 0 ? [...channels] : "none");
-      if (channels.size === 0) set.set("stay_247_mode", "off");
+      // Also clean up the per-channel mode entry (prevents orphaned mode data)
+      remove247ChannelMode(set, cleanId, channels);
     }
 
     this.markIntentionalLeave(cleanId);

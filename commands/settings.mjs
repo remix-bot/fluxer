@@ -10,6 +10,19 @@ function embed(desc, opts = {}) {
   return { embeds: [b] };
 }
 
+/** Build a rich embed with fields for the 24/7 status panel */
+function richEmbed(fields, opts = {}) {
+  const b = new EmbedBuilder().setColor(getGlobalColor());
+  if (opts.title) b.setTitle(opts.title);
+  if (opts.description) b.setDescription(opts.description);
+  if (opts.footer) b.setFooter({ text: opts.footer });
+  if (opts.iconURL) b.setAuthor({ name: opts.title || "\u200b", iconURL: opts.iconURL });
+  for (const f of fields) {
+    b.addField(f.name, f.value, f.inline ?? false);
+  }
+  return { embeds: [b] };
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const SHORTCUTS = {
@@ -162,13 +175,238 @@ function save247Channels(set, channels) {
 }
 
 function modeLabel(mode) {
-  return mode === "auto" ? "🔄 auto" : mode === "on" ? "✅ on" : "❌ off";
+  return mode === "auto" ? "🔄 Auto" : mode === "on" ? "✅ On" : "❌ Off";
+}
+
+function modeEmoji(mode) {
+  return mode === "auto" ? "🔄" : mode === "on" ? "✅" : "❌";
+}
+
+function modeColor(mode) {
+  return mode === "auto" ? 0xF59E0B : mode === "on" ? 0x10B981 : 0xEF4444;
+}
+
+function modeDescription(mode, prefix) {
+  if (mode === "on")  return `Stays connected permanently. Won't rejoin after \`${prefix}leave\`.`;
+  if (mode === "auto") return `Stays connected & auto-rejoins after \`${prefix}leave\` or disconnect.`;
+  return "24/7 disabled — leaves after inactivity.";
+}
+
+/** Resolve a channel name from cache, falling back to mention */
+function resolveChannelName(client, channelId) {
+  try {
+    const ch = client?.channels?.get?.(channelId);
+    if (ch?.name) return ch.name;
+  } catch (_) {}
+  return null;
+}
+
+/**
+ * Build a rich 24/7 status panel with per-channel details.
+ * Shows each saved channel with its mode, player status, and member count.
+ * Uses color-coded sections and a clean visual layout.
+ */
+function build247StatusPanel(set, ctx, message) {
+  const channels = [...get247Channels(set)];
+  const prefix = (() => {
+    try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
+  })();
+
+  if (channels.length === 0) {
+    return richEmbed([
+      {
+        name: "Getting Started",
+        value:
+          "Join a voice channel and run one of:\n" +
+          `• \`${prefix}247 on\` — stay permanently, no auto-rejoin\n` +
+          `• \`${prefix}247 auto\` — stay + auto-rejoin after leave/disconnect\n\n` +
+          "Each channel in your server can have its own 24/7 mode.",
+        inline: false,
+      },
+    ], {
+      title: "♾️ 24/7 Mode",
+      description: "No voice channels are saved for 24/7.",
+      footer: `${prefix}247 on | ${prefix}247 auto | ${prefix}247 off`,
+    });
+  }
+
+  const fields = [];
+  const guildId = getGuildId(message);
+
+  for (let i = 0; i < channels.length; i++) {
+    const chId = channels[i];
+    const mode = get247ChannelMode(set, chId);
+    const chName = resolveChannelName(ctx.client, chId);
+    const displayName = chName ? `**${chName}** <#${chId}>` : `<#${chId}>`;
+
+    // Player status
+    let statusLine = "⚪ Not connected";
+    let trackLine = "";
+    let memberInfo = "";
+    try {
+      const player = ctx.players?.playerMap?.get(chId);
+      if (player && !player._destroyed) {
+        const currentTrack = player.queue?.getCurrent?.();
+        if (currentTrack) {
+          const title = currentTrack.title ?? currentTrack.uri ?? "Unknown";
+          statusLine = "🟢 Playing";
+          trackLine = `\n🎵 **${title.length > 45 ? title.slice(0, 42) + "..." : title}**`;
+        } else {
+          statusLine = "🟡 Connected";
+          trackLine = "\nWaiting for music...";
+        }
+
+        // Count members in the channel
+        if (guildId && ctx.observedVoiceUsers) {
+          let humans = 0;
+          for (const [, info] of ctx.observedVoiceUsers) {
+            if (String(info.channelId).replace(/\D/g, "") === chId &&
+                String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, "")) {
+              humans++;
+            }
+          }
+          memberInfo = humans > 0 ? ` 👤 ${humans}` : " 👤 0";
+        }
+      }
+    } catch (_) {}
+
+    fields.push({
+      name: `${modeEmoji(mode)} ${displayName}`,
+      value:
+        `**Mode:** ${modeLabel(mode)} — ${modeDescription(mode, prefix)}\n` +
+        `${statusLine}${memberInfo}${trackLine}`,
+      inline: false,
+    });
+  }
+
+  // Summary bar
+  const onCount   = channels.filter(id => get247ChannelMode(set, id) === "on").length;
+  const autoCount = channels.filter(id => get247ChannelMode(set, id) === "auto").length;
+  const modeSummary = [];
+  if (onCount > 0) modeSummary.push(`✅ ${onCount} on`);
+  if (autoCount > 0) modeSummary.push(`🔄 ${autoCount} auto`);
+  if (modeSummary.length === 0) modeSummary.push("❌ all off");
+
+  const summaryLine = channels.length === 1
+    ? "1 channel saved"
+    : `${channels.length} channels saved`;
+
+  return richEmbed(fields, {
+    title: "♾️ 24/7 Mode",
+    description: `**${summaryLine}** — ${modeSummary.join(" · ")}`,
+    footer: `${prefix}247 on | ${prefix}247 auto | ${prefix}247 off`,
+  });
+}
+
+/**
+ * Build a rich embed for the %247 on/auto confirmation.
+ * Uses color coding based on the mode selected.
+ */
+function build247EnabledPanel(set, channelId, mode, joined, ctx, guildId) {
+  const channels = [...get247Channels(set)];
+  const modeStr = mode === "auto" ? "🔄 Auto" : "✅ On";
+  const prefix = (() => {
+    try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
+  })();
+  const chName = resolveChannelName(ctx.client, channelId);
+  const displayName = chName ? `**${chName}** <#${channelId}>` : `<#${channelId}>`;
+
+  const fields = [];
+
+  // Primary channel that was just set
+  const connectStatus = joined
+    ? "🟢 **Bot joined and connected!**"
+    : "🟡 Mode updated (player was already active)";
+
+  fields.push({
+    name: `${modeEmoji(mode)} ${displayName}`,
+    value: `**Mode:** ${modeStr}\n${modeDescription(mode, prefix)}\n${connectStatus}`,
+    inline: false,
+  });
+
+  // Show other saved channels if any
+  const otherChannels = channels.filter(id => id !== channelId);
+  if (otherChannels.length > 0) {
+    const otherLines = otherChannels.map(id => {
+      const m = get247ChannelMode(set, id);
+      const name = resolveChannelName(ctx.client, id);
+      const label = name ? `${name}` : `<#${id}>`;
+      return `${modeEmoji(m)} ${label} — ${modeLabel(m)}`;
+    });
+    fields.push({
+      name: `📋 Other Channels (${otherChannels.length})`,
+      value: otherLines.join("\n"),
+      inline: false,
+    });
+  }
+
+  const summary = channels.length === 1
+    ? "1 channel saved"
+    : `${channels.length} channels saved`;
+
+  // Use the mode's color for the embed
+  const b = new EmbedBuilder();
+  b.setColor(modeColor(mode));
+  b.setTitle(`♾️ 24/7 ${modeStr}`);
+  b.setDescription(`**${summary}** for this server`);
+  b.setFooter({ text: `${prefix}247 off to disable for a channel` });
+  for (const f of fields) b.addField(f.name, f.value, f.inline ?? false);
+  return { embeds: [b] };
+}
+
+/**
+ * Build a rich embed for the %247 off confirmation.
+ */
+function build247DisabledPanel(set, channelId, guildId) {
+  const channels = [...get247Channels(set)];
+  const prefix = (() => {
+    try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
+  })();
+
+  const fields = [];
+
+  // The channel that was removed
+  fields.push({
+    name: `❌ <#${channelId}>`,
+    value: "24/7 mode **disabled** — bot has left this channel.",
+    inline: false,
+  });
+
+  // Show remaining saved channels if any
+  if (channels.length > 0) {
+    const remainingLines = channels.map(id => {
+      const m = get247ChannelMode(set, id);
+      return `${modeEmoji(m)} <#${id}> — ${modeLabel(m)}`;
+    });
+    fields.push({
+      name: `📋 Remaining (${channels.length})`,
+      value: remainingLines.join("\n"),
+      inline: false,
+    });
+  } else {
+    fields.push({
+      name: "📋 No Channels Saved",
+      value:
+        "All 24/7 channels have been removed.\n" +
+        "The bot will leave voice after inactivity.",
+      inline: false,
+    });
+  }
+
+  const summary = channels.length === 0
+    ? "No channels saved"
+    : `${channels.length} channel${channels.length !== 1 ? "s" : ""} remaining`;
+
+  return richEmbed(fields, {
+    title: "♾️ 24/7 Disabled",
+    description: `**${summary}**`,
+    footer: `${prefix}247 on | ${prefix}247 auto to re-enable`,
+  });
 }
 
 function format247Status(set) {
   const channels = get247Channels(set);
-  if (channels.size === 0) return "❌ disabled";
-  // Show per-channel mode for multi-voice, single mode for single channel
+  if (channels.size === 0) return "❌ Disabled";
   if (channels.size === 1) {
     const chId = [...channels][0];
     const mode = get247ChannelMode(set, chId);
@@ -186,7 +424,7 @@ function format247Summary(set) {
   if (channels.length === 0) {
     return [
       "**24/7 Mode**",
-      "Status: ❌ disabled",
+      "Status: ❌ Disabled",
       "Saved channels: none"
     ].join("\n");
   }
@@ -203,7 +441,7 @@ function prettifySettingLabel(key) {
   const custom = {
     songAnnouncements: "Song announcements",
     prefix: "Prefix",
-    pfp: "Bot avatar style",
+    pfx: "Bot avatar style",
     locale: "Locale",
     stay_247: "24/7 mode",
     volume: "Default volume",
@@ -253,11 +491,7 @@ async function handle247(ctx, message, value) {
         await player.leave().catch(() => {});
         player.destroy();
       }
-      const remaining = [...channels];
-      const extra = remaining.length > 0
-        ? `\nSaved channels left: ${remaining.map(ch => `<#${ch}> (${modeLabel(get247ChannelMode(set, ch))})`).join(", ")}`
-        : "";
-      return message.reply(embed(ctx.t(message, "responses.settings.247Disabled", { channel: id }) + extra));
+      return message.reply(build247DisabledPanel(set, id, guildId));
     }
 
     // Not in a channel — disable all for this guild
@@ -274,7 +508,18 @@ async function handle247(ctx, message, value) {
         player.destroy();
       }
     }
-    return message.reply(embed(ctx.t(message, "responses.settings.247DisabledAll")));
+    const prefix = (() => {
+      try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
+    })();
+    return message.reply(richEmbed([{
+      name: "❌ All Channels",
+      value: "24/7 mode **disabled** for all channels in this server.\nThe bot will leave voice after inactivity.",
+      inline: false,
+    }], {
+      title: "♾️ 24/7 Disabled",
+      description: "No channels saved",
+      footer: `${prefix}247 on | ${prefix}247 auto to re-enable`,
+    }));
   }
 
   // ── ON / AUTO ─────────────────────────────────────────────────────────────
@@ -294,25 +539,52 @@ async function handle247(ctx, message, value) {
   // Per-channel mode: each channel gets its own on/auto setting
   set247ChannelMode(set, id, resolved);
 
-  const resolvedLabel = resolved === "auto" ? "**auto**" : "**on**";
-  const savedSummary = channels.size === 1
-    ? `Saved channel: <#${id}> (${resolvedLabel})`
-    : `Saved channels (${channels.size}): ${[...channels].map(ch => `<#${ch}> (${modeLabel(get247ChannelMode(set, ch))})`).join(", ")}`;
+  const playerExists = ctx.players.playerMap.has(id) ||
+      [...ctx.players.playerMap.values()].some(p =>
+        cleanId(p?._channelId ?? "") === id && cleanId(p?._guildId ?? "") === cleanId(guildId)
+      );
 
-  if (
-    ctx.players.playerMap.has(id) ||
-    [...ctx.players.playerMap.values()].some(p =>
-      cleanId(p?._channelId ?? "") === id && cleanId(p?._guildId ?? "") === cleanId(guildId)
-    )
-  ) {
-    return message.reply(embed(ctx.t(message, "responses.settings.247Set", { mode: resolvedLabel, channel: id, summary: savedSummary })));
+  if (playerExists) {
+    return message.reply(build247EnabledPanel(set, id, resolved, false, ctx, guildId));
   }
 
   try {
     await ctx._spawnPlayer(guildId, id);
-    return message.reply(embed(ctx.t(message, "responses.settings.247Joined", { mode: resolvedLabel, channel: id, summary: savedSummary })));
+    return message.reply(build247EnabledPanel(set, id, resolved, true, ctx, guildId));
   } catch (e) {
-    return message.reply(embed(ctx.t(message, "responses.settings.247JoinFailed", { channel: id, error: e.message, summary: savedSummary })));
+    // Show error in a rich panel
+    const channels2 = [...get247Channels(set)];
+    const otherChannels = channels2.filter(ch => ch !== id);
+    const prefix = (() => {
+      try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
+    })();
+    const chName = resolveChannelName(ctx.client, id);
+    const displayName = chName ? `**${chName}** <#${id}>` : `<#${id}>`;
+    const fields = [
+      {
+        name: `⚠️ ${displayName}`,
+        value: `**Mode:** ${modeLabel(resolved)} — saved, but failed to join\nError: \`${e.message}\``,
+        inline: false,
+      },
+    ];
+    if (otherChannels.length > 0) {
+      const otherLines = otherChannels.map(ch => {
+        const m = get247ChannelMode(set, ch);
+        const name2 = resolveChannelName(ctx.client, ch);
+        const label = name2 ? name2 : `<#${ch}>`;
+        return `${modeEmoji(m)} ${label} — ${modeLabel(m)}`;
+      });
+      fields.push({
+        name: `📋 Other Channels (${otherChannels.length})`,
+        value: otherLines.join("\n"),
+        inline: false,
+      });
+    }
+    return message.reply(richEmbed(fields, {
+      title: "♾️ 24/7 — Join Failed",
+      description: `The channel was saved but the bot couldn't connect. Try \`${prefix}join\` or \`${prefix}play\` later.`,
+      footer: `${prefix}247 off to remove a failed channel`,
+    }));
   }
 }
 
@@ -391,10 +663,10 @@ async function applySet(ctx, message, set, key, rawValue) {
 async function handleShortcut(ctx, message, settingKey, valueTokens) {
   const set = ctx.getSettings(message);
 
-  // GET (no value provided)
+  // GET (no value provided) — show rich 24/7 panel
   if (valueTokens.length === 0) {
     if (settingKey === "stay_247") {
-      return message.reply(embed(ctx.t(message, "responses.settings.247Status", { status: format247Status(set) })));
+      return message.reply(build247StatusPanel(set, ctx, message));
     }
     const val = set.get(settingKey);
     return message.reply(embed(`\`${settingKey}\` → ${displayValue(settingKey, val)}`));
@@ -565,7 +837,7 @@ export async function run(message, data) {
   if (cmd === "getSettings") {
     if (settingKey) {
       if (settingKey === "stay_247") {
-        return message.reply(embed(format247Summary(set)));
+        return message.reply(build247StatusPanel(set, this, message));
       }
       const val = set.get(settingKey);
       const description = this.settingsMgr.descriptions?.[settingKey];
@@ -645,7 +917,7 @@ export async function run(message, data) {
     } else if (BOOL_SETTINGS.has(settingKey)) {
       extra = `\n**Valid values:** \`true\`, \`false\`, \`on\`, \`off\``;
     } else if (settingKey === "stay_247") {
-      extra = `\n**Valid values:** \`off\`, \`on\`, \`auto\`\n**Tip:** You can save more than one voice channel in the same server.`;
+      extra = `\n**Valid values:** \`off\`, \`on\`, \`auto\`\n\n**Modes:**\n• \`on\` — Stays connected permanently. Won't rejoin after \`${pfx}leave\`.\n• \`auto\` — Stays connected & auto-rejoins after \`${pfx}leave\` or disconnect.\n• \`off\` — Leaves after inactivity.\n\n**Multi-Voice:** You can save multiple voice channels in the same server. Each channel has its own mode.`;
     }
 
     return message.reply(embed(

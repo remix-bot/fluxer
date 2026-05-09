@@ -799,6 +799,15 @@ export class GatewayHandler {
             channels.delete(cleanOld);
             channels.add(cleanId);
             set.set("stay_247", [...channels]);
+
+            // Also migrate the per-channel mode from old → new channel
+            const modes = set.get("stay_247_modes");
+            if (modes && typeof modes === "object" && !Array.isArray(modes) && modes[cleanOld]) {
+              modes[cleanId] = modes[cleanOld];
+              delete modes[cleanOld];
+              set.set("stay_247_modes", modes);
+            }
+
             logger.voice247(`[247] Updated stay_247: ${cleanOld} → ${cleanId}`);
           }
         }
@@ -843,6 +852,17 @@ export class GatewayHandler {
                 logger.voice247(`[247] Channel ${cleanOld} mode='${mode}' — not rejoining.`);
                 channels.delete(cleanOld);
                 set.set("stay_247", channels.size > 0 ? [...channels] : "none");
+                // Also clean up the per-channel mode entry
+                const modes = set.get("stay_247_modes");
+                if (modes && typeof modes === "object" && !Array.isArray(modes)) {
+                  delete modes[cleanOld];
+                  set.set("stay_247_modes", modes);
+                }
+                if (channels.size === 0) set.set("stay_247_mode", "off");
+                else {
+                  const first = [...channels][0];
+                  set.set("stay_247_mode", modes?.[first] ?? "auto");
+                }
               }
             }
           }

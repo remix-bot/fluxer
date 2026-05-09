@@ -396,7 +396,8 @@ export class RecoveryManager {
                   .setColor(getGlobalColor())
                   .setDescription(
                       `Left channel <#${activeChannelId}> because of inactivity.\n` +
-                      `If you want me to stay in voice, use \`${prefix}247 on/auto\``
+                      `If you want me to stay in voice, use \`${prefix}247 on\` or \`${prefix}247 auto\`\n` +
+                      `💡 Use \`${prefix}247\` to view and manage all saved channels.`
                   )
                   .toJSON();
               if (typeof ch?.send === "function") ch.send({ embeds: [embed] }).catch(() => {});
