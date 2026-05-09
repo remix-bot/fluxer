@@ -229,12 +229,12 @@ function build247StatusPanel(set, ctx, message) {
     });
   }
 
-  // Simple per-channel list: emoji + channel + mode
+  // Simple per-channel list: emoji + channel mention + mode
   const lines = channels.map(chId => {
     const mode = get247ChannelMode(set, chId);
     const chName = resolveChannelName(ctx.client, chId);
-    const label = chName ? `${chName}` : `<#${chId}>`;
-    return `${modeEmoji(mode)} ${label} — ${modeLabel(mode)}`;
+    const label = chName ? `${chName}` : ``;
+    return `${modeEmoji(mode)} ${label} <#${chId}> — ${modeLabel(mode)}`;
   });
 
   const onCount   = channels.filter(id => get247ChannelMode(set, id) === "on").length;
@@ -264,15 +264,17 @@ function build247EnabledPanel(set, channelId, mode, joined, ctx, guildId) {
     try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
   })();
   const chName = resolveChannelName(ctx.client, channelId);
-  const label = chName ? chName : `<#${channelId}>`;
+  // Always include <#channelId> so the description is unambiguous
+  // (channel names like "2" can read as counts: "2 set to Auto — 2 channels saved")
+  const label = chName ? `**${chName}** <#${channelId}>` : `<#${channelId}>`;
 
   // Build simple list of all saved channels
   const lines = channels.map(id => {
     const m = get247ChannelMode(set, id);
     const n = resolveChannelName(ctx.client, id);
-    const l = n ? n : `<#${id}>`;
+    const l = n ? `${n}` : `<#${id}>`;
     const marker = id === channelId ? " ←" : "";
-    return `${modeEmoji(m)} ${l} — ${modeLabel(m)}${marker}`;
+    return `${modeEmoji(m)} ${l} <#${id}> — ${modeLabel(m)}${marker}`;
   });
 
   const summary = channels.length === 1
@@ -284,7 +286,7 @@ function build247EnabledPanel(set, channelId, mode, joined, ctx, guildId) {
   const b = new EmbedBuilder();
   b.setColor(modeColor(mode));
   b.setTitle(`♾️ 24/7 ${modeStr}`);
-  b.setDescription(`${label} set to **${modeStr}** — ${summary}`);
+  b.setDescription(`${label} → **${modeStr}** — ${summary}`);
   b.setFooter({ text: `${prefix}247 off to disable for a channel` });
   const raw = b.toJSON();
   raw.fields = [{
@@ -524,28 +526,12 @@ async function handle247(ctx, message, value) {
 
   save247Channels(set, channels);
 
-  // Check if the bot already has a player in this guild.
-  // Fluxer only supports one voice connection per guild — spawning a new player
-  // would disconnect the existing one. If the bot is already in a different
-  // channel in this guild, just save the 24/7 setting without spawning.
   const playerExists = ctx.players.playerMap.has(id) ||
       [...ctx.players.playerMap.values()].some(p =>
         cleanId(p?._channelId ?? "") === id && cleanId(p?._guildId ?? "") === cleanId(guildId)
       );
 
-  const guildHasPlayer = [...ctx.players.playerMap.values()].some(p =>
-    cleanId(p?._guildId ?? "") === cleanId(guildId) && !p._destroyed
-  );
-
   if (playerExists) {
-    return message.reply(build247EnabledPanel(set, id, resolved, false, ctx, guildId));
-  }
-
-  // If the bot is already in a different channel in this guild, save the
-  // channel for 24/7 but don't try to spawn a new player (which would
-  // disconnect the existing one). The bot will auto-rejoin when it
-  // eventually disconnects from the current channel.
-  if (guildHasPlayer) {
     return message.reply(build247EnabledPanel(set, id, resolved, false, ctx, guildId));
   }
 
