@@ -24,16 +24,32 @@ export async function run(msg) {
     return msg.reply({ embeds: [emptyEmbed] });
   }
 
-  const itemsPerPage = 50;
-  const totalPages = Math.ceil(guilds.length / itemsPerPage);
+  const MAX_DESC = 4096;
   const pages = [];
 
-  // Build the content for each page
-  for (let i = 0; i < guilds.length; i += itemsPerPage) {
-    const chunk = guilds.slice(i, i + itemsPerPage);
-    const list = chunk.map((g, index) => `${i + index + 1}. **${g.name}** (\`${g.id}\`)`).join("\n");
-    pages.push(list);
+  // Build pages dynamically — each page accumulates lines until it would
+  // exceed the 4096-char description limit, then starts a new page.
+  let currentLines = [];
+  let currentLen   = 0;
+
+  for (let i = 0; i < guilds.length; i++) {
+    const g = guilds[i];
+    let name = g.name || "unknown";
+    if (name.length > 40) name = name.slice(0, 37) + "...";
+    const line = `${i + 1}. **${name}** (\`${g.id}\`)`;
+    const addedLen = line.length + (currentLines.length ? 1 : 0); // +1 for \n
+
+    if (currentLen + addedLen > MAX_DESC - 20 && currentLines.length > 0) {
+      pages.push(currentLines.join("\n"));
+      currentLines = [];
+      currentLen   = 0;
+    }
+    currentLines.push(line);
+    currentLen += addedLen;
   }
+  if (currentLines.length) pages.push(currentLines.join("\n"));
+
+  const totalPages = pages.length;
 
   let currentPage = 0;
 

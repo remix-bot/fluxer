@@ -64,45 +64,74 @@ export async function run(message) {
     const totalLines    = lines.length;
 
     const LINES_PER_PAGE = 25;
-    const totalPages     = Math.ceil(totalLines / LINES_PER_PAGE);
+    const MAX_DESC       = 4096;
+    let totalPages       = Math.ceil(totalLines / LINES_PER_PAGE);
 
-    // Single page — no pagination needed
-    if (totalPages === 1) {
-      const singleEmbed = new EmbedBuilder()
-        .setColor(getGlobalColor())
-        .setTitle(`🎵 ${Utils.truncate(displayTitle, 50)}`)
-        .setDescription([
-          `by *${artist}*${syncIndicator}`,
-          ``,
-          "```",
-          lines.join("\n"),
-          "```"
-        ].join("\n"))
-        .setFooter({ text: this.t(message, "responses.lyrics.nodeLinkFooter", { lines: totalLines }) });
-      if (current.thumbnail) singleEmbed.setThumbnail(current.thumbnail);
-      return message.reply({ embeds: [singleEmbed] });
-    }
-
-    // Multi-page
+    // Build page payloads — each is the raw lyric lines for that page
     const pages = [];
     for (let i = 0; i < totalLines; i += LINES_PER_PAGE) {
       pages.push(lines.slice(i, i + LINES_PER_PAGE).join("\n"));
     }
 
+    // ── Re-check: if a page's content + header + code block exceeds 4096, re-split
+    //    into smaller chunks so setDescription never throws RangeError. ──────────
+    const CODE_WRAP = 13; // "```\n" (4) + "\n```" (5) + header-ish overhead
+    {
+      const reshaped = [];
+      for (const pageText of pages) {
+        const headerLine = `by *${artist}*${syncIndicator}`;
+        const overhead   = headerLine.length + 1 + 1 + CODE_WRAP; // header + blank + ``` + ```
+        const budget     = MAX_DESC - overhead;
+        if (pageText.length <= budget) {
+          reshaped.push(pageText);
+        } else {
+          // Split this page's text into chunks that fit
+          const pageLines = pageText.split("\n");
+          let chunk = "";
+          for (const ln of pageLines) {
+            if (chunk.length + ln.length + 1 > budget) {
+              if (chunk) reshaped.push(chunk);
+              chunk = ln;
+            } else {
+              chunk += (chunk ? "\n" : "") + ln;
+            }
+          }
+          if (chunk) reshaped.push(chunk);
+        }
+      }
+      pages.length = 0;
+      pages.push(...reshaped);
+      totalPages = pages.length;
+    }
+
+    // ── Single page — no pagination needed ────────────────────────────────────
+    if (totalPages === 1) {
+      const headerLine = `by *${artist}*${syncIndicator}`;
+      const descBody   = pages[0];
+      const singleDesc = [headerLine, "", "```", descBody, "```"].join("\n");
+
+      const singleEmbed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setTitle(`🎵 ${Utils.truncate(displayTitle, 50)}`)
+        .setDescription(singleDesc.slice(0, MAX_DESC))
+        .setFooter({ text: this.t(message, "responses.lyrics.nodeLinkFooter", { lines: totalLines }) });
+      if (current.thumbnail) singleEmbed.setThumbnail(current.thumbnail);
+      return message.reply({ embeds: [singleEmbed] });
+    }
+
+    // ── Multi-page ────────────────────────────────────────────────────────────
     let currentPage      = 0;
     let emojiRemoveTimeout;
 
     const buildContent = (pageIdx, expired = false) => {
+      const headerLine = `by *${artist}*${syncIndicator} • Page ${pageIdx + 1}/${totalPages}`;
+      const descBody   = pages[pageIdx];
+      const desc       = [headerLine, "", "```", descBody, "```"].join("\n");
+
       const b = new EmbedBuilder()
         .setColor(getGlobalColor())
         .setTitle(`🎵 ${Utils.truncate(displayTitle, 50)}`)
-        .setDescription([
-          `by *${artist}*${syncIndicator} • Page ${pageIdx + 1}/${totalPages}`,
-          ``,
-          "```",
-          pages[pageIdx],
-          "```"
-        ].join("\n"))
+        .setDescription(desc.slice(0, MAX_DESC))
         .setFooter({ text: expired
           ? this.t(message, "responses.lyrics.controlsExpired", { lines: totalLines })
           : this.t(message, "responses.lyrics.nodeLinkFooter", { lines: totalLines }) });
@@ -152,16 +181,12 @@ export async function run(message) {
     setTimeout(() => {
       clearTimeout(emojiRemoveTimeout);
       unobserve();
+      const closedHeader = `by *${artist}*${syncIndicator} • Page ${currentPage + 1}/${totalPages}`;
+      const closedDesc   = [closedHeader, "", "```", pages[currentPage], "```"].join("\n");
       const closedEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
         .setTitle(`🎵 ${Utils.truncate(displayTitle, 50)}`)
-        .setDescription([
-          `by *${artist}*${syncIndicator} • Page ${currentPage + 1}/${totalPages}`,
-          ``,
-          "```",
-          pages[currentPage],
-          "```"
-        ].join("\n"))
+        .setDescription(closedDesc.slice(0, MAX_DESC))
         .setFooter({ text: this.t(message, "responses.lyrics.sessionClosed", { lines: totalLines }) });
       if (current.thumbnail) closedEmbed.setThumbnail(current.thumbnail);
       msg.edit({ embeds: [closedEmbed] }).catch(() => {});

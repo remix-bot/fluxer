@@ -51,13 +51,16 @@ export async function run(msg, data) {
   let desc = "";
   for (const [channelId, total] of channelCounts) {
     const name = await getChannelName(channelId);
-    desc += this.t(msg, "responses.test.channelEntry", { name, count: total });
+    const entry = this.t(msg, "responses.test.channelEntry", { name, count: total });
+    // Guard against 4096-char embed description limit
+    if (desc.length + entry.length > 4080) break;
+    desc += entry;
   }
 
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
     .setTitle(this.t(msg, "responses.test.title"))
-    .setDescription(desc.trim())
+    .setDescription(desc.trim().slice(0, 4096))
     ;
   msg.reply({ embeds: [embed] });
 }
