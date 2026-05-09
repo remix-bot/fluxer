@@ -77,19 +77,6 @@ export class Remix {
     client.setMaxListeners(50);
     this.client = client;
 
-    // ── VoiceManager — MUST be created BEFORE login ──────────────────────────
-    // Per Fluxer.js docs: "Create a VoiceManager before login so it receives
-    // VoiceStatesSync from READY/GUILD_CREATE. This lets the manager see users
-    // already in voice when the bot starts."
-    // If created after login, the VoiceStatesSync events are already fired and
-    // missed — the bot won't know who's in voice channels after a restart.
-    try {
-      getVoiceManager(client);
-      // VoiceManager will auto-register for VoiceStatesSync / VoiceStateUpdate
-    } catch (e) {
-      logger.warn("[VoiceManager] Pre-login init failed:", e.message);
-    }
-
     // ── Message & Settings handlers ──────────────────────────────────────────
     const messages = new MessageHandler(this.client);
     this.messages  = messages;
@@ -119,7 +106,7 @@ export class Remix {
           false,
           {
             icon_url: msg.channel.channel.guild?.icon
-                ? `https://fluxerusercontent.com/icons/${msg.channel.channel.guild.id}/${msg.channel.channel.guild.icon}.webp`
+                ? `https://cdn.fluxer.app/icons/${msg.channel.channel.guild.id}/${msg.channel.channel.guild.icon}.webp`
                 : null,
             title:    msg.channel.channel.guild?.name        ?? null,
           }
@@ -150,6 +137,10 @@ export class Remix {
     // VoiceStateUpdate).
     this.gatewayHandler = new GatewayHandler(this, this.recoveryManager);
 
+    // Give RecoveryManager a back-reference to GatewayHandler so it can call
+    // reseedVoiceStatesForChannel() after spawning a player.
+    this.recoveryManager.gatewayHandler = this.gatewayHandler;
+
     // Register GuildCreate, GuildDelete, VoiceStateUpdate handlers now so they
     // are active before the first Ready event fires.
     this.gatewayHandler.setupEventHandlers();
@@ -179,6 +170,25 @@ export class Remix {
             `[settings] Cleaned stay_247 for guild ${guildId}: ${JSON.stringify(val)} → ${JSON.stringify(newVal)}`
           );
         }
+
+        // ── Migrate guild-wide stay_247_mode → per-channel stay_247_modes ──
+        // If stay_247_modes doesn't exist yet but stay_247_mode does, create
+        // the per-channel map from the guild-wide mode so all channels inherit
+        // the same mode (backward compatible).
+        const modesMap = serverSettings.get("stay_247_modes");
+        if (!modesMap || typeof modesMap !== "object") {
+          const guildMode = serverSettings.get("stay_247_mode") ?? "off";
+          if (guildMode && guildMode !== "off" && cleaned.length > 0) {
+            const newModes = {};
+            for (const chId of cleaned) {
+              newModes[chId] = guildMode;
+            }
+            serverSettings.set("stay_247_modes", newModes);
+            logger.settings(
+              `[settings] Migrated stay_247_mode → stay_247_modes for guild ${guildId}: ${guildMode} → ${JSON.stringify(newModes)}`
+            );
+          }
+        }
       }
       this.recoveryManager.settingsReady = true;
       this.recoveryManager.tryAutoJoin();
@@ -189,13 +199,10 @@ export class Remix {
       logger.player("Logged in as " + (client.user?.username ?? "bot"));
 
       try {
-        // VoiceManager was created before login to catch VoiceStatesSync.
-        // Ensure it's accessible and log its state.
-        const vm = getVoiceManager(client);
-        const guildCount = vm.voiceStates?.size ?? 0;
-        logger.player(`VoiceManager ready (${guildCount} guild voice-state maps).`);
+        getVoiceManager(client);
+        logger.player("VoiceManager initialized.");
       } catch (e) {
-        logger.warn("[VoiceManager] Ready check failed:", e.message);
+        logger.warn("[VoiceManager] Init failed:", e.message);
       }
 
       const botId = client.user?.id ?? "0";
@@ -250,7 +257,6 @@ export class Remix {
       timers: this.T,
     });
     this.players.observedVoiceUsers = this.observedVoiceUsers;
-    this.players.observedVoiceBots  = this.observedVoiceBots;
 
     // ── Periodic alone-check ───────────────────────────────────────────────────
     const ALONE_CHECK_INTERVAL = this.T.aloneCheckInterval;
@@ -280,8 +286,6 @@ export class Remix {
           if (player._is247Enabled()) continue;
 
           let hasHuman = false;
-
-          // Source 1: observedVoiceUsers map (seeded from READY/GUILD_CREATE + VOICE_STATE_UPDATE)
           for (const [, info] of this.observedVoiceUsers) {
             const infoChannel = String(info.channelId ?? "").replace(/\D/g, "");
             const infoGuild   = String(info.guildId   ?? "").replace(/\D/g, "");
@@ -291,22 +295,32 @@ export class Remix {
             }
           }
 
-          // Source 2: VoiceManager.voiceStates (populated from VoiceStatesSync events)
-          // This is the authoritative source per Fluxer.js docs.  It catches users
-          // who were already in voice when the bot started, even if
-          // observedVoiceUsers hasn't been fully seeded yet.
+          // Fallback: check guild voice_states cache if observedVoiceUsers
+          // didn't find anyone (can happen after bot restart before reseed).
           if (!hasHuman) {
             try {
-              const vm = getVoiceManager(this.client);
-              const participants = vm.listParticipantsInChannel?.(guildId, channelId);
-              if (participants && participants.length > 0) {
-                // Filter out bots — listParticipantsInChannel returns ALL users
-                const guild = this.client.guilds.get(guildId);
-                for (const uid of participants) {
-                  const member = guild?.members?.get?.(uid);
-                  if (!member?.user?.bot) {
-                    hasHuman = true;
-                    break;
+              const guild = this.client?.guilds?.get?.(cleanGuildId);
+              const voiceStates = guild?.voice_states ?? guild?.voiceStates;
+              if (voiceStates) {
+                const entries = Array.isArray(voiceStates)
+                    ? voiceStates
+                    : typeof voiceStates.values === "function"
+                        ? [...voiceStates.values()]
+                        : Object.values(voiceStates);
+                for (const state of entries) {
+                  const stateChannel = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
+                  if (stateChannel === cleanChanId) {
+                    const stateUserId = state?.userId ?? state?.user_id ?? state?.id;
+                    const member = guild?.members?.get?.(stateUserId);
+                    const isBot = member?.user?.bot ?? state?.member?.user?.bot ?? false;
+                    if (!isBot) {
+                      hasHuman = true;
+                      // Also update observedVoiceUsers so future checks are fast
+                      if (stateUserId) {
+                        this.observedVoiceUsers.set(stateUserId, { channelId: cleanChanId, guildId: cleanGuildId });
+                      }
+                      break;
+                    }
                   }
                 }
               }
@@ -616,15 +630,12 @@ export class Remix {
         name:   guild.name,
         id:     guild.id,
         icon:   guild.icon
-            ? `https://fluxerusercontent.com/icons/${guild.id}/${guild.icon}.webp`
+            ? `https://cdn.fluxer.app/icons/${guild.id}/${guild.icon}.webp`
             : null,
         description: guild.description ?? null,
         ownerId: guild.ownerId ?? null,
-        channelIds: guild.channels && typeof guild.channels.keys === "function"
-            ? [...guild.channels.keys()]
-            : [],
         voiceChannels: guild.channels
-            .filter(c => c.isVoice?.() ?? (c.type === 2) ?? false)
+            .filter(c => c.isVoiceBased?.() ?? false)
             .map(c => {
               // Build voice participants list for this channel
               const voiceParticipants = [];

@@ -1,9 +1,9 @@
 import * as fs from "fs";
 import { logger } from "./constants/Logger.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getVoiceManager } from "@fluxerjs/voice";
 import { getGlobalColor } from "./MessageHandler.mjs";
 import Player from "./Player.mjs";
+import { get247ChannelMode } from "./constants/Helpers247.mjs";
 
 /**
  * RecoveryManager — handles session persistence, boot recovery, 24/7 auto-join,
@@ -44,11 +44,24 @@ export class RecoveryManager {
     this.botReady = false;
     this.settingsReady = false;
 
+    // ── Auto-join guard ───────────────────────────────────────────────────────
+    // Prevents concurrent tryAutoJoin() calls.  Both settings "ready" and
+    // Events.Ready can trigger tryAutoJoin(); without this guard, two calls
+    // could overlap and attempt to spawn duplicate players.
+    this._autoJoinRunning = false;
+    this._autoJoinDone    = false;
+
     // ── Expose convenience methods on the Remix instance ──────────────────────
     // These are referenced by the shutdown hooks and dashboard.
     remix._buildRecoveryState = () => this.buildRecoveryState();
     remix._writeRecoveryState = (state, label) => this.writeRecoveryState(state, label);
     remix._spawnPlayer = this.spawnPlayer.bind(this);
+
+    // ── GatewayHandler reference (set after construction) ────────────────────
+    // RecoveryManager is created before GatewayHandler, so we can't pass it
+    // in the constructor. Instead, index.mjs sets this reference after both
+    // objects are constructed.
+    this.gatewayHandler = null;
   }
 
   // ── Utility helpers ──────────────────────────────────────────────────────────
@@ -76,11 +89,21 @@ export class RecoveryManager {
         const channelId = this.normalizeChannelId(player._channelId ?? channelKey);
         if (!guildId || !channelId) continue;
 
-        // ── Skip 24/7 channels ───────────────────────────────────────────
-        // 24/7 on/auto already handles rejoin on boot via tryAutoJoin() which
-        // reads the stay_247 setting from MySQL. No need to save/restore
-        // these sessions in recovery.json — that's only for regular voice
-        // sessions where users had active queues.
+        // ── Save ALL active sessions including 24/7 ──────────────────────
+        // Previously, 24/7 channels were skipped because tryAutoJoin()
+        // handles reconnection on boot.  However, this meant queue data
+        // (current track, queue, loop state) was lost on restart.
+        // Now we save 24/7 channels too, with their mode stored in the
+        // recovery data so tryAutoJoin() can restore both the connection
+        // and the music state.
+
+        const dedupeKey = `${guildId}:${channelId}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+
+        // Determine if this is a 24/7 channel and get its per-channel mode
+        let is247 = false;
+        let mode247 = null;
         try {
           const set = remix.settingsMgr.getServer(guildId);
           if (set) {
@@ -91,16 +114,12 @@ export class RecoveryManager {
                   ? raw247.map(id => this.normalizeChannelId(id)).filter(Boolean)
                   : [this.normalizeChannelId(raw247)].filter(Boolean);
               if (channels247.includes(channelId) || channels247.includes(homeChannel)) {
-                logger.recovery(`[Recovery] Skipping 24/7 channel ${channelId} — auto-join handles this on boot.`);
-                continue;
+                is247 = true;
+                mode247 = get247ChannelMode(set, homeChannel || channelId);
               }
             }
           }
         } catch (_) {}
-
-        const dedupeKey = `${guildId}:${channelId}`;
-        if (seen.has(dedupeKey)) continue;
-        seen.add(dedupeKey);
 
         const current = player.queue.getCurrent();
         const queueData = player.queue.getQueue();
@@ -117,6 +136,8 @@ export class RecoveryManager {
           loopQueue: !!player.queue.loop,
           loopSong: !!player.queue.songLoop,
           preferredVolume: player.preferredVolume ?? 1,
+          is247,
+          mode247,   // "on" | "auto" | null
           savedAt: Date.now(),
         });
       } catch (e) {
@@ -277,14 +298,35 @@ export class RecoveryManager {
 
     // Only enforce 24/7 check if we are NOT recovering from a reboot
     if (!recoveryData) {
-      const set = remix.settingsMgr.getServer(guildId);
-      const raw = set.get("stay_247");
-      if (!raw || raw === "none") return;
+      // Try the guildId as-is first, then the cleaned version.
+      // The settingsMgr Map key might differ from the guildId format
+      // passed in (e.g. string vs number, or cleaned vs raw).
+      let set = remix.settingsMgr.getServer(guildId);
+      let raw = set.get("stay_247");
+      if ((!raw || raw === "none") && String(guildId).replace(/\D/g, "") !== String(guildId)) {
+        const cleanGId = String(guildId).replace(/\D/g, "");
+        set = remix.settingsMgr.getServer(cleanGId);
+        raw = set.get("stay_247");
+      }
+      if (!raw || raw === "none") {
+        // Diagnostic: log why we're skipping
+        logger.recovery(
+          `[PlayerSpawn] Skipping 24/7 channel ${cleanChannelId} in guild ${guildId}: ` +
+          `stay_247=${JSON.stringify(raw)}. ` +
+          `SettingsMgr has this guild: ${remix.settingsMgr.guilds.has(guildId)}`
+        );
+        return;
+      }
 
       const channels = Array.isArray(raw)
           ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
           : new Set([String(raw).replace(/\D/g, "")]);
-      if (!channels.has(cleanChannelId)) return;
+      if (!channels.has(cleanChannelId)) {
+        logger.recovery(
+          `[PlayerSpawn] Skipping channel ${cleanChannelId}: not in stay_247 list [${[...channels].join(", ")}]`
+        );
+        return;
+      }
     }
 
     // Atomic mutex check — blocks concurrent spawns for the same channel.
@@ -297,11 +339,10 @@ export class RecoveryManager {
         try {
           channel = await remix.client.channels.fetch(cleanChannelId);
         } catch (e) {
-          logger.warn("[PlayerSpawn] Could not fetch channel", cleanChannelId, e.message);
-          return;
+          throw new Error(`Could not fetch channel ${cleanChannelId}: ${e.message}`);
         }
       }
-      if (!channel) { logger.warn("[PlayerSpawn] Channel not found:", cleanChannelId); return; }
+      if (!channel) { throw new Error(`Channel not found: ${cleanChannelId}`); }
       remix.client.channels.set(cleanChannelId, channel);
 
       const p = new Player(remix.config.token, {
@@ -325,17 +366,22 @@ export class RecoveryManager {
             : Array.isArray(raw2)
                 ? raw2.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
                 : [String(raw2).replace(/\D/g, "")].filter(Boolean);
-        const mode2 = remix.settingsMgr.getServer(guildId).get("stay_247_mode") ?? "auto";
+
+        // Per-channel mode: check the mode for this specific channel
+        const matchChannel = channels2.includes(homeChannelId) ? homeChannelId
+            : channels2.includes(activeChannelId) ? activeChannelId
+            : null;
+        const mode2 = matchChannel
+            ? get247ChannelMode(remix.settingsMgr.getServer(guildId), matchChannel)
+            : "off";
 
         // Remove player from map and destroy it now that we've read the state.
         remix.players.playerMap.delete(activeChannelId);
         if (activeChannelId !== cleanChannelId) remix.players.playerMap.delete(cleanChannelId);
         p.destroy();
 
-        if (channels2.includes(homeChannelId) || channels2.includes(activeChannelId)) {
-          if (mode2 === "on" || mode2 === "auto") {
-            this.scheduleSpawn(guildId, homeChannelId, this.T.rejoin247Delay, null, "247-autoleave");
-          }
+        if (matchChannel && (mode2 === "on" || mode2 === "auto")) {
+          this.scheduleSpawn(guildId, homeChannelId, this.T.rejoin247Delay, null, "247-autoleave");
         } else {
           // 24/7 is off — send inactivity message with hint to enable 247
           try {
@@ -353,7 +399,7 @@ export class RecoveryManager {
                       `If you want me to stay in voice, use \`${prefix}247 on/auto\``
                   )
                   .toJSON();
-              ch.send({ embeds: [embed] }).catch(() => {});
+              if (typeof ch?.send === "function") ch.send({ embeds: [embed] }).catch(() => {});
             }
           } catch (_) {}
         }
@@ -387,7 +433,7 @@ export class RecoveryManager {
             }
           }
         }
-        ch?.send({ embeds: [{ description: String(m), color: getGlobalColor() }] }).catch(() => {});
+        if (typeof ch?.send === "function") ch.send({ embeds: [{ description: String(m), color: getGlobalColor() }] }).catch(() => {});
       });
 
       // ── Join channel ───────────────────────────────────────────────────────
@@ -401,6 +447,30 @@ export class RecoveryManager {
 
         // Record the intended 247 home channel for this player.
         p._home247Channel = cleanChannelId;
+
+        // ── Re-seed voice states for this channel ────────────────────────────
+        // After joining, the bot needs to know who's already in the channel.
+        // The initial seedVoiceStatesFromGuilds() may have missed users because
+        // the guild cache wasn't fully populated at boot, or because Discord
+        // sends voice states during GUILD_CREATE before the bot processes them.
+        // This re-reads the guild's voice_states cache and updates the
+        // observedVoiceUsers map so the bot detects humans already present.
+        try {
+          const humansFound = this.gatewayHandler.reseedVoiceStatesForChannel(guildId, cleanChannelId);
+          if (humansFound > 0) {
+            logger.recovery(
+              `[Recovery] Re-seeded voice states for ${cleanChannelId}: ` +
+              `${humansFound} human(s) already present — cancelling inactivity timer.`
+            );
+            // Humans are present — stop any inactivity timer that Player.join()
+            // may have started (it starts one if the queue is empty).
+            if (typeof p._stopInactivityTimer === "function") {
+              p._stopInactivityTimer();
+            }
+          }
+        } catch (reseedErr) {
+          logger.warn("[PlayerSpawn] Voice state reseed failed:", reseedErr?.message);
+        }
 
         // ── Restore recovery state ───────────────────────────────────────────
         if (recoveryData) {
@@ -433,52 +503,6 @@ export class RecoveryManager {
           }
           logger.recovery(`[Recovery] Restored session in ${cleanChannelId} (${recoveryData.queue?.length ?? 0} track(s)).`);
         }
-
-        // ── Post-recovery voice state verification ─────────────────────────
-        // After a bot restart, voice state data may not be fully settled when
-        // the player first joins.  Schedule a delayed check to:
-        //   1. Re-seed observedVoiceUsers from VoiceManager (which receives
-        //      VoiceStatesSync events from READY/GUILD_CREATE)
-        //   2. Stop any incorrectly-started inactivity timers if humans are
-        //      present in the channel
-        setTimeout(() => {
-          if (p._destroyed) return;
-
-          // Re-seed observedVoiceUsers from VoiceManager for this guild
-          try {
-            const vm = getVoiceManager(remix.client);
-            const guildVoiceMap = vm?.voiceStates?.get?.(guildId);
-            if (guildVoiceMap) {
-              const cleanGuildId = String(guildId).replace(/\D/g, "");
-              for (const [userId, channelId] of guildVoiceMap) {
-                if (!userId || !channelId) continue;
-                const guild = remix.client.guilds.get(guildId);
-                const member = guild?.members?.get?.(userId);
-                const isBot = member?.user?.bot ?? false;
-                if (!isBot) {
-                  remix.observedVoiceUsers.set(userId, { channelId, guildId: cleanGuildId });
-                }
-              }
-            }
-          } catch (_) {}
-
-          // Check if humans are now detected in the channel
-          if (p._hasHumansInChannel()) {
-            logger.recovery(
-              `[Recovery] Post-join check: humans detected in ${cleanChannelId}, ` +
-              `stopping any inactivity timer.`
-            );
-            p._stopInactivityTimer();
-          } else if (!p._is247Enabled()) {
-            // No humans and not 24/7 — start inactivity timer if not already running
-            // (the bot may have been alone when it restarted)
-            logger.recovery(
-              `[Recovery] Post-join check: no humans in ${cleanChannelId}, ` +
-              `starting inactivity timer.`
-            );
-            p._startInactivityTimer();
-          }
-        }, 8_000); // 8s grace period for voice states to settle after join
       } catch (e) {
         remix.players.playerMap.delete(cleanChannelId);
         try { p.destroy(); } catch (_) {}
@@ -610,6 +634,8 @@ export class RecoveryManager {
    */
   async tryAutoJoin() {
     if (!this.botReady || !this.settingsReady) return;
+    if (this._autoJoinDone || this._autoJoinRunning) return;
+    this._autoJoinRunning = true;
     const { remix } = this;
 
     await new Promise(r => setTimeout(r, 2000));
@@ -645,8 +671,6 @@ export class RecoveryManager {
     for (const [guildId, serverSettings] of remix.settingsMgr.guilds) {
       const raw = serverSettings.get("stay_247");
       if (!raw || raw === "none") continue;
-      const mode = serverSettings.get("stay_247_mode") ?? "auto";
-      if (mode !== "auto" && mode !== "on") continue;
 
       const channelIds = Array.isArray(raw)
           ? raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
@@ -654,21 +678,46 @@ export class RecoveryManager {
 
       for (const channelId of channelIds) {
         const clean = String(channelId).replace(/\D/g, "");
+        // Per-channel mode: only join if this specific channel is on/auto
+        const mode = get247ChannelMode(serverSettings, clean);
+        if (mode !== "auto" && mode !== "on") continue;
+
         if (clean && !recoveryChannels.has(clean)) {
           joinList.push({ guildId, channelId: clean, recoveryData: null });
+          logger.recovery(
+            `[Recovery] Added 24/7 channel ${clean} (guild ${guildId}, mode ${mode}) to join list`
+          );
         }
       }
     }
 
+    logger.recovery(
+      `[Recovery] Join list built: ${joinList.length} channel(s) ` +
+      `(${joinList.filter(j => j.recoveryData).length} recovery, ` +
+      `${joinList.filter(j => !j.recoveryData).length} 24/7)`
+    );
+
     // ── Filter out guilds the bot is no longer a member of ────────────────
     const filteredList = [];
     for (const item of joinList) {
-      if (!remix.client.guilds.has(item.guildId)) {
+      // Try both the raw guildId and the cleaned (digits-only) version.
+      // The settings Map might use a different format than client.guilds
+      // (e.g. string vs number, or with/without non-digit chars).
+      const cleanGId = String(item.guildId).replace(/\D/g, "");
+      const hasRaw   = remix.client.guilds.has(item.guildId);
+      const hasClean = cleanGId && cleanGId !== String(item.guildId) && remix.client.guilds.has(cleanGId);
+
+      if (!hasRaw && !hasClean) {
         logger.recovery(
-          `[Recovery] Skipping guild ${item.guildId} channel ${item.channelId} — bot is no longer in the server.`
+          `[Recovery] Skipping guild ${item.guildId} channel ${item.channelId} — bot is no longer in the server. ` +
+          `(hasRaw=${hasRaw}, hasClean=${hasClean}, cleanGId=${cleanGId}, ` +
+          `clientGuildsSample=[${[...remix.client.guilds.keys()].slice(0, 3).join(", ")}])`
         );
         this.cleanStaleGuild(item.guildId);
       } else {
+        if (hasClean && !hasRaw) {
+          item.guildId = cleanGId;
+        }
         filteredList.push(item);
       }
     }
@@ -707,38 +756,13 @@ export class RecoveryManager {
       `(${ok} ok, ${errors.length} failed).`
     );
 
-    // ── Final voice state reconciliation ────────────────────────────────────
-    // After all recovery spawns complete, do one final pass to re-seed
-    // observedVoiceUsers from VoiceManager.  This ensures that even if some
-    // guilds' VoiceStatesSync events arrived late, the data is captured.
-    try {
-      const vm = getVoiceManager(remix.client);
-      if (vm?.voiceStates) {
-        let reconciled = 0;
-        for (const [guildId, userMap] of vm.voiceStates) {
-          if (!userMap) continue;
-          const cleanGuildId = String(guildId).replace(/\D/g, "");
-          for (const [userId, channelId] of userMap) {
-            if (!userId || !channelId) continue;
-            const guild = remix.client.guilds.get(guildId);
-            const member = guild?.members?.get?.(userId);
-            const isBot = member?.user?.bot ?? false;
-            if (!isBot && !remix.observedVoiceUsers.has(userId)) {
-              remix.observedVoiceUsers.set(userId, { channelId, guildId: cleanGuildId });
-              reconciled++;
-            }
-          }
-        }
-        if (reconciled > 0) {
-          logger.recovery(`[Recovery] Final reconciliation: added ${reconciled} user(s) to observedVoiceUsers.`);
-        }
-      }
-    } catch (_) {}
-
     // Delete recovery file AFTER all spawns have been attempted (success or fail).
     // If the process crashes mid-recovery, the file still exists for next boot.
     if (recoveryFileExisted) {
       try { fs.unlinkSync(this.recoveryPath); } catch (_) {}
     }
+
+    this._autoJoinRunning = false;
+    this._autoJoinDone = true;
   }
 }

@@ -19,6 +19,7 @@ import https from "node:https";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "./MessageHandler.mjs";
 import { logger } from "./constants/Logger.mjs";
+import { get247ChannelMode } from "./constants/Helpers247.mjs";
 import { PROVIDER_NAMES } from "./constants/providers.mjs";
 
 /** Emit a plain embed payload so listeners can send it directly */
@@ -341,6 +342,7 @@ export default class Player extends EventEmitter {
   // Inactivity timeout
   _inactivityTimer     = null;
   _inactivityLimit = 3 * 60 * 1000; // 3 min default
+  _pendingInactivityCheck = false; // Guard to prevent race between join() timer and reseed
 
   // Join mutex — prevents concurrent join() calls from racing each other
   _isJoining           = false;
@@ -414,8 +416,6 @@ export default class Player extends EventEmitter {
       if (!set?.get) return false;
       const raw = set.get("stay_247");
       if (!raw || raw === "none") return false;
-      const mode = set.get("stay_247_mode") ?? "auto";
-      if (mode !== "on" && mode !== "auto") return false;
 
       const channels = Array.isArray(raw)
           ? raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
@@ -430,9 +430,15 @@ export default class Player extends EventEmitter {
           : null;
       const currentChannel = String(this._channelId ?? "").replace(/\D/g, "");
 
-      // Check home channel first (most reliable), then current channel
-      // (covers players created via join command that have no home set).
-      return channels.includes(homeChannel) || channels.includes(currentChannel);
+      // Determine which channel to check the mode for
+      const matchChannel = channels.includes(homeChannel) ? homeChannel
+          : channels.includes(currentChannel) ? currentChannel
+          : null;
+      if (!matchChannel) return false;
+
+      // Per-channel mode lookup: each channel can have its own on/auto/off
+      const mode = get247ChannelMode(set, matchChannel);
+      return mode === "on" || mode === "auto";
     };
 
     if (this.settingsMgr?.getServer) return checkSettings(this.settingsMgr.getServer(this._guildId));
@@ -604,43 +610,36 @@ export default class Player extends EventEmitter {
     if (!this._channelId || !this._guildId) return false;
     const cleanChan  = String(this._channelId).replace(/\D/g, "");
     const cleanGuild = String(this._guildId).replace(/\D/g, "");
-
-    // ── Source 1: observedVoiceUsers map (fast path) ────────────────────────
     try {
       const voiceUsers = this._observedVoiceUsers;
       if (voiceUsers) {
-        for (const [, info] of voiceUsers) {
+        for ( const [, info] of voiceUsers) {
           if (
               String(info.guildId   ?? "").replace(/\D/g, "") === cleanGuild &&
               String(info.channelId ?? "").replace(/\D/g, "") === cleanChan
           ) return true;
         }
-        // Don't return false here — fall through to VoiceManager check.
-        // After a bot restart, observedVoiceUsers may be empty if the
-        // GUILD_CREATE purge bug hasn't been fully resolved, but VoiceManager
-        // receives VoiceStatesSync events and has the correct data.
+        // Don't return false here — fall through to guild voice_states
+        // fallback in case observedVoiceUsers hasn't been populated yet
+        // (e.g., right after bot restart before reseed completes).
       }
     } catch (_) {}
-
-    // ── Source 2: VoiceManager.voiceStates (authoritative per Fluxer.js docs) ──
     try {
-      const vm = getVoiceManager(this.client);
-      const participants = vm?.listParticipantsInChannel?.(cleanGuild, cleanChan);
-      if (participants && participants.length > 0) {
-        const guild = this.client?.guilds?.get?.(this._guildId);
-        for (const uid of participants) {
-          const member = guild?.members?.get?.(uid);
-          if (!member?.user?.bot) return true;
+      // @fluxerjs channels do NOT have a .members property.
+      // Use the guild's member manager and filter by voice state instead.
+      const guild = this.client?.guilds?.get?.(this._guildId);
+      if (guild?.members) {
+        for (const member of guild.members.values()) {
+          // GuildMember doesn't expose voice channelId directly in @fluxerjs,
+          // so fall through to the voice_states raw data check below.
+          if (!member?.user?.bot) {
+            // We can't determine channel from member alone — skip here
+            // and rely on _observedVoiceUsers or voice_states instead.
+          }
         }
       }
-    } catch (_) {}
-
-    // ── Source 3: guild.voice_states (legacy fallback) ──────────────────────
-    // Fluxer.js Guild does NOT normally have a voice_states property, but
-    // check anyway for forward compatibility.
-    try {
-      const guild = this.client?.guilds?.get?.(this._guildId);
-      const voiceStates = guild?.voice_states ?? guild?.voiceStates;
+      // Fallback: iterate raw voice_states on the guild object.
+      const voiceStates = guild?.voice_states;
       if (voiceStates) {
         const entries = Array.isArray(voiceStates)
             ? voiceStates
@@ -651,6 +650,7 @@ export default class Player extends EventEmitter {
           const stateChannelId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
           if (stateChannelId === cleanChan) {
             const userId = String(state?.userId ?? state?.user_id ?? "");
+            // Check if user is a bot — look up via members or observedVoiceUsers
             const member = guild?.members?.get?.(userId);
             const isBot = member?.user?.bot ?? false;
             if (!isBot) return true;
@@ -658,7 +658,6 @@ export default class Player extends EventEmitter {
         }
       }
     } catch (_) {}
-
     return false;
   }
 
@@ -695,6 +694,12 @@ export default class Player extends EventEmitter {
   }
 
   _stopInactivityTimer() {
+    // Also cancel any pending inactivity check that Player.join() scheduled.
+    // This is important after recovery: reseedVoiceStatesForChannel() calls
+    // _stopInactivityTimer() when it finds humans in the channel, but
+    // Player.join() may have already scheduled a 3-second delayed check.
+    // Clearing the flag prevents that delayed check from restarting the timer.
+    this._pendingInactivityCheck = false;
     if (this._inactivityTimer) {
       logger.inactivity(`[Player] Stopping inactivity timer for guild ${this._guildId}`);
       clearTimeout(this._inactivityTimer);
@@ -1315,16 +1320,20 @@ export default class Player extends EventEmitter {
       if (!this.queue.isEmpty() && !this.queue.getCurrent()) {
         this.playNext();
       } else if (this.queue.isEmpty()) {
-        // Only start inactivity timer if no humans are in the channel.
-        // After a bot restart, humans may already be in the channel — don't
-        // start a timer that would cause the bot to leave immediately.
+        // Delay the inactivity timer start to give the caller (e.g. RecoveryManager.spawnPlayer)
+        // time to re-seed voice states and check for humans already in the channel.
+        // The reseed will call _stopInactivityTimer() if humans are found, which
+        // sets this._inactivityTimer = null.  When this callback fires, it checks
+        // whether the timer was cancelled (by checking if _inactivityTimer is null)
+        // before starting a new one.
+        this._pendingInactivityCheck = true;
         setTimeout(() => {
+          // If the inactivity timer was stopped between scheduling and now (e.g.
+          // by reseedVoiceStatesForChannel finding humans), don't restart it.
+          if (!this._pendingInactivityCheck) return;
+          this._pendingInactivityCheck = false;
           if (this.queue.isEmpty() && !this.queue.getCurrent()) {
-            if (this._hasHumansInChannel()) {
-              logger.inactivity(`[Player] Humans present after join — skipping inactivity timer.`);
-            } else {
-              this._startInactivityTimer();
-            }
+            this._startInactivityTimer();
           }
         }, 3000);
       }

@@ -83,6 +83,64 @@ function getGuildName(message) {
 
 // ── 24/7 helpers ──────────────────────────────────────────────────────────────
 
+/**
+ * Get the 24/7 mode for a specific channel.
+ * Reads from the per-channel map (stay_247_modes) first,
+ * falls back to the guild-wide stay_247_mode for backward compat.
+ *
+ * @param {ServerSettings} set
+ * @param {string} channelId  Clean channel ID
+ * @returns {string} "on" | "auto" | "off"
+ */
+function get247ChannelMode(set, channelId) {
+  const modes = set.get("stay_247_modes");
+  if (modes && typeof modes === "object" && !Array.isArray(modes)) {
+    const perChannel = modes[channelId];
+    if (perChannel === "on" || perChannel === "auto" || perChannel === "off") return perChannel;
+  }
+  // Fallback: guild-wide mode (legacy)
+  const guildMode = set.get("stay_247_mode") ?? "off";
+  return guildMode;
+}
+
+/**
+ * Set the 24/7 mode for a specific channel.
+ *
+ * @param {ServerSettings} set
+ * @param {string} channelId  Clean channel ID
+ * @param {string} mode      "on" | "auto" | "off"
+ */
+function set247ChannelMode(set, channelId, mode) {
+  let modes = set.get("stay_247_modes");
+  if (!modes || typeof modes !== "object" || Array.isArray(modes)) modes = {};
+  modes[channelId] = mode;
+  set.set("stay_247_modes", modes);
+  // Also update guild-wide mode for backward compat with older code
+  set.set("stay_247_mode", mode);
+}
+
+/**
+ * Remove a channel from the per-channel modes map.
+ * If no channels remain, clears stay_247_modes entirely.
+ *
+ * @param {ServerSettings} set
+ * @param {string} channelId  Clean channel ID
+ * @param {Set} currentChannels  Current set of all 247 channels for this guild
+ */
+function remove247ChannelMode(set, channelId, currentChannels) {
+  let modes = set.get("stay_247_modes");
+  if (!modes || typeof modes !== "object" || Array.isArray(modes)) return;
+  delete modes[channelId];
+  set.set("stay_247_modes", modes);
+  // Update guild-wide mode to match the first remaining channel, or "off"
+  if (currentChannels.size === 0) {
+    set.set("stay_247_mode", "off");
+  } else {
+    const firstChannel = [...currentChannels][0];
+    set.set("stay_247_mode", modes[firstChannel] ?? "auto");
+  }
+}
+
 function get247Channels(set) {
   const raw = set.get("stay_247");
   if (!raw || raw === "none") return new Set();
@@ -103,19 +161,28 @@ function save247Channels(set, channels) {
   set.set("stay_247", arr.length > 0 ? arr : "none");
 }
 
+function modeLabel(mode) {
+  return mode === "auto" ? "🔄 auto" : mode === "on" ? "✅ on" : "❌ off";
+}
+
 function format247Status(set) {
   const channels = get247Channels(set);
-  const mode     = set.get("stay_247_mode") ?? "off";
   if (channels.size === 0) return "❌ disabled";
-  const channelList = [...channels].map(id => `<#${id}>`).join(", ");
-  const modeLabel = mode === "auto" ? "🔄 auto" : mode === "on" ? "✅ on" : "❌ off";
-  const countLabel = channels.size === 1 ? "1 channel" : `${channels.size} channels`;
-  return `${modeLabel} — ${countLabel}: ${channelList}`;
+  // Show per-channel mode for multi-voice, single mode for single channel
+  if (channels.size === 1) {
+    const chId = [...channels][0];
+    const mode = get247ChannelMode(set, chId);
+    return `${modeLabel(mode)} — <#${chId}>`;
+  }
+  const parts = [...channels].map(id => {
+    const mode = get247ChannelMode(set, id);
+    return `<#${id}> (${modeLabel(mode)})`;
+  });
+  return `${channels.size} channels: ${parts.join(", ")}`;
 }
 
 function format247Summary(set) {
   const channels = [...get247Channels(set)];
-  const mode = set.get("stay_247_mode") ?? "off";
   if (channels.length === 0) {
     return [
       "**24/7 Mode**",
@@ -124,17 +191,12 @@ function format247Summary(set) {
     ].join("\n");
   }
 
-  const modeLabel = mode === "auto"
-    ? "🔄 auto"
-    : mode === "on"
-      ? "✅ on"
-      : "❌ off";
-
-  return [
-    "**24/7 Mode**",
-    `Status: ${modeLabel}`,
-    `Saved channels (${channels.length}): ${channels.map(id => `<#${id}>`).join(", ")}`
-  ].join("\n");
+  const lines = ["**24/7 Mode**"];
+  for (const id of channels) {
+    const mode = get247ChannelMode(set, id);
+    lines.push(`• <#${id}> — ${modeLabel(mode)}`);
+  }
+  return lines.join("\n");
 }
 
 function prettifySettingLabel(key) {
@@ -177,6 +239,7 @@ async function handle247(ctx, message, value) {
       const id = cleanId(channelId);
       channels.delete(id);
       save247Channels(set, channels);
+      remove247ChannelMode(set, id, channels);
       ctx.markIntentionalLeave?.(id);
       const player = ctx.players.playerMap.get(id)
           ?? [...ctx.players.playerMap.values()].find(p =>
@@ -190,10 +253,9 @@ async function handle247(ctx, message, value) {
         await player.leave().catch(() => {});
         player.destroy();
       }
-      if (channels.size === 0) set.set("stay_247_mode", "off");
       const remaining = [...channels];
       const extra = remaining.length > 0
-        ? `\nSaved channels left: ${remaining.map(ch => `<#${ch}>`).join(", ")}`
+        ? `\nSaved channels left: ${remaining.map(ch => `<#${ch}> (${modeLabel(get247ChannelMode(set, ch))})`).join(", ")}`
         : "";
       return message.reply(embed(ctx.t(message, "responses.settings.247Disabled", { channel: id }) + extra));
     }
@@ -201,6 +263,7 @@ async function handle247(ctx, message, value) {
     // Not in a channel — disable all for this guild
     save247Channels(set, new Set());
     set.set("stay_247_mode", "off");
+    set.set("stay_247_modes", {});
     for (const [chId, player] of [...ctx.players.playerMap.entries()]) {
       if (cleanId(player?._guildId ?? "") === cleanId(guildId)) {
         const activeChannelId = cleanId(player._channelId ?? chId);
@@ -228,14 +291,13 @@ async function handle247(ctx, message, value) {
   const channels = get247Channels(set);
   channels.add(id);
   save247Channels(set, channels);
-  set.set("stay_247_mode", resolved);
+  // Per-channel mode: each channel gets its own on/auto setting
+  set247ChannelMode(set, id, resolved);
 
-  const modeLabel = resolved === "auto"
-      ? "**auto**"
-      : "**on**";
+  const resolvedLabel = resolved === "auto" ? "**auto**" : "**on**";
   const savedSummary = channels.size === 1
-    ? `Saved channel: <#${id}>`
-    : `Saved channels (${channels.size}): ${[...channels].map(ch => `<#${ch}>`).join(", ")}`;
+    ? `Saved channel: <#${id}> (${resolvedLabel})`
+    : `Saved channels (${channels.size}): ${[...channels].map(ch => `<#${ch}> (${modeLabel(get247ChannelMode(set, ch))})`).join(", ")}`;
 
   if (
     ctx.players.playerMap.has(id) ||
@@ -243,12 +305,12 @@ async function handle247(ctx, message, value) {
       cleanId(p?._channelId ?? "") === id && cleanId(p?._guildId ?? "") === cleanId(guildId)
     )
   ) {
-    return message.reply(embed(ctx.t(message, "responses.settings.247Set", { mode: modeLabel, channel: id, summary: savedSummary })));
+    return message.reply(embed(ctx.t(message, "responses.settings.247Set", { mode: resolvedLabel, channel: id, summary: savedSummary })));
   }
 
   try {
     await ctx._spawnPlayer(guildId, id);
-    return message.reply(embed(ctx.t(message, "responses.settings.247Joined", { mode: modeLabel, channel: id, summary: savedSummary })));
+    return message.reply(embed(ctx.t(message, "responses.settings.247Joined", { mode: resolvedLabel, channel: id, summary: savedSummary })));
   } catch (e) {
     return message.reply(embed(ctx.t(message, "responses.settings.247JoinFailed", { channel: id, error: e.message, summary: savedSummary })));
   }
@@ -519,7 +581,7 @@ export async function run(message, data) {
     // guild.iconURL() is a method that does not exist on @fluxerjs/core Guild objects.
     const rawGuild  = message.message?.guild;
     const iconUrl   = rawGuild?.icon
-        ? `https://fluxerusercontent.com/icons/${rawGuild.id}/${rawGuild.icon}.webp`
+        ? `https://cdn.fluxer.app/icons/${rawGuild.id}/${rawGuild.icon}.webp`
         : null;
 
     const lines = Object.entries(d)

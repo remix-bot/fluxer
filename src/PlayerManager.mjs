@@ -11,6 +11,7 @@ import { Message } from "./MessageHandler.mjs";
 import { SettingsManager } from "./Settings.mjs";
 import { Utils } from "./Utils.mjs";
 import { logger } from "./constants/Logger.mjs";
+import { get247ChannelMode } from "./constants/Helpers247.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { getGlobalColor } from "./MessageHandler.mjs";
@@ -167,88 +168,34 @@ export class PlayerManager {
 
     // Broadcast user list changes to the global :users channel when
     // someone joins or leaves the player's voice channel.
-    //
-    // CRITICAL: After a bot reload, guild.voice_states may not yet contain all
-    // users who are in the channel (only the bot's own state may be present).
-    // The observedVoiceUsers map is seeded from READY/GUILD_CREATE and IS
-    // reliable — so we use it as a fallback to ensure all users are announced.
     const sendUserUpdates = (eventType) => {
       if (!this.dashboard?.enabled) return;
       const channelId = getPlayerChannelId(player, context.channelId);
-      const guildId = cleanId(player._guildId ?? context.guildId);
       const channel = player.client?.channels?.get(channelId);
-      const guild = player.client?.guilds?.get(guildId);
-      const sentUserIds = new Set(); // Deduplicate across both sources
-
-      // ── Source 1: guild.voice_states (real-time Discord data) ──────────
-      if (guild) {
-        const voiceStates = guild.voice_states ?? guild.voiceStates ?? null;
-        if (voiceStates) {
-          const entries = Array.isArray(voiceStates)
-            ? voiceStates
-            : typeof voiceStates.values === "function"
-              ? [...voiceStates.values()]
-              : Object.values(voiceStates);
-          for (const state of entries) {
-            if (!state?.channelId && !state?.channel_id) continue;
-            const stateChannelId = cleanId(state.channelId ?? state.channel_id);
-            if (stateChannelId !== channelId) continue;
-            const userId = String(state.userId ?? state.user_id ?? "");
-            if (!userId) continue;
-            const member = guild.members?.get?.(userId);
-            if (!member?.user || member.user?.bot) continue;
-            sentUserIds.add(userId);
-            emit(eventType, member.user.id);
-            this.dashboard.userUpdate({
-              type: eventType,
-              guildId,
-              channelId,
-            }, member.user);
-          }
-        }
-      }
-
-      // ── Source 2: observedVoiceUsers (seeded from READY/GUILD_CREATE) ──
-      // This catches users who were already in the channel when the bot
-      // reloaded but whose voice states aren't in guild.voice_states yet.
-      // After a bot restart, guild.voice_states may only contain the bot's
-      // own voice state, while observedVoiceUsers was populated from the
-      // READY payload and contains ALL humans who were already in voice.
-      if (eventType === "join" && this.observedVoiceUsers) {
-        const botUserId = player.client?.user?.id;
-        for (const [mapUserId, info] of this.observedVoiceUsers) {
-          if (sentUserIds.has(mapUserId)) continue; // Already sent from voice_states
-          const infoChannelId = cleanId(info.channelId ?? "");
-          const infoGuildId = cleanId(info.guildId ?? "");
-          if (infoChannelId !== channelId || infoGuildId !== guildId) continue;
-          // Skip the bot itself — it's not a "user" to announce
-          if (botUserId && String(mapUserId) === String(botUserId)) continue;
-          // Skip bots (check observedVoiceBots if available)
-          const botKey = `${infoGuildId}:${mapUserId}`;
-          if (this.observedVoiceBots?.has?.(botKey)) continue;
-          sentUserIds.add(mapUserId);
-          // Try to get user object from cache first, then fetch asynchronously
-          const cachedUser = player.client?.users?.get?.(mapUserId);
-          emit(eventType, String(mapUserId));
-          if (cachedUser) {
-            this.dashboard.userUpdate({
-              type: eventType,
-              guildId,
-              channelId,
-            }, cachedUser);
-          } else {
-            // User not in cache — fetch async and send update when available
-            player.client?.users?.fetch?.(mapUserId)?.then?.((userObj) => {
-              if (userObj) {
-                this.dashboard.userUpdate({
-                  type: eventType,
-                  guildId,
-                  channelId,
-                }, userObj);
-              }
-            })?.catch?.(() => {});
-          }
-        }
+      const guild = player.client?.guilds?.get(cleanId(player._guildId ?? context.guildId));
+      if (!guild) return;
+      const voiceStates = guild.voice_states ?? guild.voiceStates ?? null;
+      if (!voiceStates) return;
+      const entries = Array.isArray(voiceStates)
+        ? voiceStates
+        : typeof voiceStates.values === "function"
+          ? [...voiceStates.values()]
+          : Object.values(voiceStates);
+      for (const state of entries) {
+        if (!state?.channelId && !state?.channel_id) continue;
+        const stateChannelId = cleanId(state.channelId ?? state.channel_id);
+        if (stateChannelId !== channelId) continue;
+        const member = guild.members?.get?.(state.userId ?? state.user_id);
+        if (!member?.user || member.user?.bot) continue;
+        // Send per-player channel "join"/"leave" event with just the user ID
+        // (matching Stoat format where data = userId string)
+        emit(eventType, member.user.id);
+        // Also send global user update
+        this.dashboard.userUpdate({
+          type: eventType,
+          guildId: cleanId(player._guildId ?? context.guildId),
+          channelId,
+        }, member.user);
       }
     };
 
@@ -375,84 +322,6 @@ export class PlayerManager {
     });
 
     return player;
-  }
-
-  /**
-   * Safely send a message to a text channel.
-   *
-   * In Fluxer.js, VoiceChannel does NOT have a .send() method — only
-   * TextChannel and DMChannel do.  If player.textChannel is a voice
-   * channel (or any object without .send()), we fall back to
-   * client.channels.send(channelId, payload) which works on any
-   * channel type.
-   *
-   * @param {Object} ch - Channel object (player.textChannel)
-   * @param {Object} payload - Message payload (embed, content, etc.)
-   * @returns {Promise<any>}
-   */
-  async _sendToTextChannel(ch, payload) {
-    // ── Check if the channel is actually a text channel ────────────────
-    // Fluxer.js voice channels have a .send() method that throws
-    // CANNOT_SEND_MESSAGES_IN_NON_TEXT_CHANNEL when called. We need to
-    // detect this BEFORE calling .send() and fall back to a real text
-    // channel from the same guild.
-    const isTextChannel = (c) => {
-      if (!c) return false;
-      // type 0 = text channel in Fluxer/Discord; type 2 = voice; type 13 = stage
-      if (c.type != null) return c.type === 0 || c.type === 5 || c.type === 13;
-      // isText() method if available
-      if (typeof c.isText === "function") return c.isText();
-      // If the channel has isVoice() and it returns true, it's NOT a text channel
-      if (typeof c.isVoice === "function" && c.isVoice()) return false;
-      return false;
-    };
-
-    // Method 1: channel.send() — only if it's a real text channel
-    if (ch && isTextChannel(ch) && typeof ch.send === "function") {
-      try {
-        return await ch.send(payload);
-      } catch (e) {
-        // Send failed even though we thought it was a text channel —
-        // fall through to the guild text channel search below
-        logger.warn("[PlayerManager] _sendToTextChannel: send() failed on type-0 channel:", e.message);
-      }
-    }
-
-    // Method 2: Find a suitable text channel from the same guild
-    const channelId = ch?.id ?? ch?._id;
-    const guildId = ch?.guildId ?? ch?.guild?.id ?? ch?.server_id ?? ch?.serverId;
-
-    if (guildId && this.commands?.client) {
-      const guild = this.commands.client.guilds.get(guildId);
-      if (guild?.channels) {
-        const channelValues = typeof guild.channels.values === "function"
-            ? [...guild.channels.values()]
-            : Array.isArray(guild.channels) ? guild.channels : Object.values(guild.channels);
-
-        // Prefer: system channel > first text channel the bot can send to
-        const sysCh = guild.systemChannelId
-            ? channelValues.find(c => (c.id ?? c._id) === guild.systemChannelId)
-            : null;
-        if (sysCh && isTextChannel(sysCh) && typeof sysCh.send === "function") {
-          try { return await sysCh.send(payload); } catch (_) {}
-        }
-
-        // Fall back to the first text channel
-        const textCh = channelValues.find(c => isTextChannel(c));
-        if (textCh && typeof textCh.send === "function") {
-          try { return await textCh.send(payload); } catch (_) {}
-        }
-      }
-    }
-
-    // Method 3: client.channels.send(id, payload) — last resort
-    if (channelId && this.commands?.client?.channels?.send) {
-      try {
-        return await this.commands.client.channels.send(channelId, payload);
-      } catch (_) {}
-    }
-
-    logger.warn("[PlayerManager] _sendToTextChannel: no valid text channel found for guild", guildId ?? channelId ?? "(unknown)");
   }
 
   /**
@@ -833,18 +702,15 @@ export class PlayerManager {
       guildId: cleanId(channel.guildId ?? getMessageGuildId(message)),
     });
 
-    player.on("autoleave", async () => {
+    player.on("autoleave", () => {
       const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;
       const homeChannelId = cleanId(player._home247Channel) || activeChannelId;
       const ch       = player.textChannel;
       const guildId = cleanId(player._guildId ?? ch?.guildId ?? ch?.guild?.id ?? getMessageGuildId({ channel: ch }));
 
-      // Check 24/7 settings for this channel
+      // Check 24/7 settings for this channel (per-channel mode)
       const raw247 = (() => {
         try { return this.settings.getServer(guildId)?.get("stay_247"); } catch (_) { return null; }
-      })();
-      const mode247 = (() => {
-        try { return this.settings.getServer(guildId)?.get("stay_247_mode") ?? "off"; } catch (_) { return "off"; }
       })();
       const isIn247List = (() => {
         if (!raw247 || raw247 === "none") return false;
@@ -853,6 +719,16 @@ export class PlayerManager {
             : [String(raw247).replace(/\D/g, "")].filter(Boolean);
         return channels.includes(homeChannelId) || channels.includes(activeChannelId);
       })();
+
+      // Per-channel mode: check the mode for this specific channel
+      const matchChannel = isIn247List
+          ? (channels247list => channels247list.includes(homeChannelId) ? homeChannelId : activeChannelId)(
+              Array.isArray(raw247) ? raw247.map(id => String(id).replace(/\D/g, "")) : [String(raw247).replace(/\D/g, "")]
+            )
+          : null;
+      const mode247 = matchChannel
+          ? get247ChannelMode(this.settings.getServer(guildId), matchChannel)
+          : "off";
 
       // Remove player from map and destroy
       this.playerMap.delete(activeChannelId);
@@ -864,7 +740,7 @@ export class PlayerManager {
         // 24/7 is active — rejoin after a short delay (same as RecoveryManager.spawnPlayer autoleave)
         const delay = this.timers?.rejoin247Delay ?? 3000;
         if (this.spawnPlayer) {
-          logger.recovery(`[AutoLeave] 24/7 rejoin scheduled for ${homeChannelId} in ${delay}ms`);
+          logger.recovery(`[AutoLeave] 24/7 rejoin scheduled for ${homeChannelId} (mode ${mode247}) in ${delay}ms`);
           setTimeout(() => {
             this.spawnPlayer(guildId, homeChannelId, 0, null, "initplayer-autoleave").catch(e =>
               logger.warn("[AutoLeave] 24/7 rejoin failed for", homeChannelId, e.message)
@@ -878,44 +754,29 @@ export class PlayerManager {
         })();
         const desc = this.locale?.translate(guildId, "responses.join.autoLeaveInactive247", { channel: `<#${activeChannelId}>`, prefix })
           ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
-        try {
-          await this._sendToTextChannel(ch, mkEmbed(desc));
-        } catch (e) {
-          logger.warn("[PlayerManager] autoleave send failed:", e.message);
-        }
+        if (typeof ch?.send === "function") ch.send(mkEmbed(desc));
       }
     });
 
     player.on("leave", () => {});
 
-    player.on("message", async (m) => {
+    player.on("message", (m) => {
       const ch       = player.textChannel;
       const guildId = cleanId(player._guildId ?? ch?.guildId ?? ch?.guild?.id ?? getMessageGuildId({ channel: ch }));
       const raw      = this.settings.getServer(guildId)?.get("songAnnouncements");
       const disabled = raw === false || raw === 0 ||
           ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
       if (disabled) return;
-      try {
-        await this._sendToTextChannel(ch, typeof m === "object" && Array.isArray(m.embeds) ? m : mkEmbed(m));
-      } catch (e) {
-        logger.warn("[PlayerManager] message send failed:", e.message);
-      }
+      if (typeof ch?.send === "function") ch.send(typeof m === "object" && Array.isArray(m.embeds) ? m : mkEmbed(m));
     });
 
     this.playerMap.set(cleanChannelId, player);
 
     (async () => {
-      let statusMsg;
-      try {
-        statusMsg = await message.reply(mkEmbed(this._t(message, "responses.join.joining")));
-      } catch (e) {
-        logger.warn("[PlayerManager] statusMsg reply failed:", e.message);
-      }
+      const statusMsg = await message.reply(mkEmbed(this._t(message, "responses.join.joining")));
       try {
         await player.join(cid);
-        if (statusMsg?.edit) {
-          try { await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joined", { channel: cid }))); } catch (_) {}
-        }
+        await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joined", { channel: cid })));
 
         const guildId = cleanId(channel.guildId ?? getMessageGuildId(message));
         if (guildId) {
@@ -939,9 +800,7 @@ export class PlayerManager {
         } else {
           errorMsg = this._t(message, "responses.join.joinFailed", { error: err.message });
         }
-        if (statusMsg?.edit) {
-          try { await statusMsg.edit(mkEmbed(errorMsg)); } catch (_) {}
-        }
+        await statusMsg.edit(mkEmbed(errorMsg)).catch(() => {});
         this.playerMap.delete(cleanChannelId);
         player.destroy();
       }

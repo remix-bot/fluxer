@@ -2,6 +2,7 @@ import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { logger } from "../src/constants/Logger.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { get247ChannelMode } from "../src/constants/Helpers247.mjs";
 
 export const command = new CommandBuilder()
     .setName("leave")
@@ -64,7 +65,10 @@ export async function run(msg) {
           : new Set([String(raw).replace(/\D/g, "")]);
 
   if (ch247.has(activeChannelId) || ch247.has(homeChannelId)) {
-    const mode = set?.get("stay_247_mode") ?? "auto";
+    const matchChannel = ch247.has(homeChannelId) ? homeChannelId
+        : ch247.has(activeChannelId) ? activeChannelId
+        : null;
+    const mode = matchChannel ? get247ChannelMode(set, matchChannel) : "off";
     this.markIntentionalLeave(activeChannelId);
     this.players.playerMap.delete(activeChannelId);
     if (activeChannelId !== cid) this.players.playerMap.delete(cid);

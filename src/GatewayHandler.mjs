@@ -1,6 +1,7 @@
 import { Events, GatewayOpcodes } from "@fluxerjs/core";
 import { logger } from "./constants/Logger.mjs";
 import { ServerSettings } from "./Settings.mjs";
+import { get247ChannelMode } from "./constants/Helpers247.mjs";
 import mysql from "mysql2";
 
 /**
@@ -481,16 +482,18 @@ export class GatewayHandler {
           const set  = remix.settingsMgr.getServer(guildId);
           if (set) {
             const raw  = set.get("stay_247");
-            const mode = set.get("stay_247_mode") ?? "auto";
-            if (raw && raw !== "none" && (mode === "on" || mode === "auto")) {
+            if (raw && raw !== "none") {
               const channels = Array.isArray(raw)
                   ? raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15)
                   : [String(raw).replace(/\D/g, "")].filter(id => id.length >= 15);
               for (const chId of channels) {
+                // Per-channel mode: only spawn if this channel is on/auto
+                const mode = get247ChannelMode(set, chId);
+                if (mode !== "on" && mode !== "auto") continue;
                 // Only spawn if there isn't already a player for this channel
                 if (!remix.players.playerMap.has(chId) && !this.recoveryManager.pendingSpawns.has(chId)) {
                   logger.voice247(
-                    `[GuildCreate] Late-arriving guild ${guildId} — scheduling 24/7 spawn for channel ${chId}`
+                    `[GuildCreate] Late-arriving guild ${guildId} — scheduling 24/7 spawn for channel ${chId} (mode ${mode})`
                   );
                   this.recoveryManager.scheduleSpawn(guildId, chId, this.T.rejoin247Delay, null, "guild-create-247");
                 }
@@ -818,7 +821,8 @@ export class GatewayHandler {
                 ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15))
                 : new Set();
             if (channels.has(cleanOld)) {
-              const mode = set.get("stay_247_mode") ?? "auto";
+              // Per-channel mode: check the mode for this specific channel
+              const mode = get247ChannelMode(set, cleanOld);
               if (mode === "on" || mode === "auto") {
                 // For multi-voice guilds, match the specific player by channel ID
                 // instead of skipping recovery entirely (was: if multiVoiceGuild return)
@@ -836,7 +840,7 @@ export class GatewayHandler {
                   this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, null, "gateway-disconnect");
                 }
               } else {
-                logger.voice247(`[247] stay_247_mode='${mode}' — not rejoining.`);
+                logger.voice247(`[247] Channel ${cleanOld} mode='${mode}' — not rejoining.`);
                 channels.delete(cleanOld);
                 set.set("stay_247", channels.size > 0 ? [...channels] : "none");
               }
