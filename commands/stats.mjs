@@ -73,18 +73,44 @@ function getUserCount(client) {
 }
 
 function getLivePlayerCount(playerMap) {
-  const liveChannels = new Set();
+  let live = 0;
+  const seenGuilds = new Set();
 
   for (const [mapKey, player] of playerMap ?? []) {
+    // Skip null / destroyed / leaving entries
     if (!player || player._destroyed || player.leaving) continue;
 
-    const channelId = String(player._channelId ?? mapKey ?? "").replace(/\D/g, "");
-    if (!channelId) continue;
+    // Skip players still in the join() phase — they don't have a voice
+    // connection yet and may fail to connect.
+    if (player._isJoining) continue;
 
-    liveChannels.add(channelId);
+    // A player is only "live" if it has an actual voice connection.
+    // Stale entries (gateway disconnect, LiveKit drop) that haven't been
+    // cleaned up yet will have connection = null or a dead room state.
+    const conn = player.connection;
+    if (conn) {
+      const room = conn.room;
+      if (room) {
+        const state = room.state;
+        // Explicitly dead states → skip
+        if (state === "disconnected" || state === "failed" || state === 0) continue;
+        // undefined = connected on some LiveKit builds (no persistent state prop)
+        // "connected"  = explicitly connected
+      }
+      // conn exists but no room → still a valid LiveKit connection reference
+    } else {
+      // No connection at all → not live
+      continue;
+    }
+
+    live++;
+
+    // Also track unique guilds so we can report server count
+    const guildId = String(player._guildId ?? "").replace(/\D/g, "");
+    if (guildId) seenGuilds.add(guildId);
   }
 
-  return liveChannels.size;
+  return live;
 }
 
 // ── Embed builder ─────────────────────────────────────────────────────────────

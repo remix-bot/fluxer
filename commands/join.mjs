@@ -89,16 +89,23 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
     message.channel.send({ embeds: [embed] });
   });
 
-  this.players.playerMap.set(cleanChannelId, p);
+  // Mark as pending so concurrent commands see the channel is taken,
+  // but don't add to playerMap until join() succeeds to avoid phantom
+  // entries inflating the player count.
+  this.players._pendingJoins.add(cleanChannelId);
 
   const joiningEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.join.joining"));
   const statusMsg = await message.reply({ embeds: [joiningEmbed] });
   try {
     await p.join(cleanChannelId);
+    // Only add to playerMap after join succeeds
+    this.players.playerMap.set(cleanChannelId, p);
+    this.players._pendingJoins.delete(cleanChannelId);
     const okEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.join.joined", { channel: cid }));
     await statusMsg.edit({ embeds: [okEmbed] });
     cb(p);
   } catch (e) {
+    this.players._pendingJoins.delete(cleanChannelId);
     this.players.playerMap.delete(cleanChannelId);
     p.destroy();
     const errEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.join.joinFailed", { error: e.message }));

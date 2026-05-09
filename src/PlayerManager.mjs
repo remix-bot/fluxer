@@ -84,6 +84,9 @@ export class PlayerManager {
   /** @type {Map<string, Player>} */
   playerMap = new Map();
 
+  /** @type {Set<string>} Channel IDs currently being joined (not yet in playerMap) */
+  _pendingJoins = new Set();
+
   /** @type {Object} */
   config;
 
@@ -459,6 +462,10 @@ export class PlayerManager {
         player.textChannel = message.channel;
         return player;
       }
+      // Also check if a join is in-progress for this channel
+      if (this._pendingJoins.has(cleanUserChannelId)) {
+        return null; // A player is being created — caller should retry
+      }
     }
 
     const serverPlayers = cleanGuildId
@@ -684,6 +691,10 @@ export class PlayerManager {
       cb(existing);
       return message.reply(mkEmbed(this._t(message, "responses.join.alreadyJoined", { channel: cid })));
     }
+    // Also block if a join is already in-progress for this channel
+    if (this._pendingJoins.has(cleanChannelId)) {
+      return message.reply(mkEmbed(this._t(message, "responses.join.joining")));
+    }
 
     const player = new Player(this.config.token, {
       ...this.playerConfig,
@@ -770,12 +781,21 @@ export class PlayerManager {
       if (typeof ch?.send === "function") ch.send(typeof m === "object" && Array.isArray(m.embeds) ? m : mkEmbed(m));
     });
 
-    this.playerMap.set(cleanChannelId, player);
+    // Mark as "pending join" so concurrent getPlayer() / checkVoiceChannels()
+    // calls can see a player is being created for this channel, but stats
+    // won't count it until the join actually succeeds.
+    this._pendingJoins.add(cleanChannelId);
 
     (async () => {
       const statusMsg = await message.reply(mkEmbed(this._t(message, "responses.join.joining")));
       try {
         await player.join(cid);
+
+        // Only add to playerMap after join succeeds — this prevents phantom
+        // entries from inflating the player count.
+        this.playerMap.set(cleanChannelId, player);
+        this._pendingJoins.delete(cleanChannelId);
+
         await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joined", { channel: cid })));
 
         const guildId = cleanId(channel.guildId ?? getMessageGuildId(message));
@@ -789,6 +809,8 @@ export class PlayerManager {
 
         cb(player);
       } catch (err) {
+        this._pendingJoins.delete(cleanChannelId);
+
         const errCode = sanitizeJoinError(err);
         let errorMsg;
         if (errCode === "PERMISSION") {
