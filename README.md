@@ -57,11 +57,11 @@ We believe music features shouldn't be locked behind paywalls — **all commands
 ## Features
 
 - **High-quality audio playback** via moonlink.js (Lavalink proxy) and `@fluxerjs/voice`
-- **Multi-source search** — YouTube, Spotify, SoundCloud, and direct URL support
+- **Multi-source search** — YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, and direct URL support
 - **24/7 mode** — keep the bot in a voice channel permanently, with auto-recovery on restart
 - **Session recovery** — active players and queues survive bot restarts and crash recovery
 - **Interactive emoji player** — reaction-based control panel with play, pause, skip, volume, shuffle, and more
-- **Lyrics** — fetch song lyrics via the Genius API
+- **Lyrics** — fetch synced lyrics via NodeLink
 - **Radio stations** — built-in support for custom radio streams with keyword-based search
 - **Server settings** — per-guild configuration for prefix, volume, locale, 24/7 channels, and more
 - **Web dashboard** — optional browser-based control panel with Redis-backed sessions and Fluxer OAuth2 login
@@ -94,53 +94,38 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 | `playnext` | Add a song/playlist to the *top* of the queue | `%playnext query: text` | `pn` |
 | `pause` | Pause the current playback | `%pause` | |
 | `resume` | Resume the paused playback | `%resume` | |
-| `skip` | Skip the currently playing song | `%skip` | |
+| `skip` | Skip the currently playing song | `%skip` | `s` |
 | `np` | Show the currently playing song | `%np` | `current`, `nowplaying` |
-| `list` | View the upcoming queue | `%list` | `queue` |
+| `list` | View the upcoming queue | `%list` | `queue`, `q` |
 | `loop` | Toggle loop mode (song or queue) | `%loop queue` | |
 | `shuffle` | Randomize the queue order | `%shuffle` | |
 | `remove` | Remove a specific song by its queue index | `%remove 3` | |
 | `clear` | Clear the entire queue | `%clear` | `c` |
-| `volume` | Change the playback volume (1–200) | `%volume 50` | `v` |
-| `volumedefault` | Set the default volume for the server | `%volumedefault 80` | |
+| `volume` | Change the playback volume (1–200) | `%volume 50` | `v`, `vol` |
+| `volumedefault` | Set the default volume for the server | `%volumedefault 80` | `vd` |
 | `search` | Search for a track and pick from results | `%search query` | |
-| `lyrics` | Fetch lyrics for the current or specified song | `%lyrics` | |
+| `lyrics` | Display synced lyrics from NodeLink | `%lyrics` | `lyric`, `ly` |
 | `thumbnail` | Get the thumbnail of the current track | `%thumbnail` | `thumb` |
-| `radio` | Play a built-in or custom radio station | `%radio` | |
-
-### Voice Channel
-
-| Command | Description | Usage | Aliases |
-| :--- | :--- | :--- | :--- |
+| `radio` | Play a built-in or custom radio station | `%radio` | `r` |
+| `filter` | Manage audio filters (bass, speed, nightcore, etc.) | `%filter bass 50` | `filters`, `fx`, `effect` |
+| `player` | Create an interactive emoji control panel with live progress | `%player` | |
 | `join` | Make the bot join a specific voice channel | `%join 123456789` | |
-| `leave` | Make the bot leave the current voice channel | `%leave` | `l` |
-| `forceleave` | Force the bot to leave any channel (owner only) | `%forceleave` | |
-
-### Player & UI
-
-| Command | Description | Usage | Aliases |
-| :--- | :--- | :--- | :--- |
-| `player` | Create an interactive emoji control panel | `%player` | |
-
-### Settings & Server
-
-| Command | Description | Usage | Aliases |
-| :--- | :--- | :--- | :--- |
-| `settings` | View or change server settings | `%settings set` | `s` |
-| `filter` | Manage audio filters (bass, speed, nightcore, etc.) | `%filter bass 50` | |
+| `leave` | Make the bot leave the current voice channel | `%leave` | `l`, `stop` |
+| `forceleave` | Force the bot to leave any channel (requires Manage Channels) | `%forceleave` | `fl` |
 
 ### Utility
 
 | Command | Description | Usage | Aliases |
 | :--- | :--- | :--- | :--- |
-| `stats` | Display bot stats (uptime, ping, node info) | `%stats` | `info` |
-| `invite` | Get the bot invite link | `%invite` | |
-| `support` | Get an invite to the support server | `%support` | |
-| `reload` | Reload commands or settings at runtime (owner) | `%reload` | |
+| `settings` | View or change server settings (requires Manage Server) | `%settings set` | `prefix`, `pfx`, `247` |
+| `stats` | Display bot stats (uptime, ping, player count) | `%stats` | `info` |
+| `invite` | Get the bot invite link | `%invite` | `addbot`, `remix` |
+| `support` | Get an invite to the support server | `%support` | `server` |
+| `reload` | Reload commands or modules at runtime (owner) | `%reload` | |
 | `servers` | List servers the bot is in (owner) | `%servers` | |
 | `eval` | Evaluate JavaScript (owner only) | `%eval 1+1` | |
-| `debug` | Debugging utilities (owner only) | `%debug` | |
-| `test` | Developer testing command | `%test 1` | |
+| `debug` | Debug voice connections and player state (owner) | `%debug voice` | |
+| `test` | Show voice channel user counts (owner) | `%test` | |
 
 ---
 
@@ -179,7 +164,7 @@ If you prefer to host Remix yourself, please note: **You must make it clear that
    - `prefix` — the command prefix (default: `%`)
    - `nodelink` — your NodeLink instance connection details
    - `spotify` — (optional) Spotify API credentials for Spotify track support
-   - `geniusToken` — (optional) Genius API token for lyrics support
+   - `geniusToken` — *(deprecated, unused)* was previously for lyrics; lyrics are now fetched via NodeLink
    - `owners` — array of Fluxer user IDs with owner-only command access
 
 4. **Set up the database:** *(See [Database Setup](#-database-setup) below)*
@@ -267,19 +252,26 @@ Key configuration options in `config.json`:
 | `embedColor` | string | `0xe9196c` | Hex color for embed messages |
 | `owners` | string[] | `[]` | User IDs with owner privileges |
 | `playerAFKTimeout` | number | `60000` | Inactivity timeout in ms before bot leaves |
+| `customStatsFooter` | string | — | Custom text shown in the `%stats` embed footer |
 | `webPort` | number | `80` | Port for the web dashboard |
 | `helpCatalog` | bool | `true` | Enable categorized help command |
 | `helpPagination` | bool | `true` | Enable paginated help output |
 | `mysql` | object | — | **Required.** MySQL connection settings |
-| `nodelink` | object | — | NodeLink connection (host, port, password) |
-| `spotify` | object | — | Spotify API credentials |
-| `geniusToken` | string | — | Genius API token for lyrics |
-| `dashboard` | object | — | Dashboard, Redis, and OAuth2 settings |
-| `logging` | object | — | Per-category log toggle (see config example) |
-| `timers` | object | — | Timing values for inactivity, recovery, etc. |
-| `cache` | object | — | Guild and member cache limits |
+| `nodelink` | object | — | NodeLink connection (`host`, `port`, `password`, `requestTimeout`) |
+| `spotify` | object | — | Spotify API credentials (`clientId`, `clientSecret`) |
+| `geniusToken` | string | — | *(Deprecated, unused)* Previously for lyrics; lyrics are now fetched via NodeLink |
+| `dashboard` | object | — | Dashboard config: `enabled`, `redis`, `fluxer` (OAuth2) |
+| `dashboardUrl` | string | — | URL the dashboard is accessible from |
+| `sessionSecret` | string | — | Secret for Express.js session middleware |
+| `logging` | object | — | Per-category log toggle (`enabled` + 12 sub-categories, see config example) |
+| `timers` | object | — | Timing values for inactivity, recovery, rejoin, etc. (14 sub-keys) |
+| `cache` | object | — | Guild and member cache (`guilds.enabled`, `guilds.max`, `members.enabled`, `members.max`) |
 | `radio` | array | `[]` | Custom radio station definitions |
-| `ssl` | object | — | SSL certificate paths and HTTPS toggle |
+| `ssl` | object | — | SSL certificate paths (`private`, `cert`), `useSSL`, `httpPort` |
+| `presenceInterval` | number | — | Interval in ms for rotating bot presence status |
+| `presenceContents` | string[] | `[]` | Presence status messages to cycle through |
+| `fluxer.js` | object | — | Fluxer.js REST options (`timeout`, `retries`) |
+| `fluxer-api` | object | — | Fluxer API endpoint configuration |
 
 ---
 
@@ -292,11 +284,13 @@ fluxer/
 ├── package.json
 ├── commands/                    # Command modules (one file per command)
 │   ├── play.mjs                 # Play a track or playlist
-│   ├── player.mjs               # Interactive emoji control panel
-│   ├── settings.mjs             # Per-guild settings management
-│   ├── lyrics.mjs               # Genius lyrics fetcher
+│   ├── player.mjs               # Interactive emoji control panel with live progress
+│   ├── settings.mjs             # Per-guild settings management (prefix, 247, volume, etc.)
+│   ├── lyrics.mjs               # Synced lyrics from NodeLink
 │   ├── filter.mjs               # Audio filter controls
 │   ├── radio.mjs                # Radio station management
+│   ├── debug.mjs                # Voice connection debugger (owner only, paginated)
+│   ├── stats.mjs                # Bot stats with live player count
 │   └── ...                      # All other commands
 ├── src/
 │   ├── CommandHandler.mjs       # Command loader, prefix manager, registry
@@ -313,17 +307,20 @@ fluxer/
 │   ├── constants/
 │   │   ├── Logger.mjs           # Structured logger with per-category control
 │   │   ├── Locale.mjs           # i18n translation engine
+│   │   ├── Helpers247.mjs       # 24/7 mode helper utilities
 │   │   ├── providers.mjs        # Audio source provider definitions
 │   │   └── audio/
 │   │       ├── StreamMerger.mjs # Audio stream merging utilities
 │   │       └── Tuna.mjs         # Audio filter/effect processing
 │   └── dashboard/
 │       ├── Dashboard.mjs        # Web dashboard server (Express + WebSocket)
+│       ├── DatabaseManager.mjs  # Dashboard database query manager
 │       └── RedisHandler.mjs     # Redis session and pub/sub handler
 ├── settings/
 │   ├── Settings.mjs             # Abstract SettingsManager base class
 │   ├── migrate.mjs              # Legacy-to-remote settings migration script
-│   └── runnables.mjs            # Runnable task definitions
+│   ├── runnables.mjs            # Runnable task definitions
+│   └── README.md                # Settings system documentation
 └── storage/
     ├── defaults.json            # Default per-guild settings template
     ├── modules.json             # Plugin module registry
