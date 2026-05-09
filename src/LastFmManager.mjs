@@ -407,6 +407,83 @@ export class LastFmManager {
     return data.user;
   }
 
+  // ── Playlists ────────────────────────────────────────────────────────────────
+
+  /**
+   * Get a list of the user's Last.fm playlists.
+   * @param {string} userId
+   * @returns {Promise<Array<{ id: string, title: string, trackCount: number, url: string, created: string }>>}
+   */
+  async getPlaylists(userId) {
+    const user = await this.getUser(userId);
+    if (!user) throw new Error("NOT_LINKED");
+
+    const data = await apiCall(
+      {
+        method:   "user.getplaylists",
+        api_key:  this.apiKey,
+        user:     user.username,
+      },
+      this.apiSecret
+    );
+
+    return (data.playlists?.playlist ?? []).map(p => ({
+      id:         String(p.id),
+      title:      p.title ?? "Untitled",
+      trackCount: +p.size ?? 0,
+      url:        p.url ?? "",
+      created:    p.date ?? "",
+    }));
+  }
+
+  /**
+   * Fetch tracks from a specific Last.fm playlist.
+   * Uses the playlist.fetch API method with the playlist URL.
+   *
+   * @param {string} userId
+   * @param {number|string} playlistId - Playlist number (1-based index from getPlaylists) or the playlist URL
+   * @param {number} [limit=50] - Max tracks to return
+   * @returns {Promise<Array<{ artist, name, url, image }>>}
+   */
+  async getPlaylistTracks(userId, playlistId, limit = 50) {
+    const user = await this.getUser(userId);
+    if (!user) throw new Error("NOT_LINKED");
+
+    let playlistUrl;
+
+    // If playlistId is a number, look up the playlist URL from the user's playlists
+    if (/^\d+$/.test(String(playlistId))) {
+      const playlists = await this.getPlaylists(userId);
+      const idx = +playlistId - 1; // 1-based to 0-based
+      if (idx < 0 || idx >= playlists.length) {
+        throw new Error(`Playlist #${playlistId} not found. You have ${playlists.length} playlist(s). Use \`%lastfm playlists\` to see them.`);
+      }
+      playlistUrl = playlists[idx].url;
+    } else {
+      // Assume it's a URL
+      playlistUrl = String(playlistId);
+    }
+
+    const data = await apiCall(
+      {
+        method:        "playlist.fetch",
+        api_key:       this.apiKey,
+        playlistURL:   playlistUrl,
+      },
+      this.apiSecret
+    );
+
+    const trackList = data.playlist?.trackList?.track ?? data.playlist?.tracks?.track ?? [];
+    const tracks = (Array.isArray(trackList) ? trackList : [trackList]).slice(0, limit);
+
+    return tracks.map(t => ({
+      artist: t.artist?.name ?? t.artist?.["#text"] ?? t.creator ?? "Unknown",
+      name:   t.title ?? t.name ?? "Unknown",
+      url:    t.url ?? "",
+      image:  t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
+    }));
+  }
+
   // ── Play helper (for %lastfm play and %play lastfm:loved etc.) ─────────────
 
   /**
@@ -414,10 +491,11 @@ export class LastFmManager {
    * that can be resolved by the player's worker (YouTube Music search).
    *
    * @param {string} userId
-   * @param {"loved"|"top"|"recent"} category
+   * @param {"loved"|"top"|"recent"|"playlist"} category
    * @param {object}  [options]
    * @param {string}  [options.period="overall"] - Period for top tracks (overall|7day|1month|3month|6month|12month)
    * @param {number}  [options.limit=20]         - Max tracks to return
+   * @param {string|number} [options.playlistId] - Playlist ID or index (required when category="playlist")
    * @returns {Promise<{ username: string, tracks: Array<{ query: string, artist: string, name: string, url: string }> }>}
    */
   async getTracksForPlay(userId, category, options = {}) {
@@ -439,8 +517,12 @@ export class LastFmManager {
         // Filter out "now playing" entries (they have no finished timestamp)
         tracks = tracks.filter(t => !t.now);
         break;
+      case "playlist":
+        if (!options.playlistId) throw new Error("Playlist ID required. Use `%lastfm playlists` to see your playlists, then `%lastfm play playlist <number>`.");
+        tracks = await this.getPlaylistTracks(userId, options.playlistId, limit);
+        break;
       default:
-        throw new Error(`Unknown Last.fm category: ${category}. Use loved, top, or recent.`);
+        throw new Error(`Unknown Last.fm category: ${category}. Use loved, top, recent, or playlist.`);
     }
 
     return {

@@ -12,8 +12,8 @@ export const command = new CommandBuilder()
   .addAliases("lf", "lfm")
   .addChoiceOption(o =>
     o.setName("action")
-      .setDescription("The action to perform: link, unlink, np, profile, loved, top, recent, play, scrobble", "options.lastfm.action")
-      .addChoices("link", "confirm", "unlink", "np", "profile", "loved", "top", "recent", "play", "scrobble")
+      .setDescription("The action to perform: link, unlink, np, profile, loved, top, recent, playlists, play, scrobble", "options.lastfm.action")
+      .addChoices("link", "confirm", "unlink", "np", "profile", "loved", "top", "recent", "playlists", "play", "scrobble")
       .setRequired(false)
   )
   .addTextOption(o =>
@@ -40,17 +40,21 @@ function notLinked(prefix) {
   };
 }
 
+// Valid categories that can be played (without a sub-number)
+const SIMPLE_CATEGORIES = ["loved", "top", "recent"];
+
 /**
- * Resolve a Last.fm category (loved/top/recent) into playable tracks.
+ * Resolve a Last.fm category (loved/top/recent/playlist) into playable tracks.
  * Shared between `%lastfm play <cat>` and `%play lastfm:<cat>`.
  *
  * @param {object} ctx     - The command `this` context (has .lastfm, .getPlayer, .handler, .t)
  * @param {object} msg     - The message object
  * @param {string} userId  - Discord user ID
- * @param {string} category - "loved", "top", or "recent"
+ * @param {string} category - "loved", "top", "recent", or "playlist"
  * @param {object} [options]
- * @param {string} [options.period] - Period for top tracks
- * @param {number} [options.limit]  - Max tracks
+ * @param {string} [options.period]      - Period for top tracks
+ * @param {number} [options.limit]       - Max tracks
+ * @param {string|number} [options.playlistId] - Playlist number or URL (for category="playlist")
  * @returns {Promise<void>}
  */
 export async function playLastFmCategory(ctx, msg, userId, category, options = {}) {
@@ -60,10 +64,20 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   if (!lastfm || !lastfm.enabled) return msg.reply(notConfigured(msg));
 
   // Validate category
-  if (!["loved", "top", "recent"].includes(category)) {
+  const validCategories = [...SIMPLE_CATEGORIES, "playlist"];
+  if (!validCategories.includes(category)) {
     return msg.reply({
       embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
-        `❌ Unknown category \`${category}\`. Use \`loved\`, \`top\`, or \`recent\`.`
+        `❌ Unknown category \`${category}\`. Use \`loved\`, \`top\`, \`recent\`, or \`playlist\`.`
+      )]
+    });
+  }
+
+  // Playlist requires an ID
+  if (category === "playlist" && !options.playlistId) {
+    return msg.reply({
+      embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+        `❌ Specify a playlist number. Use \`${prefix}lastfm playlists\` to see your playlists, then \`${prefix}lastfm play playlist <number>\`.`
       )]
     });
   }
@@ -77,8 +91,8 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   if (!p) return;
 
   // Fetch tracks from Last.fm
-  const categoryEmoji = { loved: "❤️", top: "📊", recent: "🕐" }[category];
-  const categoryLabel = { loved: "Loved", top: "Top", recent: "Recent" }[category];
+  const categoryEmoji = { loved: "❤️", top: "📊", recent: "🕐", playlist: "📋" }[category];
+  const categoryLabel = { loved: "Loved", top: "Top", recent: "Recent", playlist: "Playlist" }[category];
 
   let statusMsg;
   try {
@@ -172,6 +186,41 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   else msg.reply(doneEmbed);
 }
 
+/**
+ * Parse "playlist N" from message text after "play" keyword.
+ * @returns {{ category: string, playlistId?: string|number }}
+ */
+function parsePlayArgs(msg, data) {
+  // Try from the token option first
+  let raw = data.get("token")?.value;
+  if (!raw) {
+    const content = msg.message?.content ?? "";
+    const args = content.split(/\s+/);
+    const playIdx = args.indexOf("play");
+    if (playIdx >= 0 && args[playIdx + 1]) {
+      // Collect everything after "play"
+      raw = args.slice(playIdx + 1).join(" ");
+    }
+  }
+
+  if (!raw) return { category: "" };
+
+  const lower = raw.toLowerCase().trim();
+
+  // "playlist 3" or "playlist 1"
+  const playlistMatch = lower.match(/^playlist\s+(\d+)$/);
+  if (playlistMatch) {
+    return { category: "playlist", playlistId: playlistMatch[1] };
+  }
+
+  // "loved", "top", "recent"
+  if (SIMPLE_CATEGORIES.includes(lower)) {
+    return { category: lower };
+  }
+
+  return { category: "" };
+}
+
 // ── Run ────────────────────────────────────────────────────────────────────────
 
 export async function run(msg, data) {
@@ -244,9 +293,6 @@ export async function run(msg, data) {
     }
 
     // ── Confirm (completes the auth flow) ──────────────────────────────────
-    // This is handled as a sub-action via text matching since we can't
-    // predict the token as a choice. We check if action wasn't matched
-    // and treat it as a token confirmation.
     case "confirm": {
       // Get token from the option, or fall back to parsing the message
       let tokenValue = data.get("token")?.value;
@@ -370,28 +416,68 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [embed] });
     }
 
-    // ── Play (loved/top/recent tracks as queue) ────────────────────────────
-    case "play": {
-      // Parse category from the token option or from message text
-      let category = data.get("token")?.value?.toLowerCase();
-      if (!category) {
-        const rawContent = msg.message?.content ?? "";
-        const args = rawContent.split(/\s+/);
-        const playIdx = args.indexOf("play");
-        if (playIdx >= 0 && args[playIdx + 1]) {
-          category = args[playIdx + 1].toLowerCase();
-        }
-      }
+    // ── Playlists ──────────────────────────────────────────────────────────
+    case "playlists": {
+      const user = await lastfm.getUser(userId);
+      if (!user) return msg.reply(notLinked(prefix));
 
-      if (!category || !["loved", "top", "recent"].includes(category)) {
+      let playlists;
+      try {
+        playlists = await lastfm.getPlaylists(userId);
+      } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
-            `❌ Usage: \`${prefix}lastfm play <loved|top|recent>\`\nExample: \`${prefix}lastfm play loved\``
-          )]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch playlists: ${err.message}`)]
         });
       }
 
-      return playLastFmCategory(this, msg, userId, category);
+      if (!playlists.length) {
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`📋 No playlists found for **${user.username}**.`)]
+        });
+      }
+
+      const lines = playlists.map((pl, i) => {
+        const num = String(i + 1).padStart(2, " ");
+        const link = pl.url ? `[${pl.title}](${pl.url})` : pl.title;
+        return `\`${num}.\` ${link} — **${pl.trackCount}** tracks`;
+      });
+
+      const desc = lines.join("\n").slice(0, 4096);
+
+      return msg.reply({
+        embeds: [new EmbedBuilder()
+          .setColor(getGlobalColor())
+          .setTitle(`📋 Playlists — ${user.username}`)
+          .setDescription(desc)
+          .setFooter({ text: `💡 Use ${prefix}lastfm play playlist <number> to play one!` })]
+      });
+    }
+
+    // ── Play (loved/top/recent/playlist tracks as queue) ────────────────────
+    case "play": {
+      const parsed = parsePlayArgs(msg, data);
+
+      if (!parsed.category) {
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription([
+            `❌ Usage: \`${prefix}lastfm play <category>\``,
+            ``,
+            `**Categories:**`,
+            `\`loved\` — Play your loved tracks`,
+            `\`top\` — Play your top tracks`,
+            `\`recent\` — Play your recent tracks`,
+            `\`playlist <number>\` — Play a playlist (use \`${prefix}lastfm playlists\` to list)`,
+            ``,
+            `**Examples:**`,
+            `\`${prefix}lastfm play loved\``,
+            `\`${prefix}lastfm play playlist 1\``,
+          ].join("\n"))]
+        });
+      }
+
+      return playLastFmCategory(this, msg, userId, parsed.category, {
+        playlistId: parsed.playlistId,
+      });
     }
 
     // ── Loved tracks ──────────────────────────────────────────────────────
@@ -478,9 +564,13 @@ export async function run(msg, data) {
             `\`${prefix}lastfm loved\` — View your loved tracks`,
             `\`${prefix}lastfm top\` — View your top tracks`,
             `\`${prefix}lastfm recent\` — View your recent tracks`,
+            `\`${prefix}lastfm playlists\` — View your Last.fm playlists`,
+            ``,
+            `🎶 **Play from Last.fm:**`,
             `\`${prefix}lastfm play loved\` — Play your loved tracks`,
             `\`${prefix}lastfm play top\` — Play your top tracks`,
             `\`${prefix}lastfm play recent\` — Play your recent tracks`,
+            `\`${prefix}lastfm play playlist 1\` — Play a playlist`,
             ``,
             `💡 Or use inline: \`${prefix}play lastfm:loved\``,
           ].join("\n"))]

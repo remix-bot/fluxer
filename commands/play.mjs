@@ -56,10 +56,24 @@ export async function run(message, data) {
   const { provider: inlineProvider, query } = parseInlineProvider(rawQuery);
   const provider = inlineProvider ?? flagProvider ?? "ytm";
 
-  // ── Last.fm special provider: %play lastfm:loved / lastfm:top / lastfm:recent ──
-  if ((provider === "lastfm" || provider === "lf") && LASTFM_PLAY_CATEGORIES.includes(query.toLowerCase())) {
-    const userId = message.message?.author?.id ?? message.author?.id;
-    return playLastFmCategory(this, message, userId, query.toLowerCase());
+  // ── Last.fm special provider: %play lastfm:loved / lastfm:top / lastfm:recent / lastfm:playlist 1 ──
+  if (provider === "lastfm" || provider === "lf") {
+    const lowerQuery = query.toLowerCase().trim();
+
+    // Simple categories: lastfm:loved, lastfm:top, lastfm:recent
+    if (LASTFM_PLAY_CATEGORIES.includes(lowerQuery)) {
+      const userId = message.message?.author?.id ?? message.author?.id;
+      return playLastFmCategory(this, message, userId, lowerQuery);
+    }
+
+    // Playlist: lastfm:playlist 1 or lastfm:playlist 3
+    const playlistMatch = lowerQuery.match(/^playlist\s+(\d+)$/);
+    if (playlistMatch) {
+      const userId = message.message?.author?.id ?? message.author?.id;
+      return playLastFmCategory(this, message, userId, "playlist", {
+        playlistId: playlistMatch[1],
+      });
+    }
   }
 
   const p = await this.getPlayer(message, true, true, true);
