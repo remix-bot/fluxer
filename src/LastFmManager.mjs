@@ -407,6 +407,53 @@ export class LastFmManager {
     return data.user;
   }
 
+  // ── Play helper (for %lastfm play and %play lastfm:loved etc.) ─────────────
+
+  /**
+   * Fetch tracks from Last.fm by category and return search queries
+   * that can be resolved by the player's worker (YouTube Music search).
+   *
+   * @param {string} userId
+   * @param {"loved"|"top"|"recent"} category
+   * @param {object}  [options]
+   * @param {string}  [options.period="overall"] - Period for top tracks (overall|7day|1month|3month|6month|12month)
+   * @param {number}  [options.limit=20]         - Max tracks to return
+   * @returns {Promise<{ username: string, tracks: Array<{ query: string, artist: string, name: string, url: string }> }>}
+   */
+  async getTracksForPlay(userId, category, options = {}) {
+    const user = await this.getUser(userId);
+    if (!user) throw new Error("NOT_LINKED");
+
+    const limit = options.limit ?? 20;
+    let tracks;
+
+    switch (category) {
+      case "loved":
+        tracks = await this.getLovedTracks(userId, limit);
+        break;
+      case "top":
+        tracks = await this.getTopTracks(userId, options.period ?? "overall", limit);
+        break;
+      case "recent":
+        tracks = await this.getRecentTracks(userId, limit);
+        // Filter out "now playing" entries (they have no finished timestamp)
+        tracks = tracks.filter(t => !t.now);
+        break;
+      default:
+        throw new Error(`Unknown Last.fm category: ${category}. Use loved, top, or recent.`);
+    }
+
+    return {
+      username: user.username,
+      tracks: tracks.map(t => ({
+        query:  `${t.artist} ${t.name}`,   // searchable query for YouTube Music
+        artist: t.artist,
+        name:   t.name,
+        url:    t.url ?? "",
+      })),
+    };
+  }
+
   // ── Internal helpers ───────────────────────────────────────────────────────
 
   _assertEnabled() {

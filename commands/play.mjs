@@ -2,6 +2,10 @@ import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { PROVIDER_CHOICES } from "../src/constants/providers.mjs";
+import { playLastFmCategory } from "./lastfm.mjs";
+
+// Last.fm provider keywords that trigger special play logic
+const LASTFM_PLAY_CATEGORIES = ["loved", "top", "recent"];
 
 function parseInlineProvider(raw) {
   const match = raw.match(/^([a-z]+):\s*(.+)$/i);
@@ -29,6 +33,7 @@ export const command = new CommandBuilder()
         "$prefixplay dz: get lucky",
         "$prefixplay -p yt take over league of legends",
         "$prefixplay https://open.spotify.com/track/...",
+        "$prefixplay lastfm:loved",
         "$prefixp take over league of legends"
     )
     .addTextOption(option =>
@@ -46,13 +51,19 @@ export const command = new CommandBuilder()
     .addAlias("p");
 
 export async function run(message, data) {
-  const p = await this.getPlayer(message, true, true, true);
-  if (!p) return;
-
   const rawQuery     = data.get("query").value;
   const flagProvider = data.get("provider")?.value;
   const { provider: inlineProvider, query } = parseInlineProvider(rawQuery);
   const provider = inlineProvider ?? flagProvider ?? "ytm";
+
+  // ── Last.fm special provider: %play lastfm:loved / lastfm:top / lastfm:recent ──
+  if ((provider === "lastfm" || provider === "lf") && LASTFM_PLAY_CATEGORIES.includes(query.toLowerCase())) {
+    const userId = message.message?.author?.id ?? message.author?.id;
+    return playLastFmCategory(this, message, userId, query.toLowerCase());
+  }
+
+  const p = await this.getPlayer(message, true, true, true);
+  if (!p) return;
 
   const searchEmbed = new EmbedBuilder()
     .setColor(getGlobalColor())

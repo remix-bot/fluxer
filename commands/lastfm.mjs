@@ -12,8 +12,8 @@ export const command = new CommandBuilder()
   .addAliases("lf", "lfm")
   .addChoiceOption(o =>
     o.setName("action")
-      .setDescription("The action to perform: link, unlink, np, profile, loved, top, recent, scrobble", "options.lastfm.action")
-      .addChoices("link", "confirm", "unlink", "np", "profile", "loved", "top", "recent", "scrobble")
+      .setDescription("The action to perform: link, unlink, np, profile, loved, top, recent, play, scrobble", "options.lastfm.action")
+      .addChoices("link", "confirm", "unlink", "np", "profile", "loved", "top", "recent", "play", "scrobble")
       .setRequired(false)
   )
   .addTextOption(o =>
@@ -38,6 +38,138 @@ function notLinked(prefix) {
       .setColor(getGlobalColor())
       .setDescription(`❌ You don't have a Last.fm account linked. Use \`${prefix}lastfm link\` to get started.`)]
   };
+}
+
+/**
+ * Resolve a Last.fm category (loved/top/recent) into playable tracks.
+ * Shared between `%lastfm play <cat>` and `%play lastfm:<cat>`.
+ *
+ * @param {object} ctx     - The command `this` context (has .lastfm, .getPlayer, .handler, .t)
+ * @param {object} msg     - The message object
+ * @param {string} userId  - Discord user ID
+ * @param {string} category - "loved", "top", or "recent"
+ * @param {object} [options]
+ * @param {string} [options.period] - Period for top tracks
+ * @param {number} [options.limit]  - Max tracks
+ * @returns {Promise<void>}
+ */
+export async function playLastFmCategory(ctx, msg, userId, category, options = {}) {
+  const lastfm = ctx.lastfm;
+  const prefix = ctx.handler?.getPrefix?.(msg.message?.guildId) ?? "%";
+
+  if (!lastfm || !lastfm.enabled) return msg.reply(notConfigured(msg));
+
+  // Validate category
+  if (!["loved", "top", "recent"].includes(category)) {
+    return msg.reply({
+      embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+        `❌ Unknown category \`${category}\`. Use \`loved\`, \`top\`, or \`recent\`.`
+      )]
+    });
+  }
+
+  // Check if user is linked
+  const user = await lastfm.getUser(userId);
+  if (!user) return msg.reply(notLinked(prefix));
+
+  // Get a player (user must be in a voice channel)
+  const p = await ctx.getPlayer(msg, true, true, true);
+  if (!p) return;
+
+  // Fetch tracks from Last.fm
+  const categoryEmoji = { loved: "❤️", top: "📊", recent: "🕐" }[category];
+  const categoryLabel = { loved: "Loved", top: "Top", recent: "Recent" }[category];
+
+  let statusMsg;
+  try {
+    statusMsg = await msg.reply({
+      embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
+        `${categoryEmoji} Fetching your ${categoryLabel} tracks from Last.fm...`
+      )]
+    });
+  } catch { statusMsg = null; }
+
+  let result;
+  try {
+    result = await lastfm.getTracksForPlay(userId, category, options);
+  } catch (err) {
+    const errMsg = err.message === "NOT_LINKED"
+      ? notLinked(prefix)
+      : { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch Last.fm tracks: ${err.message}`)] };
+    if (statusMsg) statusMsg.edit(errMsg).catch(() => msg.reply(errMsg));
+    else msg.reply(errMsg);
+    return;
+  }
+
+  if (!result.tracks.length) {
+    const noTracks = { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
+      `${categoryEmoji} No ${categoryLabel.toLowerCase()} tracks found for **${result.username}**.`
+    )] };
+    if (statusMsg) statusMsg.edit(noTracks).catch(() => msg.reply(noTracks));
+    else msg.reply(noTracks);
+    return;
+  }
+
+  // Play each track sequentially — first one via play(), rest added to queue
+  let added = 0;
+  let failed = 0;
+
+  if (statusMsg) {
+    statusMsg.edit({
+      embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
+        `${categoryEmoji} Loading **${result.tracks.length}** ${categoryLabel.toLowerCase()} tracks from **${result.username}**...`
+      )]
+    }).catch(() => {});
+  }
+
+  // Play the first track immediately
+  const firstTrack = result.tracks[0];
+  try {
+    const events = p.play(firstTrack.query, false, "ytm");
+    await new Promise((resolve) => {
+      events.on("message", () => resolve());
+      events.on("error", () => { failed++; resolve(); });
+      // Timeout safety
+      setTimeout(resolve, 15_000);
+    });
+    added++;
+  } catch {
+    failed++;
+  }
+
+  // Queue the rest — use workerJob directly for speed (no need to wait for play messages)
+  const restTracks = result.tracks.slice(1);
+  for (const track of restTracks) {
+    try {
+      const data = await p.workerJob("generalQuery", { query: track.query, provider: "ytm" });
+      if (data && data.type !== "error") {
+        if (data.type === "list") {
+          p.addManyToQueue(data.data, false);
+          added += data.data.length;
+        } else if (data.type === "video") {
+          p.addToQueue(data.data, false);
+          added++;
+        } else {
+          failed++;
+        }
+      } else {
+        failed++;
+      }
+    } catch {
+      failed++;
+    }
+  }
+
+  const summary = [];
+  if (added > 0) summary.push(`✅ Added **${added}** track${added !== 1 ? "s" : ""} to the queue`);
+  if (failed > 0) summary.push(`⚠️ ${failed} track${failed !== 1 ? "s" : ""} couldn't be found`);
+
+  const doneEmbed = { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
+    `${categoryEmoji} **${categoryLabel} Tracks — ${result.username}**\n${summary.join(" · ")}`
+  )] };
+
+  if (statusMsg) statusMsg.edit(doneEmbed).catch(() => msg.reply(doneEmbed));
+  else msg.reply(doneEmbed);
 }
 
 // ── Run ────────────────────────────────────────────────────────────────────────
@@ -238,6 +370,30 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [embed] });
     }
 
+    // ── Play (loved/top/recent tracks as queue) ────────────────────────────
+    case "play": {
+      // Parse category from the token option or from message text
+      let category = data.get("token")?.value?.toLowerCase();
+      if (!category) {
+        const rawContent = msg.message?.content ?? "";
+        const args = rawContent.split(/\s+/);
+        const playIdx = args.indexOf("play");
+        if (playIdx >= 0 && args[playIdx + 1]) {
+          category = args[playIdx + 1].toLowerCase();
+        }
+      }
+
+      if (!category || !["loved", "top", "recent"].includes(category)) {
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+            `❌ Usage: \`${prefix}lastfm play <loved|top|recent>\`\nExample: \`${prefix}lastfm play loved\``
+          )]
+        });
+      }
+
+      return playLastFmCategory(this, msg, userId, category);
+    }
+
     // ── Loved tracks ──────────────────────────────────────────────────────
     case "loved": {
       const user = await lastfm.getUser(userId);
@@ -322,8 +478,11 @@ export async function run(msg, data) {
             `\`${prefix}lastfm loved\` — View your loved tracks`,
             `\`${prefix}lastfm top\` — View your top tracks`,
             `\`${prefix}lastfm recent\` — View your recent tracks`,
+            `\`${prefix}lastfm play loved\` — Play your loved tracks`,
+            `\`${prefix}lastfm play top\` — Play your top tracks`,
+            `\`${prefix}lastfm play recent\` — Play your recent tracks`,
             ``,
-            `💡 You can also play your tracks: \`${prefix}play lastfm loved\``,
+            `💡 Or use inline: \`${prefix}play lastfm:loved\``,
           ].join("\n"))]
       });
   }
@@ -347,5 +506,5 @@ function buildTrackList(username, title, tracks, showPlaycount = false) {
     .setColor(getGlobalColor())
     .setTitle(`${title} — ${username}`)
     .setDescription(desc)
-    .setFooter({ text: `💡 Use ${"%"}play lastfm loved to play these!` });
+    .setFooter({ text: `💡 Use %lastfm play loved to play these!` });
 }

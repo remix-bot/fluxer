@@ -92,7 +92,7 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 
 | Command | Description | Usage | Aliases |
 | :--- | :--- | :--- | :--- |
-| `play` | Play a song from a URL, search query, or playlist | `%play Never Gonna Give You Up` | `p` |
+| `play` | Play a song from a URL, search query, or playlist | `%play Never Gonna Give You Up` / `%play lastfm:loved` | `p` |
 | `playnext` | Add a song/playlist to the *top* of the queue | `%playnext query: text` | `pn` |
 | `pause` | Pause the current playback | `%pause` | |
 | `resume` | Resume the paused playback | `%resume` | |
@@ -123,7 +123,7 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 | `stats` | Display bot stats (uptime, ping, player count) | `%stats` | `info` |
 | `invite` | Get the bot invite link | `%invite` | `addbot`, `remix` |
 | `support` | Get an invite to the support server | `%support` | `server` |
-| `lastfm` | Link Last.fm account, toggle scrobbling, view profile | `%lastfm link` | `lf`, `lfm` |
+| `lastfm` | Link Last.fm, toggle scrobbling, view profile, play tracks | `%lastfm link` / `%lastfm play loved` | `lf`, `lfm` |
 | `reload` | Reload commands or modules at runtime (owner) | `%reload` | |
 | `servers` | List servers the bot is in (owner) | `%servers` | |
 | `eval` | Evaluate JavaScript (owner only) | `%eval 1+1` | |
