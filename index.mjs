@@ -14,6 +14,7 @@ import { Dashboard } from "./src/dashboard/Dashboard.mjs";
 import { Locale } from "./src/constants/Locale.mjs";
 import { RecoveryManager } from "./src/RecoveryManager.mjs";
 import { GatewayHandler } from "./src/GatewayHandler.mjs";
+import { LastFmManager } from "./src/LastFmManager.mjs";
 
 export class Remix {
   constructor() {
@@ -146,6 +147,10 @@ export class Remix {
     // are active before the first Ready event fires.
     this.gatewayHandler.setupEventHandlers();
 
+    // ── Last.fm Manager ─────────────────────────────────────────────────────
+    // Handles Last.fm API auth, scrobbling, and user data.
+    this.lastfm = new LastFmManager(config.lastfm, config.mysql);
+
     // ── Settings ready callback ──────────────────────────────────────────────
     settings.on("ready", () => {
       initLogger(config);
@@ -258,6 +263,7 @@ export class Remix {
       timers: this.T,
     });
     this.players.observedVoiceUsers = this.observedVoiceUsers;
+    this.players._lastfm = this.lastfm;
 
     // ── Periodic alone-check ───────────────────────────────────────────────────
     const ALONE_CHECK_INTERVAL = this.T.aloneCheckInterval;

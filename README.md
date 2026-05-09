@@ -49,7 +49,7 @@
 
 ## About The Project
 
-Remix is a free and open-source music bot for [Fluxer](https://fluxer.app), built with [`@fluxerjs/core`](https://github.com/fluxerjs/core) and powered by [`moonlink.js`](https://github.com/ShadowLp174/moonlink.js) for seamless, high-quality audio streaming. It uses [`revoice.js`](https://github.com/ShadowLp174/revoice.js) for LiveKit voice connections and audio playback, and [`@fluxerjs/voice`](https://github.com/fluxerjs/voice) for native voice channel integration alongside the Moonlink Lavalink proxy.
+Remix is a free and open-source music bot for [Fluxer](https://fluxer.app), built with [`@fluxerjs/core`](https://github.com/fluxerjs/core) and powered by [`moonlink.js`](https://github.com/ShadowLp174/moonlink.js) for seamless, high-quality audio streaming. It uses [`revoice.js`](https://www.npmjs.com/package/revoice.js) for LiveKit voice connections and audio playback, and [`@fluxerjs/voice`](https://github.com/fluxerjs/voice) for native voice channel integration alongside the Moonlink Lavalink proxy.
 
 We believe music features shouldn't be locked behind paywalls — **all commands on Remix are 100% free and always will be.**
 
@@ -64,6 +64,7 @@ We believe music features shouldn't be locked behind paywalls — **all commands
 - **Interactive emoji player** — reaction-based control panel with play, pause, skip, volume, shuffle, and more
 - **Lyrics** — fetch synced lyrics via NodeLink
 - **Radio stations** — built-in support for custom radio streams with keyword-based search
+- **Last.fm integration** — auto-scrobble songs, play loved/top/recent tracks, and view your Last.fm profile
 - **Server settings** — per-guild configuration for prefix, volume, locale, 24/7 channels, and more
 - **Web dashboard** — optional browser-based control panel with Redis-backed sessions and Fluxer OAuth2 login
 - **Multi-language support** — available in English, Arabic, German, Kurdish (Sorani), and Brazilian Portuguese
@@ -122,6 +123,7 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 | `stats` | Display bot stats (uptime, ping, player count) | `%stats` | `info` |
 | `invite` | Get the bot invite link | `%invite` | `addbot`, `remix` |
 | `support` | Get an invite to the support server | `%support` | `server` |
+| `lastfm` | Link Last.fm account, toggle scrobbling, view profile | `%lastfm link` | `lf`, `lfm` |
 | `reload` | Reload commands or modules at runtime (owner) | `%reload` | |
 | `servers` | List servers the bot is in (owner) | `%servers` | |
 | `eval` | Evaluate JavaScript (owner only) | `%eval 1+1` | |
@@ -261,6 +263,7 @@ Key configuration options in `config.json`:
 | `nodelink` | object | — | NodeLink connection (`host`, `port`, `password`, `requestTimeout`) |
 | `spotify` | object | — | Spotify API credentials (`clientId`, `clientSecret`) |
 | `geniusToken` | string | — | *(Deprecated, unused)* Previously for lyrics; lyrics are now fetched via NodeLink |
+| `lastfm` | object | — | Last.fm integration (`apiKey`, `apiSecret`, `scrobbleThreshold`, `scrobbleMinMs`) |
 | `dashboard` | object | — | Dashboard config: `enabled`, `redis`, `fluxer` (OAuth2) |
 | `dashboardUrl` | string | — | URL the dashboard is accessible from |
 | `sessionSecret` | string | — | Secret for Express.js session middleware |
@@ -292,6 +295,7 @@ fluxer/
 │   ├── radio.mjs                # Radio station management
 │   ├── debug.mjs                # Voice connection debugger (owner only, paginated)
 │   ├── stats.mjs                # Bot stats with live player count
+│   ├── lastfm.mjs               # Last.fm account linking, scrobbling, and profile
 │   └── ...                      # All other commands
 ├── src/
 │   ├── CommandHandler.mjs       # Command loader, prefix manager, registry
@@ -302,6 +306,7 @@ fluxer/
 │   ├── Settings.mjs             # RemoteSettingsManager + ServerSettings export
 │   ├── GatewayHandler.mjs       # Raw WS events, voice-state tracking, presence rotation
 │   ├── RecoveryManager.mjs      # Session persistence, crash recovery, 24/7 auto-join
+│   ├── LastFmManager.mjs        # Last.fm API client — auth, scrobbling, user data
 │   ├── Utils.mjs                # Shared utilities
 │   ├── worker.mjs               # Background task worker
 │   ├── probe.mjs                # FFprobe wrapper for audio stream info
@@ -375,7 +380,7 @@ To add a new language, place a JSON file in `storage/locales/bot/` following the
 
 **Powered by:**
 - [`@fluxerjs/core`](https://github.com/fluxerjs/core) — Fluxer API client
-- [`revoice.js`](https://github.com/ShadowLp174/revoice.js) — LiveKit voice connection and MediaPlayer
+- [`revoice.js`](https://www.npmjs.com/package/revoice.js) — LiveKit voice connection and MediaPlayer
 - [`@fluxerjs/voice`](https://github.com/fluxerjs/voice) — Native voice channel integration
 - [`moonlink.js`](https://github.com/ShadowLp174/moonlink.js) — Lavalink proxy
 - [`NodeLink`](https://github.com/PerformanC/NodeLink) — Audio node manager

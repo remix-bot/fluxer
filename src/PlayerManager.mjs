@@ -115,6 +115,7 @@ export class PlayerManager {
     this.locale       = config.locale ?? null;
     this.spawnPlayer  = config.spawnPlayer ?? null;   // RecoveryManager.spawnPlayer — for 24/7 rejoin on autoleave
     this.timers       = config.timers ?? {};
+    this._lastfm      = null;   // Set later by Remix class after init
   }
 
   /**
@@ -218,6 +219,11 @@ export class PlayerManager {
       emit("streamStartPlay", Date.now());
       // Also broadcast on global channel for full state update
       this.dashboard.playerUpdate({ type: "startplay" }, player);
+
+      // ── Last.fm: now-playing notification + deferred scrobble ────────────
+      if (this._lastfm?.enabled && song) {
+        this._handleLastFmStartPlay(player, song);
+      }
     });
 
     player.on("stopplay", () => {
@@ -827,6 +833,102 @@ export class PlayerManager {
         player.destroy();
       }
     })();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Last.fm Scrobbling
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Handle the "startplay" event for Last.fm: send now-playing notification
+   * to all linked users in the voice channel, and schedule a deferred scrobble
+   * after the track has played for long enough (50% duration or 4 min).
+   *
+   * @param {Player} player
+   * @param {Object} song - Track object
+   */
+  _handleLastFmStartPlay(player, song) {
+    const lastfm = this._lastfm;
+    if (!lastfm?.enabled) return;
+
+    const guildId = cleanId(player._guildId);
+    if (!guildId) return;
+
+    // Find all human users in the voice channel
+    const channelId = getPlayerChannelId(player);
+    const humanUserIds = [];
+
+    // Check observedVoiceUsers first
+    if (this.observedVoiceUsers) {
+      for (const [uid, info] of this.observedVoiceUsers) {
+        if (cleanId(info.guildId) === guildId && cleanId(info.channelId) === channelId) {
+          humanUserIds.push(uid);
+        }
+      }
+    }
+
+    // Also check guild voice states as fallback
+    const guild = player.client?.guilds?.get(guildId);
+    if (guild) {
+      const voiceStates = guild.voice_states ?? guild.voiceStates ?? null;
+      if (voiceStates) {
+        const entries = Array.isArray(voiceStates)
+          ? voiceStates
+          : typeof voiceStates.values === "function"
+            ? [...voiceStates.values()]
+            : Object.values(voiceStates ?? {});
+        for (const state of entries) {
+          const uid = state?.userId ?? state?.user_id;
+          const chId = cleanId(state?.channelId ?? state?.channel_id);
+          if (uid && chId === channelId) {
+            // Skip bots
+            const member = guild.members?.get?.(uid);
+            if (member?.user?.bot) continue;
+            if (!humanUserIds.includes(uid)) humanUserIds.push(uid);
+          }
+        }
+      }
+    }
+
+    const startedAtMs = player.startedPlaying;
+
+    // Send now-playing for each linked user
+    for (const userId of humanUserIds) {
+      lastfm.updateNowPlaying(userId, song).catch(() => {});
+    }
+
+    // Schedule deferred scrobble after threshold
+    const durationMs = (() => {
+      const d = song.duration;
+      if (!d) return null;
+      if (typeof d === "object" && d.seconds) return d.seconds * 1000;
+      if (typeof d === "number") return d;
+      return null;
+    })();
+
+    if (durationMs && durationMs >= 30_000) {
+      const thresholdMs = Math.min(
+        durationMs * lastfm.scrobbleThreshold,
+        lastfm.scrobbleMinMs
+      );
+      // Don't schedule if threshold is too far out (cap at 10 min)
+      if (thresholdMs <= 600_000) {
+        setTimeout(() => {
+          // Only scrobble if the same song is still playing
+          const current = player.queue?.getCurrent();
+          if (!current || player._destroyed || player.leaving) return;
+          if (current.title !== song.title && current.url !== song.url) return;
+          if (player._paused) return; // don't scrobble if paused
+
+          const playedMs = Date.now() - (player.startedPlaying ?? startedAtMs);
+          if (lastfm.shouldScrobble(song, playedMs)) {
+            for (const userId of humanUserIds) {
+              lastfm.scrobble(userId, song, startedAtMs).catch(() => {});
+            }
+          }
+        }, thresholdMs);
+      }
+    }
   }
 
 }

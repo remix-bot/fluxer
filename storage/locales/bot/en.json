@@ -33,6 +33,7 @@
     "invite": "Get the invite link for Remix and the support server.",
     "join": "Make the bot join your voice channel, or specify one.",
     "leave": "Make the bot leave your current voice channel.",
+    "lastfm": "Link your Last.fm account, toggle scrobbling, or view your profile.",
     "list": "List the songs in the queue of your current voice channel.",
     "loop": "Toggle the looping of your queue/song.",
     "lyrics": "Display synced lyrics from NodeLink.",
@@ -60,6 +61,10 @@
   "options": {
     "debug": {
       "target": "The target that should be examined."
+    },
+    "lastfm": {
+      "action": "The action to perform: link, confirm, unlink, np, profile, loved, top, recent, scrobble",
+      "token": "The auth token from Last.fm (used with 'confirm' action)"
     },
     "eval": {
       "expression": "The JavaScript expression to evaluate"
@@ -248,6 +253,33 @@
       "playerNotInit": "Player not initialized.",
       "leftRejoin247": "✅ Successfully Left — rejoining <#{{channel}}> in 5 seconds.\nTo disable 24/7 mode permanently, use `%247 off`.",
       "left247On": "✅ Successfully Left.\n24/7 mode is **on** — bot won't rejoin automatically. Use `%play` to bring it back, or `%247 off` to fully disable.\nUse `%247` to view all saved channels."
+    },
+    "lastfm": {
+      "notConfigured": "❌ Last.fm integration is not configured on this bot. Ask the bot owner to add a Last.fm API key to the config.",
+      "notLinked": "❌ You don't have a Last.fm account linked. Use `{{prefix}}lastfm link` to get started.",
+      "linked": "✅ Last.fm account **[{{username}}](https://last.fm/user/{{username}})** linked! Scrobbling is enabled by default.",
+      "alreadyLinked": "✅ You already have **{{username}}** linked! Use `{{prefix}}lastfm unlink` to disconnect, or `{{prefix}lastfm scrobble` to toggle scrobbling.",
+      "unlinked": "✅ Last.fm account **{{username}}** has been unlinked.",
+      "scrobbleEnabled": "✅ Scrobbling **enabled** — songs you listen to will be scrobbled to **{{username}}**.",
+      "scrobbleDisabled": "⏸️ Scrobbling **disabled** — songs won't be scrobbled. Your account is still linked.",
+      "authDM": "📧 Check your DMs for the Last.fm authorization link! After approving, run `{{prefix}}lastfm confirm <token>` here.",
+      "authDMFailed": "⚠️ I couldn't DM you. [Click here to authorize on Last.fm]({{url}}), then run `{{prefix}}lastfm confirm <token>`.",
+      "confirmUsage": "❌ Usage: `{{prefix}}lastfm confirm <token>` — provide the token from the auth DM.",
+      "confirmFailed": "❌ Failed to get session: {{error}}\nMake sure you approved the token on Last.fm first.",
+      "tokenFailed": "❌ Failed to get auth token: {{error}}",
+      "noLoved": "❤️ No loved tracks found for **{{username}}**.",
+      "noTop": "📊 No top tracks found for **{{username}}**.",
+      "noRecent": "🕐 No recent tracks found for **{{username}}**.",
+      "lovedTitle": "❤️ Loved Tracks — {{username}}",
+      "topTitle": "📊 Top Tracks — {{username}}",
+      "recentTitle": "🕐 Recent Tracks — {{username}}",
+      "nowPlaying": "🎵 Now Playing on Last.fm",
+      "lastPlayed": "🕐 Last Played on Last.fm",
+      "profileTitle": "Last.fm Profile: {{username}}",
+      "profileScrobbles": "🎵 **{{playcount}}** scrobbles",
+      "profileRegistered": "👤 Registered: {{date}}",
+      "profileLink": "🔗 [Open profile]({{url}})",
+      "fetchFailed": "❌ Failed to fetch data from Last.fm: {{error}}"
     },
     "list": {
       "empty": "📭 The queue is empty. Use `{{prefix}}play` to add songs!",

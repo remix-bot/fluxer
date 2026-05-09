@@ -395,7 +395,7 @@ export class RecoveryManager {
               const embed = new EmbedBuilder()
                   .setColor(getGlobalColor())
                   .setDescription(
-                      `Left channel ${activeChannelId} because of inactivity.\n` +
+                      `Left channel <#${activeChannelId}> because of inactivity.\n` +
                       `If you want me to stay in voice, use \`${prefix}247 on\` or \`${prefix}247 auto\`\n` +
                       `💡 Use \`${prefix}247\` to view and manage all saved channels.`
                   )

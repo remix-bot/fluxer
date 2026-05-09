@@ -76,6 +76,14 @@
   },
   "sessionSecret": "secret for the expressjs session middleware; https://www.npmjs.com/package/express-session#user-content-secret",
   "geniusToken": "Genius access token (Used for lyrics); optional",
+  "lastfm": {
+    "Comment": "Last.fm integration: auto-scrobble songs, play loved/top/recent tracks. Register at https://www.last.fm/api/account/create",
+    "apiKey": "your_lastfm_api_key",
+    "apiSecret": "your_lastfm_api_secret",
+    "scrobbleThreshold": 0.5,
+    "scrobbleMinMs": 240000,
+    "Comment2": "scrobbleThreshold: fraction of track duration before scrobbling (0.5 = 50%). scrobbleMinMs: minimum ms played before scrobble (default 4 min). Both must be met."
+  },
   "owners": ["user id for owner-only commands", "another user id"],
   "playerAFKTimeout": 60000,
   "Comment": "The above specifies the time in ms after which a player goes inactive; Optional.",
