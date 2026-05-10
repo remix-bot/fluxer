@@ -362,12 +362,38 @@ export class GatewayHandler {
     const client = remix.client;
 
     const setPresence = () => {
+      const entry = this.presenceContents[this.presenceIndex];
+
+      // Support both plain strings and rich objects:
+      // String: "Ping for Prefix"
+      // Object: { text: "...", emoji_name: "🎵", activity: { name: "kyun.sh", type: 2 } }
+      const isObj = typeof entry === "object" && entry !== null;
+
+      const custom_status = {};
+      if (isObj) {
+        if (entry.text)       custom_status.text       = entry.text;
+        if (entry.emoji_name) custom_status.emoji_name  = entry.emoji_name;
+        if (entry.emoji_id)   custom_status.emoji_id    = entry.emoji_id;
+      } else {
+        custom_status.text = String(entry);
+      }
+
       const presence = {
         status:        "online",
         mobile:        false,
         afk:           false,
-        custom_status: { text: this.presenceContents[this.presenceIndex] },
+        custom_status,
       };
+
+      // Add activity (e.g. "Listening to kyun.sh") if provided
+      if (isObj && entry.activity) {
+        presence.activities = [{
+          name: entry.activity.name ?? "music",
+          type: entry.activity.type ?? 0,
+          url:  entry.activity.url  ?? undefined,
+        }];
+      }
+
       if (client.ws?.send) {
         client.ws.send(0, { op: GatewayOpcodes.PresenceUpdate, d: presence });
       } else {

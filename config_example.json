@@ -13,7 +13,25 @@
   },
   "prefix": "your desired prefix (such as %)",
   "presenceInterval": null,
-  "presenceContents": [],
+  "presenceContents-Comment": "Each entry can be a plain string (e.g. 'Ping for Prefix') or an object. Objects support: text (required), emoji_name (unicode emoji or custom emoji name), emoji_id (snowflake ID for custom guild emojis only), activity ({ name, type, url? }). Activity types: 0=Playing, 1=Streaming, 2=Listening, 3=Watching, 5=Competing. For custom guild emojis, provide both emoji_name AND emoji_id. For unicode emojis, only emoji_name is needed.",
+  "presenceContents": [
+    {
+      "text": "Ping for Prefix | Hosted by https://kyun.sh/",
+      "emoji_name": "Remix",
+      "emoji_id": "1487652011819025844",
+      "activity": { "name": "kyun.sh", "type": 2 }
+    },
+    {
+      "text": "Ping for Prefix",
+      "emoji_name": "🎧",
+      "activity": { "name": "music", "type": 2 }
+    },
+    {
+      "text": "Ping for Prefix | By RedTech & NoLogicAlan",
+      "emoji_name": "🎶",
+      "activity": { "name": "RedTech & NoLogicAlan", "type": 2 }
+    }
+  ],
   "spotify": {
     "clientId": "your spotify client id",
     "clientSecret": "your spotify client secret"

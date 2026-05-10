@@ -68,12 +68,37 @@ export class Remix {
     const client = new Client({
       intents: config["fluxer.js"]?.intents ?? 0,
       ...config["fluxer.js"],
-      presence: presenceContents.length > 0 ? {
-        status:        "online",
-        mobile:        false,
-        afk:           false,
-        custom_status: { text: presenceContents[0] },
-      } : undefined,
+      presence: (() => {
+        if (presenceContents.length === 0) return undefined;
+        const entry = presenceContents[0];
+        const isObj = typeof entry === "object" && entry !== null;
+
+        const custom_status = {};
+        if (isObj) {
+          if (entry.text)       custom_status.text       = entry.text;
+          if (entry.emoji_name) custom_status.emoji_name  = entry.emoji_name;
+          if (entry.emoji_id)   custom_status.emoji_id    = entry.emoji_id;
+        } else {
+          custom_status.text = String(entry);
+        }
+
+        const p = {
+          status:        "online",
+          mobile:        false,
+          afk:           false,
+          custom_status,
+        };
+
+        if (isObj && entry.activity) {
+          p.activities = [{
+            name: entry.activity.name ?? "music",
+            type: entry.activity.type ?? 0,
+            url:  entry.activity.url  ?? undefined,
+          }];
+        }
+
+        return p;
+      })(),
     });
 
     client.setMaxListeners(50);
@@ -478,7 +503,15 @@ export class Remix {
     // ── Modules ───────────────────────────────────────────────────────────────
     logger.commands("Loading Modules.");
     this.loadedModules = new Map();
-    this.modules       = JSON.parse(fs.readFileSync("./storage/modules.json"));
+    try {
+      this.modules = JSON.parse(fs.readFileSync("./storage/modules.json"));
+    } catch (e) {
+      const reason = e.code === "ENOENT"
+          ? "storage/modules.json not found."
+          : `storage/modules.json is malformed JSON: ${e.message}`;
+      console.error(`[Startup] WARN: ${reason} — starting with no modules.`);
+      this.modules = [];
+    }
     Promise.allSettled(this.modules.map(async m => {
       if (!m.enabled) return;
       try {
