@@ -956,7 +956,12 @@ export class QueuePaginator {
     const closeSession = async () => {
       unobserve();
       const embed = buildEmbed(state.page);
-      embed.footer.text += " • " + this._handler.t(guildId, "pagination.embed.sclosedTitle");
+      const closedLabel = this._handler.t(guildId, "pagination.embed.sclosedTitle");
+      if (embed.footer && typeof embed.footer.text === "string") {
+        embed.footer.text += " • " + closedLabel;
+      } else {
+        embed.footer = { text: closedLabel };
+      }
       rawMsg.edit({ embeds: [embed] }).catch(() => {});
       await clearReactions();
     };
