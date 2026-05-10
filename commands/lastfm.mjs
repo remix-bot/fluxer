@@ -12,8 +12,8 @@ export const command = new CommandBuilder()
   .addAliases("lf", "lfm")
   .addChoiceOption(o =>
     o.setName("action")
-      .setDescription("The action to perform: link, unlink, np, profile, loved, top, recent, playlists, play, scrobble", "options.lastfm.action")
-      .addChoices("link", "confirm", "unlink", "np", "profile", "loved", "top", "recent", "playlists", "play", "scrobble")
+      .setDescription("The action to perform: link, unlink, np, profile, loved, top, recent, playlists, play, scrobble, leaderboard", "options.lastfm.action")
+      .addChoices("link", "confirm", "unlink", "np", "profile", "loved", "top", "recent", "playlists", "play", "scrobble", "leaderboard", "lb")
       .setRequired(false)
   )
   .addTextOption(o =>
@@ -401,6 +401,9 @@ export async function run(msg, data) {
         });
       }
 
+      // Sync scrobble count in background (keeps leaderboard fresh)
+      lastfm.syncUserScrobbleCount(userId).catch(() => {});
+
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
         .setAuthor({ name: `Last.fm Profile: ${info.name}`, icon_url: info.image?.[2]?.["#text"] || undefined, url: info.url })
@@ -527,6 +530,104 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [buildTrackList(user.username, "📊 Top Tracks", tracks, true)] });
     }
 
+    // ── Leaderboard ─────────────────────────────────────────────────────
+    case "leaderboard":
+    case "lb": {
+      let lb;
+      try {
+        lb = await lastfm.getLeaderboard(0, 10);
+      } catch (err) {
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch leaderboard: ${err.message}`)]
+        });
+      }
+
+      if (!lb.entries.length) {
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
+            `🎵 No scrobbles recorded yet. Link your Last.fm account with \`${prefix}lastfm link\` and start listening!`
+          )]
+        });
+      }
+
+      // Single page — no pagination needed
+      if (lb.totalPages <= 1) {
+        const embed = buildLeaderboardEmbed(lb, 0, prefix);
+        return msg.reply({ embeds: [embed] });
+      }
+
+      // Multi-page with emoji navigation
+      let currentPage = 0;
+
+      const buildPage = (pageIdx, expired = false) => {
+        // Fetch for this page index (we pre-load only page 0;
+        // subsequent pages are fetched on navigation)
+        const footerText = expired
+          ? "Controls expired"
+          : `Page ${pageIdx + 1}/${lb.totalPages} • Use ◀️▶️ to navigate`;
+        const embed = buildLeaderboardEmbed(lb, pageIdx, prefix);
+        embed.setFooter({ text: footerText });
+        return { embeds: [embed] };
+      };
+
+      const replyMsg = await msg.reply(buildPage(0));
+      if (!replyMsg?.message) return;
+
+      const navEmojis = ["◀️", "▶️", "❌"];
+      for (const emoji of navEmojis) {
+        await replyMsg.message.react(emoji).catch(() => {});
+      }
+
+      const clearReactions = async () => {
+        try {
+          await replyMsg.message.removeAllReactions();
+        } catch {
+          for (const emoji of navEmojis) {
+            try { await replyMsg.message.removeReaction(emoji); } catch {}
+          }
+        }
+      };
+
+      let emojiTimeout;
+      const resetTimer = () => {
+        clearTimeout(emojiTimeout);
+        emojiTimeout = setTimeout(async () => {
+          unobserve?.();
+          await clearReactions();
+          await replyMsg.edit(buildPage(currentPage, true)).catch(() => {});
+        }, EMOJI_REMOVE_TIMEOUT);
+      };
+
+      const unobserve = replyMsg.onReaction(navEmojis, async (e) => {
+        if (e.emoji_id === "❌") {
+          clearTimeout(emojiTimeout);
+          unobserve?.();
+          await replyMsg.message.delete().catch(() => {});
+          return;
+        }
+
+        resetTimer();
+
+        if (e.emoji_id === "◀️") {
+          currentPage = currentPage > 0 ? currentPage - 1 : lb.totalPages - 1;
+        } else if (e.emoji_id === "▶️") {
+          currentPage = currentPage < lb.totalPages - 1 ? currentPage + 1 : 0;
+        }
+
+        // Fetch the page data from DB
+        try {
+          lb = await lastfm.getLeaderboard(currentPage, 10);
+        } catch {
+          /* keep previous data */
+        }
+
+        await replyMsg.edit(buildPage(currentPage)).catch(() => {});
+      });
+
+      resetTimer();
+      break;
+    }
+
     // ── Recent tracks ──────────────────────────────────────────────────────
     case "recent": {
       const user = await lastfm.getUser(userId);
@@ -566,6 +667,7 @@ export async function run(msg, data) {
             `\`${prefix}lastfm top\` — View your top tracks`,
             `\`${prefix}lastfm recent\` — View your recent tracks`,
             `\`${prefix}lastfm playlists\` — View your Last.fm playlists`,
+            `\`${prefix}lastfm leaderboard\` — Scrobble leaderboard`,
             ``,
             `🎶 **Play from Last.fm:**`,
             `\`${prefix}lastfm play loved\` — Play your loved tracks`,
@@ -599,4 +701,27 @@ function buildTrackList(username, title, tracks, showPlaycount = false) {
     .setTitle(`${title} — ${username}`)
     .setDescription(desc)
     .setFooter({ text: `💡 Use %lastfm play loved to play these!` });
+}
+
+// ── Leaderboard embed builder ─────────────────────────────────────────────────
+
+function buildLeaderboardEmbed(lb, pageIdx, prefix) {
+  const MEDALS = ["🥇", "🥈", "🥉"];
+  const startRank = pageIdx * lb.perPage;
+
+  const lines = lb.entries.map((entry, i) => {
+    const rank = startRank + i + 1;
+    const medal = rank <= 3 ? MEDALS[rank - 1] : `  `;
+    const name = entry.username || entry.userId;
+    const count = Utils.formatNumber(entry.scrobbleCount);
+    return `${medal} ${rank}. **${name}** — ${count} scrobbles`;
+  });
+
+  const desc = lines.join("\n").slice(0, 4096);
+
+  return new EmbedBuilder()
+    .setColor(getGlobalColor())
+    .setTitle("🎵 Scrobble Leaderboard")
+    .setDescription(desc)
+    .setFooter({ text: `💡 View & sync your count: ${prefix}lastfm profile` });
 }

@@ -123,7 +123,7 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 | `stats` | Display bot stats (uptime, ping, player count, stored scrobbles) | `%stats` | `info` |
 | `invite` | Get the bot invite link | `%invite` | `addbot`, `remix` |
 | `support` | Get an invite to the support server | `%support` | `server` |
-| `lastfm` | Link Last.fm, toggle scrobbling, view profile, play tracks | `%lastfm link` / `%lastfm play loved` | `lf`, `lfm` |
+| `lastfm` | Link Last.fm, toggle scrobbling, view profile, play tracks, leaderboard | `%lastfm link` / `%lastfm play loved` / `%lastfm lb` | `lf`, `lfm` |
 | `reload` | Reload commands or modules at runtime (owner) | `%reload` | |
 | `servers` | List servers the bot is in (owner) | `%servers` | |
 | `eval` | Evaluate JavaScript (owner only) | `%eval 1+1` | |

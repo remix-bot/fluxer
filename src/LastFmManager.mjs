@@ -119,13 +119,21 @@ export class LastFmManager {
     const pool = this._pool;
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS \`lastfm_users\` (
-        \`user_id\`     VARCHAR(30)  NOT NULL PRIMARY KEY,
-        \`session_key\` VARCHAR(64)  NOT NULL,
-        \`username\`    VARCHAR(64)  NOT NULL DEFAULT '',
-        \`scrobble\`    TINYINT(1)   NOT NULL DEFAULT 1,
-        \`linked_at\`   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+        \`user_id\`       VARCHAR(30)  NOT NULL PRIMARY KEY,
+        \`session_key\`   VARCHAR(64)  NOT NULL,
+        \`username\`      VARCHAR(64)  NOT NULL DEFAULT '',
+        \`scrobble\`      TINYINT(1)   NOT NULL DEFAULT 1,
+        \`scrobble_count\` BIGINT       NOT NULL DEFAULT 0,
+        \`linked_at\`     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+
+    // Auto-migrate: add scrobble_count column if it doesn't exist (existing tables)
+    try {
+      await pool.execute("ALTER TABLE \`lastfm_users\` ADD COLUMN \`scrobble_count\` BIGINT NOT NULL DEFAULT 0 AFTER \`scrobble\`");
+    } catch {
+      // Column already exists — ignore
+    }
 
     // Stats table — single row tracking global scrobble counts
     await pool.execute(`
@@ -298,7 +306,7 @@ export class LastFmManager {
       logger.settings(`[LastFm] Scrobbled "${track.title}" for ${userId}`);
 
       // Increment stored scrobbles counter (non-blocking)
-      this._incrementScrobbleCount();
+      this._incrementScrobbleCount(userId);
     } catch (err) {
       logger.warn(`[LastFm] Scrobble failed for ${userId}: ${err.message}`);
     }
@@ -743,6 +751,65 @@ export class LastFmManager {
     }
   }
 
+  /**
+   * Get the scrobble leaderboard — top users by scrobble_count.
+   * @param {number} [page=0] - 0-based page index
+   * @param {number} [perPage=10] - Users per page
+   * @returns {Promise<{ entries: Array<{ userId, username, scrobbleCount }>, totalUsers: number, page, perPage, totalPages: number }>}
+   */
+  async getLeaderboard(page = 0, perPage = 10) {
+    if (!this.enabled) return { entries: [], totalUsers: 0, page: 0, perPage: 10, totalPages: 0 };
+
+    const pool = await this._getPool();
+
+    // Get total count
+    const [countRows] = await pool.execute(
+      "SELECT COUNT(*) AS total FROM lastfm_users WHERE scrobble_count > 0"
+    );
+    const totalUsers = Number(countRows[0]?.total ?? 0);
+    const totalPages = Math.max(1, Math.ceil(totalUsers / perPage));
+
+    // Clamp page
+    page = Math.max(0, Math.min(page, totalPages - 1));
+
+    const offset = page * perPage;
+    const [rows] = await pool.execute(
+      "SELECT user_id, username, scrobble_count FROM lastfm_users WHERE scrobble_count > 0 ORDER BY scrobble_count DESC LIMIT ? OFFSET ?",
+      [String(perPage), String(offset)]
+    );
+
+    const entries = rows.map(r => ({
+      userId:       r.user_id,
+      username:     r.username || r.user_id,
+      scrobbleCount: Number(r.scrobble_count),
+    }));
+
+    return { entries, totalUsers, page, perPage, totalPages };
+  }
+
+  /**
+   * Update a user's scrobble_count from their Last.fm profile (user.getinfo).
+   * This syncs the local counter with Last.fm's actual count.
+   * Called lazily when the leaderboard is viewed or the user checks their profile.
+   * @param {string} userId
+   * @returns {Promise<number>} The updated scrobble count
+   */
+  async syncUserScrobbleCount(userId) {
+    if (!this.enabled) return 0;
+    try {
+      const info = await this.getUserInfo(userId);
+      const playcount = Number(info.playcount ?? 0);
+      const pool = await this._getPool();
+      await pool.execute(
+        "UPDATE lastfm_users SET scrobble_count = ? WHERE user_id = ?",
+        [String(playcount), String(userId)]
+      );
+      return playcount;
+    } catch {
+      return 0;
+    }
+  }
+
   // ── Internal helpers ───────────────────────────────────────────────────────
 
   _assertEnabled() {
@@ -751,15 +818,22 @@ export class LastFmManager {
 
   /**
    * Increment the stored scrobbles counter (in-memory + MySQL).
+   * Also increments per-user scrobble_count.
    * Called after a successful scrobble. Non-blocking — fire-and-forget.
    */
-  _incrementScrobbleCount() {
+  _incrementScrobbleCount(userId) {
     this._storedScrobbles++;
     // Persist to MySQL in the background (don't await)
     this._getPool().then(pool => {
       pool.execute(
         "UPDATE lastfm_stats SET stored_scrobbles = stored_scrobbles + 1 WHERE id = 1"
       ).catch(() => {});
+      if (userId) {
+        pool.execute(
+          "UPDATE lastfm_users SET scrobble_count = scrobble_count + 1 WHERE user_id = ?",
+          [String(userId)]
+        ).catch(() => {});
+      }
     }).catch(() => {});
   }
 
