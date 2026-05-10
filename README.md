@@ -382,7 +382,7 @@ To add a new language, place a JSON file in `storage/locales/bot/` following the
 - [`@fluxerjs/core`](https://github.com/fluxerjs/core) — Fluxer API client
 - [`revoice.js`](https://www.npmjs.com/package/revoice.js) — LiveKit voice connection and MediaPlayer
 - [`@fluxerjs/voice`](https://github.com/fluxerjs/voice) — Native voice channel integration
-- [`moonlink.js`](https://github.com/ShadowLp174/moonlink.js) — Lavalink proxy
+- [`moonlink.js`](https://github.com/Ecliptia/moonlink.js) — Lavalink proxy
 - [`NodeLink`](https://github.com/PerformanC/NodeLink) — Audio node manager
 
 <p align="center">
