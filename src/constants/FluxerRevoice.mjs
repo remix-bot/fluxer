@@ -163,6 +163,17 @@ export class FluxerRevoice extends EventEmitter {
   connections  = new Map();
   users        = new Map();
 
+  // Guild-level join mutex: prevents concurrent joinVoiceChannel() calls
+  // for the same guild. When the bot tries to join multiple channels in
+  // the same guild simultaneously (e.g. during recovery), the Fluxer
+  // voice server can return 401 Unauthorized because the previous
+  // session's token hasn't been fully cleaned up yet. Serializing joins
+  // per guild eliminates this race condition.
+  /** @type {Map<string, Promise>} */
+  _guildJoinQueue = new Map();
+  /** @type {number} Delay between consecutive guild joins (ms) */
+  _guildJoinDelay = 1500;
+
   constructor(client) {
     super();
     if (!client) throw new Error("FluxerRevoice requires a Fluxer client instance");
@@ -251,6 +262,24 @@ export class FluxerRevoice extends EventEmitter {
    * @returns {Promise<FluxerVoiceConnection>}
    */
   async join(channelId, _leaveIfEmpty = false) {
+    // Resolve the guild ID for this channel so we can serialize joins per guild.
+    // This prevents the 401 Unauthorized race condition that occurs when
+    // multiple channels in the same guild are joined simultaneously.
+    let guildId = null;
+    try {
+      const ch = this.client.channels?.get?.(channelId);
+      guildId = ch?.guildId ?? ch?.guild?.id ?? null;
+    } catch (_) {}
+
+    if (guildId) {
+      // Serialize: wait for any in-flight join for this guild to complete,
+      // then add a short delay before starting our join.
+      const prev = this._guildJoinQueue.get(guildId) ?? Promise.resolve();
+      const ourTurn = prev.then(() => new Promise(r => setTimeout(r, this._guildJoinDelay)));
+      this._guildJoinQueue.set(guildId, ourTurn);
+      await ourTurn;
+    }
+
     if (this.connections.has(channelId)) {
       const existing = this.connections.get(channelId);
       // If the existing connection is still alive, reuse it.

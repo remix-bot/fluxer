@@ -161,10 +161,37 @@ export class GatewayHandler {
         null;
 
     if (!voiceStatesRaw) {
+      // Fallback: use observedVoiceUsers as a data source when the guild's
+      // voice_states cache is not populated by @fluxerjs/core. This is common
+      // because the raw WS listener populates observedVoiceUsers from READY,
+      // GUILD_CREATE, and VOICE_STATE_UPDATE events, but the Guild object
+      // itself may not have a voice_states property.
       logger.voiceState(
-        `[Reseed] Guild ${cleanGuild} has no voice_states cache — cannot reseed.`
+        `[Reseed] Guild ${cleanGuild} has no voice_states cache — falling back to observedVoiceUsers.`
       );
-      return 0;
+      for (const [uid, info] of remix.observedVoiceUsers) {
+        const infoGuild   = String(info.guildId ?? "").replace(/\D/g, "");
+        const infoChannel = String(info.channelId ?? "").replace(/\D/g, "");
+        if (infoGuild === cleanGuild && infoChannel === cleanChannel) {
+          humansFound++;
+          logger.voiceState(
+            `[Reseed] Found human ${uid} in channel ${cleanChannel} (guild ${cleanGuild}) via observedVoiceUsers`
+          );
+        }
+      }
+      // Also update the bot's own entry
+      const botId = client.user?.id;
+      if (botId) {
+        const botKey = this.getObservedVoiceBotKey(botId, cleanGuild);
+        if (botKey) {
+          remix.observedVoiceBots.set(botKey, { channelId: cleanChannel, guildId: cleanGuild });
+        }
+      }
+      logger.voiceState(
+        `[Reseed] Channel ${cleanChannel} (guild ${cleanGuild}): ` +
+        `found ${humansFound} human(s) via fallback, observedVoiceUsers size now ${remix.observedVoiceUsers.size}`
+      );
+      return humansFound;
     }
 
     // Process object-style voice_states (keyed by userId)
@@ -822,20 +849,26 @@ export class GatewayHandler {
               ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15))
               : new Set();
           if (channels.has(cleanOld) && cleanOld !== cleanId && cleanId.length >= 15) {
-            // Keep the old channel saved AND add the new one.
-            // The bot moved from one 24/7 channel to another — both should
-            // remain in the saved list so the bot can auto-rejoin either one.
+            // Replace the old channel with the new one in stay_247.
+            // Previously this kept BOTH channels, causing unbounded growth
+            // in the stay_247 list (e.g. guild 1480202154270605526 ended up
+            // with 5+ channels). Now we remove the old channel and add the
+            // new one so the list stays at the correct size.
+            channels.delete(cleanOld);
             channels.add(cleanId);
             set.set("stay_247", [...channels]);
 
-            // Copy the per-channel mode from old → new channel (keep old too)
+            // Move the per-channel mode from old → new channel
             const modes = set.get("stay_247_modes");
-            if (modes && typeof modes === "object" && !Array.isArray(modes) && modes[cleanOld]) {
-              if (!modes[cleanId]) modes[cleanId] = modes[cleanOld];
+            if (modes && typeof modes === "object" && !Array.isArray(modes)) {
+              if (modes[cleanOld] && !modes[cleanId]) {
+                modes[cleanId] = modes[cleanOld];
+              }
+              delete modes[cleanOld];
               set.set("stay_247_modes", modes);
             }
 
-            logger.voice247(`[247] Added to stay_247: ${cleanId} (kept ${cleanOld})`);
+            logger.voice247(`[247] Updated stay_247: ${cleanOld} → ${cleanId}`);
           }
         }
       } catch (e) {
@@ -850,45 +883,69 @@ export class GatewayHandler {
         if (remix.intentionalLeaves.has(cleanOld)) {
           logger.voice247(`[247] Skipping rejoin for ${cleanOld} — intentional leave.`);
         } else {
-          const set = remix.settingsMgr.getServer(guildId);
-          const raw = set.get("stay_247");
-          if (raw && raw !== "none") {
-            const channels = Array.isArray(raw)
-                ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15))
-                : new Set();
-            if (channels.has(cleanOld)) {
-              // Per-channel mode: check the mode for this specific channel
-              const mode = get247ChannelMode(set, cleanOld);
-              if (mode === "on" || mode === "auto") {
-                // For multi-voice guilds, match the specific player by channel ID
-                // instead of skipping recovery entirely (was: if multiVoiceGuild return)
-                const player = remix.players.playerMap.get(cleanOld);
-                if (player && !player.leaving) {
-                  logger.voice247("[247] Fluxer gateway disconnected us. Forcing player recovery...");
-                  if (typeof player._recoverConnection === "function") {
-                    player._recoverConnection();
+          // Check if the bot is still in another voice channel in this guild.
+          // During multi-voice recovery, the bot may be moved from one channel
+          // to another, which triggers a disconnect event for the old channel.
+          // This is NOT a real disconnect — it's a side effect of joining a
+          // new channel in the same guild. Skip recovery in this case to
+          // prevent the recovery loop (Bug #5).
+          const botInOtherChannel = [...remix.players.playerMap.entries()].some(([mapKey, p]) => {
+            if (String(p?._guildId ?? "").replace(/\D/g, "") !== String(guildId ?? "").replace(/\D/g, "")) return false;
+            const pChannel = String(p?._channelId ?? mapKey).replace(/\D/g, "");
+            return pChannel !== cleanOld && !p.leaving && !p._destroyed;
+          });
+
+          if (botInOtherChannel) {
+            logger.voice247(
+              `[247] Bot disconnected from ${cleanOld} but is still in another channel ` +
+              `in guild ${guildId} — skipping recovery (likely a channel move).`
+            );
+            // Clean up the old player entry if it wasn't already removed
+            const oldPlayer = remix.players.playerMap.get(cleanOld);
+            if (oldPlayer && !oldPlayer._destroyed) {
+              remix.players.playerMap.delete(cleanOld);
+              try { oldPlayer.destroy(); } catch (_) {}
+            }
+          } else {
+            const set = remix.settingsMgr.getServer(guildId);
+            const raw = set.get("stay_247");
+            if (raw && raw !== "none") {
+              const channels = Array.isArray(raw)
+                  ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15))
+                  : new Set();
+              if (channels.has(cleanOld)) {
+                // Per-channel mode: check the mode for this specific channel
+                const mode = get247ChannelMode(set, cleanOld);
+                if (mode === "on" || mode === "auto") {
+                  // Match the specific player by channel ID
+                  const player = remix.players.playerMap.get(cleanOld);
+                  if (player && !player.leaving) {
+                    logger.voice247("[247] Fluxer gateway disconnected us. Forcing player recovery...");
+                    if (typeof player._recoverConnection === "function") {
+                      player._recoverConnection();
+                    } else {
+                      remix.players.playerMap.delete(cleanOld);
+                      try { player.destroy(); } catch (_) {}
+                      this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, null, "gateway-disconnect");
+                    }
                   } else {
-                    remix.players.playerMap.delete(cleanOld);
-                    try { player.destroy(); } catch (_) {}
                     this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, null, "gateway-disconnect");
                   }
                 } else {
-                  this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, null, "gateway-disconnect");
-                }
-              } else {
-                logger.voice247(`[247] Channel ${cleanOld} mode='${mode}' — not rejoining.`);
-                channels.delete(cleanOld);
-                set.set("stay_247", channels.size > 0 ? [...channels] : "none");
-                // Also clean up the per-channel mode entry
-                const modes = set.get("stay_247_modes");
-                if (modes && typeof modes === "object" && !Array.isArray(modes)) {
-                  delete modes[cleanOld];
-                  set.set("stay_247_modes", modes);
-                }
-                if (channels.size === 0) set.set("stay_247_mode", "off");
-                else {
-                  const first = [...channels][0];
-                  set.set("stay_247_mode", modes?.[first] ?? "auto");
+                  logger.voice247(`[247] Channel ${cleanOld} mode='${mode}' — not rejoining.`);
+                  channels.delete(cleanOld);
+                  set.set("stay_247", channels.size > 0 ? [...channels] : "none");
+                  // Also clean up the per-channel mode entry
+                  const modes = set.get("stay_247_modes");
+                  if (modes && typeof modes === "object" && !Array.isArray(modes)) {
+                    delete modes[cleanOld];
+                    set.set("stay_247_modes", modes);
+                  }
+                  if (channels.size === 0) set.set("stay_247_mode", "off");
+                  else {
+                    const first = [...channels][0];
+                    set.set("stay_247_mode", modes?.[first] ?? "auto");
+                  }
                 }
               }
             }

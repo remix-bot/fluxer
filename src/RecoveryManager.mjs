@@ -536,17 +536,29 @@ export class RecoveryManager {
         // Use the retryCount passed into spawnPlayer from scheduleSpawn's closure.
         const prevRetryCount = retryCount;
 
-        const shouldRetry = isTransient && prevRetryCount < this.maxTransientRetries
-            && (
-                !recoveryData?.queue?.length
-                    ? (() => {
-                        try {
-                            const raw = remix.settingsMgr.getServer(guildId)?.get("stay_247");
-                            return raw && raw !== "none";
-                        } catch (_) { return false; }
-                    })()
-                    : !!recoveryData
-            );
+        // Determine if this channel should be retried.
+        // A channel is retry-eligible if:
+        //   1. It has recovery data (boot recovery session) — always retry.
+        //   2. It was a 24/7 auto-join — retry if 24/7 is still enabled.
+        //   3. Fallback: if the guild still exists, give at least 1 retry
+        //      even when settings lookup fails (handles the race where the bot
+        //      was in the guild when the join list was built but settings cache
+        //      is momentarily unavailable).
+        const isRetryEligible = (() => {
+          if (recoveryData) return true; // boot recovery — always retry
+          try {
+            const raw = remix.settingsMgr.getServer(guildId)?.get("stay_247");
+            if (raw && raw !== "none") return true; // 24/7 enabled
+          } catch (_) {}
+          // Fallback: if the bot is still in the guild, the channel is likely
+          // a legitimate 24/7 or recovery channel — give it at least 1 retry.
+          // This fixes the "Giving up after 0 retries" bug that occurs when
+          // settingsMgr.getServer returns null during transient failures.
+          if (prevRetryCount === 0 && remix.client.guilds.has(guildId)) return true;
+          return false;
+        })();
+
+        const shouldRetry = isTransient && prevRetryCount < this.maxTransientRetries && isRetryEligible;
         if (shouldRetry) {
           const nextRetry = prevRetryCount + 1;
           const retryDelay = this.getRetryDelay(prevRetryCount);
@@ -747,7 +759,16 @@ export class RecoveryManager {
     );
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    const ok = filteredList.length - errors.length;
+    // Count how many sessions are currently active (joined successfully on first
+    // attempt or after transient retry). Transient failures are retried
+    // asynchronously by scheduleSpawn, so they don't appear here — log them
+    // separately instead of claiming 0 failures.
+    const immediateOk = [...remix.players.playerMap.values()].filter(p =>
+      filteredList.some(item => this.normalizeChannelId(item.channelId) === this.normalizeChannelId(p._channelId ?? p._home247Channel))
+    ).length;
+    const immediateFail = filteredList.length - immediateOk;
+    const retryPending = this.scheduledSpawns.size;
+
     if (errors.length > 0) {
       for (const err of errors) {
         logger.error("[Recovery] Failed to join channel", err.channelId, "guild", err.guildId, err.error);
@@ -755,7 +776,8 @@ export class RecoveryManager {
     }
     logger.recovery(
       `[Recovery] Processed ${filteredList.length} session(s) in ${elapsed}s ` +
-      `(${ok} ok, ${errors.length} failed).`
+      `(${immediateOk} joined, ${immediateFail} pending/failed` +
+      (retryPending > 0 ? `, ${retryPending} retry scheduled` : "") + `).`
     );
 
     // Delete recovery file AFTER all spawns have been attempted (success or fail).
