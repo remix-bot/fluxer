@@ -171,6 +171,75 @@ export class FluxerRevoice extends EventEmitter {
   }
 
   /**
+   * Send a VOICE_STATE_UPDATE leave signal to the Fluxer gateway so it
+   * knows the bot is no longer in the given channel.  Without this, the
+   * gateway may think the bot is still connected and won't send a fresh
+   * VOICE_SERVER_UPDATE on the next joinVoiceChannel() call, causing the
+   * rejoin to hang or fail.
+   *
+   * @param {string} channelId — The channel ID to leave
+   */
+  _leaveGateway(channelId) {
+    try {
+      const vm = getVoiceManager(this.client);
+      if (vm && typeof vm.updateVoiceState === "function") {
+        // Sending a VOICE_STATE_UPDATE with channel_id = null (or omitting
+        // the channel) tells the gateway the bot is leaving voice.
+        // Some @fluxerjs/voice versions accept null, others need undefined.
+        vm.updateVoiceState(null, { self_deaf: false, self_mute: false });
+        logger.player(`[FluxerRevoice] Sent gateway leave signal for channel ${channelId}`);
+      }
+    } catch (e) {
+      logger.warn(`[FluxerRevoice] Gateway leave signal failed for ${channelId}: ${e?.message}`);
+    }
+  }
+
+  /**
+   * Fully tear down a stale FluxerVoiceConnection: disconnect the native
+   * @fluxerjs/voice connection, close the LiveKit room, remove from the
+   * connections map, and send a gateway leave signal.
+   *
+   * @param {string} channelId
+   * @param {FluxerVoiceConnection} existing
+   */
+  async _destroyStaleConnection(channelId, existing) {
+    // 1. Remove from map immediately so no other code can get this dead ref
+    this.connections.delete(channelId);
+
+    // 2. Disconnect the native @fluxerjs/voice connection (sends gateway leave)
+    if (existing._nativeConn && typeof existing._nativeConn.disconnect === "function") {
+      try {
+        await existing._nativeConn.disconnect();
+      } catch (e) {
+        logger.warn(`[FluxerRevoice] Stale native disconnect error for ${channelId}: ${e?.message}`);
+      }
+    }
+
+    // 3. Close the LiveKit Room directly
+    if (existing.room) {
+      try {
+        await existing.room.disconnect();
+      } catch (_) {
+        // Room may already be closed
+      }
+    }
+
+    // 4. Mark as destroyed and clean up listeners
+    existing._destroyed = true;
+    existing._connected = false;
+    try { existing.removeAllListeners(); } catch (_) {}
+
+    // 5. Send an explicit gateway leave signal so the gateway knows we left.
+    //    This is critical: if the gateway still thinks we're in the channel,
+    //    the next joinVoiceChannel() won't receive VOICE_SERVER_UPDATE and
+    //    the rejoin will fail.
+    this._leaveGateway(channelId);
+
+    // 6. Brief delay to let the gateway process the leave before we rejoin
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  /**
    * Join a voice channel using the Fluxer gateway.
    *
    * This sends a VOICE_STATE_UPDATE through the Fluxer gateway, receives
@@ -185,15 +254,19 @@ export class FluxerRevoice extends EventEmitter {
     if (this.connections.has(channelId)) {
       const existing = this.connections.get(channelId);
       // If the existing connection is still alive, reuse it.
-      // If the LiveKit room disconnected, the connection is stale — remove it
-      // so we can create a fresh one instead of returning a dead connection
-      // that will fail with "LiveKit disconnected (connectionState: 0)".
+      // If the LiveKit room disconnected, the connection is stale — clean it
+      // up fully and rejoin instead of returning a dead connection that will
+      // fail with "LiveKit disconnected (connectionState: 0)".
       if (existing && !existing._destroyed && existing.room && existing.room.isConnected) {
         logger.player(`[FluxerRevoice] Already connected to ${channelId}, returning existing connection`);
         return existing;
       }
-      logger.player(`[FluxerRevoice] Stale connection for ${channelId} (isConnected: ${existing?.room?.isConnected ?? false}, destroyed: ${existing?._destroyed ?? true}) — removing and rejoining`);
-      this.connections.delete(channelId);
+      logger.player(
+        `[FluxerRevoice] Stale connection for ${channelId} ` +
+        `(isConnected: ${existing?.room?.isConnected ?? false}, ` +
+        `destroyed: ${existing?._destroyed ?? true}) — cleaning up and rejoining`
+      );
+      await this._destroyStaleConnection(channelId, existing);
     }
 
     logger.player(`[FluxerRevoice] Joining channel ${channelId} via Fluxer gateway...`);
@@ -315,9 +388,23 @@ export class FluxerRevoice extends EventEmitter {
     room.on(RoomEvent.Disconnected, (reason) => {
       logger.player(`[FluxerRevoice] Room disconnected: ${reason ?? "unknown"}`);
       connection._connected = false;
+      connection._destroyed = true;
+
       // Remove from connections map so the next join() creates a fresh
       // connection instead of returning this dead one.
       this.connections.delete(channelId);
+
+      // Send gateway leave signal so the gateway knows we're gone.
+      // Without this, the gateway may still think the bot is in the channel
+      // and won't send a fresh VOICE_SERVER_UPDATE on rejoin.
+      this._leaveGateway(channelId);
+
+      // Try to disconnect the native @fluxerjs/voice connection as well,
+      // in case it still has resources open.
+      if (nativeConnection && typeof nativeConnection.disconnect === "function") {
+        try { nativeConnection.disconnect(); } catch (_) {}
+      }
+
       connection.emit("disconnect");
     });
 

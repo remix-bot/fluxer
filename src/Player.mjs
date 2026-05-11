@@ -558,7 +558,31 @@ export default class Player extends EventEmitter {
 
     try {
       if (this.connection) {
+        // Clean up the old connection. FluxerVoiceConnection.disconnect()
+        // handles native @fluxerjs/voice disconnect + LiveKit room close.
+        // We also need to send a gateway leave signal so the gateway
+        // processes the leave before we attempt to rejoin.
         try { await this.connection.disconnect(); } catch (_) {}
+
+        // Explicitly send a gateway leave signal via @fluxerjs/voice so
+        // the gateway knows the bot left the channel.  Without this, the
+        // gateway may still think the bot is in the channel and won't
+        // send a fresh VOICE_SERVER_UPDATE on the next joinVoiceChannel().
+        try {
+          const vm = getVoiceManager(this.client);
+          if (vm && typeof vm.updateVoiceState === "function") {
+            vm.updateVoiceState(null, { self_deaf: false, self_mute: false });
+            logger.mediaplayer(`[Player] Sent gateway leave signal before recovery rejoin`);
+          }
+        } catch (e) {
+          logger.warn(`[Player] Gateway leave signal failed: ${e?.message}`);
+        }
+
+        // Also remove the stale connection from FluxerRevoice's map
+        // so the next _revoice.join() doesn't return the dead connection.
+        if (this._revoice && this._channelId) {
+          try { this._revoice.deleteConnection(this._channelId); } catch (_) {}
+        }
       }
 
       await Utils.sleep(2000);
@@ -1132,6 +1156,21 @@ export default class Player extends EventEmitter {
       logger.mediaplayer(`[Player] Connection not connected, reconnecting...`);
       try { this.connection.removeAllListeners(); } catch (_) {}
       try { await this.connection.disconnect(); } catch (_) {}
+
+      // Send gateway leave signal so the gateway knows we left.
+      // Without this, joinVoiceChannel() may not get VOICE_SERVER_UPDATE.
+      try {
+        const vm = getVoiceManager(this.client);
+        if (vm && typeof vm.updateVoiceState === "function") {
+          vm.updateVoiceState(null, { self_deaf: false, self_mute: false });
+        }
+      } catch (_) {}
+
+      // Remove stale connection from FluxerRevoice's map
+      if (this._revoice && this._channelId) {
+        try { this._revoice.deleteConnection(this._channelId); } catch (_) {}
+      }
+
       this.connection = null;
       this._mediaPlayer = null;
     }
@@ -1146,8 +1185,23 @@ export default class Player extends EventEmitter {
         try { this.connection.removeAllListeners(); } catch (_) {}
         try {
           await this.connection.disconnect();
-          await Utils.sleep(500);
         } catch (_) {}
+
+        // Send gateway leave signal for the old channel so the gateway
+        // processes the leave before we join a new/different channel.
+        try {
+          const vm = getVoiceManager(this.client);
+          if (vm && typeof vm.updateVoiceState === "function") {
+            vm.updateVoiceState(null, { self_deaf: false, self_mute: false });
+          }
+        } catch (_) {}
+
+        // Remove from FluxerRevoice's map if the channel differs
+        if (this._revoice && this._channelId) {
+          try { this._revoice.deleteConnection(this._channelId); } catch (_) {}
+        }
+
+        await Utils.sleep(500);
         this.connection  = null;
         this._mediaPlayer = null;
       }
