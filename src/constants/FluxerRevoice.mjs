@@ -183,8 +183,17 @@ export class FluxerRevoice extends EventEmitter {
    */
   async join(channelId, _leaveIfEmpty = false) {
     if (this.connections.has(channelId)) {
-      logger.player(`[FluxerRevoice] Already connected to ${channelId}, returning existing connection`);
-      return this.connections.get(channelId);
+      const existing = this.connections.get(channelId);
+      // If the existing connection is still alive, reuse it.
+      // If the LiveKit room disconnected, the connection is stale — remove it
+      // so we can create a fresh one instead of returning a dead connection
+      // that will fail with "LiveKit disconnected (connectionState: 0)".
+      if (existing && !existing._destroyed && existing.room && existing.room.isConnected) {
+        logger.player(`[FluxerRevoice] Already connected to ${channelId}, returning existing connection`);
+        return existing;
+      }
+      logger.player(`[FluxerRevoice] Stale connection for ${channelId} (isConnected: ${existing?.room?.isConnected ?? false}, destroyed: ${existing?._destroyed ?? true}) — removing and rejoining`);
+      this.connections.delete(channelId);
     }
 
     logger.player(`[FluxerRevoice] Joining channel ${channelId} via Fluxer gateway...`);
@@ -306,6 +315,9 @@ export class FluxerRevoice extends EventEmitter {
     room.on(RoomEvent.Disconnected, (reason) => {
       logger.player(`[FluxerRevoice] Room disconnected: ${reason ?? "unknown"}`);
       connection._connected = false;
+      // Remove from connections map so the next join() creates a fresh
+      // connection instead of returning this dead one.
+      this.connections.delete(channelId);
       connection.emit("disconnect");
     });
 
