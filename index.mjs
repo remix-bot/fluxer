@@ -66,8 +66,14 @@ export class Remix {
     };
 
     // ── Fluxer Client ────────────────────────────────────────────────────────
+    // Fluxer does NOT support intents — the value is always sent as 0 in the
+    // gateway IDENTIFY payload regardless of what you set here. Setting a
+    // non-zero value only produces a warning unless suppressIntentWarning
+    // is true. Always use intents: 0 for Fluxer bots.
     const client = new Client({
-      intents: config["fluxer.js"]?.intents ?? 0,
+      intents: 0,
+      suppressIntentWarning: true,
+      waitForGuilds: true,
       ...config["fluxer.js"],
       presence: (() => {
         if (presenceContents.length === 0) return undefined;
@@ -104,6 +110,14 @@ export class Remix {
 
     client.setMaxListeners(50);
     this.client = client;
+
+    // ── VoiceManager initialization (MUST be before login) ─────────────────
+    try {
+      getVoiceManager(client);
+      logger.player("[Startup] VoiceManager initialized before login.");
+    } catch (e) {
+      logger.warn("[Startup] VoiceManager pre-login init failed:", e.message);
+    }
 
     // ── Message & Settings handlers ──────────────────────────────────────────
     const messages = new MessageHandler(this.client);
@@ -238,12 +252,8 @@ export class Remix {
       // error at the source and log it cleanly instead.
       this._attachWsErrorHandlers();
 
-      try {
-        getVoiceManager(client);
-        logger.player("VoiceManager initialized.");
-      } catch (e) {
-        logger.warn("[VoiceManager] Init failed:", e.message);
-      }
+      // VoiceManager was already initialized before login (required for
+      // VOICE_STATES_SYNC event registration). No need to re-initialize here.
 
       const botId = client.user?.id ?? "0";
 
@@ -288,8 +298,7 @@ export class Remix {
     // The FluxerRevoice class provides the same .join() interface as
     // revoice.js's Revoice class, returning FluxerVoiceConnection objects
     // that wrap LiveKit Rooms compatible with revoice.js's MediaPlayer.
-    this.revoice = new FluxerRevoice(client);
-    logger.player("[FluxerRevoice] Instance created with Fluxer client.");
+    this.revoice = FluxerRevoice.getInstance(client);
 
     // ── Player Manager ───────────────────────────────────────────────────────
     this.playerContext = {
@@ -375,6 +384,19 @@ export class Remix {
                     }
                   }
                 }
+              }
+            } catch (_) {}
+          }
+
+          // Fallback: check LiveKit remote participants if guild cache is empty.
+          // This is the most reliable source of truth — if the bot's LiveKit room
+          // has remote participants, those are real humans in the channel.
+          if (!hasHuman) {
+            try {
+              const room = player.connection?.room;
+              if (room?.isConnected && room.remoteParticipants && room.remoteParticipants.size > 0) {
+                hasHuman = true;
+                logger.aloneCheck(`[AloneCheck] Found ${room.remoteParticipants.size} LiveKit remote participant(s) in ${channelId}`);
               }
             } catch (_) {}
           }

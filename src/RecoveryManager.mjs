@@ -24,7 +24,7 @@ export class RecoveryManager {
       aloneCheckInterval:  timers.aloneCheckInterval  ?? 30_000,
       aloneCheckDebounce:  timers.aloneCheckDebounce  ?? 500,
       rejoin247Delay:      timers.rejoin247Delay       ?? 3_000,
-      recoveryStaggerMs:   timers.recoveryStaggerMs    ?? 2_000,
+      recoveryStaggerMs:   timers.recoveryStaggerMs    ?? 3_000,
       recoveryConcurrency:  timers.recoveryConcurrency   ?? 2,
     };
 
@@ -39,6 +39,10 @@ export class RecoveryManager {
     this.maxTransientRetries = remix.config.timers?.maxTransientRetries ?? 5;
     /** @type {number} Base delay multiplier for exponential backoff (ms) */
     this.retryBaseDelay = remix.config.timers?.retryBaseDelay ?? 15_000;
+    /** @type {Map<string, number>} Per-guild 401 failure count for circuit breaker */
+    this._guild401Count = new Map();
+    /** @type {number} Max 401 failures per guild before circuit breaker trips */
+    this._guild401Max = 2;
 
     // ── Ready flags ───────────────────────────────────────────────────────────
     this.botReady = false;
@@ -331,6 +335,35 @@ export class RecoveryManager {
 
     // Atomic mutex check — blocks concurrent spawns for the same channel.
     if (remix.players.playerMap.has(cleanChannelId) || this.pendingSpawns.has(cleanChannelId)) return;
+    
+    // ── Duplicate player cleanup for same guild ──────────────────────────
+    // If there's already a player for a different channel in this guild
+    // that has the SAME _channelId (e.g. due to a stale playerMap entry
+    // from a previous failed recovery), clean it up before spawning.
+    // This prevents the "multiple players per guild" conflict that causes
+    // "skipped re-key" and gateway force-disconnects.
+    const cleanGuildId = String(guildId).replace(/\D/g, "");
+    for (const [mapKey, existingPlayer] of remix.players.playerMap) {
+      if (existingPlayer._destroyed || existingPlayer.leaving) {
+        remix.players.playerMap.delete(mapKey);
+        try { existingPlayer.destroy(); } catch (_) {}
+        continue;
+      }
+      // Check if an existing player in this guild has the same channel ID
+      // as the one we're about to spawn (stale state from a move/recovery)
+      const existingChannelId = String(existingPlayer._channelId ?? mapKey).replace(/\D/g, "");
+      const existingGuildId = String(existingPlayer._guildId ?? "").replace(/\D/g, "");
+      if (existingGuildId === cleanGuildId && existingChannelId === cleanChannelId) {
+        logger.warn(
+          `[PlayerSpawn] Found existing player for channel ${cleanChannelId} ` +
+          `in guild ${cleanGuildId} (mapKey=${mapKey}) — destroying duplicate before spawning new player`
+        );
+        remix.players.playerMap.delete(mapKey);
+        try { existingPlayer.leave().catch(() => {}); } catch (_) {}
+        try { existingPlayer.destroy(); } catch (_) {}
+      }
+    }
+    
     this.pendingSpawns.add(cleanChannelId);
 
     try {
@@ -453,7 +486,6 @@ export class RecoveryManager {
         // ── Re-seed voice states for this channel ────────────────────────────
         // After joining, the bot needs to know who's already in the channel.
         // The initial seedVoiceStatesFromGuilds() may have missed users because
-        // the guild cache wasn't fully populated at boot, or because Discord
         // sends voice states during GUILD_CREATE before the bot processes them.
         // This re-reads the guild's voice_states cache and updates the
         // observedVoiceUsers map so the bot detects humans already present.
@@ -514,24 +546,67 @@ export class RecoveryManager {
         // If the bot was kicked while offline (or between retries), the 401 will
         // keep repeating.  Verify the bot is still in the guild — if not, clean
         // up all state and skip retries entirely.
-        if (e.message?.includes("401 Unauthorized") && !remix.client.guilds.has(guildId)) {
+        // ── 401 Unauthorized handling with circuit breaker ─────────────────
+        if (e.message?.includes("401 Unauthorized")) {
+          const cleanGId = String(guildId).replace(/\D/g, "");
+          
+          // Bot no longer in guild → clean up entirely
+          if (!remix.client.guilds.has(guildId) && !remix.client.guilds.has(cleanGId)) {
+            logger.warn(
+              `[PlayerSpawn] 401 on guild ${guildId} — bot no longer in server. ` +
+              `Cleaning up and skipping retries.`
+            );
+            this.cleanStaleGuild(guildId, "401 and bot not in guild");
+            return;
+          }
+
+          // Guild-level circuit breaker: if this guild has hit the 401 threshold,
+          // stop retrying all channels in it during this recovery cycle.
+          const prev401 = this._guild401Count.get(cleanGId) ?? 0;
+          const new401 = prev401 + 1;
+          this._guild401Count.set(cleanGId, new401);
+
+          if (new401 >= this._guild401Max) {
+            logger.warn(
+              `[PlayerSpawn] 401 circuit breaker tripped for guild ${cleanGId} ` +
+              `(${new401} failures ≥ ${this._guild401Max}). Skipping all further ` +
+              `retries for this guild in the current recovery cycle.`
+            );
+            // Cancel any other scheduled spawns for this guild
+            for (const [chId, entry] of this.scheduledSpawns) {
+              if (String(entry.guildId).replace(/\D/g, "") === cleanGId) {
+                clearTimeout(entry.timer);
+                this.scheduledSpawns.delete(chId);
+                logger.warn(`[PlayerSpawn] Circuit breaker cancelled spawn for channel ${chId}`);
+              }
+            }
+            return;
+          }
+
+          // First 401 in guild — log with context but don't retry
+          // (401 is permission-based, retrying immediately won't help)
           logger.warn(
-            `[PlayerSpawn] 401 on guild ${guildId} — bot no longer in server. ` +
-            `Cleaning up and skipping retries.`
+            `[PlayerSpawn] 401 Unauthorized for channel ${cleanChannelId} in guild ${cleanGId} ` +
+            `(${new401}/${this._guild401Max} before circuit breaker). ` +
+            `Bot is still in guild — permissions may have been revoked. ` +
+            `Skipping retry (401 is persistent, not transient).`
           );
-          this.cleanStaleGuild(guildId, "401 and bot not in guild");
           return;
         }
 
         // Retry if the failure is a transient LiveKit race (with max retries + backoff)
-        // NOTE: "401 Unauthorized" is NOT transient — it means missing permissions or
-        // bot kicked from guild. It is handled above by the guild membership check.
-        const isTransient = e.message?.includes("engine is closed") ||
+        // IMPORTANT: 401 Unauthorized is NOT transient — it's a permission error
+        // that will keep failing. It's already handled above with the circuit
+        // breaker. The "signal failure" pattern is excluded here because it
+        // includes 401 errors (e.g. "engine: signal failure: client error: 401
+        // Unauthorized") — retrying those just creates more 401 errors.
+        const isTransient = (e.message?.includes("engine is closed") ||
             e.message?.includes("MediaPlayer after retry") ||
             e.message?.includes("LiveKit connection timeout") ||
             e.message?.includes("LiveKit failed") ||
-            e.message?.includes("No room available") ||
-            e.message?.includes("signal failure");
+            e.message?.includes("No room available")) &&
+            !e.message?.includes("401") &&
+            !e.message?.includes("Unauthorized");
 
         // Use the retryCount passed into spawnPlayer from scheduleSpawn's closure.
         const prevRetryCount = retryCount;
@@ -738,6 +813,19 @@ export class RecoveryManager {
 
     if (filteredList.length === 0) return;
 
+    // ── Sort join list by guild ID ──────────────────────────────────────────
+    // Group channels by guild so that same-guild joins are dispatched
+    // sequentially rather than concurrently. This is critical because the
+    // Fluxer gateway needs time to process each voice state transition
+    // before the next one — concurrent same-guild joins cause 401 errors.
+    filteredList.sort((a, b) => {
+      const ga = String(a.guildId).replace(/\D/g, "");
+      const gb = String(b.guildId).replace(/\D/g, "");
+      if (ga !== gb) return ga.localeCompare(gb);
+      // Within the same guild, maintain original order
+      return 0;
+    });
+
     const startTime = Date.now();
     logger.recovery(
       `[Recovery] Joining ${filteredList.length} session(s) ` +
@@ -786,6 +874,8 @@ export class RecoveryManager {
       try { fs.unlinkSync(this.recoveryPath); } catch (_) {}
     }
 
+    // Reset 401 circuit breaker for next boot cycle
+    this._guild401Count.clear();
     this._autoJoinRunning = false;
     this._autoJoinDone = true;
   }

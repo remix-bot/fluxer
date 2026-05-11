@@ -330,6 +330,10 @@ export default class Player extends EventEmitter {
   _playingNext      = false;
   _isRecovering     = false;
   startedPlaying    = null;
+
+  // Track last disconnect reason for smarter recovery
+  _lastDisconnectReason = null; // "401" | "gateway" | "unexpected" | null
+  _lastDisconnectTime   = 0;    // timestamp of last disconnect
   // searches Map with max-size eviction to prevent memory leak on busy servers.
   searches          = new Map();
   _searchMaxSize    = 50;
@@ -468,6 +472,29 @@ export default class Player extends EventEmitter {
     return cleanHome || null;
   }
 
+  /**
+   * Resolve the guild ID for this player, using the channel cache
+   * as a fallback if _guildId is not set. This is needed for
+   * guild-scoped gateway leave signals.
+   * @returns {string|null}
+   */
+  _resolveGuildId() {
+    const cleanGuild = String(this._guildId ?? "").replace(/\D/g, "");
+    if (cleanGuild) return cleanGuild;
+
+    // Fallback: resolve from the channel object
+    try {
+      const channelId = this._channelId ?? this._home247Channel;
+      if (channelId) {
+        const ch = this.client?.channels?.get?.(channelId);
+        const fromChannel = ch?.guildId ?? ch?.guild?.id ?? null;
+        if (fromChannel) return String(fromChannel).replace(/\D/g, "");
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Volume Restore
   // ═══════════════════════════════════════════════════════════════════════════
@@ -508,6 +535,36 @@ export default class Player extends EventEmitter {
       this.emit("autoleave");
       return;
     }
+
+    // ── 401 Permission-based recovery guard ──────────────────────────────
+    // If the last disconnect was due to a 401 Unauthorized error, don't
+    // keep retrying — 401 is a permission problem, not a transient failure.
+    // Retrying just creates more 401 errors and recovery loops.
+    // Instead, give up on recovery and let the 24/7 system schedule a
+    // delayed respawn with proper cooldown.
+    if (this._lastDisconnectReason === "401") {
+      const timeSinceDisconnect = Date.now() - this._lastDisconnectTime;
+      if (timeSinceDisconnect < 60_000) {
+        // Within 60 seconds of a 401 — don't attempt recovery.
+        // Let the 24/7 system handle reconnection with its own delay.
+        logger.warn(
+          `[Player] Skipping recovery for guild ${this._guildId} — ` +
+          `last disconnect was 401 Unauthorized (${timeSinceDisconnect / 1000}s ago). ` +
+          `Delegating to 24/7 respawn system.`
+        );
+        this._isRecovering = false;
+        this._recoveryPending = false;
+        this.emit("autoleave");
+        return;
+      }
+      // If more than 60s have passed since the 401, try again — permissions
+      // may have been restored.
+      logger.player(
+        `[Player] 401 was ${timeSinceDisconnect / 1000}s ago — retrying recovery ` +
+        `(permissions may have been restored).`
+      );
+    }
+
     this._isRecovering = true;
     this._recoveryPending = true;
 
@@ -522,8 +579,16 @@ export default class Player extends EventEmitter {
       return;
     }
     // Exponential backoff: 2s, 4s, 8s, 16s, 32s (was linear: 2s, 4s, 6s, 8s, 10s)
-    const backoffMs = Math.min(2000 * Math.pow(2, this._recoveryAttempts - 1), 30_000);
-    logger.mediaplayer(`[Player] Recovery attempt ${this._recoveryAttempts}/${MAX_RECOVERY} for ${this._guildId} (backoff ${backoffMs}ms)`);
+    // If last disconnect was a gateway force-disconnect, use longer backoff
+    // to avoid the recovery cascade where rejoining causes another disconnect.
+    let backoffMs;
+    if (this._lastDisconnectReason === "gateway") {
+      // Gateway force-disconnects need longer recovery time to avoid cascading
+      backoffMs = Math.min(5000 * Math.pow(2, this._recoveryAttempts - 1), 60_000);
+    } else {
+      backoffMs = Math.min(2000 * Math.pow(2, this._recoveryAttempts - 1), 30_000);
+    }
+    logger.mediaplayer(`[Player] Recovery attempt ${this._recoveryAttempts}/${MAX_RECOVERY} for ${this._guildId} (backoff ${backoffMs}ms, reason: ${this._lastDisconnectReason ?? "unknown"})`);
     await Utils.sleep(backoffMs);
 
     // re-check after await — player may have been destroyed during backoff
@@ -571,8 +636,21 @@ export default class Player extends EventEmitter {
         try {
           const vm = getVoiceManager(this.client);
           if (vm && typeof vm.updateVoiceState === "function") {
-            vm.updateVoiceState(null, { self_deaf: false, self_mute: false });
-            logger.mediaplayer(`[Player] Sent gateway leave signal before recovery rejoin`);
+            // IMPORTANT: Always use guild-scoped leave. An unscoped
+            // updateVoiceState(null, opts) disconnects ALL guilds' voice
+            // connections, causing cascading failures.
+            const guildIdForLeave = this._guildId ?? this._resolveGuildId();
+            if (guildIdForLeave) {
+              try {
+                vm.updateVoiceState(guildIdForLeave, null, { self_deaf: false, self_mute: false });
+              } catch (e1) {
+                // Older @fluxerjs/voice may not accept 3-arg form
+                try { vm.updateVoiceState(guildIdForLeave, null); } catch (e2) {}
+              }
+              logger.mediaplayer(`[Player] Sent guild-scoped gateway leave signal for guild ${guildIdForLeave} before recovery rejoin`);
+            } else {
+              logger.warn(`[Player] Cannot send guild-scoped leave — no guildId available. Skipping to avoid disconnecting all guilds.`);
+            }
           }
         } catch (e) {
           logger.warn(`[Player] Gateway leave signal failed: ${e?.message}`);
@@ -585,7 +663,7 @@ export default class Player extends EventEmitter {
         }
       }
 
-      await Utils.sleep(2000);
+      await Utils.sleep(3000);
       if (this.leaving || this._destroyed) return;
 
       logger.mediaplayer(`[Player] Rejoining channel ${targetChannelId}`);
@@ -693,6 +771,27 @@ export default class Player extends EventEmitter {
         }
       }
     } catch (_) {}
+
+    // ── LiveKit participant fallback ──────────────────────────────────────
+    // If the above methods didn't find any humans (e.g., because
+    // voice_states cache is empty and observedVoiceUsers hasn't been
+    // populated yet after a restart), check the LiveKit room's remote
+    // participants. This is the most reliable source of truth for who's
+    // actually in the voice channel, since LiveKit knows about every
+    // connected participant regardless of gateway cache state.
+    try {
+      const room = this.connection?.room;
+      if (room?.isConnected && room.remoteParticipants) {
+        for (const [, participant] of room.remoteParticipants) {
+          // Remote participants in the LiveKit room are humans (the bot is
+          // the local participant). If there's at least one, humans are present.
+          if (participant?.identity || participant?.sid) {
+            return true;
+          }
+        }
+      }
+    } catch (_) {}
+
     return false;
   }
 
@@ -1157,12 +1256,21 @@ export default class Player extends EventEmitter {
       try { this.connection.removeAllListeners(); } catch (_) {}
       try { await this.connection.disconnect(); } catch (_) {}
 
-      // Send gateway leave signal so the gateway knows we left.
+      // Send guild-scoped gateway leave signal so the gateway knows we left.
       // Without this, joinVoiceChannel() may not get VOICE_SERVER_UPDATE.
+      // IMPORTANT: Never use unscoped updateVoiceState(null, opts) — it
+      // disconnects ALL guilds' voice connections.
       try {
         const vm = getVoiceManager(this.client);
         if (vm && typeof vm.updateVoiceState === "function") {
-          vm.updateVoiceState(null, { self_deaf: false, self_mute: false });
+          const guildIdForLeave = this._guildId ?? this._resolveGuildId();
+          if (guildIdForLeave) {
+            try {
+              vm.updateVoiceState(guildIdForLeave, null, { self_deaf: false, self_mute: false });
+            } catch (_) {
+              try { vm.updateVoiceState(guildIdForLeave, null); } catch (_2) {}
+            }
+          }
         }
       } catch (_) {}
 
@@ -1187,12 +1295,21 @@ export default class Player extends EventEmitter {
           await this.connection.disconnect();
         } catch (_) {}
 
-        // Send gateway leave signal for the old channel so the gateway
-        // processes the leave before we join a new/different channel.
+        // Send guild-scoped gateway leave signal for the old channel so the
+        // gateway processes the leave before we join a new/different channel.
+        // IMPORTANT: Never use unscoped updateVoiceState(null, opts) — it
+        // disconnects ALL guilds' voice connections.
         try {
           const vm = getVoiceManager(this.client);
           if (vm && typeof vm.updateVoiceState === "function") {
-            vm.updateVoiceState(null, { self_deaf: false, self_mute: false });
+            const guildIdForLeave = this._guildId ?? this._resolveGuildId();
+            if (guildIdForLeave) {
+              try {
+                vm.updateVoiceState(guildIdForLeave, null, { self_deaf: false, self_mute: false });
+              } catch (_) {
+                try { vm.updateVoiceState(guildIdForLeave, null); } catch (_2) {}
+              }
+            }
           }
         } catch (_) {}
 
@@ -1201,7 +1318,10 @@ export default class Player extends EventEmitter {
           try { this._revoice.deleteConnection(this._channelId); } catch (_) {}
         }
 
-        await Utils.sleep(500);
+        // Wait longer (1500ms instead of 500ms) to give the Fluxer gateway
+        // time to process the voice state leave before we join a new channel.
+        // 500ms was too short and caused 401 errors on the subsequent join.
+        await Utils.sleep(1500);
         this.connection  = null;
         this._mediaPlayer = null;
       }
@@ -1349,7 +1469,16 @@ export default class Player extends EventEmitter {
           return;
         }
         if (!this.leaving && !this._destroyed) {
-          logger.mediaplayer("[Player] Unexpected disconnect detected");
+          // Detect the reason for the disconnect to make smarter recovery decisions
+          const room = connection.room;
+          const lastSignalErr = room?._lastSignalError;
+          if (lastSignalErr?.includes?.("401") || lastSignalErr?.includes?.("Unauthorized")) {
+            this._lastDisconnectReason = "401";
+          } else {
+            this._lastDisconnectReason = "unexpected";
+          }
+          this._lastDisconnectTime = Date.now();
+          logger.mediaplayer(`[Player] Unexpected disconnect detected (reason: ${this._lastDisconnectReason})`);
           this._stopMediaPlayer()
               .catch(() => {})
               .finally(() => this._recoverConnection());
@@ -1407,6 +1536,12 @@ export default class Player extends EventEmitter {
     } catch (e) {
       const causeStr = e.cause ? ` (Cause: ${e.cause})` : "";
       logger.error("[Player] Join failed:", e.message, causeStr);
+
+      // Track the disconnect reason for smarter recovery decisions
+      if (e.message?.includes("401") || e.message?.includes("Unauthorized")) {
+        this._lastDisconnectReason = "401";
+        this._lastDisconnectTime = Date.now();
+      }
 
       if (this.connection) {
         try { this.connection.disconnect(); } catch (_) {}
@@ -1482,6 +1617,8 @@ export default class Player extends EventEmitter {
       }
       this._recoveryPending = false;
       this._isRecovering = false;
+      this._recoveryAttempts = 0;
+      this._lastDisconnectReason = null;
       this.searches.clear();
 
       if (this._workerPool) {

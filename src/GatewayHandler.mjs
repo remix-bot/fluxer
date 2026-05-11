@@ -1,4 +1,5 @@
 import { Events, GatewayOpcodes } from "@fluxerjs/core";
+import { getVoiceManager } from "@fluxerjs/voice";
 import { logger } from "./constants/Logger.mjs";
 import { ServerSettings } from "./Settings.mjs";
 import { get247ChannelMode } from "./constants/Helpers247.mjs";
@@ -39,6 +40,25 @@ export class GatewayHandler {
     // ── Previous voice state per-user (for detecting channel moves) ───────────
     /** @type {Map<string, {channelId, guildId}>} guildId:userId → state */
     this._prevVoiceState = new Map();
+
+    // ── Recent join tracker (for detecting channel moves during recovery) ────
+    // When the bot joins a new channel via recovery/spawn, the gateway sends
+    // a VOICE_STATE_UPDATE with channel_id=null for the old channel. Without
+    // tracking recent joins, this looks like a real disconnect and triggers
+    // a recovery loop. By tracking recent joins, we can distinguish between
+    // a real disconnect and a channel-move side effect.
+    /** @type {Map<string, number>} guildId → timestamp of last bot voice join */
+    this._recentBotJoins = new Map();
+    /** @type {number} Window in ms during which a bot disconnect is considered
+     *  a move side-effect rather than a real disconnect. */
+    this._moveDetectionWindow = 10_000;
+
+    // ── Gateway disconnect cooldown ──────────────────────────────────────────
+    // After the gateway force-disconnects the bot, don't attempt recovery
+    // for this guild until the cooldown expires. This prevents the cascade
+    // where recovery rejoins → gateway disconnects again → recovery again.
+    /** @type {Map<string, number>} guildId → timestamp when cooldown expires */
+    this._gatewayDisconnectCooldown = new Map();
   }
 
   // ── Voice-state key helpers ──────────────────────────────────────────────────
@@ -87,6 +107,52 @@ export class GatewayHandler {
     const { remix } = this;
     const client = remix.client;
 
+    // ── Primary source: @fluxerjs/voice VoiceManager.voiceStates ────────────
+    // The VoiceManager populates its voiceStates Map from VOICE_STATES_SYNC
+    // and VOICE_STATE_UPDATE gateway events. This is the most reliable source
+    // because it works regardless of whether guild.voice_states is populated
+    // by @fluxerjs/core (which it often isn't on Fluxer).
+    try {
+      const vm = getVoiceManager(client);
+      if (vm?.voiceStates) {
+        // voiceStates is a Map<guildId, Map<userId, channelId|null>>
+        for (const [guildId, userMap] of vm.voiceStates) {
+          if (!userMap || typeof userMap.forEach !== "function") continue;
+          const cleanGuildId = String(guildId).replace(/\D/g, "");
+          if (!cleanGuildId) continue;
+          userMap.forEach((channelId, userId) => {
+            if (!userId || !channelId) return;
+            // The bot's own ID is included in voiceStates — track it as a bot
+            const botId = client.user?.id;
+            if (userId === botId) {
+              const botKey = this.getObservedVoiceBotKey(userId, cleanGuildId);
+              if (botKey) remix.observedVoiceBots.set(botKey, { channelId, guildId: cleanGuildId });
+            } else {
+              // Check if this user is a bot via the members cache
+              const guild = client.guilds.get(cleanGuildId) ?? client.guilds.get(guildId);
+              const member = guild?.members?.get?.(userId);
+              const isBot = member?.user?.bot ?? false;
+              if (isBot) {
+                const botKey = this.getObservedVoiceBotKey(userId, cleanGuildId);
+                if (botKey) remix.observedVoiceBots.set(botKey, { channelId, guildId: cleanGuildId });
+              } else {
+                remix.observedVoiceUsers.set(userId, { channelId, guildId: cleanGuildId });
+              }
+            }
+          });
+        }
+        logger.voiceState(
+          `[Seed] Seeded from VoiceManager.voiceStates — ` +
+          `${remix.observedVoiceUsers.size} humans, ${remix.observedVoiceBots.size} bots tracked.`
+        );
+        return; // VoiceManager is the primary source — skip fallback
+      }
+    } catch (e) {
+      logger.voiceState(`[Seed] VoiceManager seeding failed: ${e?.message} — falling back to guild cache.`);
+    }
+
+    // ── Fallback: guild.voice_states cache ──────────────────────────────────
+    // Only used if VoiceManager is unavailable (shouldn't happen in normal ops).
     for (const [gId, guild] of client.guilds) {
       const voiceStatesRaw =
           guild.voice_states ??
@@ -146,29 +212,124 @@ export class GatewayHandler {
     if (!cleanGuild || !cleanChannel) return 0;
 
     let humansFound = 0;
+    const botId = client.user?.id;
 
+    // ── Primary source: @fluxerjs/voice VoiceManager.voiceStates ────────────
+    try {
+      const vm = getVoiceManager(client);
+      if (vm?.voiceStates) {
+        const guildVoiceMap = vm.voiceStates.get(cleanGuild) ?? vm.voiceStates.get(guildId);
+        if (guildVoiceMap && typeof guildVoiceMap.forEach === "function") {
+          guildVoiceMap.forEach((userChannelId, userId) => {
+            if (!userId || !userChannelId) return;
+            const userChannel = String(userChannelId).replace(/\D/g, "");
+            if (userChannel !== cleanChannel) return;
+            if (userId === botId) {
+              const botKey = this.getObservedVoiceBotKey(userId, cleanGuild);
+              if (botKey) remix.observedVoiceBots.set(botKey, { channelId: cleanChannel, guildId: cleanGuild });
+            } else {
+              const guild = client.guilds.get(cleanGuild) ?? client.guilds.get(guildId);
+              const member = guild?.members?.get?.(userId);
+              const isBot = member?.user?.bot ?? false;
+              if (isBot) {
+                const botKey = this.getObservedVoiceBotKey(userId, cleanGuild);
+                if (botKey) remix.observedVoiceBots.set(botKey, { channelId: cleanChannel, guildId: cleanGuild });
+              } else {
+                remix.observedVoiceUsers.set(userId, { channelId: cleanChannel, guildId: cleanGuild });
+                humansFound++;
+                logger.voiceState(
+                  `[Reseed] Found human ${userId} in channel ${cleanChannel} (guild ${cleanGuild}) via VoiceManager`
+                );
+              }
+            }
+          });
+
+          // Update the bot's own entry
+          if (botId) {
+            const botKey = this.getObservedVoiceBotKey(botId, cleanGuild);
+            if (botKey) remix.observedVoiceBots.set(botKey, { channelId: cleanChannel, guildId: cleanGuild });
+          }
+
+          logger.voiceState(
+            `[Reseed] Channel ${cleanChannel} (guild ${cleanGuild}): ` +
+            `found ${humansFound} human(s) via VoiceManager, observedVoiceUsers size now ${remix.observedVoiceUsers.size}`
+          );
+
+          // If VoiceManager found humans, skip fallbacks
+          if (humansFound > 0) return humansFound;
+        }
+      }
+    } catch (e) {
+      logger.voiceState(`[Reseed] VoiceManager lookup failed: ${e?.message} — falling back.`);
+    }
+
+    // ── Fallback: guild.voice_states cache ──────────────────────────────────
     const guild = client.guilds.get(cleanGuild) ?? client.guilds.get(guildId);
     if (!guild) {
       logger.voiceState(
         `[Reseed] Guild ${cleanGuild} not in cache — cannot reseed voice states.`
       );
-      return 0;
+    } else {
+      const voiceStatesRaw =
+          guild.voice_states ??
+          guild.voiceStates ??
+          null;
+
+      if (voiceStatesRaw) {
+        if (!Array.isArray(voiceStatesRaw) && typeof voiceStatesRaw === "object"
+            && typeof voiceStatesRaw.values !== "function") {
+          for (const [uid, val] of Object.entries(voiceStatesRaw)) {
+            const stateChannel = typeof val === "string" ? val
+                : val?.channelId ?? val?.channel_id ?? null;
+            if (!uid || !stateChannel) continue;
+            const isBot = val?.member?.user?.bot ?? false;
+            if (isBot) continue;
+            if (String(stateChannel).replace(/\D/g, "") === cleanChannel) {
+              remix.observedVoiceUsers.set(uid, { channelId: stateChannel, guildId: cleanGuild });
+              humansFound++;
+              logger.voiceState(
+                `[Reseed] Found human ${uid} in channel ${cleanChannel} (guild ${cleanGuild})`
+              );
+            }
+          }
+        } else {
+          const entries = Array.isArray(voiceStatesRaw)
+              ? voiceStatesRaw
+              : [...voiceStatesRaw.values()];
+          for (const state of entries) {
+            const userId       = state?.userId ?? state?.user_id ?? state?.id;
+            const stateChannel = state?.channelId ?? state?.channel_id;
+            if (!userId || !stateChannel) continue;
+            const isBot = state?.member?.user?.bot ?? false;
+            if (isBot) continue;
+            if (String(stateChannel).replace(/\D/g, "") === cleanChannel) {
+              remix.observedVoiceUsers.set(userId, { channelId: stateChannel, guildId: cleanGuild });
+              humansFound++;
+              logger.voiceState(
+                `[Reseed] Found human ${userId} in channel ${cleanChannel} (guild ${cleanGuild})`
+              );
+            }
+          }
+        }
+
+        // Update bot's own entry
+        if (botId) {
+          const botKey = this.getObservedVoiceBotKey(botId, cleanGuild);
+          if (botKey) remix.observedVoiceBots.set(botKey, { channelId: cleanChannel, guildId: cleanGuild });
+        }
+
+        if (humansFound > 0) {
+          logger.voiceState(
+            `[Reseed] Channel ${cleanChannel} (guild ${cleanGuild}): ` +
+            `found ${humansFound} human(s), observedVoiceUsers size now ${remix.observedVoiceUsers.size}`
+          );
+          return humansFound;
+        }
+      }
     }
 
-    const voiceStatesRaw =
-        guild.voice_states ??
-        guild.voiceStates ??
-        null;
-
-    if (!voiceStatesRaw) {
-      // Fallback: use observedVoiceUsers as a data source when the guild's
-      // voice_states cache is not populated by @fluxerjs/core. This is common
-      // because the raw WS listener populates observedVoiceUsers from READY,
-      // GUILD_CREATE, and VOICE_STATE_UPDATE events, but the Guild object
-      // itself may not have a voice_states property.
-      logger.voiceState(
-        `[Reseed] Guild ${cleanGuild} has no voice_states cache — falling back to observedVoiceUsers.`
-      );
+    // ── Fallback: observedVoiceUsers ────────────────────────────────────────
+    if (humansFound === 0) {
       for (const [uid, info] of remix.observedVoiceUsers) {
         const infoGuild   = String(info.guildId ?? "").replace(/\D/g, "");
         const infoChannel = String(info.channelId ?? "").replace(/\D/g, "");
@@ -179,66 +340,33 @@ export class GatewayHandler {
           );
         }
       }
-      // Also update the bot's own entry
-      const botId = client.user?.id;
+
+      // Update bot's own entry
       if (botId) {
         const botKey = this.getObservedVoiceBotKey(botId, cleanGuild);
-        if (botKey) {
-          remix.observedVoiceBots.set(botKey, { channelId: cleanChannel, guildId: cleanGuild });
-        }
-      }
-      logger.voiceState(
-        `[Reseed] Channel ${cleanChannel} (guild ${cleanGuild}): ` +
-        `found ${humansFound} human(s) via fallback, observedVoiceUsers size now ${remix.observedVoiceUsers.size}`
-      );
-      return humansFound;
-    }
-
-    // Process object-style voice_states (keyed by userId)
-    if (!Array.isArray(voiceStatesRaw) && typeof voiceStatesRaw === "object"
-        && typeof voiceStatesRaw.values !== "function") {
-      for (const [uid, val] of Object.entries(voiceStatesRaw)) {
-        const stateChannel = typeof val === "string" ? val
-            : val?.channelId ?? val?.channel_id ?? null;
-        if (!uid || !stateChannel) continue;
-        const isBot = val?.member?.user?.bot ?? false;
-        if (isBot) continue;
-        if (String(stateChannel).replace(/\D/g, "") === cleanChannel) {
-          remix.observedVoiceUsers.set(uid, { channelId: stateChannel, guildId: cleanGuild });
-          humansFound++;
-          logger.voiceState(
-            `[Reseed] Found human ${uid} in channel ${cleanChannel} (guild ${cleanGuild})`
-          );
-        }
-      }
-    } else {
-      // Process array / iterable style voice_states
-      const entries = Array.isArray(voiceStatesRaw)
-          ? voiceStatesRaw
-          : [...voiceStatesRaw.values()];
-      for (const state of entries) {
-        const userId       = state?.userId ?? state?.user_id ?? state?.id;
-        const stateChannel = state?.channelId ?? state?.channel_id;
-        if (!userId || !stateChannel) continue;
-        const isBot = state?.member?.user?.bot ?? false;
-        if (isBot) continue;
-        if (String(stateChannel).replace(/\D/g, "") === cleanChannel) {
-          remix.observedVoiceUsers.set(userId, { channelId: stateChannel, guildId: cleanGuild });
-          humansFound++;
-          logger.voiceState(
-            `[Reseed] Found human ${userId} in channel ${cleanChannel} (guild ${cleanGuild})`
-          );
-        }
+        if (botKey) remix.observedVoiceBots.set(botKey, { channelId: cleanChannel, guildId: cleanGuild });
       }
     }
 
-    // Also check the bot's own observed bots map — update the bot's entry
-    // so the voice state handler knows the bot is in this channel.
-    const botId = client.user?.id;
-    if (botId) {
-      const botKey = this.getObservedVoiceBotKey(botId, cleanGuild);
-      if (botKey) {
-        remix.observedVoiceBots.set(botKey, { channelId: cleanChannel, guildId: cleanGuild });
+    // ── Last resort: LiveKit remote participants ────────────────────────────
+    if (humansFound === 0) {
+      try {
+        const player = remix.players.playerMap.get(cleanChannel);
+        const room = player?.connection?.room;
+        if (room?.isConnected && room.remoteParticipants) {
+          for (const [, participant] of room.remoteParticipants) {
+            const userId = participant?.identity ?? participant?.sid;
+            if (userId) {
+              humansFound++;
+              remix.observedVoiceUsers.set(userId, { channelId: cleanChannel, guildId: cleanGuild });
+              logger.voiceState(
+                `[Reseed] Found human ${userId} in channel ${cleanChannel} (guild ${cleanGuild}) via LiveKit participants`
+              );
+            }
+          }
+        }
+      } catch (e) {
+        logger.voiceState(`[Reseed] LiveKit participant fallback error: ${e?.message}`);
       }
     }
 
@@ -451,20 +579,50 @@ export class GatewayHandler {
       if (!guildId) return;
 
       // Part 1: Voice state population
-      // Purge stale entries for this guild first.
-      for (const [uid, info] of [...remix.observedVoiceUsers]) {
-        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, ""))
-          remix.observedVoiceUsers.delete(uid);
-      }
-      for (const [uid, info] of [...remix.observedVoiceBots]) {
-        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, ""))
-          remix.observedVoiceBots.delete(uid);
-      }
-
+      // Only purge stale entries if the GUILD_CREATE actually contains
+      // voice_states data. If voice_states is empty, the guild may just
+      // not provide voice state data in GUILD_CREATE (common on Fluxer),
+      // and purging would destroy data we collected from VOICE_STATE_UPDATE
+      // events. Only purge entries for users that appear in the new
+      // voice_states data (so we can replace them with fresh data).
       const voiceStatesRaw =
           guild.voice_states ??
           guild.voiceStates ??
           null;
+      
+      if (voiceStatesRaw) {
+        // Build a set of user IDs from the new voice_states data
+        const newUserIds = new Set();
+        if (!Array.isArray(voiceStatesRaw) && typeof voiceStatesRaw === "object"
+            && typeof voiceStatesRaw.values !== "function") {
+          for (const uid of Object.keys(voiceStatesRaw)) {
+            newUserIds.add(uid);
+          }
+        } else {
+          const entries = Array.isArray(voiceStatesRaw)
+              ? voiceStatesRaw
+              : [...voiceStatesRaw.values()];
+          for (const state of entries) {
+            const userId = state?.userId ?? state?.user_id ?? state?.id;
+            if (userId) newUserIds.add(userId);
+          }
+        }
+        
+        // Only purge entries for users that are being replaced by new data
+        for (const [uid, info] of [...remix.observedVoiceUsers]) {
+          if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, "")
+              && newUserIds.has(uid)) {
+            remix.observedVoiceUsers.delete(uid);
+          }
+        }
+        for (const [uid, info] of [...remix.observedVoiceBots]) {
+          if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, "")) {
+            const botKey = uid; // observedVoiceBots keys are "guildId:userId"
+            // Check if this bot entry is for the current guild
+            remix.observedVoiceBots.delete(uid);
+          }
+        }
+      }
       if (voiceStatesRaw) {
         if (!Array.isArray(voiceStatesRaw) && typeof voiceStatesRaw === "object"
             && typeof voiceStatesRaw.values !== "function") {
@@ -751,6 +909,11 @@ export class GatewayHandler {
 
     // ── Bot-only logic below ───────────────────────────────────────────────
 
+    // Track recent bot joins to distinguish real disconnects from move side-effects
+    if (channelId && guildId) {
+      this._recentBotJoins.set(String(guildId).replace(/\D/g, ""), Date.now());
+    }
+
     const activeGuildPlayers = [...remix.players.playerMap.entries()].filter(([, player]) =>
       String(player?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
     );
@@ -779,17 +942,35 @@ export class GatewayHandler {
         let rekeyed = false;
         if (existingPlayer && cleanId !== cleanOld) {
           if (guildIsAmbiguous) {
-            // Multi-voice guild: can't safely re-key the playerMap (another player
-            // might already use cleanId), but still update the moved player's
-            // home channel so 24/7 recovery targets the right channel.
-            existingPlayer._channelId = cleanId;
-            existingPlayer._home247Channel = cleanId;
-            if (targetGuildId) existingPlayer._guildId = targetGuildId;
-            rekeyed = false; // keep false — don't touch playerMap keys
-            logger.voice247(
-              `[247] Updated player channel ${cleanOld} → ${cleanId} ` +
-              `(guild ${guildId} has ${guildPlayers.length} active players, skipped re-key)`
-            );
+            // Multi-voice guild: we need to re-key the playerMap so that
+            // lookups by the new channelId work. First check that no OTHER
+            // player is already using the new channelId as its key.
+            const playerAtNewKey = remix.players.playerMap.get(cleanId);
+            if (playerAtNewKey && playerAtNewKey !== existingPlayer) {
+              // Another player already uses the new key — update the moved
+              // player's channel fields but don't re-key to avoid collision.
+              existingPlayer._channelId = cleanId;
+              existingPlayer._home247Channel = cleanId;
+              if (targetGuildId) existingPlayer._guildId = targetGuildId;
+              rekeyed = false;
+              logger.voice247(
+                `[247] Updated player channel ${cleanOld} → ${cleanId} ` +
+                `(guild ${guildId} has ${guildPlayers.length} active players, ` +
+                `new key occupied by another player — skipped re-key)`
+              );
+            } else {
+              // Safe to re-key: no collision
+              remix.players.playerMap.delete(cleanOld);
+              remix.players.playerMap.set(cleanId, existingPlayer);
+              existingPlayer._channelId = cleanId;
+              existingPlayer._home247Channel = cleanId;
+              if (targetGuildId) existingPlayer._guildId = targetGuildId;
+              rekeyed = true;
+              logger.voice247(
+                `[247] Re-keyed playerMap ${cleanOld} → ${cleanId} ` +
+                `(guild ${guildId} has ${guildPlayers.length} active players)`
+              );
+            }
           } else if (playerGuildId && targetGuildId && playerGuildId !== targetGuildId) {
             // If there's no player for the old channel in playerMap, this is a
             // stale "move" from a pre-restart voice state — the bot was in
@@ -880,6 +1061,7 @@ export class GatewayHandler {
     if (!channelId && oldChannelId && guildId) {
       try {
         const cleanOld = String(oldChannelId).replace(/\D/g, "");
+        const cleanGuild = String(guildId).replace(/\D/g, "");
         if (remix.intentionalLeaves.has(cleanOld)) {
           logger.voice247(`[247] Skipping rejoin for ${cleanOld} — intentional leave.`);
         } else {
@@ -895,9 +1077,35 @@ export class GatewayHandler {
             return pChannel !== cleanOld && !p.leaving && !p._destroyed;
           });
 
-          if (botInOtherChannel) {
+          // Also check if there was a recent bot join in this guild — if so,
+          // the disconnect is likely a side-effect of the channel move, not a
+          // real disconnect that needs recovery.
+          const recentJoin = this._recentBotJoins.get(cleanGuild) ?? 0;
+          const timeSinceJoin = Date.now() - recentJoin;
+          const isLikelyMoveSideEffect = timeSinceJoin < this._moveDetectionWindow;
+
+          // Also check if there are pending spawns for this guild — if a
+          // spawnPlayer is in progress, the disconnect is expected.
+          const hasPendingSpawn = [...this.recoveryManager.pendingSpawns].some(([, entry]) =>
+            String(entry.guildId).replace(/\D/g, "") === cleanGuild
+          ) || [...this.recoveryManager.scheduledSpawns].some(([, entry]) =>
+            String(entry.guildId).replace(/\D/g, "") === cleanGuild
+          );
+
+          // Check gateway disconnect cooldown — if the gateway recently
+          // force-disconnected us, don't attempt recovery again immediately.
+          const cooldownExpiry = this._gatewayDisconnectCooldown.get(cleanGuild) ?? 0;
+          const inCooldown = Date.now() < cooldownExpiry;
+
+          if (inCooldown) {
             logger.voice247(
-              `[247] Bot disconnected from ${cleanOld} but is still in another channel ` +
+              `[247] Skipping recovery for ${cleanOld} in guild ${guildId} — ` +
+              `gateway disconnect cooldown active (${Math.ceil((cooldownExpiry - Date.now()) / 1000)}s remaining).`
+            );
+          } else if (botInOtherChannel || (isLikelyMoveSideEffect && !hasPendingSpawn)) {
+            const reason = botInOtherChannel ? "bot in other channel" : `recent join ${timeSinceJoin}ms ago (move side-effect)`;
+            logger.voice247(
+              `[247] Bot disconnected from ${cleanOld} but ${reason} ` +
               `in guild ${guildId} — skipping recovery (likely a channel move).`
             );
             // Clean up the old player entry if it wasn't already removed
@@ -906,6 +1114,11 @@ export class GatewayHandler {
               remix.players.playerMap.delete(cleanOld);
               try { oldPlayer.destroy(); } catch (_) {}
             }
+          } else if (hasPendingSpawn) {
+            logger.voice247(
+              `[247] Bot disconnected from ${cleanOld} in guild ${guildId} — ` +
+              `pending spawn in progress, skipping recovery to avoid race.`
+            );
           } else {
             const set = remix.settingsMgr.getServer(guildId);
             const raw = set.get("stay_247");
@@ -921,6 +1134,19 @@ export class GatewayHandler {
                   const player = remix.players.playerMap.get(cleanOld);
                   if (player && !player.leaving) {
                     logger.voice247("[247] Fluxer gateway disconnected us. Forcing player recovery...");
+
+                    // Set a gateway disconnect cooldown for this guild to
+                    // prevent recovery cascades. If recovery rejoins and the
+                    // gateway force-disconnects again, we don't want to
+                    // immediately retry.
+                    this._gatewayDisconnectCooldown.set(cleanGuild, Date.now() + 15_000);
+                    // Auto-clear the cooldown after 30 seconds
+                    setTimeout(() => this._gatewayDisconnectCooldown.delete(cleanGuild), 30_000);
+
+                    // Mark the disconnect reason on the player for smarter recovery
+                    player._lastDisconnectReason = "gateway";
+                    player._lastDisconnectTime = Date.now();
+
                     if (typeof player._recoverConnection === "function") {
                       player._recoverConnection();
                     } else {
