@@ -3,7 +3,7 @@ import { createPool } from "mysql2/promise";
 
 /**
  * DatabaseManager — MySQL pool for dashboard login codes and API tokens.
- * Adapted from the Stoat version for use with the Fluxer bot.
+ * Adapted for use with the Fluxer bot.
  */
 export class DatabaseManager {
   /**

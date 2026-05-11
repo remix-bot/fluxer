@@ -1,15 +1,21 @@
 /**
- * Player.mjs — moonlink.js + revoice.js edition
+ * Player.mjs — FluxerRevoice edition
  *
  * Track resolution  → moonlink.js Manager (search / load via NodeLink REST)
  * Session handling  → moonlink.js (WebSocket to NodeLink, session ID, player state)
- * Audio playback    → revoice.js (LiveKit voice connection → Fluxer VC)
+ * Voice connection  → FluxerRevoice (Fluxer gateway → LiveKit voice)
+ * Audio playback    → revoice.js MediaPlayer (FFmpeg → LiveKit audio track)
  *
+ * FluxerRevoice uses the Fluxer API/gateway (via @fluxerjs/voice) to obtain
+ * LiveKit credentials instead of a third-party REST API that the default
+ * revoice.js Revoice class uses. This avoids the 401 Unauthorized error
+ * that occurs when a Fluxer bot token is sent to an incompatible API.
  */
 
 import Revoicejs from "revoice.js";
 const { MediaPlayer } = Revoicejs;
-import { joinVoiceChannel, getVoiceManager } from "@fluxerjs/voice";
+import { ConnectionState, RoomEvent as LKRoomEvent } from "@livekit/rtc-node";
+import { getVoiceManager } from "@fluxerjs/voice";
 import { Utils } from "./Utils.mjs";
 import { EventEmitter } from "node:events";
 import meta from "./probe.mjs";
@@ -310,6 +316,8 @@ export default class Player extends EventEmitter {
   // revoice.js instances
   /** @type {import("revoice.js").MediaPlayer|null} */
   _mediaPlayer = null;
+  /** @type {import("./constants/FluxerRevoice.mjs").FluxerRevoice|null} Shared FluxerRevoice instance (injected from Remix) */
+  _revoice     = null;
 
   // moonlink.js manager reference (set by PlayerManager)
   /** @type {import("./MoonlinkManager.mjs").MoonlinkManager|null} */
@@ -386,6 +394,9 @@ export default class Player extends EventEmitter {
 
     // moonlink.js manager reference — injected by PlayerManager
     this._moonlink = opts.moonlink ?? null;
+
+    // revoice.js shared instance — injected by PlayerManager
+    this._revoice = opts.revoice ?? null;
 
     // Robust session sync that handles reconnection and stale sessions
     if (this._moonlink) {
@@ -556,12 +567,12 @@ export default class Player extends EventEmitter {
       logger.mediaplayer(`[Player] Rejoining channel ${targetChannelId}`);
       await this.join(targetChannelId);
 
-      // Do NOT re-read room.state here — on this LiveKit build room.state
-      // returns undefined even on a healthy connection (not persistently stored).
-      // join() already awaited connectionStateChanged and only resolved when
+      // Do NOT re-read room.isConnected/room.connectionState here —
+      // join() already awaited ConnectionStateChanged and only resolved when
       // the room was truly connected, so reaching this line means success.
-      // The old room.state check here always threw "unexpected state: undefined"
-      // and emitted autoleave, causing the infinite reconnect storm in the logs.
+      // The old check using room.state (which doesn't exist in @livekit/rtc-node)
+      // always threw "unexpected state: undefined" and emitted autoleave,
+      // causing the infinite reconnect storm in the logs.
       this._isRecovering = false;
       this._recoveryPending = false;
       this._recoveryAttempts = 0;
@@ -726,16 +737,14 @@ export default class Player extends EventEmitter {
       return false;
     }
 
-    // only block on explicit dead states — do NOT treat undefined as dead.
-    // On some LiveKit builds room.state is not a persistent property and returns
-    // undefined even while the room is healthy. Blocking on undefined here causes
-    // publishToRoom to be skipped on a perfectly live connection.
-    const roomState = room.state;
-    const roomAlive = roomState !== "disconnected" &&
-        roomState !== "failed" &&
-        roomState !== 0;
+    // Use the correct @livekit/rtc-node Node.js SDK API:
+    //   room.isConnected      — boolean getter (true when connected)
+    //   room.connectionState  — ConnectionState enum (CONN_DISCONNECTED=0, CONN_CONNECTED=1, CONN_RECONNECTING=2)
+    //   room.state            — does NOT exist (that's the browser SDK API)
+    const roomAlive = room.isConnected;
+    const cs = room.connectionState;
 
-    logger.mediaplayer(`[Player] _ensureMediaPlayer: attempting to create MediaPlayer (room.state: ${roomState})`);
+    logger.mediaplayer(`[Player] _ensureMediaPlayer: attempting to create MediaPlayer (isConnected: ${roomAlive}, connectionState: ${cs})`);
 
     if (this._mediaPlayer) {
       const mpAlive = !this._mediaPlayer.destroyed && typeof this._mediaPlayer.playStream === "function";
@@ -752,7 +761,7 @@ export default class Player extends EventEmitter {
 
     // Room is dead — don't even attempt publishToRoom
     if (!roomAlive) {
-      logger.mediaplayer(`[Player] Room is in dead state (${roomState}), skipping MediaPlayer creation`);
+      logger.mediaplayer(`[Player] Room is in dead state (isConnected: ${room.isConnected}, connectionState: ${cs}), skipping MediaPlayer creation`);
       return false;
     }
 
@@ -1115,12 +1124,12 @@ export default class Player extends EventEmitter {
       return;
     }
     if (this.connection && this._channelId === channelId) {
-      const state = this.connection.room?.state;
-      if (state === 1 || state === "connected") {
+      const isConnected = this.connection.connected ?? false;
+      if (isConnected) {
         logger.player(`[Player] Already in channel: ${channelId}`);
         return;
       }
-      logger.mediaplayer(`[Player] Connection in bad state (${state}), reconnecting...`);
+      logger.mediaplayer(`[Player] Connection not connected, reconnecting...`);
       try { this.connection.removeAllListeners(); } catch (_) {}
       try { await this.connection.disconnect(); } catch (_) {}
       this.connection = null;
@@ -1143,116 +1152,129 @@ export default class Player extends EventEmitter {
         this._mediaPlayer = null;
       }
 
-      const connection = await joinVoiceChannel(this.client, channel);
+      // ── FluxerRevoice join ─────────────────────────────────────────────
+      // Use the FluxerRevoice instance to join the voice channel via the
+      // Fluxer gateway. FluxerRevoice sends a VOICE_STATE_UPDATE through
+      // the gateway, receives VOICE_SERVER_UPDATE with LiveKit credentials,
+      // then creates a FluxerVoiceConnection wrapping a LiveKit Room.
+      // The FluxerVoiceConnection is API-compatible with revoice.js's
+      // VoiceConnection (has .room, .disconnect(), .leave(), events).
+      if (!this._revoice) {
+        throw new Error("FluxerRevoice instance not available — cannot join voice channel");
+      }
+
+      logger.mediaplayer(`[Player] Joining channel ${channelId} via FluxerRevoice (Fluxer API)...`);
+
+      const connection = await this._revoice.join(channelId, false);
       this.connection = connection;
       this._channelId = channelId;
       this._guildId   = channel.guildId;
       this.leaving    = false;
 
       const room = connection.room;
-      if (room) {
-        logger.mediaplayer(`[Player] Room obtained (state: ${room.state}), settling...`);
+      if (!room) {
+        throw new Error("No room available after revoice.js join");
+      }
 
-        // ── connectionStateChanged is unreliable on this LiveKit build ───────
-        // The native lk-rtc layer connects and logs "connected to room", but
-        // the JS wrapper often NEVER fires "connectionStateChanged" with
-        // "connected" and room.state does not reflect the live state.
-        // Waiting for that event causes a guaranteed 15 s timeout.
-        //
-        // Strategy: listen for the event as a best-effort fast path (resolves
-        // instantly if it works), but also poll room.state every 500 ms.
-        // If NEITHER detects "connected" within a short window, check whether
-        // the room is in an obviously-dead state.  If not, assume connected
-        // and let _ensureMediaPlayer (publishToRoom) be the real gate — it
-        // will throw if the room is genuinely unusable.
-        let connected = false;
-        let settled   = false;
+      logger.mediaplayer(`[Player] FluxerVoiceConnection obtained (isConnected: ${room.isConnected}, connectionState: ${room.connectionState})`);
 
-        try {
+      // ── Wait for the room to be connected ──────────────────────────────
+      // FluxerRevoice already waits for the LiveKit room to be ready before
+      // resolving the join() promise, but we add a safety net for slow
+      // LiveKit servers.
+      // Uses the correct @livekit/rtc-node API:
+      //   room.isConnected      — boolean getter
+      //   room.connectionState  — ConnectionState enum
+      //   RoomEvent.ConnectionStateChanged — fires with ConnectionState value
+      let connected = false;
+      let settled   = false;
+
+      try {
+        // If already connected (FluxerRevoice.wait usually resolves this), skip
+        if (room.isConnected) {
+          connected = true;
+          settled   = true;
+          logger.mediaplayer("[Player] Room already connected (immediate check via isConnected)");
+        } else {
           await new Promise((resolve, reject) => {
             const cleanup = () => {
               clearTimeout(timeout);
               clearInterval(poll);
-              try { room.off("connectionStateChanged", onStateChange); } catch (_) {}
+              try { room.off(LKRoomEvent.ConnectionStateChanged, onStateChange); } catch (_) {}
             };
 
             const timeout = setTimeout(() => {
-              // Timeout — not necessarily a failure.  The room may be connected
-              // at the native level with no JS event/state propagation.
-              logger.mediaplayer("[Player] connectionStateChanged not detected, checking state...");
+              if (settled) return;
               cleanup();
-              const s = room.state;
-              if (s === "disconnected" || s === 0 || s === "failed") {
-                reject(new Error(`LiveKit failed: ${s}`));
+              // Use room.isConnected as the source of truth
+              if (room.isConnected) {
+                connected = true;
+                settled   = true;
+                resolve();
+              } else if (!room.isConnected && (room.connectionState === ConnectionState.CONN_DISCONNECTED || room.connectionState === 0)) {
+                reject(new Error(`LiveKit disconnected (connectionState: ${room.connectionState})`));
               } else {
-                // Indeterminate state (undefined, "connecting", etc.)
-                // — optimistically proceed; MediaPlayer will validate.
+                // Still connecting or indeterminate — optimistically proceed
                 connected = true;
                 settled   = true;
                 resolve();
               }
-            }, 3_000); // 3 s instead of 15 s — avoid blocking recovery
+            }, 3_000);
 
-            const onStateChange = (state) => {
+            const onStateChange = (cs) => {
               if (settled) return;
-              logger.mediaplayer(`[Player] LiveKit state changed: ${state}`);
-              if (state === "connected" || state === 1) {
+              logger.mediaplayer(`[Player] LiveKit connectionStateChanged: ${cs}`);
+              if (cs === ConnectionState.CONN_CONNECTED || cs === 1) {
                 connected = true;
+                settled   = true;
                 cleanup();
                 resolve();
-              } else if (state === "disconnected" || state === 0 || state === "failed") {
+              } else if (cs === ConnectionState.CONN_DISCONNECTED || cs === 0) {
                 cleanup();
-                reject(new Error(`LiveKit failed: ${state}`));
+                reject(new Error(`LiveKit disconnected (connectionState: ${cs})`));
               }
             };
 
-            room.on("connectionStateChanged", onStateChange);
+            room.on(LKRoomEvent.ConnectionStateChanged, onStateChange);
 
-            // Poll room.state every 500 ms as a fallback for builds where
-            // the event never fires but the getter eventually updates.
             const poll = setInterval(() => {
               if (settled) return;
-              const s = room.state;
-              if (s === "connected" || s === 1) {
+              if (room.isConnected) {
                 connected = true;
+                settled   = true;
                 cleanup();
                 resolve();
-              } else if (s === "disconnected" || s === 0 || s === "failed") {
+              } else if (room.connectionState === ConnectionState.CONN_DISCONNECTED || room.connectionState === 0) {
                 cleanup();
-                reject(new Error(`LiveKit failed: ${s}`));
+                reject(new Error(`LiveKit disconnected (connectionState: ${room.connectionState})`));
               }
             }, 500);
 
-            // Immediate check after listener is registered.
-            const currentState = room.state;
-            if (currentState === "connected" || currentState === 1) {
+            // Immediate check using correct API
+            if (room.isConnected) {
               connected = true;
+              settled   = true;
               cleanup();
               logger.mediaplayer("[Player] Room already connected (immediate check)");
               resolve();
-            } else if (currentState === "disconnected" || currentState === 0 || currentState === "failed") {
+            } else if (room.connectionState === ConnectionState.CONN_DISCONNECTED || room.connectionState === 0) {
               cleanup();
-              reject(new Error(`LiveKit failed: ${currentState}`));
+              reject(new Error(`LiveKit disconnected (connectionState: ${room.connectionState})`));
             }
           });
-        } catch (err) {
-          logger.error("[Player] LiveKit connection failed:", err.message);
-          throw err;
         }
-
-        if (connected) {
-          logger.mediaplayer("[Player] Room ready, proceeding to MediaPlayer");
-        } else {
-          throw new Error("LiveKit room did not reach connected state");
-        }
-      } else {
-        // connection.room is null — this happens when joinVoiceChannel returns
-        // a stale/recycled connection object before the LiveKit room is assigned,
-        // usually due to a concurrent join race or a channel that no longer has
-        // an active room. Treat it as transient so the retry loop handles it.
-        throw new Error("No room available after joinVoiceChannel");
+      } catch (err) {
+        logger.error("[Player] LiveKit connection failed:", err.message);
+        throw err;
       }
 
+      if (connected) {
+        logger.mediaplayer("[Player] Room ready via FluxerRevoice, proceeding to MediaPlayer");
+      }
+
+      // ── VoiceConnection event handlers ──────────────────────────────────
+      // FluxerVoiceConnection emits "disconnect" on unexpected
+      // disconnection and "autoleave" when the room empties.
       connection.on("error", (err) => {
         if (this.connection !== connection) {
           try { connection.removeAllListeners(); } catch (_) {}
@@ -1267,13 +1289,9 @@ export default class Player extends EventEmitter {
             });
       });
 
-      // @fluxerjs VoiceConnection / LiveKitRtcConnection emits "disconnect",
-      // NOT "disconnected" (Discord.js naming). Using the wrong event name meant
-      // this handler was silently never registered — voice disconnect recovery
-      // was completely broken.
       connection.on("disconnect", () => {
         if (this.connection !== connection) {
-          try { connection.removeAllListeners(); connection.destroy(); } catch (_) {}
+          try { connection.removeAllListeners(); } catch (_) {}
           return;
         }
         if (!this.leaving && !this._destroyed) {
@@ -1282,10 +1300,19 @@ export default class Player extends EventEmitter {
               .catch(() => {})
               .finally(() => this._recoverConnection());
         } else {
-          try { connection.removeAllListeners(); connection.destroy(); } catch (_) {}
+          try { connection.removeAllListeners(); } catch (_) {}
         }
       });
 
+      connection.on("autoleave", () => {
+        if (this.connection !== connection) return;
+        logger.mediaplayer("[Player] Auto-leave triggered by FluxerVoiceConnection (room empty)");
+        if (!this.leaving && !this._destroyed) {
+          this.emit("autoleave");
+        }
+      });
+
+      // Send self-deaf voice state update via @fluxerjs/voice if available
       try {
         const vm = getVoiceManager(this.client);
         vm.updateVoiceState(channelId, { self_deaf: true, self_mute: false });
@@ -1296,17 +1323,10 @@ export default class Player extends EventEmitter {
       const playerReady = await this._ensureMediaPlayer();
       if (!playerReady) {
         logger.mediaplayer("[Player] First MediaPlayer attempt failed, retrying after delay...");
-        // 1s wasn't enough — LiveKit can take 2-3s to fully tear down after
-        // a room_disconnected event fires. If we retry too soon we hit the
-        // same "engine is closed" error. 3s gives the engine time to settle.
         await Utils.sleep(3000);
         if (this._destroyed || this.leaving) throw new Error("Player destroyed during MediaPlayer retry");
-        // If the room disconnected while we were waiting, fail fast so the
-        // caller's retry logic (spawnPlayer) can respawn with a fresh connection.
-        const roomAlive = this.connection?.room?.state !== "disconnected" &&
-            this.connection?.room?.state !== "failed" &&
-            this.connection?.room?.state !== 0;
-        if (!roomAlive && this.connection?.room?.state !== undefined) {
+        const roomAlive = this.connection?.room?.isConnected ?? false;
+        if (!roomAlive) {
           throw new Error("Room disconnected during MediaPlayer retry");
         }
         const retryReady = await this._ensureMediaPlayer();
@@ -1315,21 +1335,13 @@ export default class Player extends EventEmitter {
 
       this._restoreVolume();
       this.emit("roomfetched");
-      logger.player(`[Player] Voice connected to ${channel.name}`);
+      logger.player(`[Player] Voice connected to ${channel.name || channelId} via FluxerRevoice`);
 
       if (!this.queue.isEmpty() && !this.queue.getCurrent()) {
         this.playNext();
       } else if (this.queue.isEmpty()) {
-        // Delay the inactivity timer start to give the caller (e.g. RecoveryManager.spawnPlayer)
-        // time to re-seed voice states and check for humans already in the channel.
-        // The reseed will call _stopInactivityTimer() if humans are found, which
-        // sets this._inactivityTimer = null.  When this callback fires, it checks
-        // whether the timer was cancelled (by checking if _inactivityTimer is null)
-        // before starting a new one.
         this._pendingInactivityCheck = true;
         setTimeout(() => {
-          // If the inactivity timer was stopped between scheduling and now (e.g.
-          // by reseedVoiceStatesForChannel finding humans), don't restart it.
           if (!this._pendingInactivityCheck) return;
           this._pendingInactivityCheck = false;
           if (this.queue.isEmpty() && !this.queue.getCurrent()) {
@@ -1343,7 +1355,7 @@ export default class Player extends EventEmitter {
       logger.error("[Player] Join failed:", e.message, causeStr);
 
       if (this.connection) {
-        try { this.connection.destroy(); } catch (_) {}
+        try { this.connection.disconnect(); } catch (_) {}
         this.connection = null;
       }
       throw e;
@@ -1369,7 +1381,20 @@ export default class Player extends EventEmitter {
         this._mediaPlayer.destroy();
         this._mediaPlayer = null;
       }
-      await this.connection.disconnect();
+
+      // Clean up from FluxerRevoice connections map before disconnecting
+      const channelId = this._channelId;
+      if (this._revoice && channelId) {
+        try {
+          if (typeof this._revoice.deleteConnection === "function") {
+            this._revoice.deleteConnection(channelId);
+          } else if (this._revoice.connections) {
+            this._revoice.connections.delete(channelId);
+          }
+        } catch (_) {}
+      }
+
+      await this.connection.leave();
 
       this.queue.reset();
       this.connection  = null;
@@ -2149,8 +2174,9 @@ export default class Player extends EventEmitter {
     if (!this.connection || this.leaving) return;
 
     const room = this.connection.room;
-    if (!room || room.state === "disconnected" || room.state === "failed" || room.state === 0) {
-      logger.mediaplayer("[Player] Room disconnected/failed, recovering connection before playing.");
+    if (!room || !room.isConnected) {
+      const cs = room?.connectionState;
+      logger.mediaplayer(`[Player] Room not connected (isConnected: ${room?.isConnected}, connectionState: ${cs}), recovering connection before playing.`);
       if (songData) {
         this.queue.data.unshift(songData);
         this.queue.current = null;

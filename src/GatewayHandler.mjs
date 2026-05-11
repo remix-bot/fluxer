@@ -703,7 +703,7 @@ export class GatewayHandler {
             const player = remix.players.playerMap.get(cleanId_ref);
             if (player) {
               // Send "join" or "leave" on the per-player channel
-              // (matching Stoat format: { type, data } where data = userId)
+              // (standard format: { type, data } where data = userId)
               const eventType = channelId ? "join" : "leave";
               remix.dashboard.updatePlayer({
                 type: eventType,

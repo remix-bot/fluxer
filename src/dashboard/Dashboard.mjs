@@ -679,7 +679,7 @@ export class Dashboard {
   // ═══════════════════════════════════════════════════════════════════════════
   // Pub/Sub broadcast helpers
   //
-  // CRITICAL: The backend (backend-master) expects Stoat-compatible message
+  // CRITICAL: The backend (backend-master) expects standard message
   // formats on both the global :players channel and the per-player
   // :player_{channelId} channel.  The formats are:
   //
@@ -761,7 +761,7 @@ export class Dashboard {
    * The backend PlayerManager.setupEvents() expects messages in the format:
    *   { type: "<eventType>", data: <payload> }
    *
-   * This method accepts details in that Stoat-compatible format directly.
+   * This method accepts details in that standard format directly.
    *
    * @param {Object} details Must include `type` and optionally `data`.
    *   Examples:

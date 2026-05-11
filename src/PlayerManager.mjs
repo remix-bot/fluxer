@@ -121,7 +121,7 @@ export class PlayerManager {
   /**
    * Forward player lifecycle/state events to the dashboard pub/sub channels.
    *
-   * IMPORTANT: Events are sent in Stoat-compatible { type, data } format so
+   * IMPORTANT: Events are sent in standard { type, data } format so
    * the backend (backend-master) PlayerManager can parse them correctly.
    *
    * Two channels are used:
@@ -144,7 +144,7 @@ export class PlayerManager {
       writable: true,
     });
 
-    // ── Per-player channel: Stoat-compatible { type, data } format ────────
+    // ── Per-player channel: standard { type, data } format ────────
     // The backend PlayerManager.setupEvents() expects:
     //   { type: "startplay",  data: serialisedVideo }
     //   { type: "stopplay",   data: null }
@@ -192,7 +192,7 @@ export class PlayerManager {
         const member = guild.members?.get?.(state.userId ?? state.user_id);
         if (!member?.user || member.user?.bot) continue;
         // Send per-player channel "join"/"leave" event with just the user ID
-        // (matching Stoat format where data = userId string)
+        // (matching standard format where data = userId string)
         emit(eventType, member.user.id);
         // Also send global user update
         this.dashboard.userUpdate({
@@ -215,7 +215,7 @@ export class PlayerManager {
       // Send the serialised video to the per-player channel
       emit("startplay", Dashboard.convertVideo(song ?? player.queue?.current));
       // Emit streamStartPlay with current timestamp so the backend can
-      // calculate elapsed time accurately (matches Stoat behaviour)
+      // calculate elapsed time accurately (standard behaviour)
       emit("streamStartPlay", Date.now());
       // Also broadcast on global channel for full state update
       this.dashboard.playerUpdate({ type: "startplay" }, player);
@@ -232,7 +232,7 @@ export class PlayerManager {
     });
 
     player.on("playback", (playing) => {
-      // Stoat sends "pause" or "resume" with { elapsedTime } — match that
+      // Sends "pause" or "resume" with { elapsedTime } — match that format
       const elapsedMs = player._pausedAt
           ? (player._pausedAt.getTime?.() ?? Number(player._pausedAt)) -
             (player.startedPlaying?.getTime?.() ?? Number(player.startedPlaying ?? 0))
@@ -248,7 +248,7 @@ export class PlayerManager {
     });
 
     player.on("filter", (filter) => {
-      // Filter events are Fluxer-specific — no Stoat equivalent.
+      // Filter events are Fluxer-specific.
       // Send as a custom event type; the backend will ignore unknown types.
       emit("filter", filter);
     });
@@ -259,7 +259,7 @@ export class PlayerManager {
     });
 
     player.on("message", (message) => {
-      // No Stoat equivalent — skip per-player, only global broadcast
+      // No per-player equivalent — skip, only global broadcast
     });
 
     player.on("autoleave", () => {
@@ -708,6 +708,7 @@ export class PlayerManager {
       config:             this.config,
       nodelink:           this.config.nodelink,
       moonlink:           this.playerConfig?.moonlink ?? null,
+      revoice:            this.playerConfig?.revoice ?? null,
       settingsMgr:        this.settings,
       observedVoiceUsers: this.observedVoiceUsers ?? null,
       locale:             this.locale ?? null,

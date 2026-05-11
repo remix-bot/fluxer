@@ -47,6 +47,7 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
     config:             this.config,
     nodelink:           this.config.nodelink,
     moonlink:           this.moonlink ?? null,
+    revoice:            this.revoice ?? null,
     messageChannel:     message.channel,
     settingsMgr:        this.settingsMgr ?? this.settings ?? null,
     observedVoiceUsers: this.observedVoiceUsers ?? null,

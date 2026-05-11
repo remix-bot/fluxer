@@ -9,6 +9,7 @@ import { RemoteSettingsManager } from "./src/Settings.mjs";
 import { PlayerManager } from "./src/PlayerManager.mjs";
 import childProcess from "node:child_process";
 import { getVoiceManager } from "@fluxerjs/voice";
+import { FluxerRevoice } from "./src/constants/FluxerRevoice.mjs";
 import { MoonlinkManager } from "./src/MoonlinkManager.mjs";
 import { Dashboard } from "./src/dashboard/Dashboard.mjs";
 import { Locale } from "./src/constants/Locale.mjs";
@@ -229,6 +230,14 @@ export class Remix {
     client.on(Events.Ready, async () => {
       logger.player("Logged in as " + (client.user?.username ?? "bot"));
 
+      // ── Attach proactive error handlers on WS shards ───────────────────
+      // @fluxerjs/ws throws "WebSocket error" on socket close/reconnect.
+      // Without an error handler on the WS object, this escalates to
+      // uncaughtException and produces noisy stack traces. By attaching
+      // .on("error") handlers on every shard's WebSocket, we catch the
+      // error at the source and log it cleanly instead.
+      this._attachWsErrorHandlers();
+
       try {
         getVoiceManager(client);
         logger.player("VoiceManager initialized.");
@@ -272,12 +281,23 @@ export class Remix {
       this.gatewayHandler.onReady();
     });
 
+    // ── FluxerRevoice Instance (shared across all players) ─────────────────
+    // Uses the Fluxer gateway (via @fluxerjs/voice) to join voice channels
+    // instead of a third-party REST API. This avoids the 401 error that occurs
+    // when a Fluxer bot token is sent to an incompatible API endpoint.
+    // The FluxerRevoice class provides the same .join() interface as
+    // revoice.js's Revoice class, returning FluxerVoiceConnection objects
+    // that wrap LiveKit Rooms compatible with revoice.js's MediaPlayer.
+    this.revoice = new FluxerRevoice(client);
+    logger.player("[FluxerRevoice] Instance created with Fluxer client.");
+
     // ── Player Manager ───────────────────────────────────────────────────────
     this.playerContext = {
       client:   this.client,
       config,
       nodelink: config.nodelink,
       moonlink: null,
+      revoice:  this.revoice,
     };
     this.players = new PlayerManager(settings, commands, {
       config,
@@ -544,6 +564,79 @@ export class Remix {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
+  /**
+   * Attach error handlers on all @fluxerjs/ws shard WebSockets.
+   *
+   * When the Fluxer gateway's underlying WebSocket closes (e.g. network
+   * blip, server restart), @fluxerjs/ws throws a "WebSocket error" from
+   * its internal error handler.  Without an .on("error") listener on the
+   * WS object itself, this escalates to Node's uncaughtException handler,
+   * producing a noisy stack trace even though the bot recovers
+   * automatically via gateway reconnection.
+   *
+   * By attaching .on("error") handlers here, we catch the error at the
+   * source, log a single clean line, and prevent it from reaching
+   * uncaughtException.
+   */
+  _attachWsErrorHandlers() {
+    try {
+      const wsManager = this.client?.ws;
+      if (!wsManager) return;
+
+      // @fluxerjs/ws may use a single connection or a ShardManager.
+      // Handle both patterns:
+      const attachToSocket = (wsObj, label) => {
+        if (!wsObj) return;
+        // Avoid attaching duplicate handlers on reconnect
+        if (wsObj._fluxerErrorHandled) return;
+        wsObj._fluxerErrorHandled = true;
+
+        if (typeof wsObj.on === "function") {
+          wsObj.on("error", (err) => {
+            logger.warn(`[WS] ${label} transport error (auto-recovering): ${err?.message ?? err}`);
+          });
+        }
+        if (typeof wsObj.addEventListener === "function") {
+          wsObj.addEventListener("error", (event) => {
+            const err = event?.error ?? event?.message ?? event;
+            logger.warn(`[WS] ${label} transport error (auto-recovering): ${err?.message ?? err}`);
+          });
+        }
+      };
+
+      // Pattern 1: ws.shards is a Map (multi-shard)
+      if (wsManager.shards && typeof wsManager.shards.forEach === "function") {
+        wsManager.shards.forEach((shard, id) => {
+          attachToSocket(shard?.ws, `Shard ${id}`);
+        });
+      }
+
+      // Pattern 2: ws itself has a .ws property (single-shard)
+      if (wsManager.ws) {
+        attachToSocket(wsManager.ws, "Gateway");
+      }
+
+      // Pattern 3: ws is itself a WebSocket-like object
+      if (typeof wsManager.on === "function" && !wsManager._fluxerErrorHandled) {
+        attachToSocket(wsManager, "WSManager");
+      }
+
+      // Also listen for new shards being created (future-proofing)
+      if (typeof wsManager.on === "function" && !wsManager._shardCreateHandled) {
+        wsManager._shardCreateHandled = true;
+        wsManager.on("shardCreate", (shard) => {
+          if (shard?.ws) {
+            attachToSocket(shard.ws, `Shard ${shard.id ?? "?"}`);
+          }
+        });
+      }
+
+      logger.player("[WS] Proactive error handlers attached to gateway sockets.");
+    } catch (e) {
+      logger.warn("[WS] Failed to attach WS error handlers:", e.message);
+    }
+  }
+
   markIntentionalLeave(channelId, ttlMs = null) {
     const clean = String(channelId).replace(/\D/g, "");
     if (!clean) return;
@@ -739,6 +832,11 @@ const remix = new Remix();
 const isIgnorableWsCrash = (err) => {
   const message = String(err?.message ?? err ?? "");
   const stack = String(err?.stack ?? "");
+  // WebSocket transport errors from @fluxerjs/ws — these are recoverable
+  // because the gateway client automatically reconnects. They should be
+  // caught by the proactive .on("error") handlers in _attachWsErrorHandlers(),
+  // but this acts as a safety net in case a new shard is created after the
+  // initial handler attachment or the error slips through via a different path.
   return message === "WebSocket error" &&
       (
         stack.includes("@fluxerjs/ws/dist/index.mjs") ||

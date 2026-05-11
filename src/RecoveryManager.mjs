@@ -350,6 +350,7 @@ export class RecoveryManager {
         config:           remix.config,
         nodelink:         remix.config.nodelink,
         moonlink:         remix.moonlink,
+        revoice:          remix.revoice,
         settingsMgr:      remix.settingsMgr,
         observedVoiceUsers: remix.observedVoiceUsers,
       });
