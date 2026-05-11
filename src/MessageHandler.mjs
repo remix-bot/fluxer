@@ -319,7 +319,7 @@ export class MessageHandler {
   async sendMessage(channel, message) {
     if (this.checkPermissions(["SendMessages"], channel).length !== 0) {
       logger.warn("[MessageHandler] Missing SendMessages permission in channel", channel.id);
-      return;
+      return null;
     }
     let opts;
     if (typeof message === "string") {

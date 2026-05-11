@@ -38,28 +38,30 @@ class Tuna {
     });
   }
   search(query, page = 1, size = 10) {
-    return new Promise(async res => {
-      const results = await this.get("/v1/sounds/search", { size, page, search: query });
+    return this.get("/v1/sounds/search", { size, page, search: query }).then(results => {
       results.items = results.items.map(s => {
         s.download = function() {
-          return new Promise(resolve => {
-            https.get(this.oggPath, (r) => { resolve(r); });
+          return new Promise((resolve, reject) => {
+            const req = https.get(this.oggPath, (r) => { resolve(r); });
+            req.on("error", (err) => { reject(err); });
+            req.setTimeout(15_000, () => { req.destroy(); reject(new Error("Tuna download timeout")); });
           });
         };
         return s;
       });
-      res(results);
+      return results;
     });
   }
   getSound(id) {
-    return new Promise(async res => {
-      const sound = await this.get("/v1/sounds/" + id);
+    return this.get("/v1/sounds/" + id).then(sound => {
       sound.download = function() {
-        return new Promise(res => {
-          https.get(this.oggPath, (result) => { res(result); });
+        return new Promise((resolve, reject) => {
+          const req = https.get(this.oggPath, (result) => { resolve(result); });
+          req.on("error", (err) => { reject(err); });
+          req.setTimeout(15_000, () => { req.destroy(); reject(new Error("Tuna download timeout")); });
         });
       };
-      res(sound);
+      return sound;
     });
   }
 }

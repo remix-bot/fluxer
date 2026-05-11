@@ -300,7 +300,7 @@ class YTUtils extends EventEmitter {
 
     let tracks = [];
     if      (data.loadType === "search")   tracks = data.data ?? [];
-    else if (data.loadType === "track")    tracks = [data.data];
+    else if (data.loadType === "track")    tracks = data.data ? [data.data] : [];
     else if (data.loadType === "playlist") tracks = data.data?.tracks ?? [];
 
     const resultTracks = this._rankTracks(tracks, provider);
@@ -335,10 +335,16 @@ class YTUtils extends EventEmitter {
       }
 
       // Handle single track
-      if (data.loadType === "track") {
+      if (data.loadType === "track" && data.data) {
         const video = trackToVideo(data.data);
+        if (!video) return { type: "error", data: "Failed to parse track data." };
         this.emit("message", `Successfully added [${video.title}](${video.url}) to the queue.`);
         return { type: "video", data: video };
+      }
+
+      if (data.loadType === "track" && !data.data) {
+        this.emit("message", `**Track data was empty for '${query}'.**`);
+        return { type: "error", data: "Empty track data returned." };
       }
 
       // Handle search results (take first)
@@ -383,10 +389,16 @@ class YTUtils extends EventEmitter {
     }
 
     // Single track from search
-    if (data.loadType === "track") {
+    if (data.loadType === "track" && data.data) {
       const video = trackToVideo(data.data);
+      if (!video) return { type: "error", data: "Failed to parse track data." };
       this.emit("message", `Successfully added [${video.title}](${video.url}) to the queue.`);
       return { type: "video", data: video };
+    }
+
+    if (data.loadType === "track" && !data.data) {
+      this.emit("message", `**Track data was empty for '${query}'.**`);
+      return { type: "error", data: "Empty track data returned." };
     }
 
     // Nothing found

@@ -50,6 +50,11 @@ export class MySqlSettingsManager extends SettingsManager {
   constructor(config, defaultsPath) {
     super();
     this.db = mysql.createPool({ connectionLimit: 15, ...config });
+    // Without this listener, any pool-level error (connection drop, timeout, protocol error)
+    // fires an unhandled 'error' event which crashes the entire process with no log output.
+    this.db.on("error", (err) => {
+      logger.error("[DB] MySQL pool error:", err.code ?? err.message);
+    });
     if (defaultsPath) this.loadDefaultsSync(defaultsPath);
     this.load();
   }
@@ -64,7 +69,7 @@ export class MySqlSettingsManager extends SettingsManager {
       this._loadAttempts = (this._loadAttempts || 0) + 1;
       const delay = Math.min(1000 * Math.pow(2, this._loadAttempts - 1), 30_000);
       logger.error("[Settings] Init error (attempt", this._loadAttempts, "retrying in", delay + "ms):", res.error);
-      return setTimeout(() => { this.load(); }, delay);
+      return setTimeout(() => { this.load().catch(err => logger.error("[Settings] Retry load error:", err?.message ?? err)); }, delay);
     }
     this._loadAttempts = 0;
     res.results.forEach((r) => {

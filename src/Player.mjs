@@ -891,7 +891,7 @@ export default class Player extends EventEmitter {
           }
           if (![200, 204, 206].includes(res.statusCode)) {
             res.resume();
-            return reject(new Error(`HTTP ${res.statusCode} at ${target}`));
+            return reject(new Error(`HTTP ${res.statusCode}`));
           }
           if (returnStream) return resolve(res);
 

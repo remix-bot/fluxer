@@ -921,7 +921,7 @@ export class PlayerManager {
           if (current.title !== song.title && current.url !== song.url) return;
           if (player._paused) return; // don't scrobble if paused
 
-          const playedMs = Date.now() - (player.startedPlaying ?? startedAtMs);
+          const playedMs = Date.now() - (player.startedPlaying ?? startedAtMs ?? Date.now());
           if (lastfm.shouldScrobble(song, playedMs)) {
             for (const userId of humanUserIds) {
               lastfm.scrobble(userId, song, startedAtMs).catch(() => {});

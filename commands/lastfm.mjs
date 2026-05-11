@@ -380,7 +380,7 @@ export async function run(msg, data) {
       const statusEmoji = track.now ? "🎵 Now Playing" : "🕐 Last Played";
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setAuthor({ name: `${statusEmoji} on Last.fm`, icon_url: track.image || undefined })
+        .setAuthor({ name: `${statusEmoji} on Last.fm`, iconURL: track.image || undefined })
         .setDescription(`**${track.name}** by **${track.artist}**\n[Open on Last.fm](${track.url})`)
         .setFooter({ text: `Last.fm: ${user.username}` });
 
@@ -406,7 +406,7 @@ export async function run(msg, data) {
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setAuthor({ name: `Last.fm Profile: ${info.name}`, icon_url: info.image?.[2]?.["#text"] || undefined, url: info.url })
+        .setAuthor({ name: `Last.fm Profile: ${info.name}`, iconURL: info.image?.[2]?.["#text"] || undefined, url: info.url })
         .setDescription([
           `🎵 **${Utils.formatNumber(info.playcount ?? 0)}** scrobbles`,
           `👤 Registered: ${info.registered?.unixtime ? new Date(+info.registered.unixtime * 1000).toLocaleDateString() : "unknown"}`,
@@ -504,7 +504,7 @@ export async function run(msg, data) {
         });
       }
 
-      return msg.reply({ embeds: [buildTrackList(user.username, "❤️ Loved Tracks", tracks)] });
+      return msg.reply({ embeds: [buildTrackList(user.username, "❤️ Loved Tracks", tracks, false, prefix)] });
     }
 
     // ── Top tracks ─────────────────────────────────────────────────────────
@@ -527,7 +527,7 @@ export async function run(msg, data) {
         });
       }
 
-      return msg.reply({ embeds: [buildTrackList(user.username, "📊 Top Tracks", tracks, true)] });
+      return msg.reply({ embeds: [buildTrackList(user.username, "📊 Top Tracks", tracks, true, prefix)] });
     }
 
     // ── Leaderboard ─────────────────────────────────────────────────────
@@ -648,7 +648,7 @@ export async function run(msg, data) {
         });
       }
 
-      return msg.reply({ embeds: [buildTrackList(user.username, "🕐 Recent Tracks", tracks)] });
+      return msg.reply({ embeds: [buildTrackList(user.username, "🕐 Recent Tracks", tracks, false, prefix)] });
     }
 
     default:
@@ -684,7 +684,7 @@ export async function run(msg, data) {
 
 // ── Track list embed builder ──────────────────────────────────────────────────
 
-function buildTrackList(username, title, tracks, showPlaycount = false) {
+function buildTrackList(username, title, tracks, showPlaycount = false, prefix = "%") {
   const lines = tracks.map((t, i) => {
     const num = String(i + 1).padStart(2, " ");
     let name = t.name;
@@ -700,7 +700,7 @@ function buildTrackList(username, title, tracks, showPlaycount = false) {
     .setColor(getGlobalColor())
     .setTitle(`${title} — ${username}`)
     .setDescription(desc)
-    .setFooter({ text: `💡 Use %lastfm play loved to play these!` });
+    .setFooter({ text: `💡 Use ${prefix}lastfm play loved to play these!` });
 }
 
 // ── Leaderboard embed builder ─────────────────────────────────────────────────

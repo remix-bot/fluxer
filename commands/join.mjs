@@ -69,8 +69,8 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
       } catch (_) { return "%"; }
     })();
     const desc = is247
-        ? this.t(message, "responses.join.autoLeaveInactive", { channel: activeChannelId })
-        : this.t(message, "responses.join.autoLeaveInactive247", { channel: activeChannelId, prefix });
+        ? this.t(message, "responses.join.autoLeaveInactive247", { channel: activeChannelId, prefix })
+        : this.t(message, "responses.join.autoLeaveInactive", { channel: activeChannelId });
     const embed = new EmbedBuilder().setColor(getGlobalColor())
         .setDescription(desc);
     message.channel.send({ embeds: [embed] });

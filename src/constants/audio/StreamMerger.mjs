@@ -13,6 +13,7 @@ class StreamMerger extends Transform {
   }
   _transform(chunk, _enc, cb) {
     if (!this.ffmpeg) { this.push(chunk); return cb(); }
+    if (!this.ffmpeg.stdio?.[3]?.writable) { this.push(chunk); return cb(); }
     this.ffmpeg.stdio[3].write(chunk);
     cb();
   }

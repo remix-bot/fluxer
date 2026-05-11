@@ -71,7 +71,7 @@ export class RemoteSettingsManager extends EventEmitter {
       // exponential backoff with a cap of 30s instead of forever-at-2s
       const delay = Math.min(1000 * Math.pow(2, this._loadAttempts - 1), 30_000);
       logger.error("[Settings] Init error (attempt", this._loadAttempts, "retrying in", delay + "ms):", res.error);
-      return setTimeout(() => { this.load(); }, delay);
+      return setTimeout(() => { this.load().catch(err => logger.error("[Settings] Retry load error:", err?.message ?? err)); }, delay);
     }
     this._loadAttempts = 0;
     res.results.forEach((r) => {

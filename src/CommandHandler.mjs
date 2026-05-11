@@ -553,7 +553,6 @@ export class CommandHandler extends EventEmitter {
     let usedArgumentCount = 0;
 
     for (let i = 0, argIndex = 1; i < options.length; i++) {
-      if (options[i] instanceof Flag) i++;
       const o = options[i];
       if (o?.type === "text") { texts.push(o); continue; }
       if ((args[argIndex] || "").startsWith("-")) {

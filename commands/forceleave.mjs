@@ -4,7 +4,7 @@ import { getGlobalColor } from "../src/MessageHandler.mjs";
 
 export const command = new CommandBuilder()
   .setName("forceleave")
-  .addAlias("fl")
+  .addAliases("fl")
   .setDescription("Make Remix leave a channel even if you're not in it.")
   .setRequirement(r => r.addPermission("ManageChannels"))
   .setCategory("music")

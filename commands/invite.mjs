@@ -11,8 +11,7 @@ export const command = new CommandBuilder()
 export async function run(message) {
     const description = this.t(message, "responses.invite.description");
 
-    const botUser = message.handler.client.user;
-
+    const botUser = this.client?.user;
     const botIcon = botUser?.displayAvatarURL?.() || null;
 
     const embed = new EmbedBuilder()

@@ -1,6 +1,4 @@
 import { CommandBuilder } from "../src/CommandHandler.mjs";
-import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
 
 export const command = new CommandBuilder()
   .setName("remove")
@@ -14,10 +12,8 @@ export const command = new CommandBuilder()
 export async function run(message, data) {
   const p = await this.getPlayer(message, false, false, false);
   if (!p) return;
-  const res = p.remove(data.options[0].value - 1);
-  const embed = new EmbedBuilder()
-    .setColor(getGlobalColor())
-    .setDescription(res)
-    ;
-  message.reply({ embeds: [embed] });
+  const index = data.get("index")?.value;
+  if (index == null) return message.reply("Please provide a valid queue position.");
+  const res = p.remove(index - 1);
+  message.replyEmbed(res);
 }

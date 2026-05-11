@@ -24,7 +24,7 @@ export async function run(msg, data) {
         const guild   = guildId ? this.client.guilds.get(String(guildId).replace(/\D/g, "")) : null;
         const conn = s.connection;
         const room = conn?.room;
-        const roomState = room?.state ?? "no-room";
+        const roomState = room?.connectionState ?? (room?.isConnected ? "connected" : "disconnected");
         const hasMediaPlayer = !!s._mediaPlayer && !s._mediaPlayer?.destroyed;
         return {
           name:      channel?.name ?? "unknown",

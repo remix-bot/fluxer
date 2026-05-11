@@ -91,11 +91,14 @@ function getLivePlayerCount(playerMap) {
     if (conn) {
       const room = conn.room;
       if (room) {
-        const state = room.state;
+        // Use @livekit/rtc-node Node.js SDK API:
+        // room.isConnected — boolean getter (true when connected)
+        // room.connectionState — ConnectionState enum (0=disconnected, 1=connected, 2=reconnecting)
+        // room.state does NOT exist in the Node.js SDK (browser-only API)
+        const isConnected = room.isConnected;
+        const connectionState = room.connectionState;
         // Explicitly dead states → skip
-        if (state === "disconnected" || state === "failed" || state === 0) continue;
-        // undefined = connected on some LiveKit builds (no persistent state prop)
-        // "connected"  = explicitly connected
+        if (!isConnected && (connectionState === 0 || connectionState === "disconnected")) continue;
       }
       // conn exists but no room → still a valid LiveKit connection reference
     } else {

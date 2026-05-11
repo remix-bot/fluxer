@@ -538,7 +538,7 @@ export class GatewayHandler {
       logger.guild(`[GuildDelete] Removed from server ${guildId} — cleaning up.`);
 
       for (const [channelId, player] of remix.players.playerMap) {
-        if (!player._guildId || player._guildId === guildId) {
+        if (!player._guildId || String(player._guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, "")) {
           remix.players.playerMap.delete(channelId);
           try { player.leave().catch(() => {}); } catch (_) {}
           try { player.destroy();               } catch (_) {}
@@ -547,10 +547,10 @@ export class GatewayHandler {
       }
 
       for (const [userId, info] of [...remix.observedVoiceUsers]) {
-        if (info.guildId === guildId) remix.observedVoiceUsers.delete(userId);
+        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, "")) remix.observedVoiceUsers.delete(userId);
       }
       for (const [userId, info] of [...remix.observedVoiceBots]) {
-        if (info.guildId === guildId) remix.observedVoiceBots.delete(userId);
+        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, "")) remix.observedVoiceBots.delete(userId);
       }
       for (const [stateKey, info] of [...this._prevVoiceState]) {
         if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, ""))
