@@ -131,6 +131,17 @@ export async function run(msg, data) {
           ? new Set(raw.map(id => cleanId(id)).filter(Boolean))
           : new Set([cleanId(raw)]);
 
+  // ── Snapshot all 247 auto channels in this guild BEFORE leaving ────────
+  // When the bot leaves one channel, the gateway may send a guild-level
+  // disconnect that kills ALL voice connections in the guild (not just the
+  // target).  By snapshotting beforehand, we can schedule rejoins for every
+  // 24/7 auto channel that was collateral-disconnected.
+  const other247AutoChannels = [...ch247].filter(id => {
+    if (id === activeChannelId || id === homeChannelId || id === targetChannelId) return false;
+    const mode = get247ChannelMode(set, id);
+    return mode === "auto";
+  });
+
   if (ch247.has(activeChannelId) || ch247.has(homeChannelId)) {
     const matchChannel = ch247.has(homeChannelId) ? homeChannelId
         : ch247.has(activeChannelId) ? activeChannelId
@@ -144,7 +155,7 @@ export async function run(msg, data) {
     player.destroy();
 
     if (mode === "auto") {
-      msg.reply(embed(this.t(msg, "responses.leave.leftRejoin247", { channel: targetChannelId })));
+      msg.reply(embed(this.t(msg, "responses.leave.leftRejoin247", { channel: targetChannelId, prefix: set?.get("prefix") ?? "%" })));
       const leave247Delay = this.config?.timers?.leave247RejoinDelay ?? 5000;
       setTimeout(() => {
         if (this._spawnPlayer) {
@@ -153,8 +164,68 @@ export async function run(msg, data) {
           );
         }
       }, leave247Delay);
+
+      // ── Rejoin other 24/7 auto channels that may have been disconnected ──
+      // If the gateway sent a guild-level leave, all other 24/7 auto channels
+      // also lost their connections.  Schedule a rejoin for each one with a
+      // staggered delay to avoid overloading the global join queue.
+      if (other247AutoChannels.length > 0) {
+        const rejoinBaseDelay = leave247Delay;
+        const rejoinStagger = this.config?.timers?.rejoin247Delay ?? 3000;
+        for (let i = 0; i < other247AutoChannels.length; i++) {
+          const otherChannelId = other247AutoChannels[i];
+          const otherPlayer = this.players.playerMap.get(otherChannelId);
+          // Only rejoin if the player is gone (was collateral-disconnected)
+          if (!otherPlayer || otherPlayer._destroyed) {
+            // Clean up the dead player from the map
+            if (otherPlayer) {
+              this.players.playerMap.delete(otherChannelId);
+              try { otherPlayer.destroy(); } catch (_) {}
+            }
+            const delay = rejoinBaseDelay + (i + 1) * rejoinStagger;
+            logger.recovery(
+              `[leave] Scheduling 247 auto-rejoin for collateral-disconnected channel ${otherChannelId} in ${delay}ms`
+            );
+            setTimeout(() => {
+              if (this._spawnPlayer) {
+                this._spawnPlayer(guildId, otherChannelId).catch(e =>
+                    logger.warn("[leave] 247 collateral rejoin failed for", otherChannelId, e.message)
+                );
+              }
+            }, delay);
+          }
+        }
+      }
     } else {
-      msg.reply(embed(this.t(msg, "responses.leave.left247On")));
+      // Mode is "on" — bot left, won't rejoin automatically for this channel.
+      // But still check if other 24/7 auto channels need rejoining.
+      msg.reply(embed(this.t(msg, "responses.leave.left247On", { prefix: set?.get("prefix") ?? "%" })));
+
+      if (other247AutoChannels.length > 0) {
+        const rejoinDelay = this.config?.timers?.leave247RejoinDelay ?? 5000;
+        const rejoinStagger = this.config?.timers?.rejoin247Delay ?? 3000;
+        for (let i = 0; i < other247AutoChannels.length; i++) {
+          const otherChannelId = other247AutoChannels[i];
+          const otherPlayer = this.players.playerMap.get(otherChannelId);
+          if (!otherPlayer || otherPlayer._destroyed) {
+            if (otherPlayer) {
+              this.players.playerMap.delete(otherChannelId);
+              try { otherPlayer.destroy(); } catch (_) {}
+            }
+            const delay = rejoinDelay + (i + 1) * rejoinStagger;
+            logger.recovery(
+              `[leave] Scheduling 247 auto-rejoin for collateral-disconnected channel ${otherChannelId} in ${delay}ms`
+            );
+            setTimeout(() => {
+              if (this._spawnPlayer) {
+                this._spawnPlayer(guildId, otherChannelId).catch(e =>
+                    logger.warn("[leave] 247 collateral rejoin failed for", otherChannelId, e.message)
+                );
+              }
+            }, delay);
+          }
+        }
+      }
     }
   } else {
     await this.leaveChannel(activeChannelId, guildId, msg);

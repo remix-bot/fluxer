@@ -676,6 +676,7 @@ export class Remix {
 
   async leaveChannel(channelId, guildId, message, force = false) {
     const cleanId = String(channelId).replace(/\D/g, "");
+    const cleanGuildId = String(guildId).replace(/\D/g, "");
     const set     = this.settingsMgr.getServer(guildId);
     const raw     = set.get("stay_247");
 
@@ -691,14 +692,25 @@ export class Remix {
     if (channels.has(cleanId) && !force) {
       if (channelMode === "auto") {
         if (message) {
+          const prefix = (() => { try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; } })();
+          const guildIdForLocale = message?.channel?.channel?.guildId ?? message?.guildId ?? cleanGuildId;
           message.replyEmbed(
-              `⚠️ 24/7 mode is enabled (auto) — I'll rejoin <#${cleanId}> in a few seconds.\n` +
-              `To permanently remove me, disable 24/7 mode first: \`%247 off\``
+              this.locale.translate(guildIdForLocale, "responses.leave.autoRejoinHint", {
+                channel: cleanId,
+                prefix
+              })
           );
         }
         return false;
       }
     }
+
+    // ── Snapshot other 247 auto channels before leaving ────────────────
+    const other247AutoChannels = [...channels].filter(id => {
+      if (id === cleanId) return false;
+      const mode = get247ChannelMode(set, id);
+      return mode === "auto";
+    });
 
     if (channels.has(cleanId)) {
       channels.delete(cleanId);
@@ -716,7 +728,43 @@ export class Remix {
       player.destroy();
     }
 
-    if (message) message.replyEmbed("✅ Successfully Left");
+    if (message) {
+      const guildIdForLocale = message?.channel?.channel?.guildId ?? message?.guildId ?? cleanGuildId;
+      message.replyEmbed(this.locale.translate(guildIdForLocale, "responses._common.successfullyLeft"));
+    }
+
+    // ── Rejoin other 24/7 auto channels that may have been collateral-disconnected ──
+    // When the gateway sends a guild-level leave (because leaveChannel() API
+    // was unavailable), ALL voice connections in the guild are dropped.  We
+    // must schedule rejoins for every other 24/7 auto channel that lost its
+    // player as a side effect.
+    if (other247AutoChannels.length > 0) {
+      const rejoinBaseDelay = this.T?.leave247RejoinDelay ?? 5000;
+      const rejoinStagger = this.T?.rejoin247Delay ?? 3000;
+      for (let i = 0; i < other247AutoChannels.length; i++) {
+        const otherChannelId = other247AutoChannels[i];
+        const otherPlayer = this.players.playerMap.get(otherChannelId);
+        // Only rejoin if the player is gone (was collateral-disconnected)
+        if (!otherPlayer || otherPlayer._destroyed) {
+          if (otherPlayer) {
+            this.players.playerMap.delete(otherChannelId);
+            try { otherPlayer.destroy(); } catch (_) {}
+          }
+          const delay = rejoinBaseDelay + (i + 1) * rejoinStagger;
+          logger.recovery(
+            `[leaveChannel] Scheduling 247 auto-rejoin for collateral-disconnected channel ${otherChannelId} in ${delay}ms`
+          );
+          setTimeout(() => {
+            if (this._spawnPlayer) {
+              this._spawnPlayer(guildId, otherChannelId).catch(e =>
+                  logger.warn("[leaveChannel] 247 collateral rejoin failed for", otherChannelId, e.message)
+              );
+            }
+          }, delay);
+        }
+      }
+    }
+
     return true;
   }
 

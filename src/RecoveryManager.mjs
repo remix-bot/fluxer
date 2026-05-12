@@ -325,13 +325,13 @@ export class RecoveryManager {
                 (c.permissionsFor?.(remix.client.user)?.has?.("SendMessages") ?? true)
             );
             if (ch) {
+              const desc = remix.locale?.translate(guildId, "responses.join.autoLeaveInactive247", {
+                channel: `<#${activeChannelId}>`,
+                prefix
+              }) ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on\` or \`${prefix}247 auto\`\nUse \`${prefix}247\` to view and manage all saved channels.`;
               const embed = new EmbedBuilder()
                   .setColor(getGlobalColor())
-                  .setDescription(
-                      `Left channel <#${activeChannelId}> because of inactivity.\n` +
-                      `If you want me to stay in voice, use \`${prefix}247 on\` or \`${prefix}247 auto\`\n` +
-                      `Use \`${prefix}247\` to view and manage all saved channels.`
-                  )
+                  .setDescription(desc)
                   .toJSON();
               if (typeof ch?.send === "function") ch.send({ embeds: [embed] }).catch(() => {});
             }

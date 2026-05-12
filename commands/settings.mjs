@@ -182,7 +182,12 @@ function save247Channels(set, channels) {
   set.set("stay_247", arr.length > 0 ? arr : "none");
 }
 
-function modeLabel(mode) {
+function modeLabel(mode, t, guildId) {
+  if (t && guildId) {
+    if (mode === "auto") return t(guildId, "responses.settings.247Panel.modeAuto");
+    if (mode === "on")   return t(guildId, "responses.settings.247Panel.modeOn");
+    return t(guildId, "responses.settings.247Panel.modeOff");
+  }
   return mode === "auto" ? "🔄 Auto" : mode === "on" ? "✅ On" : "❌ Off";
 }
 
@@ -206,26 +211,30 @@ function resolveChannelName(client, channelId) {
 /**
  * Build a simple 24/7 status panel.
  * Shows each saved channel with its mode — clean and minimal.
+ * @param {object} set - ServerSettings
+ * @param {object} ctx - Bot context (Remix instance)
+ * @param {object} message - Message object
+ * @param {Function} [t] - Locale translate function (guildId, key, data)
+ * @param {string} [guildId] - Guild ID for locale
  */
-function build247StatusPanel(set, ctx, message) {
+function build247StatusPanel(set, ctx, message, t, guildId) {
   const channels = [...get247Channels(set)];
   const prefix = (() => {
     try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
   })();
+  const locale = (key, data = {}) => t ? t(guildId, key, { ...data, prefix }) : key;
 
   if (channels.length === 0) {
     return richEmbed([
       {
-        name: "Getting Started",
-        value:
-          `• \`${prefix}247 on\` — stay permanently\n` +
-          `• \`${prefix}247 auto\` — stay + auto-rejoin after disconnect`,
+        name: locale("responses.settings.247Panel.gettingStarted"),
+        value: locale("responses.settings.247Panel.gettingStartedValue"),
         inline: false,
       },
     ], {
-      title: "♾️ 24/7 Mode",
-      description: "No voice channels saved.",
-      footer: `${prefix}247 on | ${prefix}247 auto | ${prefix}247 off`,
+      title: locale("responses.settings.247Panel.title"),
+      description: locale("responses.settings.247Panel.noChannelsSaved"),
+      footer: locale("responses.settings.247Panel.footer"),
     });
   }
 
@@ -234,38 +243,48 @@ function build247StatusPanel(set, ctx, message) {
     const mode = get247ChannelMode(set, chId);
     const chName = resolveChannelName(ctx.client, chId);
     const label = chName ? `${chName}` : ``;
-    return `${modeEmoji(mode)} ${label} <#${chId}> — ${modeLabel(mode)}`;
+    return `${modeEmoji(mode)} ${label} <#${chId}> — ${modeLabel(mode, t, guildId)}`;
   });
 
   const onCount   = channels.filter(id => get247ChannelMode(set, id) === "on").length;
   const autoCount = channels.filter(id => get247ChannelMode(set, id) === "auto").length;
   const summaryParts = [];
-  if (onCount > 0) summaryParts.push(`✅ ${onCount} on`);
-  if (autoCount > 0) summaryParts.push(`🔄 ${autoCount} auto`);
+  if (onCount > 0) summaryParts.push(locale("responses.settings.247Panel.summaryOn", { count: onCount }));
+  if (autoCount > 0) summaryParts.push(locale("responses.settings.247Panel.summaryAuto", { count: autoCount }));
+
+  const channelsKey = channels.length === 1
+      ? "responses.settings.247Panel.channelsSaved_one"
+      : "responses.settings.247Panel.channelsSaved_other";
 
   return richEmbed([{
-    name: `${channels.length} channel${channels.length !== 1 ? "s" : ""} saved`,
+    name: locale(channelsKey, { count: channels.length }),
     value: lines.join("\n"),
     inline: false,
   }], {
-    title: "♾️ 24/7 Mode",
+    title: locale("responses.settings.247Panel.title"),
     description: summaryParts.join(" · "),
-    footer: `${prefix}247 on | ${prefix}247 auto | ${prefix}247 off`,
+    footer: locale("responses.settings.247Panel.footer"),
   });
 }
 
 /**
  * Build a simple embed for the %247 on/auto confirmation.
+ * @param {object} set - ServerSettings
+ * @param {string} channelId - Clean channel ID
+ * @param {string} mode - "on" | "auto"
+ * @param {boolean} joined - Whether the bot joined
+ * @param {object} ctx - Bot context
+ * @param {string} guildId - Guild ID
+ * @param {Function} [t] - Locale translate function
  */
-function build247EnabledPanel(set, channelId, mode, joined, ctx, guildId) {
+function build247EnabledPanel(set, channelId, mode, joined, ctx, guildId, t) {
   const channels = [...get247Channels(set)];
-  const modeStr = mode === "auto" ? "🔄 Auto" : "✅ On";
+  const modeStr = modeLabel(mode, t, guildId);
   const prefix = (() => {
     try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
   })();
+  const locale = (key, data = {}) => t ? t(guildId, key, { ...data, prefix }) : key;
   const chName = resolveChannelName(ctx.client, channelId);
-  // Always include <#channelId> so the description is unambiguous
-  // (channel names like "2" can read as counts: "2 set to Auto — 2 channels saved")
   const label = chName ? `**${chName}** <#${channelId}>` : `<#${channelId}>`;
 
   // Build simple list of all saved channels
@@ -273,24 +292,23 @@ function build247EnabledPanel(set, channelId, mode, joined, ctx, guildId) {
     const m = get247ChannelMode(set, id);
     const n = resolveChannelName(ctx.client, id);
     const l = n ? `${n}` : `<#${id}>`;
-    const marker = id === channelId ? " ←" : "";
-    return `${modeEmoji(m)} ${l} <#${id}> — ${modeLabel(m)}${marker}`;
+    const marker = id === channelId ? locale("responses.settings.247Panel.currentMarker") : "";
+    return `${modeEmoji(m)} ${l} <#${id}> — ${modeLabel(m, t, guildId)}${marker}`;
   });
 
-  const summary = channels.length === 1
-    ? "1 channel saved"
-    : `${channels.length} channels saved`;
+  const channelsKey = channels.length === 1
+      ? "responses.settings.247Panel.channelsSaved_one"
+      : "responses.settings.247Panel.channelsSaved_other";
+  const summary = locale(channelsKey, { count: channels.length });
 
-  // Use the mode's color for the embed.  EmbedBuilder doesn't have addField,
-  // so we build the base embed, .toJSON() it, then attach fields as a raw array.
   const b = new EmbedBuilder();
   b.setColor(modeColor(mode));
-  b.setTitle(`♾️ 24/7 ${modeStr}`);
-  b.setDescription(`${label} → **${modeStr}** — ${summary}`);
-  b.setFooter({ text: `${prefix}247 off to disable for a channel` });
+  b.setTitle(locale("responses.settings.247Panel.enabledTitle", { mode: modeStr }));
+  b.setDescription(locale("responses.settings.247Panel.enabledDescription", { channel: label, mode: modeStr, summary }));
+  b.setFooter({ text: locale("responses.settings.247Panel.enabledFooter") });
   const raw = b.toJSON();
   raw.fields = [{
-    name: "Saved Channels",
+    name: locale("responses.settings.247Panel.savedChannels"),
     value: lines.join("\n"),
     inline: false,
   }];
@@ -299,63 +317,76 @@ function build247EnabledPanel(set, channelId, mode, joined, ctx, guildId) {
 
 /**
  * Build a simple embed for the %247 off confirmation.
+ * @param {object} set - ServerSettings
+ * @param {string} channelId - Clean channel ID
+ * @param {string} guildId - Guild ID
+ * @param {Function} [t] - Locale translate function
  */
-function build247DisabledPanel(set, channelId, guildId) {
+function build247DisabledPanel(set, channelId, guildId, t) {
   const channels = [...get247Channels(set)];
   const prefix = (() => {
     try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
   })();
+  const locale = (key, data = {}) => t ? t(guildId, key, { ...data, prefix }) : key;
 
   if (channels.length === 0) {
     return richEmbed([{
-      name: "No Channels Saved",
-      value: "All 24/7 channels removed. Bot will leave voice after inactivity.",
+      name: locale("responses.settings.247Panel.noChannelsSavedField"),
+      value: locale("responses.settings.247Panel.allChannelsRemoved"),
       inline: false,
     }], {
-      title: "♾️ 24/7 Disabled",
-      footer: `${prefix}247 on | ${prefix}247 auto to re-enable`,
+      title: locale("responses.settings.247Panel.disabledTitle"),
+      footer: locale("responses.settings.247Panel.reenableFooter"),
     });
   }
 
   const lines = channels.map(id => {
     const m = get247ChannelMode(set, id);
-    const n = resolveChannelName(null, id); // no client needed for fallback
     const l = `<#${id}>`;
-    return `${modeEmoji(m)} ${l} — ${modeLabel(m)}`;
+    return `${modeEmoji(m)} ${l} — ${modeLabel(m, t, guildId)}`;
   });
 
+  const channelsKey = channels.length === 1
+      ? "responses.settings.247Panel.channelsRemaining_one"
+      : "responses.settings.247Panel.channelsRemaining_other";
+
   return richEmbed([{
-    name: `${channels.length} channel${channels.length !== 1 ? "s" : ""} remaining`,
+    name: locale(channelsKey, { count: channels.length }),
     value: lines.join("\n"),
     inline: false,
   }], {
-    title: "♾️ 24/7 Disabled",
-    description: `<#${channelId}> removed`,
-    footer: `${prefix}247 on | ${prefix}247 auto to re-enable`,
+    title: locale("responses.settings.247Panel.disabledTitle"),
+    description: locale("responses.settings.247Panel.channelRemoved", { channel: channelId }),
+    footer: locale("responses.settings.247Panel.reenableFooter"),
   });
 }
 
-function format247Status(set) {
+function format247Status(set, t, guildId) {
   const channels = get247Channels(set);
-  if (channels.size === 0) return "❌ Disabled";
+  if (channels.size === 0) return t ? t(guildId, "responses.settings.247Panel.modeOff") : "❌ Disabled";
   if (channels.size === 1) {
     const chId = [...channels][0];
     const mode = get247ChannelMode(set, chId);
-    return `${modeLabel(mode)} — <#${chId}>`;
+    return `${modeLabel(mode, t, guildId)} — <#${chId}>`;
   }
   const parts = [...channels].map(id => {
     const mode = get247ChannelMode(set, id);
-    return `<#${id}> (${modeLabel(mode)})`;
+    return `<#${id}> (${modeLabel(mode, t, guildId)})`;
   });
   return `${channels.size} channels: ${parts.join(", ")}`;
 }
 
-function format247Summary(set) {
+function format247Summary(set, t, guildId) {
   const channels = [...get247Channels(set)];
+  const prefix = (() => {
+    try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
+  })();
+  const locale = (key, data = {}) => t ? t(guildId, key, { ...data, prefix }) : key;
+
   if (channels.length === 0) {
     return [
-      "**24/7 Mode**",
-      "Status: ❌ Disabled",
+      `**24/7 Mode**`,
+      `Status: ${locale("responses.settings.247Panel.modeOff")}`,
       "Saved channels: none"
     ].join("\n");
   }
@@ -363,7 +394,7 @@ function format247Summary(set) {
   const lines = ["**24/7 Mode**"];
   for (const id of channels) {
     const mode = get247ChannelMode(set, id);
-    lines.push(`• <#${id}> — ${modeLabel(mode)}`);
+    lines.push(`• <#${id}> — ${modeLabel(mode, t, guildId)}`);
   }
   return lines.join("\n");
 }
@@ -393,7 +424,7 @@ async function handle247(ctx, message, value) {
 
   if (!["off", "on", "auto"].includes(resolved)) {
     return message.reply(embed(
-        ctx.t(message, "responses.settings.invalid247", { value })
+        ctx.t(message, "responses.settings.invalid247", { value, prefix: set.get("prefix") ?? "%" })
     ));
   }
 
@@ -422,7 +453,8 @@ async function handle247(ctx, message, value) {
         await player.leave().catch(() => {});
         player.destroy();
       }
-      return message.reply(build247DisabledPanel(set, id, guildId));
+      const t247 = ctx.locale?.translate?.bind(ctx.locale);
+    return message.reply(build247DisabledPanel(set, id, guildId, t247));
     }
 
     // Not in a channel — disable all for this guild
@@ -442,14 +474,16 @@ async function handle247(ctx, message, value) {
     const prefix = (() => {
       try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
     })();
+    const t247 = ctx.locale?.translate?.bind(ctx.locale);
+    const loc = (key, data = {}) => t247 ? t247(guildId, key, { ...data, prefix }) : key;
     return message.reply(richEmbed([{
-      name: "❌ All Channels",
-      value: "24/7 mode **disabled** for all channels in this server.\nThe bot will leave voice after inactivity.",
+      name: loc("responses.settings.247Panel.allChannelsLabel"),
+      value: loc("responses.settings.247Panel.allChannelsDisabled"),
       inline: false,
     }], {
-      title: "♾️ 24/7 Disabled",
-      description: "No channels saved",
-      footer: `${prefix}247 on | ${prefix}247 auto to re-enable`,
+      title: loc("responses.settings.247Panel.disabledTitle"),
+      description: loc("responses.settings.247Panel.noChannelsSavedShort"),
+      footer: loc("responses.settings.247Panel.reenableFooter"),
     }));
   }
 
@@ -459,7 +493,7 @@ async function handle247(ctx, message, value) {
   const userChannelId = ctx.players.checkVoiceChannels(message);
   if (!userChannelId) {
     return message.reply(embed(
-        ctx.t(message, "responses.settings.noVoice247", { mode: resolved })
+        ctx.t(message, "responses.settings.noVoice247", { mode: resolved, prefix: set.get("prefix") ?? "%" })
     ));
   }
 
@@ -532,18 +566,22 @@ async function handle247(ctx, message, value) {
       );
 
   if (playerExists) {
-    return message.reply(build247EnabledPanel(set, id, resolved, false, ctx, guildId));
+    const t247 = ctx.locale?.translate?.bind(ctx.locale);
+    return message.reply(build247EnabledPanel(set, id, resolved, false, ctx, guildId, t247));
   }
 
   try {
     await ctx._spawnPlayer(guildId, id);
-    return message.reply(build247EnabledPanel(set, id, resolved, true, ctx, guildId));
+    const t247 = ctx.locale?.translate?.bind(ctx.locale);
+    return message.reply(build247EnabledPanel(set, id, resolved, true, ctx, guildId, t247));
   } catch (e) {
     const prefix = (() => {
       try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
     })();
+    const t247 = ctx.locale?.translate?.bind(ctx.locale);
+    const loc = (key, data = {}) => t247 ? t247(guildId, key, { ...data, prefix }) : key;
     return message.reply(embed(
-        `⚠️ 24/7 ${modeLabel(resolved)} saved, but failed to join <#${id}>.\nError: \`${e.message}\`\n\nTry \`${prefix}join\` or \`${prefix}play\` later.`
+        loc("responses.settings.247Panel.joinFailed", { mode: modeLabel(resolved, t247, guildId), channel: id, error: e.message })
     ));
   }
 }
@@ -626,7 +664,8 @@ async function handleShortcut(ctx, message, settingKey, valueTokens) {
   // GET (no value provided) — show rich 24/7 panel
   if (valueTokens.length === 0) {
     if (settingKey === "stay_247") {
-      return message.reply(build247StatusPanel(set, ctx, message));
+      const t247 = ctx.locale?.translate?.bind(ctx.locale);
+      return message.reply(build247StatusPanel(set, ctx, message, t247, getGuildId(message)));
     }
     const val = set.get(settingKey);
     return message.reply(embed(`\`${settingKey}\` → ${displayValue(settingKey, val)}`));
@@ -797,7 +836,8 @@ export async function run(message, data) {
   if (cmd === "getSettings") {
     if (settingKey) {
       if (settingKey === "stay_247") {
-        return message.reply(build247StatusPanel(set, this, message));
+        const t247 = this.locale?.translate?.bind(this.locale);
+        return message.reply(build247StatusPanel(set, this, message, t247, getGuildId(message)));
       }
       const val = set.get(settingKey);
       const description = this.settingsMgr.descriptions?.[settingKey];
@@ -820,7 +860,7 @@ export async function run(message, data) {
         .filter(([k]) => k !== "stay_247_mode") // surfaced inline with stay_247
         .map(([k]) => {
           if (k === "stay_247") {
-            return `• **24/7 mode** — ${format247Status(set)}`;
+            return `• **24/7 mode** — ${format247Status(set, this.locale?.translate?.bind(this.locale), getGuildId(message))}`;
           }
           return `• **${prettifySettingLabel(k)}** — ${displayValue(k, d[k])}`;
         });
@@ -883,7 +923,7 @@ export async function run(message, data) {
     return message.reply(embed(
         `**⚙️ Setting: \`${settingKey}\`**\n\n` +
         `${description}${extra}\n\n` +
-        `**Current value:** ${settingKey === "stay_247" ? format247Status(set) : displayValue(settingKey, currentVal)}\n` +
+        `**Current value:** ${settingKey === "stay_247" ? format247Status(set, this.locale?.translate?.bind(this.locale), getGuildId(message)) : displayValue(settingKey, currentVal)}\n` +
         `**Default:** ${displayValue(settingKey, defaultVal)}`,
         { title: `⚙️ ${settingKey}` }
     ));
