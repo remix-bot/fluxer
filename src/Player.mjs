@@ -516,7 +516,7 @@ export default class Player extends EventEmitter {
     }
 
     if (savedVol !== undefined && savedVol !== null) {
-      this.preferredVolume = Utils.clamp(savedVol / 100, 0, 1);
+      this.preferredVolume = Utils.clamp(savedVol / 100, 0, 2);
       logger.player(`[Player] Restored volume ${savedVol}% for guild ${this._guildId}`);
     }
   }
@@ -1735,7 +1735,7 @@ export default class Player extends EventEmitter {
   // ═══════════════════════════════════════════════════════════════════════════
 
   setVolume(v) {
-    this.preferredVolume = Utils.clamp(v, 0, 1);
+    this.preferredVolume = Utils.clamp(v, 0, 2);
     this.emit("volume", this.preferredVolume);
     this._mediaPlayer?.setVolume(this.preferredVolume);
     if (!this.connection)

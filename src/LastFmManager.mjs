@@ -93,6 +93,12 @@ export class LastFmManager {
     this._storedScrobbles = 0;
     this._scrobblesLoaded = false;
 
+    // Cache for total synced scrobbles (sum of all users' lifetime scrobble counts)
+    this._totalScrobblesCache = null;
+    this._totalScrobblesCacheExpiry = 0;
+    this._totalScrobblesInflight = null;
+    const TOTAL_SCROBBLES_TTL_MS = 10 * 60 * 1000; // refresh every 10 minutes
+
     if (!this.enabled) {
       logger.settings("[LastFm] Disabled — apiKey or apiSecret missing in config.");
     }
@@ -732,6 +738,78 @@ export class LastFmManager {
     }
 
     return this._storedScrobbles;
+  }
+
+  /**
+   * Get the total lifetime scrobbles across ALL linked Last.fm users.
+   * Syncs each user's scrobble count from the Last.fm API, then sums them up.
+   * Results are cached for 10 minutes to avoid hammering the API.
+   *
+   * @param {number} [concurrency=3] - How many users to sync in parallel
+   * @returns {Promise<number>} Total scrobbles across all linked users
+   */
+  async getTotalScrobbles(concurrency = 3) {
+    if (!this.enabled) return 0;
+
+    // Return cached value if still fresh
+    if (this._totalScrobblesCache !== null && Date.now() < this._totalScrobblesCacheExpiry) {
+      return this._totalScrobblesCache;
+    }
+
+    // Deduplicate concurrent calls
+    if (this._totalScrobblesInflight) return this._totalScrobblesInflight;
+
+    this._totalScrobblesInflight = this._refreshTotalScrobbles(concurrency);
+    try {
+      return await this._totalScrobblesInflight;
+    } finally {
+      this._totalScrobblesInflight = null;
+    }
+  }
+
+  /**
+   * Internal: sync all users' scrobble counts from Last.fm and return the sum.
+   */
+  async _refreshTotalScrobbles(concurrency) {
+    try {
+      const pool = await this._getPool();
+
+      // Get all linked user IDs
+      const [rows] = await pool.execute(
+        "SELECT user_id FROM lastfm_users"
+      );
+
+      if (!rows.length) {
+        this._totalScrobblesCache = 0;
+        this._totalScrobblesCacheExpiry = Date.now() + 10 * 60 * 1000;
+        return 0;
+      }
+
+      // Sync each user's scrobble count from the Last.fm API (with concurrency limit)
+      const userIds = rows.map(r => r.user_id);
+
+      // Batch the sync calls to avoid overloading the Last.fm API
+      for (let i = 0; i < userIds.length; i += concurrency) {
+        const batch = userIds.slice(i, i + concurrency);
+        await Promise.allSettled(batch.map(uid => this.syncUserScrobbleCount(uid)));
+      }
+
+      // Now sum up all scrobble_count values from the DB
+      const [sumRows] = await pool.execute(
+        "SELECT COALESCE(SUM(scrobble_count), 0) AS total FROM lastfm_users"
+      );
+
+      const total = Number(sumRows[0]?.total ?? 0);
+      this._totalScrobblesCache = total;
+      this._totalScrobblesCacheExpiry = Date.now() + 10 * 60 * 1000;
+
+      logger.settings(`[LastFm] Total synced scrobbles across ${userIds.length} users: ${total}`);
+      return total;
+    } catch (err) {
+      logger.warn(`[LastFm] _refreshTotalScrobbles failed: ${err.message}`);
+      // Return stale cache if available, otherwise 0
+      return this._totalScrobblesCache ?? 0;
+    }
   }
 
   /**

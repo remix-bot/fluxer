@@ -176,7 +176,8 @@ export async function run(message) {
   };
 
   // Fetch Last.fm stats in the background (non-blocking for initial reply)
-  const scrobblePromise = lastfmEnabled ? lastfm.getStoredScrobbles() : Promise.resolve(0);
+  // getTotalScrobbles() syncs all linked users' lifetime scrobble counts from Last.fm
+  const scrobblePromise = lastfmEnabled ? lastfm.getTotalScrobbles() : Promise.resolve(0);
   const linkedPromise   = lastfmEnabled ? lastfm.getLinkedUsersCount()  : Promise.resolve(0);
 
   const hasCached = cachedUserCount !== null;
