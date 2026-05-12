@@ -32,7 +32,7 @@
     "forceleave": "Faça o Remix sair de um canal mesmo que você não esteja nele.",
     "invite": "Obtenha o link de convite do Remix e do servidor de suporte.",
     "join": "Faça o bot entrar no seu canal de voz ou especifique um.",
-    "leave": "Faça o bot sair do seu canal de voz atual.",
+    "leave": "Faça o bot sair de um canal de voz. Especifique um canal ou deixe em branco para o atual.",
     "list": "Liste as músicas na fila do seu canal de voz atual.",
     "loop": "Ative/desative o loop da fila/música.",
     "lyrics": "Exiba letras sincronizadas do NodeLink.",
@@ -241,10 +241,12 @@
       "voiceChannelUnknown": "canal de voz desconhecido"
     },
     "leave": {
-      "noVoiceChannel": "⚠️ Por favor, entre em um canal de voz primeiro.",
+      "noVoiceChannel": "⚠️ Por favor, entre em um canal de voz primeiro ou especifique um: `{{prefix}}leave <#channel>`",
       "notInVoice": "Não estou em um canal de voz.",
       "joinChannel": "⚠️ Por favor, entre em {{channel}} para usar este comando.",
       "multipleChannels": "⚠️ Estou tocando em vários canais! Por favor, entre em um deles:\n{{channels}}",
+      "specifyChannel": "⚠️ Você não está em um canal de voz. Estou tocando em:\n{{channels}}\n\nUse `{{prefix}}leave <#channel>` para sair de um canal específico.",
+      "noPlayerInChannel": "⚠️ Não estou tocando em <#{{channel}}>. Estou em:\n{{channels}}",
       "playerNotInit": "Player não inicializado.",
       "leftRejoin247": "✅ Sai com sucesso — reentrando em <#{{channel}}> em 5 segundos.\nPara desativar o modo 24/7 permanentemente, use `%247 off`.",
       "left247On": "✅ Sai com sucesso.\nℹ️ O modo 24/7 está **ativo** — o bot não voltará automaticamente. Use `%play` para trazê-lo de volta ou `%247 off` para desativar completamente."

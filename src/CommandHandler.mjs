@@ -586,6 +586,7 @@ export class CommandHandler extends EventEmitter {
       }
 
       if (!o) continue;
+      if (o instanceof Flag) continue;
       if (opts.findIndex(op => op.uid === o.uid) !== -1) continue;
       let value = args[argIndex];
       if ((args[argIndex] || "").startsWith('"') && (STRING_TYPES.includes(o.type))) {

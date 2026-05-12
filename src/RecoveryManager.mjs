@@ -256,8 +256,37 @@ export class RecoveryManager {
         revoice:          remix.revoice,
         settingsMgr:      remix.settingsMgr,
         observedVoiceUsers: remix.observedVoiceUsers,
+        locale:           remix.locale ?? null,
       });
       remix.players.setupEvents(p, { channelId: cleanChannelId, guildId });
+
+      // ── Set a default textChannel so song announcements have somewhere to go ──
+      // After a reboot, spawned players don't have a user message to set
+      // textChannel from. Find the guild's announcement channel or the first
+      // available text channel as a fallback.
+      try {
+        const guild = remix.client.guilds.get(cleanGuildId) ?? remix.client.guilds.get(guildId);
+        const serverSet = remix.settingsMgr.getServer(guildId);
+        const cachedChId = remix._announcementChannelCache?.get?.(guildId)
+            ?? serverSet?.get("announcementChannelId")
+            ?? null;
+        let textCh = cachedChId ? guild?.channels?.get(String(cachedChId)) : null;
+        if (!textCh && guild) {
+          textCh = [...(guild.channels?.values?.() ?? [])].find(c =>
+              (c.isTextBased?.() ?? c.channel_type === "TextChannel" ?? true) &&
+              (c.permissionsFor?.(remix.client.user)?.has?.("SendMessages") ?? true)
+          );
+        }
+        if (textCh) {
+          p.textChannel = textCh;
+          if (!cachedChId && serverSet) {
+            remix._announcementChannelCache?.set?.(guildId, textCh.id);
+            if (serverSet.get("announcementChannelId") !== textCh.id) {
+              serverSet.set("announcementChannelId", textCh.id);
+            }
+          }
+        }
+      } catch (_) {}
 
       // ── Autoleave handler ───────────────────────────────────────────────────
       p.on("autoleave", async () => {

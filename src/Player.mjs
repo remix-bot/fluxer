@@ -243,8 +243,6 @@ export class Queue extends EventEmitter {
     return `Moved **${track.title}** from position ${from + 1} to ${to + 1}.`;
   }
 
-  addFirst(data) { return this.add(data, true); }
-
   add(data, top = false) {
     this.emit("queue", { type: "add", data: { append: !top, data } });
     return top ? this.data.unshift(data) : this.data.push(data);
@@ -311,8 +309,6 @@ export default class Player extends EventEmitter {
   client       = null;
   settings     = null;
   config       = {};
-  spotifyConfig = null;
-
   // revoice.js instances
   /** @type {import("revoice.js").MediaPlayer|null} */
   _mediaPlayer = null;
@@ -377,7 +373,6 @@ export default class Player extends EventEmitter {
     this.queue        = new Queue();
     this.client       = opts.client;
     this.config       = opts.config ?? {};
-    this.spotifyConfig = opts.config?.spotify;
     this.settings     = opts.settings ?? null;
     this.settingsMgr  = opts.settingsMgr ?? null;
     this._observedVoiceUsers = opts.observedVoiceUsers ?? null;
@@ -739,17 +734,7 @@ export default class Player extends EventEmitter {
       // @fluxerjs channels do NOT have a .members property.
       // Use the guild's member manager and filter by voice state instead.
       const guild = this.client?.guilds?.get?.(this._guildId);
-      if (guild?.members) {
-        for (const member of guild.members.values()) {
-          // GuildMember doesn't expose voice channelId directly in @fluxerjs,
-          // so fall through to the voice_states raw data check below.
-          if (!member?.user?.bot) {
-            // We can't determine channel from member alone — skip here
-            // and rely on _observedVoiceUsers or voice_states instead.
-          }
-        }
-      }
-      // Fallback: iterate raw voice_states on the guild object.
+      // Iterate raw voice_states on the guild object.
       const voiceStates = guild?.voice_states;
       if (voiceStates) {
         const entries = Array.isArray(voiceStates)
@@ -892,8 +877,6 @@ export default class Player extends EventEmitter {
     try {
       this._mediaPlayer = new MediaPlayer();
       this._mediaPlayer.setMaxListeners(0);
-      this._setupMediaPlayerMonitoring();
-
       await this._mediaPlayer.publishToRoom(room);
       logger.mediaplayer("[Player] MediaPlayer published successfully");
       return true;
@@ -912,18 +895,6 @@ export default class Player extends EventEmitter {
       this._mediaPlayer = null;
       return false;
     }
-  }
-
-  _setupMediaPlayerMonitoring() {
-    // No-op: recovery is fully handled by connection.on("disconnect") in join().
-  }
-
-  async _cleanupMediaPlayer() {
-    try {
-      await this._mediaPlayer?.stop();
-    } catch (_) {}
-
-    this._mediaPlayer = null;
   }
 
   async _stopMediaPlayer() {
@@ -1624,12 +1595,6 @@ export default class Player extends EventEmitter {
         this._workerPool = null;
       }
 
-      while (this._workerQueue.length > 0) {
-        const resolve = this._workerQueue.shift();
-        resolve();
-      }
-      this._workerSemaphore = 0;
-
       const connToDestroy = this.connection;
       this.connection   = null;
       this._mediaPlayer = null;
@@ -2124,27 +2089,7 @@ export default class Player extends EventEmitter {
   // Worker Management
   // ═══════════════════════════════════════════════════════════════════════════
 
-  _workerSemaphore  = 0;
-  _workerMaxConcurrent = 3;
-  _workerQueue      = [];
-  _workerPool       = null;
-
-  _acquireWorkerSlot() {
-    if (this._workerSemaphore < this._workerMaxConcurrent) {
-      this._workerSemaphore++;
-      return Promise.resolve();
-    }
-    return new Promise(resolve => this._workerQueue.push(resolve));
-  }
-
-  _releaseWorkerSlot() {
-    const next = this._workerQueue.shift();
-    if (next) {
-      next();
-    } else {
-      this._workerSemaphore--;
-    }
-  }
+  _workerPool = null;
 
   _getWorkerPool() {
     if (!this._workerPool) {

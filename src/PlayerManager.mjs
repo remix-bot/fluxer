@@ -87,6 +87,10 @@ export class PlayerManager {
   /** @type {Set<string>} Channel IDs currently being joined (not yet in playerMap) */
   _pendingJoins = new Set();
 
+  /** @type {Map<string, {timer, songUrl, startedAtMs}>} Pending scrobble timers keyed by channel ID.
+   *  Prevents duplicate scrobbles when startplay fires multiple times. */
+  _pendingScrobbleTimers = new Map();
+
   /** @type {Object} */
   config;
 
@@ -387,6 +391,22 @@ export class PlayerManager {
       if (seeded) return seeded;
     } catch (_) {}
 
+    // ── Fallback: VoiceManager.voiceStates direct lookup ────────────────
+    // After a reboot, getVoiceChannelId() may return null if the
+    // VoiceManager hasn't synced yet, but voiceStates (populated from
+    // READY / GUILD_CREATE raw gateway events) may already have the data.
+    try {
+      const vm = getVoiceManager(this.commands.client);
+      if (vm?.voiceStates) {
+        const guildVoiceMap = vm.voiceStates.get(cleanGuild) ?? vm.voiceStates.get(guildId);
+        if (guildVoiceMap && typeof guildVoiceMap.get === "function") {
+          const vmChannelId = guildVoiceMap.get(userId);
+          const seeded = seedObserved(vmChannelId);
+          if (seeded) return seeded;
+        }
+      }
+    } catch (_) {}
+
     const memberVoiceChannelId =
       message?.member?.voice?.channelId ??
       message?.message?.member?.voice?.channelId ??
@@ -428,14 +448,36 @@ export class PlayerManager {
       }
     } catch (_) {}
 
+    // ── Fallback: match user to any active player in the guild ──────────
+    // After a reboot with 24/7, voice states may not be fully populated.
+    // If the guild has active players, check if any of them have the user
+    // as a remote participant in their LiveKit room.
     const liveGuildPlayers = [...this.playerMap.entries()].filter(([channelId, player]) => {
       const fallbackChannel =
         this.commands.client?.channels?.get?.(channelId) ??
         null;
-      return getPlayerGuildId(player, fallbackChannel) === cleanGuild;
+      return getPlayerGuildId(player, fallbackChannel) === cleanGuild && !player?._destroyed;
     });
     if (liveGuildPlayers.length === 1) {
       return getPlayerChannelId(liveGuildPlayers[0][1], liveGuildPlayers[0][0]) || cleanId(liveGuildPlayers[0][0]);
+    }
+    // Multiple players — try LiveKit remote participants to find which
+    // channel the user is actually in.
+    if (liveGuildPlayers.length > 1) {
+      for (const [mapKey, player] of liveGuildPlayers) {
+        try {
+          const room = player?.connection?.room;
+          if (!room?.isConnected || !room.remoteParticipants) continue;
+          for (const [, participant] of room.remoteParticipants) {
+            const pId = participant?.identity ?? participant?.sid;
+            if (pId === userId) {
+              const found = getPlayerChannelId(player, mapKey) || cleanId(mapKey);
+              seedObserved(found);
+              return found;
+            }
+          }
+        } catch (_) {}
+      }
     }
     return null;
   }
@@ -658,6 +700,9 @@ export class PlayerManager {
 
     const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;
     this.playerMap.delete(activeChannelId);
+    // Clean up pending scrobble timer
+    const pendingScrobble = this._pendingScrobbleTimers.get(activeChannelId);
+    if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this._pendingScrobbleTimers.delete(activeChannelId); }
     if (activeChannelId !== cleanChannelId) this.playerMap.delete(cleanChannelId);
     await msg.reply(mkEmbed(this._t(msg, "responses._common.successfullyLeft")));
     await player.leave();
@@ -750,6 +795,9 @@ export class PlayerManager {
 
       // Remove player from map and destroy
       this.playerMap.delete(activeChannelId);
+      // Clean up pending scrobble timer
+      const pendingScrobble = this._pendingScrobbleTimers.get(activeChannelId);
+      if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this._pendingScrobbleTimers.delete(activeChannelId); }
       if (activeChannelId !== cleanChannelId) this.playerMap.delete(cleanChannelId);
       if (homeChannelId !== activeChannelId) this.playerMap.delete(homeChannelId);
       player.destroy();
@@ -893,6 +941,16 @@ export class PlayerManager {
 
     const startedAtMs = player.startedPlaying;
 
+    // ── Cancel any previous pending scrobble timer for this channel ───────
+    // Prevents duplicate scrobbles when startplay fires multiple times
+    // (e.g. recovery rejoining, track restart, queue loop).
+    const pendingKey = channelId;
+    const existing = this._pendingScrobbleTimers.get(pendingKey);
+    if (existing) {
+      clearTimeout(existing.timer);
+      this._pendingScrobbleTimers.delete(pendingKey);
+    }
+
     // Send now-playing for each linked user
     for (const userId of humanUserIds) {
       lastfm.updateNowPlaying(userId, song).catch(() => {});
@@ -914,7 +972,8 @@ export class PlayerManager {
       );
       // Don't schedule if threshold is too far out (cap at 10 min)
       if (thresholdMs <= 600_000) {
-        setTimeout(() => {
+        const timer = setTimeout(() => {
+          this._pendingScrobbleTimers.delete(pendingKey);
           // Only scrobble if the same song is still playing
           const current = player.queue?.getCurrent();
           if (!current || player._destroyed || player.leaving) return;
@@ -928,6 +987,9 @@ export class PlayerManager {
             }
           }
         }, thresholdMs);
+
+        // Store the timer so we can cancel it if startplay fires again
+        this._pendingScrobbleTimers.set(pendingKey, { timer, songUrl: song.url, startedAtMs });
       }
     }
   }

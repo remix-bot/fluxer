@@ -32,7 +32,7 @@
     "forceleave": "Lass Remix einen Kanal verlassen, auch wenn du nicht darin bist.",
     "invite": "Erhalte den Einladungslink für Remix und den Support-Server.",
     "join": "Lass den Bot deinem Sprachkanal beitreten oder gib einen bestimmten an.",
-    "leave": "Lass den Bot deinen aktuellen Sprachkanal verlassen.",
+    "leave": "Lass den Bot einen Sprachkanal verlassen. Gib einen Kanal an oder lass leer für deinen aktuellen.",
     "list": "Liste die Songs in der Warteschlange deines aktuellen Sprachkanals auf.",
     "loop": "Aktiviere/Deaktiviere die Schleife deiner Warteschlange/des Songs.",
     "lyrics": "Zeige synchronisierte Songtexte von NodeLink an.",
@@ -241,10 +241,12 @@
       "voiceChannelUnknown": "unbekannter Sprachkanal"
     },
     "leave": {
-      "noVoiceChannel": "⚠️ Bitte trete zuerst einem Sprachkanal bei.",
+      "noVoiceChannel": "⚠️ Bitte trete zuerst einem Sprachkanal bei oder gib einen an: `{{prefix}}leave <#channel>`",
       "notInVoice": "Ich bin in keinem Sprachkanal.",
       "joinChannel": "⚠️ Bitte trete {{channel}} bei, um diesen Befehl zu nutzen.",
       "multipleChannels": "⚠️ Ich spiele in mehreren Kanälen! Bitte trete einem bei:\n{{channels}}",
+      "specifyChannel": "⚠️ Du bist in keinem Sprachkanal. Ich spiele in:\n{{channels}}\n\nNutze `{{prefix}}leave <#channel>` um einen bestimmten Kanal zu verlassen.",
+      "noPlayerInChannel": "⚠️ Ich spiele nicht in <#{{channel}}>. Ich bin in:\n{{channels}}",
       "playerNotInit": "Player nicht initialisiert.",
       "leftRejoin247": "✅ Erfolgreich verlassen — trete <#{{channel}}> in 5 Sekunden wieder bei.\nUm den 24/7-Modus dauerhaft zu deaktivieren, nutze `%247 off`.",
       "left247On": "✅ Erfolgreich verlassen.\nℹ️ 24/7-Modus ist **aktiv** — Bot wird nicht automatisch wiederkommen. Nutze `%play`, um ihn zurückzuholen, oder `%247 off` zum vollständigen Deaktivieren.\n💡 Nutze `%247` um alle gespeicherten Kanäle zu sehen."

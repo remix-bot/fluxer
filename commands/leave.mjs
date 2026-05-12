@@ -6,15 +6,24 @@ import { get247ChannelMode } from "../src/constants/Helpers247.mjs";
 
 export const command = new CommandBuilder()
     .setName("leave")
-    .setDescription("Make the bot leave your current voice channel", "commands.leave")
+    .setDescription("Make the bot leave a voice channel", "commands.leave")
     .addAliases("l", "stop")
-    .setCategory("music");
+    .setCategory("music")
+    .addChannelOption(o =>
+      o.setName("channel")
+        .setDescription("The voice channel to leave (defaults to your current channel)")
+        .setRequired(false)
+    );
 
 function embed(desc) {
   return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] };
 }
 
-export async function run(msg) {
+function cleanId(value) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+export async function run(msg, data) {
   const guildId = msg.channel?.guild?.id
       ?? msg.channel?.guildId
       ?? msg.channel?.server_id
@@ -22,47 +31,79 @@ export async function run(msg) {
       ?? msg.message?.guildId
       ?? msg.message?.server_id
       ?? msg.message?.serverId;
+  const cleanGuildId = cleanId(guildId);
 
-  const userChannelId = this.players.checkVoiceChannels(msg);
-  if (!userChannelId) return msg.reply(embed(this.t(msg, "responses.leave.noVoiceChannel")));
-
-  const cid = String(userChannelId).replace(/\D/g, "");
-  const cleanGuildId = String(guildId ?? "").replace(/\D/g, "");
-  const guildPlayers = [...this.players.playerMap.values()].filter(p =>
-    String(p?._guildId ?? "").replace(/\D/g, "") === cleanGuildId &&
-    !p?._destroyed
+  // Gather all active players in this guild
+  const guildPlayers = [...this.players.playerMap.entries()].filter(([, p]) =>
+    cleanId(p?._guildId) === cleanGuildId && !p?._destroyed
   );
 
-  const player = this.players.playerMap.get(cid)
-      ?? [...this.players.playerMap.values()].find(p =>
-        String(p?._channelId ?? "").replace(/\D/g, "") === cid
-      )
-      ?? (guildPlayers.length === 1 ? guildPlayers[0] : null);
+  // Resolve the target channel to leave:
+  // 1. If a channel option was provided, use that
+  // 2. Otherwise, use the user's current voice channel
+  const specifiedChannel = data?.get("channel")?.value;
+  let targetChannelId = null;
+
+  if (specifiedChannel) {
+    targetChannelId = cleanId(specifiedChannel);
+  } else {
+    const userChannelId = this.players.checkVoiceChannels(msg);
+    if (userChannelId) targetChannelId = cleanId(userChannelId);
+  }
+
+  // If we still don't have a target channel
+  if (!targetChannelId) {
+    if (guildPlayers.length === 0) {
+      return msg.reply(embed(this.t(msg, "responses.leave.notInVoice")));
+    }
+    // User not in voice — list the channels the bot is in
+    const channelList = guildPlayers.map(([, p]) => {
+      const id = cleanId(p._channelId);
+      return id ? `<#${id}>` : "`unknown`";
+    });
+    return msg.reply(embed(
+        this.t(msg, "responses.leave.specifyChannel", {
+          channels: channelList.map(c => `• ${c}`).join("\n"),
+          prefix: this.getSettings(msg)?.get("prefix") ?? "%"
+        })
+    ));
+  }
+
+  // Find the player for the target channel
+  const player = this.players.playerMap.get(targetChannelId)
+      ?? guildPlayers.find(([, p]) => cleanId(p._channelId) === targetChannelId)?.[1]
+      ?? null;
 
   if (!player) {
-    const guildChannels = guildPlayers.map((p) => {
-      const liveId = String(p?._channelId ?? "").replace(/\D/g, "");
-      return liveId ? `<#${liveId}>` : "`unknown voice channel`";
+    // No player in that channel — check if user picked a non-voice channel
+    if (guildPlayers.length === 0) {
+      return msg.reply(embed(this.t(msg, "responses.leave.notInVoice")));
+    }
+    const channelList = guildPlayers.map(([, p]) => {
+      const id = cleanId(p._channelId);
+      return id ? `<#${id}>` : "`unknown`";
     });
-
-    if (guildChannels.length === 0) return msg.reply(embed(this.t(msg, "responses.leave.notInVoice")));
-    if (guildChannels.length === 1) return msg.reply(embed(this.t(msg, "responses.leave.joinChannel", { channel: guildChannels[0] })));
     return msg.reply(embed(
-        this.t(msg, "responses.leave.multipleChannels", { channels: guildChannels.map(c => `• ${c}`).join("\n") })
+        this.t(msg, "responses.leave.noPlayerInChannel", {
+          channel: `<#${targetChannelId}>`,
+          channels: channelList.map(c => `• ${c}`).join("\n")
+        })
     ));
   }
 
   if (!player?.connection) return msg.reply(embed(this.t(msg, "responses.leave.playerNotInit")));
-  const activeChannelId = String(player._channelId ?? cid).replace(/\D/g, "") || cid;
-  const homeChannelId = String(player._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
 
-  const set   = this.getSettings(msg);
-  const raw   = set?.get("stay_247");
+  const activeChannelId = cleanId(player._channelId) || targetChannelId;
+  const homeChannelId = cleanId(player._home247Channel) || activeChannelId;
+
+  // ── 24/7 handling ────────────────────────────────────────────────────────
+  const set = this.getSettings(msg);
+  const raw = set?.get("stay_247");
   const ch247 = (!raw || raw === "none")
       ? new Set()
       : Array.isArray(raw)
-          ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
-          : new Set([String(raw).replace(/\D/g, "")]);
+          ? new Set(raw.map(id => cleanId(id)).filter(Boolean))
+          : new Set([cleanId(raw)]);
 
   if (ch247.has(activeChannelId) || ch247.has(homeChannelId)) {
     const matchChannel = ch247.has(homeChannelId) ? homeChannelId
@@ -71,13 +112,13 @@ export async function run(msg) {
     const mode = matchChannel ? get247ChannelMode(set, matchChannel) : "off";
     this.markIntentionalLeave(activeChannelId);
     this.players.playerMap.delete(activeChannelId);
-    if (activeChannelId !== cid) this.players.playerMap.delete(cid);
+    if (activeChannelId !== targetChannelId) this.players.playerMap.delete(targetChannelId);
     if (homeChannelId !== activeChannelId) this.players.playerMap.delete(homeChannelId);
     await player.leave().catch(() => {});
     player.destroy();
 
     if (mode === "auto") {
-      msg.reply(embed(this.t(msg, "responses.leave.leftRejoin247", { channel: cid })));
+      msg.reply(embed(this.t(msg, "responses.leave.leftRejoin247", { channel: targetChannelId })));
       const leave247Delay = this.config?.timers?.leave247RejoinDelay ?? 5000;
       setTimeout(() => {
         if (this._spawnPlayer) {

@@ -32,7 +32,7 @@
     "forceleave": "Make Remix leave a channel even if you're not in it.",
     "invite": "Get the invite link for Remix and the support server.",
     "join": "Make the bot join your voice channel, or specify one.",
-    "leave": "Make the bot leave your current voice channel.",
+    "leave": "Make the bot leave a voice channel. Specify a channel or leave blank for your current one.",
     "lastfm": "Link your Last.fm account, toggle scrobbling, or view your profile.",
     "list": "List the songs in the queue of your current voice channel.",
     "loop": "Toggle the looping of your queue/song.",
@@ -246,10 +246,12 @@
       "voiceChannelUnknown": "unknown voice channel"
     },
     "leave": {
-      "noVoiceChannel": "⚠️ Please join a voice channel first.",
+      "noVoiceChannel": "⚠️ Please join a voice channel first, or specify one: `{{prefix}}leave <#channel>`",
       "notInVoice": "I'm not in a voice channel.",
       "joinChannel": "⚠️ Please join {{channel}} to use this command.",
       "multipleChannels": "⚠️ I'm playing in multiple channels! Please join one of them:\n{{channels}}",
+      "specifyChannel": "⚠️ You're not in a voice channel. I'm playing in:\n{{channels}}\n\nUse `{{prefix}}leave <#channel>` to leave a specific channel.",
+      "noPlayerInChannel": "⚠️ I'm not playing in <#{{channel}}>. I'm in:\n{{channels}}",
       "playerNotInit": "Player not initialized.",
       "leftRejoin247": "✅ Successfully Left — rejoining <#{{channel}}> in 5 seconds.\nTo disable 24/7 mode permanently, use `%247 off`.",
       "left247On": "✅ Successfully Left.\n24/7 mode is **on** — bot won't rejoin automatically. Use `%play` to bring it back, or `%247 off` to fully disable.\nUse `%247` to view all saved channels."
