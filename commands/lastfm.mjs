@@ -139,7 +139,7 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   // Play the first track immediately
   const firstTrack = result.tracks[0];
   try {
-    const events = p.play(firstTrack.query, false, "ytm");
+    const events = p.play(firstTrack.query, false, "yt");
     await new Promise((resolve) => {
       events.on("message", () => resolve());
       events.on("error", () => { failed++; resolve(); });
@@ -155,7 +155,7 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   const restTracks = result.tracks.slice(1);
   for (const track of restTracks) {
     try {
-      const data = await p.workerJob("generalQuery", { query: track.query, provider: "ytm" });
+      const data = await p.workerJob("generalQuery", { query: track.query, provider: "yt" });
       if (data && data.type !== "error") {
         if (data.type === "list") {
           p.addManyToQueue(data.data, false);
