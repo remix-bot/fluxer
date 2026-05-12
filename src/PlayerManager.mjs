@@ -113,7 +113,7 @@ export class PlayerManager {
     this.playerConfig = config.player;
     this.dashboard    = config.dashboard ?? null;
     this.locale       = config.locale ?? null;
-    this.spawnPlayer  = config.spawnPlayer ?? null;   // RecoveryManager.spawnPlayer — for 24/7 rejoin on autoleave
+    this.spawnPlayer  = config.spawnPlayer ?? null;   // RecoveryManager.spawnPlayer — for 24/7 rejoin
     this.timers       = config.timers ?? {};
     this._lastfm      = null;   // Set later by Remix class after init
   }
@@ -760,7 +760,7 @@ export class PlayerManager {
         if (this.spawnPlayer) {
           logger.recovery(`[AutoLeave] 24/7 rejoin scheduled for ${homeChannelId} (mode ${mode247}) in ${delay}ms`);
           setTimeout(() => {
-            this.spawnPlayer(guildId, homeChannelId, 0, null, "initplayer-autoleave").catch(e =>
+            this.spawnPlayer(guildId, homeChannelId).catch(e =>
               logger.warn("[AutoLeave] 24/7 rejoin failed for", homeChannelId, e.message)
             );
           }, delay);

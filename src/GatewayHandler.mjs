@@ -15,7 +15,7 @@ import mysql from "mysql2";
 export class GatewayHandler {
   /**
    * @param {import('../../index.mjs').Remix} remix          The running bot instance.
-   * @param {import('./RecoveryManager.mjs').RecoveryManager} recoveryManager  For scheduleSpawn / tryAutoJoin.
+   * @param {import('./RecoveryManager.mjs').RecoveryManager} recoveryManager  For scheduleSpawn / 24/7 auto-join.
    */
   constructor(remix, recoveryManager) {
     this.remix = remix;
@@ -59,6 +59,28 @@ export class GatewayHandler {
     // where recovery rejoins → gateway disconnects again → recovery again.
     /** @type {Map<string, number>} guildId → timestamp when cooldown expires */
     this._gatewayDisconnectCooldown = new Map();
+
+    // ── Startup GuildDelete deferral ───────────────────────────────────────
+    // Fluxer's GUILD_DELETE does NOT expose the `unavailable` flag, so we
+    // cannot distinguish "bot was kicked" from "guild is temporarily
+    // unavailable."  During startup, the gateway sends GUILD_DELETE for
+    // guilds that went offline while the bot was down, followed immediately
+    // by GUILD_CREATE when they come back.  If we process GuildDelete
+    // immediately, we wipe in-memory state (settings cache, player map,
+    // voice observations) for guilds the bot IS still in, then GuildCreate
+    // has to re-load everything from DB — wasting time and causing scary
+    // "bot removed from server" log messages for guilds that are fine.
+    //
+    // Solution: During a startup grace period, buffer GuildDelete events
+    // and only process them after the grace period expires.  If a GuildCreate
+    // arrives for the same guild before the grace period ends, we cancel the
+    // deferred cleanup because the guild is still active.
+    /** @type {Map<string, {guild, timer}>} guildId → deferred cleanup data */
+    this._deferredGuildDeletes = new Map();
+    /** @type {number} How long to defer GuildDelete processing during startup (ms) */
+    this._startupDeleteGraceMs = 15_000;
+    /** @type {boolean} Whether we're still in the startup grace period */
+    this._inStartupGrace = true;
   }
 
   // ── Voice-state key helpers ──────────────────────────────────────────────────
@@ -578,6 +600,20 @@ export class GatewayHandler {
       const guildId = guild?.id ?? guild?._id;
       if (!guildId) return;
 
+      // ── Cancel any deferred GuildDelete for this guild ────────────────
+      // If we got GuildDelete → GuildCreate for the same guild during the
+      // startup grace period, the guild was temporarily unavailable, not
+      // actually kicked. Cancel the deferred cleanup timer.
+      const deferred = this._deferredGuildDeletes.get(guildId);
+      if (deferred) {
+        clearTimeout(deferred.timer);
+        this._deferredGuildDeletes.delete(guildId);
+        logger.guild(
+          `[GuildDelete] Cancelled deferred cleanup for server ${guildId} — ` +
+          `guild came back (GuildCreate received during grace period).`
+        );
+      }
+
       // Part 1: Voice state population
       // Only purge stale entries if the GUILD_CREATE actually contains
       // voice_states data. If voice_states is empty, the guild may just
@@ -608,7 +644,11 @@ export class GatewayHandler {
           }
         }
         
-        // Only purge entries for users that are being replaced by new data
+        // Only purge entries for users/bots that are being replaced by new data.
+        // Previously, ALL observedVoiceBots entries for the guild were deleted,
+        // which removed the bot's own entry that was set up during recovery.
+        // Now we only delete entries for bots whose user ID appears in the new
+        // voice_states data, matching the same logic used for observedVoiceUsers.
         for (const [uid, info] of [...remix.observedVoiceUsers]) {
           if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, "")
               && newUserIds.has(uid)) {
@@ -617,9 +657,13 @@ export class GatewayHandler {
         }
         for (const [uid, info] of [...remix.observedVoiceBots]) {
           if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, "")) {
-            const botKey = uid; // observedVoiceBots keys are "guildId:userId"
-            // Check if this bot entry is for the current guild
-            remix.observedVoiceBots.delete(uid);
+            // Only delete if this bot's user ID appears in the new voice_states
+            // data — i.e., it's being replaced by fresh data. This prevents
+            // destroying the bot's own entry set up during recovery.
+            const botUserId = uid.split(":").pop(); // key is "guildId:userId"
+            if (botUserId && newUserIds.has(botUserId)) {
+              remix.observedVoiceBots.delete(uid);
+            }
           }
         }
       }
@@ -706,7 +750,7 @@ export class GatewayHandler {
                   logger.voice247(
                     `[GuildCreate] Late-arriving guild ${guildId} — scheduling 24/7 spawn for channel ${chId} (mode ${mode})`
                   );
-                  this.recoveryManager.scheduleSpawn(guildId, chId, this.T.rejoin247Delay, null, "guild-create-247");
+                  this.recoveryManager.scheduleSpawn(guildId, chId, this.T.rejoin247Delay, "guild-create-247");
                 }
               }
             }
@@ -720,32 +764,35 @@ export class GatewayHandler {
       const guildId = guild?.id ?? guild?._id;
       if (!guildId) return;
 
+      // ── Startup deferral ──────────────────────────────────────────────
+      // During startup, the gateway may send GUILD_DELETE for guilds that
+      // are temporarily unavailable (not actually kicked). If we process
+      // these immediately, we wipe settings/players for guilds that will
+      // come back via GUILD_CREATE moments later.  Defer cleanup during
+      // the startup grace period; if GuildCreate arrives first, cancel.
+      if (this._inStartupGrace) {
+        logger.guild(
+          `[GuildDelete] Deferring cleanup for server ${guildId} ` +
+          `(startup grace — will confirm after ${this._startupDeleteGraceMs / 1000}s).`
+        );
+        // Cancel any existing deferred timer for this guild
+        const existing = this._deferredGuildDeletes.get(guildId);
+        if (existing) clearTimeout(existing.timer);
+
+        const timer = setTimeout(() => {
+          this._deferredGuildDeletes.delete(guildId);
+          // Grace period expired without GuildCreate — this guild is really gone
+          logger.guild(`[GuildDelete] Confirmed removal from server ${guildId} — cleaning up.`);
+          this._processGuildDelete(guildId);
+        }, this._startupDeleteGraceMs);
+
+        this._deferredGuildDeletes.set(guildId, { guild, timer });
+        return;
+      }
+
+      // ── Runtime (after startup grace) — process immediately ─────────
       logger.guild(`[GuildDelete] Removed from server ${guildId} — cleaning up.`);
-
-      for (const [channelId, player] of remix.players.playerMap) {
-        if (!player._guildId || String(player._guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, "")) {
-          remix.players.playerMap.delete(channelId);
-          try { player.leave().catch(() => {}); } catch (_) {}
-          try { player.destroy();               } catch (_) {}
-          logger.guild(`[GuildDelete] Destroyed player for channel ${channelId}.`);
-        }
-      }
-
-      for (const [userId, info] of [...remix.observedVoiceUsers]) {
-        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, "")) remix.observedVoiceUsers.delete(userId);
-      }
-      for (const [userId, info] of [...remix.observedVoiceBots]) {
-        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, "")) remix.observedVoiceBots.delete(userId);
-      }
-      for (const [stateKey, info] of [...this._prevVoiceState]) {
-        if (String(info.guildId).replace(/\D/g, "") === String(guildId).replace(/\D/g, ""))
-          this._prevVoiceState.delete(stateKey);
-      }
-
-      remix.settingsMgr.removeServer(guildId);
-      remix._announcementChannelCache.delete(guildId);
-
-      logger.guild(`[GuildDelete] Cleanup complete for server ${guildId}.`);
+      this._processGuildDelete(guildId);
     });
 
     // ── VOICE_STATE_UPDATE ──────────────────────────────────────────────────
@@ -1080,17 +1127,28 @@ export class GatewayHandler {
           // Also check if there was a recent bot join in this guild — if so,
           // the disconnect is likely a side-effect of the channel move, not a
           // real disconnect that needs recovery.
+          // IMPORTANT: We also verify that the bot is in another channel in
+          // THIS SAME guild. Cross-guild joins should NOT suppress recovery
+          // for this guild's disconnect — that was causing guilds to lose
+          // their 24/7 player silently when a different guild joined nearby.
           const recentJoin = this._recentBotJoins.get(cleanGuild) ?? 0;
           const timeSinceJoin = Date.now() - recentJoin;
-          const isLikelyMoveSideEffect = timeSinceJoin < this._moveDetectionWindow;
+          const isLikelyMoveSideEffect = timeSinceJoin < this._moveDetectionWindow && botInOtherChannel;
 
           // Also check if there are pending spawns for this guild — if a
           // spawnPlayer is in progress, the disconnect is expected.
-          const hasPendingSpawn = [...this.recoveryManager.pendingSpawns].some(([, entry]) =>
-            String(entry.guildId).replace(/\D/g, "") === cleanGuild
-          ) || [...this.recoveryManager.scheduledSpawns].some(([, entry]) =>
-            String(entry.guildId).replace(/\D/g, "") === cleanGuild
-          );
+          // pendingSpawns is a Set<string> (channel IDs), not a Map — we
+          // cross-reference with scheduledSpawns to check the guild.
+          const hasPendingSpawn = (() => {
+            for (const chId of this.recoveryManager.pendingSpawns) {
+              const entry = this.recoveryManager.scheduledSpawns.get(chId);
+              if (entry && String(entry.guildId).replace(/\D/g, "") === cleanGuild) return true;
+            }
+            for (const [, entry] of this.recoveryManager.scheduledSpawns) {
+              if (String(entry.guildId).replace(/\D/g, "") === cleanGuild) return true;
+            }
+            return false;
+          })();
 
           // Check gateway disconnect cooldown — if the gateway recently
           // force-disconnected us, don't attempt recovery again immediately.
@@ -1121,6 +1179,13 @@ export class GatewayHandler {
             );
           } else {
             const set = remix.settingsMgr.getServer(guildId);
+            if (!set) {
+              logger.voice247(
+                `[247] Skipping recovery for ${cleanOld} in guild ${guildId} — ` +
+                `settings not loaded yet (race with GuildCreate).`
+              );
+              return;
+            }
             const raw = set.get("stay_247");
             if (raw && raw !== "none") {
               const channels = Array.isArray(raw)
@@ -1130,6 +1195,20 @@ export class GatewayHandler {
                 // Per-channel mode: check the mode for this specific channel
                 const mode = get247ChannelMode(set, cleanOld);
                 if (mode === "on" || mode === "auto") {
+                  // Check persistent 401 ban — if this guild was recently
+                  // 401-banned, don't attempt recovery (it will fail).
+                  const banExpiry = this.recoveryManager._guild401Ban?.get(cleanGuild) ?? 0;
+                  if (banExpiry > Date.now()) {
+                    logger.voice247(
+                      `[247] Skipping recovery for ${cleanOld} in guild ${guildId} — ` +
+                      `guild is 401-banned (${Math.round((banExpiry - Date.now()) / 1000)}s remaining).`
+                    );
+                    // Remove the old player entry and destroy it
+                    remix.players.playerMap.delete(cleanOld);
+                    try { remix.players.playerMap.get(cleanOld)?.destroy(); } catch (_) {}
+                    return;
+                  }
+
                   // Match the specific player by channel ID
                   const player = remix.players.playerMap.get(cleanOld);
                   if (player && !player.leaving) {
@@ -1152,10 +1231,10 @@ export class GatewayHandler {
                     } else {
                       remix.players.playerMap.delete(cleanOld);
                       try { player.destroy(); } catch (_) {}
-                      this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, null, "gateway-disconnect");
+                      this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, "gateway-disconnect");
                     }
                   } else {
-                    this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, null, "gateway-disconnect");
+                    this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, "gateway-disconnect");
                   }
                 } else {
                   logger.voice247(`[247] Channel ${cleanOld} mode='${mode}' — not rejoining.`);
@@ -1198,5 +1277,59 @@ export class GatewayHandler {
     this.recoveryManager.tryAutoJoin();
 
     this.setupPresenceRotation();
+
+    // End the startup grace period after the configured delay.
+    // Any deferred GuildDelete events that weren't cancelled by a GuildCreate
+    // will be processed at this point.
+    setTimeout(() => {
+      this._inStartupGrace = false;
+      const pending = this._deferredGuildDeletes.size;
+      if (pending > 0) {
+        logger.guild(
+          `[GuildDelete] Startup grace period ended. ` +
+          `${pending} deferred deletion(s) will be processed by their timers.`
+        );
+      } else {
+        logger.guild(`[GuildDelete] Startup grace period ended. No deferred deletions.`);
+      }
+    }, this._startupDeleteGraceMs);
+  }
+
+  // ── GuildDelete cleanup (extracted for deferred processing) ────────────────
+
+  /**
+   * Perform the actual cleanup for a guild that the bot was removed from.
+   * Extracted from the GuildDelete handler so it can be called after the
+   * startup grace period expires.
+   * @param {string} guildId
+   */
+  _processGuildDelete(guildId) {
+    const { remix } = this;
+    const cleanGuildId = String(guildId).replace(/\D/g, "");
+
+    for (const [channelId, player] of remix.players.playerMap) {
+      if (String(player._guildId ?? "").replace(/\D/g, "") === cleanGuildId) {
+        remix.players.playerMap.delete(channelId);
+        try { player.leave().catch(() => {}); } catch (_) {}
+        try { player.destroy();               } catch (_) {}
+        logger.guild(`[GuildDelete] Destroyed player for channel ${channelId}.`);
+      }
+    }
+
+    for (const [userId, info] of [...remix.observedVoiceUsers]) {
+      if (String(info.guildId).replace(/\D/g, "") === cleanGuildId) remix.observedVoiceUsers.delete(userId);
+    }
+    for (const [userId, info] of [...remix.observedVoiceBots]) {
+      if (String(info.guildId).replace(/\D/g, "") === cleanGuildId) remix.observedVoiceBots.delete(userId);
+    }
+    for (const [stateKey, info] of [...this._prevVoiceState]) {
+      if (String(info.guildId).replace(/\D/g, "") === cleanGuildId)
+        this._prevVoiceState.delete(stateKey);
+    }
+
+    remix.settingsMgr.removeServer(guildId);
+    remix._announcementChannelCache.delete(guildId);
+
+    logger.guild(`[GuildDelete] Cleanup complete for server ${guildId}.`);
   }
 }

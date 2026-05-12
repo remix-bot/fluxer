@@ -168,10 +168,14 @@ export class Remix {
     this._announcementChannelCache = new Map();
     this.intentionalLeaves = new Map();
 
-    // ── Recovery Manager ────────────────────────────────────────────────────
-    // Handles session persistence, boot recovery, 24/7 auto-join, and player
-    // spawning with concurrency control.
+    // ── Recovery Manager (24/7 auto-join + spawn) ──────────────────────────
+    // Handles 24/7 auto-join on boot and player spawning.
+    // The boot-time session recovery system has been removed.
     this.recoveryManager = new RecoveryManager(this);
+
+    // Expose recoveryManager on the Fluxer client so that Player.mjs and
+    // other modules that only have a client reference can access it.
+    client._recoveryManager = this.recoveryManager;
 
     // ── Gateway Handler ─────────────────────────────────────────────────────
     // Handles raw WS gateway events, voice-state tracking, presence rotation,
@@ -327,7 +331,7 @@ export class Remix {
           const guildId = player._guildId;
           if (!guildId) continue;
 
-          if (player._isJoining || player._isRecovering) continue;
+          if (player._isJoining) continue;
 
           const channelId   = player._channelId ?? mapKey;
           const cleanChanId = String(channelId).replace(/\D/g, "");
@@ -426,16 +430,16 @@ export class Remix {
     this.players.checkVoiceChannels = function (message) {
       const userId  = message?.author?.id   ?? message?.message?.author?.id;
       const guildId =
-          message?.channel?.server_id    ??
-          message?.channel?.serverId     ??
-          message?.channel?.guild?.id    ??
-          message?.channel?.guildId      ??
-          message?.message?.server_id    ??
-          message?.message?.serverId     ??
-          message?.message?.guildId      ??
+          message?.channel?.guildId ??
+          message?.channel?.guild?.id ??
+          message?.channel?.server_id ??
+          message?.channel?.serverId ??
+          message?.message?.guildId ??
+          message?.message?.guild?.id ??
+          message?.message?.channel?.guildId ??
+          message?.message?.channel?.guild?.id ??
           message?.message?.channel?.server_id ??
-          message?.message?.channel?.serverId  ??
-          message?.message?.channel?.guildId;
+          message?.message?.channel?.serverId;
 
       logger.voice(`[checkVC] userId=${userId} guildId=${guildId}`);
       logger.voice(`[checkVC] channel keys: ${Object.keys(message?.channel ?? {}).join(",")}`);
@@ -836,13 +840,7 @@ export class Remix {
     );
   }
 
-  buildRecoveryState() {
-    return this._buildRecoveryState?.() ?? [];
-  }
 
-  writeRecoveryState(state, sourceLabel = "Recovery") {
-    return this._writeRecoveryState?.(state, sourceLabel) ?? false;
-  }
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -879,10 +877,6 @@ process.on("uncaughtException", (err, origin) => {
   }
   logger.error("[Error_Handling] Uncaught Exception/Catch");
   logger.error("Error:", err, origin);
-  try {
-    const state = remix.buildRecoveryState();
-    remix.writeRecoveryState(state, "Shutdown/Crash");
-  } catch (_) {}
   process.exit(1);
 });
 process.on("uncaughtExceptionMonitor", (err, origin) => {
@@ -890,15 +884,9 @@ process.on("uncaughtExceptionMonitor", (err, origin) => {
   logger.error("Error:", err, origin);
 });
 
-// ── Session Reboot Recovery Hooks ───────────────────────────────────────────
+// ── Shutdown Hooks ──────────────────────────────────────────────────────────
 const saveAndExit = async () => {
-  logger.recovery("\n[Shutdown] Saving active sessions for reboot recovery...");
-  try {
-    const state = remix.buildRecoveryState();
-    remix.writeRecoveryState(state, "Shutdown");
-  } catch (e) {
-    logger.error("[Shutdown] Failed to save recovery state:", e.message);
-  }
+  logger.recovery("\n[Shutdown] Cleaning up before exit...");
   try {
     if (remix.dashboard?.redis?.destroy) {
       await remix.dashboard.redis.destroy();

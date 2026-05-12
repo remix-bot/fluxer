@@ -541,12 +541,10 @@ export default class Player extends EventEmitter {
     // keep retrying — 401 is a permission problem, not a transient failure.
     // Retrying just creates more 401 errors and recovery loops.
     // Instead, give up on recovery and let the 24/7 system schedule a
-    // delayed respawn with proper cooldown.
+    // delayed respawn.
     if (this._lastDisconnectReason === "401") {
       const timeSinceDisconnect = Date.now() - this._lastDisconnectTime;
       if (timeSinceDisconnect < 60_000) {
-        // Within 60 seconds of a 401 — don't attempt recovery.
-        // Let the 24/7 system handle reconnection with its own delay.
         logger.warn(
           `[Player] Skipping recovery for guild ${this._guildId} — ` +
           `last disconnect was 401 Unauthorized (${timeSinceDisconnect / 1000}s ago). ` +

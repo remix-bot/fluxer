@@ -168,22 +168,32 @@ export class FluxerRevoice extends EventEmitter {
   connections  = new Map();
   users        = new Map();
 
-  // Guild-level join mutex: prevents concurrent joinVoiceChannel() calls
-  // for the same guild. When the bot tries to join multiple channels in
-  // the same guild simultaneously (e.g. during recovery), the Fluxer
-  // voice server can return 401 Unauthorized because the previous
-  // session's token hasn't been fully cleaned up yet. Serializing joins
-  // per guild eliminates this race condition.
+  // Guild-level join mutex: kept for per-guild cooldown tracking (401 cooldowns
+  // and minimum join intervals), but actual join serialization is handled by
+  // the global queue above. The per-guild queue was insufficient because the
+  // Fluxer gateway can't handle concurrent joins from DIFFERENT guilds either.
   /** @type {Map<string, Promise>} */
   _guildJoinQueue = new Map();
-  /** @type {number} Delay between consecutive guild joins (ms) — increased from 3000 to 4000
-   *  to give the Fluxer gateway more time to clean up the previous voice session
-   *  before we request a new one. 3000ms was too short and caused 401 errors when
-   *  multiple channels in the same guild were joined in quick succession.
-   *  The Fluxer gateway's Erlang backend needs time to process voice state
-   *  transitions, and concurrent joins within the cleanup window cause
-   *  the new LiveKit token to be rejected with 401 Unauthorized. */
-  _guildJoinDelay = 4000;
+
+  // ── Global join queue ──────────────────────────────────────────────────────
+  // The per-guild queue serializes joins within the same guild, but the Fluxer
+  // gateway also struggles when many DIFFERENT guilds are joined simultaneously.
+  // During boot recovery, 10+ channels can be spawned within seconds, each
+  // triggering VOICE_STATE_UPDATE + VOICE_SERVER_UPDATE + LiveKit connect.
+  // The gateway's Erlang backend can't process this flood fast enough, causing
+  // 401 Unauthorized errors on guilds that were scheduled later.
+  //
+  // The global queue ensures that only ONE join is in-flight at a time across
+  // ALL guilds, with a delay between each to let the gateway catch up.
+  /** @type {Promise} Global join serializer — only one join at a time across all guilds */
+  _globalJoinQueue = Promise.resolve();
+  /** @type {number} Minimum delay between ANY two joins (ms), even across guilds.
+   *  This delay runs AFTER the previous join completes and BEFORE the next
+   *  one starts, giving the Fluxer gateway time to clean up the previous
+   *  voice session. 3 seconds is needed because the gateway's Erlang backend
+   *  needs time to process the voice state transition before a new join
+   *  can succeed without 401 errors. */
+  _globalJoinDelay = 3_000;
 
   /** @type {Set<string>} Channel IDs where disconnect is expected (bot-initiated) */
   _intentionalDisconnects = new Set();
@@ -197,10 +207,12 @@ export class FluxerRevoice extends EventEmitter {
 
   /** @type {number} Minimum time between guild joins (ms) — enforced on top of
    *  the per-join delay. If a new join is requested within this window, we
-   *  wait the remaining time before proceeding. Increased from 5000 to 7000
-   *  because 5000ms was insufficient to prevent 401 errors when the bot
-   *  re-joins a channel in the same guild quickly after a disconnect. */
-  _guildMinJoinInterval = 7000;
+   *  wait the remaining time before proceeding. Increased from 7000 to 8000
+   *  because 7000ms was insufficient to prevent 401 errors when the bot
+   *  re-joins a channel in the same guild quickly after a disconnect,
+   *  especially during boot recovery when multiple guilds compete for
+   *  gateway attention. */
+  _guildMinJoinInterval = 8000;
 
   /** @type {Map<string, number>} Guild IDs that recently had a 401 error.
    *  Used to add an even longer backoff before retrying joins in that guild. */
@@ -389,6 +401,53 @@ export class FluxerRevoice extends EventEmitter {
    * @returns {Promise<FluxerVoiceConnection>}
    */
   async join(channelId, _leaveIfEmpty = false) {
+    // ── Global join queue (TRUE serialization) ───────────────────────────
+    // Serialize ALL joins so that only ONE join is in-flight at a time across
+    // the entire bot. The Fluxer gateway's Erlang backend cannot handle
+    // concurrent VOICE_STATE_UPDATE + VOICE_SERVER_UPDATE flows — it returns
+    // 401 Unauthorized when LiveKit tokens haven't propagated for the previous
+    // join yet.
+    //
+    // PREVIOUS APPROACH (broken): Add a 2s delay between starts, but don't
+    // wait for the previous join to complete. Multiple joins were in-flight
+    // simultaneously, causing 401 errors.
+    //
+    // NEW APPROACH: The global queue wraps the ENTIRE join() call. Each join
+    // must FULLY COMPLETE (including LiveKit room connection) before the next
+    // one starts, plus a 3-second gap between joins to give the gateway time
+    // to clean up the previous voice session.
+    //
+    // The promise chain works like this:
+    //   _globalJoinQueue = Promise.resolve()           // initial
+    //   _globalJoinQueue = prev.then(() => joinA())    // joinA runs after prev
+    //   _globalJoinQueue = prev.then(() => joinB())    // joinB runs after joinA completes
+    //
+    // Each caller awaits its own turn, which only resolves after the full
+    // join operation completes (or throws).
+    const joinOperation = async () => {
+      // Small gap between joins to let the gateway process the previous
+      // session's cleanup. This runs BEFORE the actual join logic.
+      await new Promise(r => setTimeout(r, this._globalJoinDelay));
+      return await this._joinInternal(channelId, _leaveIfEmpty);
+    };
+
+    // Chain onto the global queue: our join only starts after the previous
+    // one has fully completed (or failed). We store the new tail of the chain.
+    const prevQueue = this._globalJoinQueue;
+    const ourResult = prevQueue.then(() => joinOperation());
+    this._globalJoinQueue = ourResult.catch(() => {}); // don't break chain on error
+    return await ourResult;
+  }
+
+  /**
+   * Internal join implementation — called by join() through the global queue.
+   * Do NOT call this directly; always use join() to ensure serialization.
+   *
+   * @param {string} channelId
+   * @param {boolean} _leaveIfEmpty
+   * @returns {Promise<FluxerVoiceConnection>}
+   */
+  async _joinInternal(channelId, _leaveIfEmpty = false) {
     // Resolve the guild ID for this channel so we can serialize joins per guild.
     // This prevents the 401 Unauthorized race condition that occurs when
     // multiple channels in the same guild are joined simultaneously.
@@ -398,41 +457,50 @@ export class FluxerRevoice extends EventEmitter {
       guildId = ch?.guildId ?? ch?.guild?.id ?? null;
     } catch (_) {}
 
+    // Per-guild cooldown checks (still useful for same-guild rapid rejoins
+    // from recovery or user commands, even though the global queue prevents
+    // concurrent joins)
     if (guildId) {
-      // Serialize: wait for any in-flight join for this guild to complete,
-      // then add a delay before starting our join.
-      const prev = this._guildJoinQueue.get(guildId) ?? Promise.resolve();
-      const ourTurn = prev.then(async () => {
-        // Wait the base guild join delay
-        await new Promise(r => setTimeout(r, this._guildJoinDelay));
+      // Additional safety: if this guild was joined very recently, wait
+      // until the minimum interval has elapsed. This prevents the rapid
+      // rejoin that causes 401 Unauthorized errors.
+      const lastJoin = this._guildLastJoinTime.get(guildId) ?? 0;
+      const elapsed = Date.now() - lastJoin;
+      if (elapsed < this._guildMinJoinInterval) {
+        const extraWait = this._guildMinJoinInterval - elapsed;
+        logger.player(
+          `[FluxerRevoice] Guild ${guildId} was joined ${elapsed}ms ago — ` +
+          `waiting additional ${extraWait}ms to avoid 401 race`
+        );
+        await new Promise(r => setTimeout(r, extraWait));
+      }
 
-        // Additional safety: if this guild was joined very recently, wait
-        // until the minimum interval has elapsed. This prevents the rapid
-        // rejoin that causes 401 Unauthorized errors.
-        const lastJoin = this._guildLastJoinTime.get(guildId) ?? 0;
-        const elapsed = Date.now() - lastJoin;
-        if (elapsed < this._guildMinJoinInterval) {
-          const extraWait = this._guildMinJoinInterval - elapsed;
-          logger.player(
-            `[FluxerRevoice] Guild ${guildId} was joined ${elapsed}ms ago — ` +
-            `waiting additional ${extraWait}ms to avoid 401 race`
+      // If this guild recently had a 401 error, wait for the cooldown.
+      const cooldownExpiry = this._guild401Cooldown.get(guildId) ?? 0;
+      const cooldownRemaining = cooldownExpiry - Date.now();
+      if (cooldownRemaining > 0) {
+        if (cooldownRemaining > 30_000) {
+          throw new Error(
+            `Guild ${guildId} has active 401 cooldown (${Math.round(cooldownRemaining / 1000)}s remaining) — ` +
+            `aborting join for channel ${channelId} to avoid guaranteed failure. `
           );
-          await new Promise(r => setTimeout(r, extraWait));
         }
+        logger.player(
+          `[FluxerRevoice] Guild ${guildId} has 401 cooldown — ` +
+          `waiting ${Math.round(cooldownRemaining / 1000)}s before attempting join`
+        );
+        await new Promise(r => setTimeout(r, cooldownRemaining));
+      }
 
-        // If this guild recently had a 401 error, wait for the cooldown
-        const cooldownExpiry = this._guild401Cooldown.get(guildId) ?? 0;
-        const cooldownRemaining = cooldownExpiry - Date.now();
-        if (cooldownRemaining > 0) {
-          logger.player(
-            `[FluxerRevoice] Guild ${guildId} has 401 cooldown — ` +
-            `waiting ${cooldownRemaining}ms before attempting join`
-          );
-          await new Promise(r => setTimeout(r, cooldownRemaining));
-        }
-      });
-      this._guildJoinQueue.set(guildId, ourTurn);
-      await ourTurn;
+      // Re-check cooldown after waiting
+      const recheckExpiry = this._guild401Cooldown.get(guildId) ?? 0;
+      const recheckRemaining = recheckExpiry - Date.now();
+      if (recheckRemaining > 30_000) {
+        throw new Error(
+          `Guild ${guildId} 401 cooldown re-activated during wait — ` +
+          `aborting join for channel ${channelId}.`
+        );
+      }
     }
 
     if (this.connections.has(channelId)) {
@@ -576,10 +644,14 @@ export class FluxerRevoice extends EventEmitter {
 
     // Record the successful join time for this guild so future joins
     // can enforce the minimum interval and avoid 401 races.
-    if (channelGuildId) {
-      this._guildLastJoinTime.set(channelGuildId, Date.now());
-      // Clear any 401 cooldown for this guild since the join succeeded
-      this._guild401Cooldown.delete(channelGuildId);
+    // Clear any 401 cooldown for this guild since the join succeeded.
+    // Try both the resolved channelGuildId and the pre-resolved guildId
+    // to ensure the cooldown is properly cleared even if channelGuildId
+    // couldn't be resolved from the channel object.
+    const clearIds = new Set([channelGuildId, guildId].filter(Boolean));
+    for (const gId of clearIds) {
+      this._guildLastJoinTime.set(gId, Date.now());
+      this._guild401Cooldown.delete(gId);
     }
 
     // Create our FluxerVoiceConnection wrapper
