@@ -43,6 +43,28 @@ function notLinked(prefix) {
 // Valid categories that can be played (without a sub-number)
 const SIMPLE_CATEGORIES = ["loved", "top", "recent", "albums"];
 
+function buildLastFmTrackMeta(track) {
+  return {
+    source: "lastfm",
+    artist: track.artist,
+    name: track.name,
+    url: track.url ?? "",
+  };
+}
+
+async function resolveLastFmTrack(player, track) {
+  const data = await player.workerJob("generalQuery", {
+    query: track.query,
+    provider: "yt",
+    trackMeta: buildLastFmTrackMeta(track),
+  });
+
+  if (!data || data.type === "error") return null;
+  if (data.type === "video") return [data.data];
+  if (data.type === "list") return data.data ?? [];
+  return null;
+}
+
 /**
  * Resolve a Last.fm category (loved/top/recent/playlist) into playable tracks.
  * Shared between `%lastfm play <cat>` and `%play lastfm:<cat>`.
@@ -136,38 +158,19 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
     }).catch(() => {});
   }
 
-  // Play the first track immediately
-  const firstTrack = result.tracks[0];
-  try {
-    const events = p.play(firstTrack.query, false, "yt");
-    await new Promise((resolve) => {
-      events.on("message", () => resolve());
-      events.on("error", () => { failed++; resolve(); });
-      // Timeout safety
-      setTimeout(resolve, 15_000);
-    });
-    added++;
-  } catch {
-    failed++;
-  }
-
-  // Queue the rest — use workerJob directly for speed (no need to wait for play messages)
-  const restTracks = result.tracks.slice(1);
-  for (const track of restTracks) {
+  for (const track of result.tracks) {
     try {
-      const data = await p.workerJob("generalQuery", { query: track.query, provider: "yt" });
-      if (data && data.type !== "error") {
-        if (data.type === "list") {
-          p.addManyToQueue(data.data, false);
-          added += data.data.length;
-        } else if (data.type === "video") {
-          p.addToQueue(data.data, false);
-          added++;
-        } else {
-          failed++;
-        }
-      } else {
+      const resolvedTracks = await resolveLastFmTrack(p, track);
+      if (!resolvedTracks?.length) {
         failed++;
+        continue;
+      }
+
+      p.addManyToQueue(resolvedTracks, false);
+      added += resolvedTracks.length;
+
+      if (!p.queue.getCurrent()) {
+        p.playNext();
       }
     } catch {
       failed++;

@@ -144,6 +144,19 @@ function trackToVideo(track) {
   };
 }
 
+function normalizeMatchText(value) {
+  return Utils.cleanTitle(String(value ?? ""))
+    .normalize("NFKD")
+    .replace(/[^\w\s]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function tokenizeMatchText(value) {
+  return normalizeMatchText(value).split(" ").filter(Boolean);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Provider Configuration  (imported from constants/providers.mjs)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -161,6 +174,19 @@ class YTUtils extends EventEmitter {
   _prefix(p)           { return PROVIDERS[p]?.prefix  ?? "ytmsearch"; }
   _providerLabel(p)    { return PROVIDERS[p]?.label   ?? "YouTube Music"; }
   _isAudioPreferredProvider(p) { return p === "ytm"; }
+
+  _buildRequestContext(query, trackMeta = null) {
+    const requestedTitle = trackMeta?.name ?? trackMeta?.title ?? query;
+    const requestedArtist = trackMeta?.artist ?? "";
+
+    return {
+      normalizedTitle: normalizeMatchText(requestedTitle),
+      normalizedArtist: normalizeMatchText(requestedArtist),
+      queryTokens: tokenizeMatchText(query),
+      titleTokens: tokenizeMatchText(requestedTitle),
+      artistTokens: tokenizeMatchText(requestedArtist),
+    };
+  }
 
   _buildIdentifier(provider, query) {
     const prefix    = this._prefix(provider);
@@ -214,10 +240,8 @@ class YTUtils extends EventEmitter {
     return true;
   }
 
-  _scoreTrackForAudio(track, provider = "ytm") {
+  _scoreTrackForAudio(track, provider = "ytm", request = null) {
     if (!this._isPlayableTrack(track)) return Number.NEGATIVE_INFINITY;
-
-    if (!this._isAudioPreferredProvider(provider)) return 0;
 
     const info   = track?.info ?? {};
     const title  = String(info.title ?? "").toLowerCase();
@@ -259,55 +283,110 @@ class YTUtils extends EventEmitter {
       /\bfan cam\b/,
     ];
 
-    for (const re of positiveHints) {
-      if (re.test(text)) score += 3;
-    }
-    for (const re of negativeHints) {
-      if (re.test(text)) score -= 4;
+    if (this._isAudioPreferredProvider(provider)) {
+      for (const re of positiveHints) {
+        if (re.test(text)) score += 3;
+      }
+      for (const re of negativeHints) {
+        if (re.test(text)) score -= 4;
+      }
+
+      if (author.endsWith(" - topic") || author.includes("topic")) score += 4;
+      if (uri.includes("music.youtube.com")) score += 3;
+      if (source === "youtube music") score += 3;
     }
 
-    if (author.endsWith(" - topic") || author.includes("topic")) score += 4;
-    if (uri.includes("music.youtube.com")) score += 3;
-    if (source === "youtube music") score += 3;
+    if (request) {
+      const normalizedTitle = normalizeMatchText(info.title);
+      const normalizedAuthor = normalizeMatchText(info.author);
+      const fullText = `${normalizedTitle} ${normalizedAuthor} ${normalizeMatchText(info.uri)} ${normalizeMatchText(info.sourceName)}`.trim();
+
+      if (request.normalizedTitle) {
+        if (normalizedTitle === request.normalizedTitle) score += 30;
+        else if (normalizedTitle.includes(request.normalizedTitle)) score += 18;
+        else score -= 6;
+      }
+
+      if (request.normalizedArtist) {
+        if (normalizedAuthor === request.normalizedArtist) score += 20;
+        else if (normalizedAuthor.includes(request.normalizedArtist)) score += 12;
+        else score -= 8;
+      }
+
+      if (request.queryTokens.length) {
+        const overlap = request.queryTokens.filter(token => fullText.includes(token)).length;
+        score += overlap * 2;
+      }
+
+      if (request.titleTokens.length) {
+        const titleOverlap = request.titleTokens.filter(token => normalizedTitle.includes(token)).length;
+        score += titleOverlap * 4;
+      }
+
+      if (request.artistTokens.length) {
+        const artistOverlap = request.artistTokens.filter(token => normalizedAuthor.includes(token)).length;
+        score += artistOverlap * 5;
+      }
+    }
 
     return score;
   }
 
-  _pickBestTrack(tracks, provider = "ytm") {
+  _pickBestTrack(tracks, provider = "ytm", request = null) {
     const playable = tracks.filter(track => this._isPlayableTrack(track));
     const candidates = playable.length > 0 ? playable : tracks;
     if (!candidates.length) return null;
 
     return candidates
-        .map((track, index) => ({ track, index, score: this._scoreTrackForAudio(track, provider) }))
+        .map((track, index) => ({ track, index, score: this._scoreTrackForAudio(track, provider, request) }))
         .sort((a, b) => b.score - a.score || a.index - b.index)[0]
         ?.track ?? null;
   }
 
-  _rankTracks(tracks, provider = "ytm") {
+  _rankTracks(tracks, provider = "ytm", request = null) {
     const playable = tracks.filter(track => this._isPlayableTrack(track));
     const candidates = playable.length > 0 ? playable : tracks;
 
     return candidates
-        .map((track, index) => ({ track, index, score: this._scoreTrackForAudio(track, provider) }))
+        .map((track, index) => ({ track, index, score: this._scoreTrackForAudio(track, provider, request) }))
         .sort((a, b) => b.score - a.score || a.index - b.index)
         .map(item => item.track);
   }
 
-  async getResults(query, limit = 5, provider = "ytm") {
+  _applyTrackMeta(video, trackMeta = null) {
+    if (!video || !trackMeta) return video;
+
+    return {
+      ...video,
+      artist: trackMeta.artist ?? video.artist ?? null,
+      requestedArtist: trackMeta.artist ?? video.requestedArtist ?? null,
+      requestedTitle: trackMeta.name ?? trackMeta.title ?? video.requestedTitle ?? null,
+      lastfm: {
+        source: trackMeta.source ?? "lastfm",
+        artist: trackMeta.artist ?? null,
+        name: trackMeta.name ?? trackMeta.title ?? null,
+        url: trackMeta.url ?? "",
+      },
+    };
+  }
+
+  async getResults(query, limit = 5, provider = "ytm", trackMeta = null) {
     const id   = this.isValidUrl(query) ? query : this._buildIdentifier(provider, query);
     const data = await loadTracks(id, this._nlGet ?? nlGet);
+    const request = this._buildRequestContext(query, trackMeta);
 
     let tracks = [];
     if      (data.loadType === "search")   tracks = data.data ?? [];
     else if (data.loadType === "track")    tracks = data.data ? [data.data] : [];
     else if (data.loadType === "playlist") tracks = data.data?.tracks ?? [];
 
-    const resultTracks = this._rankTracks(tracks, provider);
-    return { data: resultTracks.slice(0, limit).map(trackToVideo) };
+    const resultTracks = this._rankTracks(tracks, provider, request);
+    return { data: resultTracks.slice(0, limit).map(track => this._applyTrackMeta(trackToVideo(track), trackMeta)) };
   }
 
-  async getVideoData(query, provider = "ytm") {
+  async getVideoData(query, provider = "ytm", trackMeta = null) {
+    const request = this._buildRequestContext(query, trackMeta);
+
     // Handle URLs (including YouTube Radio/Mix)
     if (this.isValidUrl(query)) {
       this.emit("message", "Loading...");
@@ -328,7 +407,7 @@ class YTUtils extends EventEmitter {
 
       // Handle playlist results
       if (data.loadType === "playlist") {
-        const tracks = (data.data?.tracks ?? []).map(trackToVideo);
+        const tracks = (data.data?.tracks ?? []).map(track => this._applyTrackMeta(trackToVideo(track), trackMeta));
         tracks.forEach(t => { t.playlistName = data.data?.info?.name ?? null; });
         this.emit("message", `Successfully added **${tracks.length}** songs to the queue.`);
         return { type: "list", data: tracks };
@@ -336,7 +415,7 @@ class YTUtils extends EventEmitter {
 
       // Handle single track
       if (data.loadType === "track" && data.data) {
-        const video = trackToVideo(data.data);
+        const video = this._applyTrackMeta(trackToVideo(data.data), trackMeta);
         if (!video) return { type: "error", data: "Failed to parse track data." };
         this.emit("message", `Successfully added [${video.title}](${video.url}) to the queue.`);
         return { type: "video", data: video };
@@ -349,8 +428,8 @@ class YTUtils extends EventEmitter {
 
       // Handle search results (take first)
       if (data.loadType === "search" && data.data?.length) {
-        const bestTrack = this._pickBestTrack(data.data, provider) ?? data.data[0];
-        const video = trackToVideo(bestTrack);
+        const bestTrack = this._pickBestTrack(data.data, provider, request) ?? data.data[0];
+        const video = this._applyTrackMeta(trackToVideo(bestTrack), trackMeta);
         this.emit("message", `Successfully added [${video.title}](${video.url}) to the queue.`);
         return { type: "video", data: video };
       }
@@ -373,15 +452,15 @@ class YTUtils extends EventEmitter {
 
     // Handle search results
     if (data.loadType === "search" && data.data?.length) {
-      const trackToUse = this._pickBestTrack(data.data, provider) ?? data.data[0];
-      const video      = trackToVideo(trackToUse);
+      const trackToUse = this._pickBestTrack(data.data, provider, request) ?? data.data[0];
+      const video      = this._applyTrackMeta(trackToVideo(trackToUse), trackMeta);
       this.emit("message", `Successfully added [${video.title}](${video.url}) to the queue.`);
       return { type: "video", data: video };
     }
 
     // Handle playlist from search
     if (data.loadType === "playlist") {
-      const tracks = (data.data?.tracks ?? []).map(trackToVideo);
+      const tracks = (data.data?.tracks ?? []).map(track => this._applyTrackMeta(trackToVideo(track), trackMeta));
       if (tracks.length > 0) {
         this.emit("message", `Successfully added **${tracks.length}** songs to the queue.`);
         return { type: "list", data: tracks };
@@ -390,7 +469,7 @@ class YTUtils extends EventEmitter {
 
     // Single track from search
     if (data.loadType === "track" && data.data) {
-      const video = trackToVideo(data.data);
+      const video = this._applyTrackMeta(trackToVideo(data.data), trackMeta);
       if (!video) return { type: "error", data: "Failed to parse track data." };
       this.emit("message", `Successfully added [${video.title}](${video.url}) to the queue.`);
       return { type: "video", data: video };
@@ -477,10 +556,10 @@ if (workerData?.poolMode) {
       let result;
       switch (jId) {
         case "generalQuery":
-          result = await jobUtils.getVideoData(jData.query, jData.provider);
+          result = await jobUtils.getVideoData(jData.query, jData.provider, jData.trackMeta);
           break;
         case "searchResults":
-          result = await jobUtils.getResults(jData.query, jData.resultCount, jData.provider);
+          result = await jobUtils.getResults(jData.query, jData.resultCount, jData.provider, jData.trackMeta);
           break;
         case "search":
           result = await jobUtils.getVideoData(String(jData), "ytm");
@@ -539,12 +618,12 @@ utils.on("error", (m) => {
   try {
     switch (jobId) {
       case "generalQuery": {
-        const result = await utils.getVideoData(data.query, data.provider);
+        const result = await utils.getVideoData(data.query, data.provider, data.trackMeta);
         post("finished", result);
         break;
       }
       case "searchResults": {
-        const result = await utils.getResults(data.query, data.resultCount, data.provider);
+        const result = await utils.getResults(data.query, data.resultCount, data.provider, data.trackMeta);
         post("finished", result);
         break;
       }

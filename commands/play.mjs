@@ -17,6 +17,31 @@ function parseInlineProvider(raw) {
   return { provider: null, query: raw.trim() };
 }
 
+function parseLastFmTrackQuery(raw) {
+  const value = String(raw ?? "").trim();
+  if (!value) return null;
+
+  const byMatch = value.match(/^(.+?)\s+by\s+(.+)$/i);
+  if (byMatch) {
+    return {
+      artist: byMatch[2].trim(),
+      name: byMatch[1].trim(),
+      source: "lastfm",
+    };
+  }
+
+  const dashMatch = value.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+  if (dashMatch) {
+    return {
+      artist: dashMatch[1].trim(),
+      name: dashMatch[2].trim(),
+      source: "lastfm",
+    };
+  }
+
+  return null;
+}
+
 export const command = new CommandBuilder()
     .setName("play")
     .setId("play")
@@ -76,6 +101,15 @@ export async function run(message, data) {
     }
   }
 
+  const resolvedProvider =
+    provider === "lastfm" || provider === "lf"
+      ? (flagProvider && flagProvider !== "lastfm" && flagProvider !== "lf" ? flagProvider : "yt")
+      : provider;
+  const lastfmTrackMeta =
+    provider === "lastfm" || provider === "lf"
+      ? parseLastFmTrackQuery(query)
+      : null;
+
   const p = await this.getPlayer(message, true, true, true);
   if (!p) return;
 
@@ -91,7 +125,11 @@ export async function run(message, data) {
     // Fluxer API timed out sending the status message — continue without it
   }
 
-  const messages = p.play(query, false, provider);
+  const playQuery = lastfmTrackMeta
+    ? `${lastfmTrackMeta.name} ${lastfmTrackMeta.artist}`.trim()
+    : query;
+
+  const messages = p.play(playQuery, false, resolvedProvider);
   messages.on("message", d => {
     const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
     if (statusMsg) {

@@ -16,6 +16,15 @@ import { logger } from "./constants/Logger.mjs";
 
 const BASE_URL = "https://ws.audioscrobbler.com/2.0/";
 
+function normalizeTrackText(value) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[^\w\s]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 /**
@@ -429,6 +438,71 @@ export class LastFmManager {
   }
 
   /**
+   * Search Last.fm for a freeform track query and return the best match.
+   * Useful for `%play lastfm: kendrick lamar luther` where artist/title
+   * boundaries are ambiguous.
+   *
+   * @param {string} query
+   * @param {number} [limit=10]
+   * @returns {Promise<{ artist: string, name: string, url: string } | null>}
+   */
+  async searchTrack(query, limit = 10) {
+    if (!this.enabled) return null;
+
+    const data = await apiCall(
+      {
+        method: "track.search",
+        api_key: this.apiKey,
+        track: query,
+        limit,
+      },
+      this.apiSecret
+    );
+
+    const matches = data?.results?.trackmatches?.track;
+    const tracks = Array.isArray(matches)
+      ? matches
+      : matches
+        ? [matches]
+        : [];
+
+    if (!tracks.length) return null;
+
+    const normalizedQuery = normalizeTrackText(query);
+    const queryTokens = normalizedQuery.split(" ").filter(Boolean);
+
+    const scored = tracks.map((track, index) => {
+      const artist = String(track.artist ?? "").trim();
+      const name = String(track.name ?? "").trim();
+      const artistNorm = normalizeTrackText(artist);
+      const nameNorm = normalizeTrackText(name);
+      const combined = `${artistNorm} ${nameNorm}`.trim();
+
+      let score = 0;
+      if (combined === normalizedQuery) score += 50;
+      if (combined.includes(normalizedQuery) && normalizedQuery) score += 25;
+      if (normalizedQuery.includes(nameNorm) && nameNorm) score += 15;
+      if (normalizedQuery.includes(artistNorm) && artistNorm) score += 12;
+
+      const overlap = queryTokens.filter(token => combined.includes(token)).length;
+      score += overlap * 4;
+
+      return {
+        index,
+        score,
+        track: {
+          artist,
+          name,
+          url: track.url ?? "",
+        },
+      };
+    });
+
+    scored.sort((a, b) => b.score - a.score || a.index - b.index);
+    return scored[0]?.track ?? null;
+  }
+
+  /**
    * Get the user's Last.fm profile info.
    */
   async getUserInfo(userId) {
@@ -699,7 +773,7 @@ export class LastFmManager {
     return {
       username: user.username,
       tracks: tracks.map(t => ({
-        query:  `${t.artist} ${t.name}`,   // searchable query for YouTube Music
+        query:  this._buildPlayQuery(t.artist, t.name),
         artist: t.artist,
         name:   t.name,
         url:    t.url ?? "",
@@ -877,15 +951,29 @@ export class LastFmManager {
     }).catch(() => {});
   }
 
+  _buildPlayQuery(artist, title) {
+    const cleanArtist = String(artist ?? "").trim();
+    const cleanTitle = String(title ?? "").trim();
+    return [cleanTitle, cleanArtist].filter(Boolean).join(" ");
+  }
+
   _extractArtist(track) {
+    const preservedArtist = track?.lastfm?.artist
+      ?? track?.requestedArtist
+      ?? track?.artist;
+    if (preservedArtist) return preservedArtist;
+
     return track.artists?.[0]?.name
       ?? track.author?.name
-      ?? track.artist
       ?? "Unknown Artist";
   }
 
   _extractTitle(track) {
-    return track.title ?? track.name ?? "Unknown Track";
+    return track?.lastfm?.name
+      ?? track?.requestedTitle
+      ?? track.title
+      ?? track.name
+      ?? "Unknown Track";
   }
 
   _extractDurationSec(track) {
@@ -913,6 +1001,10 @@ export class LastFmManager {
         : null;
 
     if (!durationMs || durationMs < 30_000) return false; // too short
+
+    const normalizedTitle = normalizeTrackText(this._extractTitle(track));
+    const normalizedArtist = normalizeTrackText(this._extractArtist(track));
+    if (!normalizedTitle || !normalizedArtist) return false;
 
     const thresholdMs = Math.min(durationMs * this.scrobbleThreshold, this.scrobbleMinMs);
     return playedMs >= thresholdMs;
