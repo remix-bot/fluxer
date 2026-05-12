@@ -74,43 +74,22 @@ function getUserCount(client) {
 
 function getLivePlayerCount(playerMap) {
   let live = 0;
-  const seenGuilds = new Set();
 
-  for (const [mapKey, player] of playerMap ?? []) {
-    // Skip null / destroyed / leaving entries
+  for (const [, player] of playerMap ?? []) {
     if (!player || player._destroyed || player.leaving) continue;
-
-    // Skip players still in the join() phase — they don't have a voice
-    // connection yet and may fail to connect.
     if (player._isJoining) continue;
 
-    // A player is only "live" if it has an actual voice connection.
-    // Stale entries (gateway disconnect, LiveKit drop) that haven't been
-    // cleaned up yet will have connection = null or a dead room state.
     const conn = player.connection;
-    if (conn) {
-      const room = conn.room;
-      if (room) {
-        // Use @livekit/rtc-node Node.js SDK API:
-        // room.isConnected — boolean getter (true when connected)
-        // room.connectionState — ConnectionState enum (0=disconnected, 1=connected, 2=reconnecting)
-        // room.state does NOT exist in the Node.js SDK (browser-only API)
-        const isConnected = room.isConnected;
-        const connectionState = room.connectionState;
-        // Explicitly dead states → skip
-        if (!isConnected && (connectionState === 0 || connectionState === "disconnected")) continue;
-      }
-      // conn exists but no room → still a valid LiveKit connection reference
-    } else {
-      // No connection at all → not live
-      continue;
+    if (!conn) continue;
+
+    const room = conn.room;
+    if (room) {
+      const isConnected = room.isConnected;
+      const connectionState = room.connectionState;
+      if (!isConnected && (connectionState === 0 || connectionState === "disconnected")) continue;
     }
 
     live++;
-
-    // Also track unique guilds so we can report server count
-    const guildId = String(player._guildId ?? "").replace(/\D/g, "");
-    if (guildId) seenGuilds.add(guildId);
   }
 
   return live;
@@ -175,8 +154,7 @@ export async function run(message) {
     footer:      this.config.customStatsFooter || null,
   };
 
-  // Fetch Last.fm stats in the background (non-blocking for initial reply)
-  // getTotalScrobbles() syncs all linked users' lifetime scrobble counts from Last.fm
+  // Fetch Last.fm stats (non-blocking for initial reply)
   const scrobblePromise = lastfmEnabled ? lastfm.getTotalScrobbles() : Promise.resolve(0);
   const linkedPromise   = lastfmEnabled ? lastfm.getLinkedUsersCount()  : Promise.resolve(0);
 

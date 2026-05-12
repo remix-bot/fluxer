@@ -89,15 +89,10 @@ export class LastFmManager {
     // In-memory user cache: Map<userId, { sessionKey, username, scrobbleEnabled }>
     this._userCache = new Map();
 
-    // In-memory scrobble counter (persisted to MySQL)
-    this._storedScrobbles = 0;
-    this._scrobblesLoaded = false;
-
     // Cache for total synced scrobbles (sum of all users' lifetime scrobble counts)
     this._totalScrobblesCache = null;
     this._totalScrobblesCacheExpiry = 0;
     this._totalScrobblesInflight = null;
-    const TOTAL_SCROBBLES_TTL_MS = 10 * 60 * 1000; // refresh every 10 minutes
 
     if (!this.enabled) {
       logger.settings("[LastFm] Disabled — apiKey or apiSecret missing in config.");
@@ -715,32 +710,6 @@ export class LastFmManager {
   // ── Global stats ────────────────────────────────────────────────────────────
 
   /**
-   * Get the total number of scrobbles the bot has stored (across all users).
-   * Uses an in-memory counter that is lazy-loaded from MySQL on first call.
-   * @returns {Promise<number>}
-   */
-  async getStoredScrobbles() {
-    if (!this.enabled) return 0;
-
-    if (!this._scrobblesLoaded) {
-      try {
-        const pool = await this._getPool();
-        const [rows] = await pool.execute(
-          "SELECT stored_scrobbles FROM lastfm_stats WHERE id = 1"
-        );
-        this._storedScrobbles = Number(rows[0]?.stored_scrobbles ?? 0);
-        this._scrobblesLoaded = true;
-      } catch {
-        // Table might not exist yet — return 0
-        this._storedScrobbles = 0;
-        this._scrobblesLoaded = true;
-      }
-    }
-
-    return this._storedScrobbles;
-  }
-
-  /**
    * Get the total lifetime scrobbles across ALL linked Last.fm users.
    * Syncs each user's scrobble count from the Last.fm API, then sums them up.
    * Results are cached for 10 minutes to avoid hammering the API.
@@ -895,23 +864,16 @@ export class LastFmManager {
   }
 
   /**
-   * Increment the stored scrobbles counter (in-memory + MySQL).
-   * Also increments per-user scrobble_count.
-   * Called after a successful scrobble. Non-blocking — fire-and-forget.
+   * Increment per-user scrobble_count after a successful scrobble.
+   * Non-blocking — fire-and-forget.
    */
   _incrementScrobbleCount(userId) {
-    this._storedScrobbles++;
-    // Persist to MySQL in the background (don't await)
+    if (!userId) return;
     this._getPool().then(pool => {
       pool.execute(
-        "UPDATE lastfm_stats SET stored_scrobbles = stored_scrobbles + 1 WHERE id = 1"
+        "UPDATE lastfm_users SET scrobble_count = scrobble_count + 1 WHERE user_id = ?",
+        [String(userId)]
       ).catch(() => {});
-      if (userId) {
-        pool.execute(
-          "UPDATE lastfm_users SET scrobble_count = scrobble_count + 1 WHERE user_id = ?",
-          [String(userId)]
-        ).catch(() => {});
-      }
     }).catch(() => {});
   }
 
