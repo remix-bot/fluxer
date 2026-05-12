@@ -977,7 +977,7 @@ export class PlayerManager {
           // Only scrobble if the same song is still playing
           const current = player.queue?.getCurrent();
           if (!current || player._destroyed || player.leaving) return;
-          if (current.title !== song.title && current.url !== song.url) return;
+          if (current.title !== song.title || current.url !== song.url) return;
           if (player._paused) return; // don't scrobble if paused
 
           const playedMs = Date.now() - (player.startedPlaying ?? startedAtMs ?? Date.now());
