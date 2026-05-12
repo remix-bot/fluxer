@@ -23,6 +23,22 @@ function cleanId(value) {
   return String(value ?? "").replace(/\D/g, "");
 }
 
+/**
+ * Resolve the guild ID from a player entry.
+ * Uses _guildId if set (populated after join() completes), otherwise falls
+ * back to the client channel cache. This is necessary because in the
+ * multi-voice scenario _guildId can still be null for a freshly-joined player,
+ * which caused guildPlayers to be empty and leave to report "not in voice".
+ */
+function resolvePlayerGuildId(player, mapKey, client) {
+  const direct = cleanId(player?._guildId);
+  if (direct) return direct;
+  const cid = cleanId(player?._channelId ?? mapKey);
+  if (!cid) return "";
+  const ch = client?.channels?.get?.(cid);
+  return cleanId(ch?.guildId ?? ch?.guild?.id ?? ch?.server_id ?? ch?.serverId);
+}
+
 export async function run(msg, data) {
   const guildId = msg.channel?.guild?.id
       ?? msg.channel?.guildId
@@ -33,10 +49,15 @@ export async function run(msg, data) {
       ?? msg.message?.serverId;
   const cleanGuildId = cleanId(guildId);
 
-  // Gather all active players in this guild
-  const guildPlayers = [...this.players.playerMap.entries()].filter(([, p]) =>
-    cleanId(p?._guildId) === cleanGuildId && !p?._destroyed
-  );
+  // Gather all active players in this guild.
+  // resolvePlayerGuildId handles players whose _guildId is still null by
+  // checking the channel cache — critical for the multi-voice use case where
+  // a player may have been joined before _guildId was written.
+  const client = this.client;
+  const guildPlayers = [...this.players.playerMap.entries()].filter(([mapKey, p]) => {
+    if (p?._destroyed) return false;
+    return resolvePlayerGuildId(p, mapKey, client) === cleanGuildId;
+  });
 
   // Resolve the target channel to leave:
   // 1. If a channel option was provided, use that
@@ -56,9 +77,9 @@ export async function run(msg, data) {
     if (guildPlayers.length === 0) {
       return msg.reply(embed(this.t(msg, "responses.leave.notInVoice")));
     }
-    // User not in voice — list the channels the bot is in
-    const channelList = guildPlayers.map(([, p]) => {
-      const id = cleanId(p._channelId);
+    // User not in voice and no channel specified — list all channels the bot is in
+    const channelList = guildPlayers.map(([mapKey, p]) => {
+      const id = cleanId(p._channelId ?? mapKey);
       return id ? `<#${id}>` : "`unknown`";
     });
     return msg.reply(embed(
@@ -69,9 +90,14 @@ export async function run(msg, data) {
     ));
   }
 
-  // Find the player for the target channel
+  // Find the player for the target channel.
+  // Match against both the map key and _channelId because after a voice-move
+  // these can differ (the map key stays as the original join channel ID while
+  // _channelId updates to the new channel).
   const player = this.players.playerMap.get(targetChannelId)
-      ?? guildPlayers.find(([, p]) => cleanId(p._channelId) === targetChannelId)?.[1]
+      ?? guildPlayers.find(([mapKey, p]) =>
+          cleanId(p._channelId) === targetChannelId || cleanId(mapKey) === targetChannelId
+      )?.[1]
       ?? null;
 
   if (!player) {
@@ -79,8 +105,8 @@ export async function run(msg, data) {
     if (guildPlayers.length === 0) {
       return msg.reply(embed(this.t(msg, "responses.leave.notInVoice")));
     }
-    const channelList = guildPlayers.map(([, p]) => {
-      const id = cleanId(p._channelId);
+    const channelList = guildPlayers.map(([mapKey, p]) => {
+      const id = cleanId(p._channelId ?? mapKey);
       return id ? `<#${id}>` : "`unknown`";
     });
     return msg.reply(embed(
