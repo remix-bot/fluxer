@@ -52,6 +52,7 @@ let VALID_LOCALES = new Set(["en"]);
 /** Volume constraints */
 const VOLUME_MIN = 1;
 const VOLUME_MAX = 200;
+const MAX_247_CHANNELS = 10;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -497,66 +498,19 @@ async function handle247(ctx, message, value) {
     ));
   }
 
-  // Save the user's channel
-  const id           = cleanId(userChannelId);
-  const channels     = get247Channels(set);
-  const cleanGuildId = cleanId(guildId);
+  // Save only the channel the user explicitly toggled.
+  // Multi-voice 24/7 should be opt-in per voice channel, not "whatever
+  // channels the bot currently happens to be in".
+  const id       = cleanId(userChannelId);
+  const channels = get247Channels(set);
+  if (!channels.has(id) && channels.size >= MAX_247_CHANNELS) {
+    return message.reply(embed(
+        `You can save up to ${MAX_247_CHANNELS} 24/7 voice channels in one server. ` +
+        `Use \`${set.get("prefix") ?? "%"}247 off\` in one of the saved channels first.`
+    ));
+  }
   channels.add(id);
   set247ChannelMode(set, id, resolved);
-
-  // Also save ALL other channels the bot is already in within this guild.
-  // We check two sources: playerMap (active players) and guild voice states
-  // (raw connections that might not have a player object yet).
-  const botId = ctx.client?.user?.id ? cleanId(ctx.client.user.id) : null;
-
-  // Source 1: playerMap — channels with active Player objects
-  for (const [chId, player] of ctx.players.playerMap.entries()) {
-    if (!player || player._destroyed) continue;
-    const pGuildId   = cleanId(player._guildId ?? "");
-    const pChannelId = cleanId(player._channelId ?? chId);
-    if (pGuildId === cleanGuildId && pChannelId && !channels.has(pChannelId)) {
-      channels.add(pChannelId);
-      set247ChannelMode(set, pChannelId, resolved);
-    }
-  }
-
-  // Source 2: guild voice_states — catches channels the bot is connected to
-  // even if the playerMap entry is missing or keyed differently.
-  try {
-    const guild = ctx.client?.guilds?.get?.(guildId)
-        ?? ctx.client?.guilds?.get?.(cleanGuildId);
-    const voiceStates = guild?.voice_states ?? guild?.voiceStates ?? null;
-    if (voiceStates && botId) {
-      const entries = Array.isArray(voiceStates)
-        ? voiceStates
-        : typeof voiceStates.values === "function"
-          ? [...voiceStates.values()]
-          : Object.values(voiceStates);
-      for (const state of entries) {
-        const stateUserId    = cleanId(state?.userId ?? state?.user_id ?? state?.id);
-        const stateChannelId = cleanId(state?.channelId ?? state?.channel_id);
-        if (stateUserId === botId && stateChannelId && !channels.has(stateChannelId)) {
-          channels.add(stateChannelId);
-          set247ChannelMode(set, stateChannelId, resolved);
-        }
-      }
-    }
-  } catch (_) {}
-
-  // Source 3: observedVoiceBots — the bot's tracked voice connections
-  try {
-    if (ctx.observedVoiceBots && botId) {
-      for (const [, info] of ctx.observedVoiceBots) {
-        if (cleanId(info?.guildId) === cleanGuildId) {
-          const botChannelId = cleanId(info?.channelId);
-          if (botChannelId && !channels.has(botChannelId)) {
-            channels.add(botChannelId);
-            set247ChannelMode(set, botChannelId, resolved);
-          }
-        }
-      }
-    }
-  } catch (_) {}
 
   save247Channels(set, channels);
 

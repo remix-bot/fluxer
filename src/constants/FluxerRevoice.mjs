@@ -113,25 +113,29 @@ export class FluxerVoiceConnection extends EventEmitter {
     // handler knows not to trigger recovery
     if (this._voice && this.channelId) {
       this._voice.markIntentionalDisconnect(this.channelId);
+      // Prefer a channel-scoped gateway leave before tearing down the room.
+      // The native disconnect path can be guild-scoped in some environments,
+      // which drops every voice connection in the guild.
+      const guildId = this._voice._resolveGuildForChannel?.(this.channelId) ?? null;
+      this._voice._leaveGateway?.(this.channelId, guildId);
     }
     this._destroyed = true;
     this._connected = false;
 
-    // Method 1: Use @fluxerjs/voice native connection disconnect
-    if (this._nativeConn && typeof this._nativeConn.disconnect === "function") {
-      try {
-        await this._nativeConn.disconnect();
-      } catch (e) {
-        logger.warn("[FluxerVoiceConnection] Native disconnect error:", e?.message);
-      }
-    }
-
-    // Method 2: Close LiveKit Room directly as fallback
+    // Close the LiveKit room directly after sending the leave signal.
+    // This keeps the disconnect scoped to the target channel.
     if (this.room) {
       try {
         await this.room.disconnect();
       } catch (e) {
         // Room may already be closed
+      }
+    } else if (this._nativeConn && typeof this._nativeConn.disconnect === "function") {
+      // Fallback only when no room object is available.
+      try {
+        await this._nativeConn.disconnect();
+      } catch (e) {
+        logger.warn("[FluxerVoiceConnection] Native disconnect error:", e?.message);
       }
     }
 
@@ -363,9 +367,17 @@ export class FluxerRevoice extends EventEmitter {
     this.connections.delete(channelId);
     // Mark as intentional so the LiveKit disconnect handler doesn't trigger recovery
     this.markIntentionalDisconnect(channelId);
+    const staleGuildId = this._resolveGuildForChannel(channelId);
+    this._leaveGateway(channelId, staleGuildId);
 
-    // 2. Disconnect the native @fluxerjs/voice connection (sends gateway leave)
-    if (existing._nativeConn && typeof existing._nativeConn.disconnect === "function") {
+    // 2. Close the LiveKit Room directly
+    if (existing.room) {
+      try {
+        await existing.room.disconnect();
+      } catch (_) {
+        // Room may already be closed
+      }
+    } else if (existing._nativeConn && typeof existing._nativeConn.disconnect === "function") {
       try {
         await existing._nativeConn.disconnect();
       } catch (e) {
@@ -373,28 +385,12 @@ export class FluxerRevoice extends EventEmitter {
       }
     }
 
-    // 3. Close the LiveKit Room directly
-    if (existing.room) {
-      try {
-        await existing.room.disconnect();
-      } catch (_) {
-        // Room may already be closed
-      }
-    }
-
-    // 4. Mark as destroyed and clean up listeners
+    // 3. Mark as destroyed and clean up listeners
     existing._destroyed = true;
     existing._connected = false;
     try { existing.removeAllListeners(); } catch (_) {}
 
-    // 5. Send an explicit gateway leave signal so the gateway knows we left.
-    //    This is critical: if the gateway still thinks we're in the channel,
-    //    the next joinVoiceChannel() won't receive VOICE_SERVER_UPDATE and
-    //    the rejoin will fail.
-    const staleGuildId = this._resolveGuildForChannel(channelId);
-    this._leaveGateway(channelId, staleGuildId);
-
-    // 6. Brief delay to let the gateway process the leave before we rejoin.
+    // 4. Brief delay to let the gateway process the leave before we rejoin.
     //    Increased from 1500ms to 2000ms to give the Erlang gateway backend
     //    more time to clean up the previous voice session.
     await new Promise(r => setTimeout(r, 2000));
@@ -687,15 +683,16 @@ export class FluxerRevoice extends EventEmitter {
       // connection instead of returning this dead one.
       this.connections.delete(channelId);
 
-      // Send gateway leave signal so the gateway knows we're gone.
-      // Without this, the gateway may still think the bot is in the channel
-      // and won't send a fresh VOICE_SERVER_UPDATE on rejoin.
-      this._leaveGateway(channelId, channelGuildId);
+      if (!isIntentional) {
+        // Unexpected disconnects still need a gateway leave signal so the
+        // next join gets a fresh voice session.
+        this._leaveGateway(channelId, channelGuildId);
 
-      // Try to disconnect the native @fluxerjs/voice connection as well,
-      // in case it still has resources open.
-      if (nativeConnection && typeof nativeConnection.disconnect === "function") {
-        try { nativeConnection.disconnect(); } catch (_) {}
+        // Best-effort cleanup for the native wrapper. Skip this on intentional
+        // leaves because it can collapse multi-voice into a guild-wide leave.
+        if (nativeConnection && typeof nativeConnection.disconnect === "function") {
+          try { nativeConnection.disconnect(); } catch (_) {}
+        }
       }
 
       connection.emit("disconnect");

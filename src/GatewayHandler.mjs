@@ -974,8 +974,41 @@ export class GatewayHandler {
         // multi-voice guilds, which broke recovery for all channels.
         const cleanId  = String(channelId).replace(/\D/g, "");
         const cleanOld = String(oldChannelId).replace(/\D/g, "");
+        const moveSet = remix.settingsMgr.getServer(guildId);
+        const moveRaw = moveSet?.get("stay_247");
+        const saved247Channels = (!moveRaw || moveRaw === "none")
+            ? []
+            : Array.isArray(moveRaw)
+                ? moveRaw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15)
+                : [String(moveRaw).replace(/\D/g, "")].filter(id => id.length >= 15);
+
+        if (saved247Channels.length > 1) {
+          logger.voice247(
+            `[247] Ignoring move-style bot voice update ${cleanOld} → ${cleanId} ` +
+            `because guild ${guildId} already has multiple saved 24/7 channels ` +
+            `[${saved247Channels.join(", ")}]`
+          );
+          return;
+        }
 
         const existingPlayer = remix.players.playerMap.get(cleanOld);
+        const newChannelAlreadySaved = (() => {
+          try {
+            const set = remix.settingsMgr.getServer(guildId);
+            const raw = set?.get("stay_247");
+            if (!raw || raw === "none") return false;
+            const saved = Array.isArray(raw)
+                ? raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15)
+                : [String(raw).replace(/\D/g, "")].filter(id => id.length >= 15);
+            return saved.includes(cleanId);
+          } catch (_) {
+            return false;
+          }
+        })();
+        const newChannelPendingSpawn =
+            this.recoveryManager?.pendingSpawns?.has?.(cleanId) ||
+            remix.players?._pendingJoins?.has?.(cleanId) ||
+            false;
         const targetChannel = client.channels.get(cleanId)
           ?? client.channels.get?.(cleanId)
           ?? null;
@@ -988,6 +1021,17 @@ export class GatewayHandler {
 
         let rekeyed = false;
         if (existingPlayer && cleanId !== cleanOld) {
+          if (newChannelAlreadySaved || newChannelPendingSpawn) {
+            // Multi-voice case: joining/spawning another channel in the same
+            // guild can look like a move event for the bot user. In that
+            // situation we must NOT re-key the old player or rewrite stay_247,
+            // otherwise one saved channel gets collapsed into the newer one.
+            logger.voice247(
+              `[247] Keeping both channels ${cleanOld} and ${cleanId} ` +
+              `(saved=${newChannelAlreadySaved} pending=${newChannelPendingSpawn})`
+            );
+            rekeyed = false;
+          } else
           if (guildIsAmbiguous) {
             // Multi-voice guild: we need to re-key the playerMap so that
             // lookups by the new channelId work. First check that no OTHER
@@ -1077,6 +1121,13 @@ export class GatewayHandler {
               ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15))
               : new Set();
           if (channels.has(cleanOld) && cleanOld !== cleanId && cleanId.length >= 15) {
+            if (channels.has(cleanId) || newChannelAlreadySaved || newChannelPendingSpawn) {
+              logger.voice247(
+                `[247] Preserved stay_247 channels ${cleanOld} and ${cleanId} ` +
+                `(saved=${channels.has(cleanId) || newChannelAlreadySaved} pending=${newChannelPendingSpawn})`
+              );
+              return;
+            }
             // Replace the old channel with the new one in stay_247.
             // Previously this kept BOTH channels, causing unbounded growth
             // in the stay_247 list (e.g. guild 1480202154270605526 ended up

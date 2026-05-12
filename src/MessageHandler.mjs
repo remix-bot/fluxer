@@ -500,7 +500,15 @@ export class Channel {
    * @returns {Function}
    */
   onMessageUser(callback, user) {
-    const oid = this.handler.observeUserMessagesChannel(user.id, this.channel, callback);
+    const resolvedUserId = user?.id
+        ?? user?._id
+        ?? user?.user?.id
+        ?? null;
+    const resolvedChannel = this.channel ?? null;
+    if (!resolvedUserId || !resolvedChannel?.id) {
+      return () => {};
+    }
+    const oid = this.handler.observeUserMessagesChannel(resolvedUserId, resolvedChannel, callback);
     return () => {
       this.handler.unobserveUserMessagesChannel(oid);
     };

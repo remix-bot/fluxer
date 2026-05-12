@@ -622,6 +622,7 @@ export class PlayerManager {
     return new Promise(resolve => {
       let unsubscribeReactions;
       let unsubscribeMessages;
+      const promptUser = msg.author ?? msg.message?.author ?? null;
 
       const cleanup = () => {
         unsubscribeMessages?.();
@@ -646,7 +647,7 @@ export class PlayerManager {
               const cid = channel._id ?? channel.id;
               this.initPlayer(msg, cid, (p) => resolve(p));
             },
-            msg.author
+            promptUser
         );
       }
 
@@ -667,7 +668,7 @@ export class PlayerManager {
         clearTimeout(timeout);
         cleanup();
         this.initPlayer(m, channel, (p) => resolve(p));
-      }, msg.author);
+      }, promptUser);
     });
   }
 
