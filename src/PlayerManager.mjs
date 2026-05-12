@@ -508,6 +508,13 @@ export class PlayerManager {
           );
       if (player) {
         player.textChannel = message.channel;
+        try {
+          const guildId = getMessageGuildId(message);
+          const textChannelId = message?.channel?.id ?? message?.channel?.channel?.id ?? null;
+          if (guildId && textChannelId) {
+            this.settings.getServer(guildId)?.set("announcementChannelId", textChannelId);
+          }
+        } catch (_) {}
         return player;
       }
       // Also check if a join is in-progress for this channel
@@ -542,6 +549,12 @@ export class PlayerManager {
       );
       if (match) {
         match[1].textChannel = message.channel;
+        try {
+          const textChannelId = message?.channel?.id ?? message?.channel?.channel?.id ?? null;
+          if (cleanGuildId && textChannelId) {
+            this.settings.getServer(cleanGuildId)?.set("announcementChannelId", textChannelId);
+          }
+        } catch (_) {}
         return match[1];
       }
 

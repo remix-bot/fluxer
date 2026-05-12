@@ -351,7 +351,10 @@ export class RecoveryManager {
         const cachedChId = remix._announcementChannelCache.get(guildId)
             ?? serverSet.get("announcementChannelId")
             ?? null;
-        let ch = cachedChId ? guild?.channels?.get(String(cachedChId)) : null;
+        let ch = p.textChannel?.channel ?? p.textChannel ?? null;
+        if (typeof ch?.send !== "function") {
+          ch = cachedChId ? guild?.channels?.get(String(cachedChId)) : null;
+        }
         if (cachedChId && !ch) {
           remix._announcementChannelCache.delete(guildId);
         }
@@ -367,7 +370,12 @@ export class RecoveryManager {
             }
           }
         }
-        if (typeof ch?.send === "function") ch.send({ embeds: [{ description: String(m), color: getGlobalColor() }] }).catch(() => {});
+        if (typeof ch?.send === "function") {
+          const payload = (typeof m === "object" && Array.isArray(m?.embeds))
+              ? m
+              : { embeds: [{ description: String(m), color: getGlobalColor() }] };
+          ch.send(payload).catch(() => {});
+        }
       });
 
       // ── Join channel ───────────────────────────────────────────────────────
