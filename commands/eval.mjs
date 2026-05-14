@@ -81,7 +81,7 @@ async function clean(value) {
 
   let output;
   try {
-    output = typeof value === "string" ? value : inspect(value, { depth: 1, compact: false });
+    output = typeof value === "string" ? value : inspect(value, { depth: 4, compact: false, maxArrayLength: 50, maxStringLength: 500, breakLength: 80 });
   } catch (err) {
     output = `[Inspection Error]: ${err.message}`;
   }
@@ -89,6 +89,34 @@ async function clean(value) {
   return output
       .replace(/`/g, "`\u200b")
       .replace(/@/g, "@\u200b") || "undefined"; // Fallback if output is empty
+}
+
+function isSingleExpression(code) {
+  const trimmed = code.trim();
+
+  // Empty code
+  if (!trimmed) return false;
+
+  // Block statements — user is writing a full function body
+  if (/^(if|for|while|do|switch|try|catch|finally|with)\s*[\({]/.test(trimmed)) return false;
+
+  // Declarations — always multi-statement style
+  if (/^\s*(const|let|var|function\s|class\s)/.test(trimmed)) return false;
+
+  // Contains semicolons that look like statement separators (but not inside strings)
+  // Strip string literals to avoid false positives from semicolons inside strings
+  const stripped = trimmed
+      .replace(/'(?:[^'\\]|\\.)*'/g, '""')   // single-quoted strings
+      .replace(/"(?:[^"\\]|\\.)*"/g, '""')    // double-quoted strings
+      .replace(/`(?:[^`\\]|\\.)*`/g, '""');   // template literals (simplified)
+  if (stripped.includes(";")) return false;
+
+  // Contains newlines that suggest multiple statements
+  // (but allow multi-line method chains like `.foo()\n.bar()`)
+  const withoutChains = trimmed.replace(/\.\s*\n/g, ".");
+  if (withoutChains.includes("\n")) return false;
+
+  return true;
 }
 
 /**
@@ -100,7 +128,13 @@ async function runEval(expression, context) {
   let result, isError = false, type = "undefined";
 
   try {
-    result = await eval(`(async function() { ${expression} })`).call(context);
+    // Auto-return single expressions so users don't need to write `return`
+    const code = isSingleExpression(expression)
+        ? `return (${expression});`
+        : expression;
+
+    // Use eval() — runs in module scope so `this` is the context passed via .call()
+    result = await eval(`(async function() { ${code} })`).call(context);
     type = result === null ? "null" : typeof result;
   } catch (e) {
     result = e;
@@ -127,7 +161,28 @@ export const command = new CommandBuilder()
 
 export async function run(msg, data) {
   const expression = data.get("expression").value;
-  const context = Object.assign({ message: msg }, this);
+
+  // Build a rich context with shorthand variables so eval can access
+  // everything easily via `this`. `this` = Remix instance merged with
+  // the extra shortcuts below.
+  //   this.client   → Fluxer Client
+  //   this.guilds   → this.client.guilds
+  //   this.channels → this.client.channels
+  //   this.users    → this.client.users
+  //   this.players  → PlayerManager
+  //   this.settings → SettingsManager
+  //   this.msg      → the Message wrapper
+  //   this.message  → the raw fluxer message object
+  const context = Object.assign({
+    message: msg?.message,
+    msg,
+    // Shorthand aliases for convenience
+    guilds:   this.client?.guilds,
+    channels: this.client?.channels,
+    users:    this.client?.users,
+    players:  this.players,
+    settings: this.settingsMgr,
+  }, this);
 
   // 1. Run the evaluation
   const { output, isError, type, elapsed } = await runEval(expression, context);
@@ -165,7 +220,7 @@ export async function run(msg, data) {
         .setTitle(title)
         .setDescription(desc)
         .setFooter({ text: footerText })
-        ;
+    ;
 
     return { embeds: [embed] };
   };
