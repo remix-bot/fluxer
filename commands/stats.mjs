@@ -25,10 +25,6 @@ function withTimeout(promise, ms, fallback) {
   ]);
 }
 
-function computeGuildCount(client) {
-  return client.guilds?.size ?? 0;
-}
-
 function computeUserCount(client) {
   let total = 0;
   for (const [, guild] of client.guilds ?? []) {
@@ -37,16 +33,64 @@ function computeUserCount(client) {
   return total;
 }
 
+async function fetchAccurateGuildCount(client) {
+  if (typeof client.fetchTotalGuildCount === "function") {
+    try {
+      const count = await withTimeout(client.fetchTotalGuildCount(), 1_200, null);
+      if (typeof count === "number" && count >= 0) return count;
+    } catch (_) {}
+  }
+
+  if (typeof client.fetchAllStats === "function") {
+    try {
+      const stats = await withTimeout(client.fetchAllStats(), 1_500, null);
+      if (typeof stats?.guilds === "number" && stats.guilds >= 0) return stats.guilds;
+    } catch (_) {}
+  }
+
+  if (client.rest && typeof client.rest.get === "function") {
+    try {
+      let total = 0;
+      let after = undefined;
+      for (let page = 0; page < 25; page++) {
+        const route = `/users/@me/guilds?limit=200${after ? `&after=${after}` : ""}`;
+        const response = await withTimeout(client.rest.get(route), 800, null);
+        if (!response) break;
+        const batch = Array.isArray(response) ? response : (response?.guilds ?? []);
+        total += batch.length;
+        if (batch.length < 200) break;
+        after = batch[batch.length - 1]?.id;
+        if (!after) break;
+      }
+      if (total > 0) return total;
+    } catch (_) {}
+  }
+
+  return client.guilds?.size ?? 0;
+}
+
+async function fetchAccurateUserCount(client) {
+  if (typeof client.fetchAllStats === "function") {
+    try {
+      const stats = await withTimeout(client.fetchAllStats(), 1_500, null);
+      if (typeof stats?.users === "number" && stats.users >= 0) return stats.users;
+      if (typeof stats?.members === "number" && stats.members >= 0) return stats.members;
+    } catch (_) {}
+  }
+
+  return computeUserCount(client);
+}
+
 async function refreshStats(client) {
   try {
     cachedStats = {
-      guildCount: computeGuildCount(client),
-      userCount: computeUserCount(client),
+      guildCount: await fetchAccurateGuildCount(client),
+      userCount: await fetchAccurateUserCount(client),
     };
   } catch {
     cachedStats = {
       guildCount: client.guilds?.size ?? 0,
-      userCount: 0,
+      userCount: computeUserCount(client),
     };
   }
 
@@ -152,7 +196,7 @@ export async function run(message) {
   const lastfmSnapshot = getLastfmSnapshot(lastfm);
 
   const shared = {
-    guildCount: computeGuildCount(this.client),
+    guildCount: this.client.guilds?.size ?? 0,
     playerCount: getLivePlayerCount(this.players.playerMap),
     scrobbleCount: lastfmSnapshot.scrobbleCount,
     linkedUsers: lastfmSnapshot.linkedUsers,
@@ -172,7 +216,7 @@ export async function run(message) {
   const scrobblePromise = lastfmEnabled
     ? withTimeout(
         lastfm.getStoredTotalScrobbles?.() ?? Promise.resolve(lastfmSnapshot.scrobbleCount),
-        FAST_WAIT_MS,
+        3_000,
         lastfmSnapshot.scrobbleCount
       )
     : Promise.resolve(0);
