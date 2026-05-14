@@ -15,11 +15,9 @@ import mysql from "mysql2";
 export class GatewayHandler {
   /**
    * @param {import('../../index.mjs').Remix} remix          The running bot instance.
-   * @param {import('./RecoveryManager.mjs').RecoveryManager} recoveryManager  For scheduleSpawn / 24/7 auto-join.
    */
-  constructor(remix, recoveryManager) {
+  constructor(remix) {
     this.remix = remix;
-    this.recoveryManager = recoveryManager;
 
     // ── Timers config (kept local — derived from remix.config) ───────────────
     const timers = remix.config.timers ?? {};
@@ -40,25 +38,6 @@ export class GatewayHandler {
     // ── Previous voice state per-user (for detecting channel moves) ───────────
     /** @type {Map<string, {channelId, guildId}>} guildId:userId → state */
     this._prevVoiceState = new Map();
-
-    // ── Recent join tracker (for detecting channel moves during recovery) ────
-    // When the bot joins a new channel via recovery/spawn, the gateway sends
-    // a VOICE_STATE_UPDATE with channel_id=null for the old channel. Without
-    // tracking recent joins, this looks like a real disconnect and triggers
-    // a recovery loop. By tracking recent joins, we can distinguish between
-    // a real disconnect and a channel-move side effect.
-    /** @type {Map<string, number>} guildId → timestamp of last bot voice join */
-    this._recentBotJoins = new Map();
-    /** @type {number} Window in ms during which a bot disconnect is considered
-     *  a move side-effect rather than a real disconnect. */
-    this._moveDetectionWindow = 10_000;
-
-    // ── Gateway disconnect cooldown ──────────────────────────────────────────
-    // After the gateway force-disconnects the bot, don't attempt recovery
-    // for this guild until the cooldown expires. This prevents the cascade
-    // where recovery rejoins → gateway disconnects again → recovery again.
-    /** @type {Map<string, number>} guildId → timestamp when cooldown expires */
-    this._gatewayDisconnectCooldown = new Map();
 
     // ── Startup GuildDelete deferral ───────────────────────────────────────
     // Fluxer's GUILD_DELETE does NOT expose the `unavailable` flag, so we
@@ -726,37 +705,6 @@ export class GatewayHandler {
         }
       }
 
-      // Part 3: 24/7 auto-join for late-arriving guilds
-      // If tryAutoJoin() has already completed (meaning this GUILD_CREATE
-      // arrived after the initial recovery sweep), check whether this guild
-      // has 24/7 channels that need a player.  This handles the race where
-      // the guild cache wasn't populated when tryAutoJoin() built its join
-      // list, causing those channels to be skipped.
-      if (this.recoveryManager._autoJoinDone) {
-        try {
-          const set  = remix.settingsMgr.getServer(guildId);
-          if (set) {
-            const raw  = set.get("stay_247");
-            if (raw && raw !== "none") {
-              const channels = Array.isArray(raw)
-                  ? raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15)
-                  : [String(raw).replace(/\D/g, "")].filter(id => id.length >= 15);
-              for (const chId of channels) {
-                // Per-channel mode: only spawn if this channel is on/auto
-                const mode = get247ChannelMode(set, chId);
-                if (mode !== "on" && mode !== "auto") continue;
-                // Only spawn if there isn't already a player for this channel
-                if (!remix.players.playerMap.has(chId) && !this.recoveryManager.pendingSpawns.has(chId)) {
-                  logger.voice247(
-                    `[GuildCreate] Late-arriving guild ${guildId} — scheduling 24/7 spawn for channel ${chId} (mode ${mode})`
-                  );
-                  this.recoveryManager.scheduleSpawn(guildId, chId, this.T.rejoin247Delay, "guild-create-247");
-                }
-              }
-            }
-          }
-        } catch (_) {}
-      }
     });
 
     // ── GUILD_DELETE ────────────────────────────────────────────────────────
@@ -956,11 +904,6 @@ export class GatewayHandler {
 
     // ── Bot-only logic below ───────────────────────────────────────────────
 
-    // Track recent bot joins to distinguish real disconnects from move side-effects
-    if (channelId && guildId) {
-      this._recentBotJoins.set(String(guildId).replace(/\D/g, ""), Date.now());
-    }
-
     const activeGuildPlayers = [...remix.players.playerMap.entries()].filter(([, player]) =>
       String(player?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
     );
@@ -1006,7 +949,6 @@ export class GatewayHandler {
           }
         })();
         const newChannelPendingSpawn =
-            this.recoveryManager?.pendingSpawns?.has?.(cleanId) ||
             remix.players?._pendingJoins?.has?.(cleanId) ||
             false;
         const targetChannel = client.channels.get(cleanId)
@@ -1155,160 +1097,21 @@ export class GatewayHandler {
       }
     }
 
-    // Bot disconnected unexpectedly — rejoin if 247 active
+    // Bot disconnected unexpectedly — emit autoleave on the player
     if (!channelId && oldChannelId && guildId) {
       try {
         const cleanOld = String(oldChannelId).replace(/\D/g, "");
-        const cleanGuild = String(guildId).replace(/\D/g, "");
         if (remix.intentionalLeaves.has(cleanOld)) {
-          logger.voice247(`[247] Skipping rejoin for ${cleanOld} — intentional leave.`);
+          logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — intentional leave.`);
         } else {
-          // Check if the bot is still in another voice channel in this guild.
-          // During multi-voice recovery, the bot may be moved from one channel
-          // to another, which triggers a disconnect event for the old channel.
-          // This is NOT a real disconnect — it's a side effect of joining a
-          // new channel in the same guild. Skip recovery in this case to
-          // prevent the recovery loop (Bug #5).
-          const botInOtherChannel = [...remix.players.playerMap.entries()].some(([mapKey, p]) => {
-            if (String(p?._guildId ?? "").replace(/\D/g, "") !== String(guildId ?? "").replace(/\D/g, "")) return false;
-            const pChannel = String(p?._channelId ?? mapKey).replace(/\D/g, "");
-            return pChannel !== cleanOld && !p.leaving && !p._destroyed;
-          });
-
-          // Also check if there was a recent bot join in this guild — if so,
-          // the disconnect is likely a side-effect of the channel move, not a
-          // real disconnect that needs recovery.
-          // IMPORTANT: We also verify that the bot is in another channel in
-          // THIS SAME guild. Cross-guild joins should NOT suppress recovery
-          // for this guild's disconnect — that was causing guilds to lose
-          // their 24/7 player silently when a different guild joined nearby.
-          const recentJoin = this._recentBotJoins.get(cleanGuild) ?? 0;
-          const timeSinceJoin = Date.now() - recentJoin;
-          const isLikelyMoveSideEffect = timeSinceJoin < this._moveDetectionWindow && botInOtherChannel;
-
-          // Also check if there are pending spawns for this guild — if a
-          // spawnPlayer is in progress, the disconnect is expected.
-          // pendingSpawns is a Set<string> (channel IDs), not a Map — we
-          // cross-reference with scheduledSpawns to check the guild.
-          const hasPendingSpawn = (() => {
-            for (const chId of this.recoveryManager.pendingSpawns) {
-              const entry = this.recoveryManager.scheduledSpawns.get(chId);
-              if (entry && String(entry.guildId).replace(/\D/g, "") === cleanGuild) return true;
-            }
-            for (const [, entry] of this.recoveryManager.scheduledSpawns) {
-              if (String(entry.guildId).replace(/\D/g, "") === cleanGuild) return true;
-            }
-            return false;
-          })();
-
-          // Check gateway disconnect cooldown — if the gateway recently
-          // force-disconnected us, don't attempt recovery again immediately.
-          const cooldownExpiry = this._gatewayDisconnectCooldown.get(cleanGuild) ?? 0;
-          const inCooldown = Date.now() < cooldownExpiry;
-
-          if (inCooldown) {
-            logger.voice247(
-              `[247] Skipping recovery for ${cleanOld} in guild ${guildId} — ` +
-              `gateway disconnect cooldown active (${Math.ceil((cooldownExpiry - Date.now()) / 1000)}s remaining).`
-            );
-          } else if (botInOtherChannel || (isLikelyMoveSideEffect && !hasPendingSpawn)) {
-            const reason = botInOtherChannel ? "bot in other channel" : `recent join ${timeSinceJoin}ms ago (move side-effect)`;
-            logger.voice247(
-              `[247] Bot disconnected from ${cleanOld} but ${reason} ` +
-              `in guild ${guildId} — skipping recovery (likely a channel move).`
-            );
-            // Clean up the old player entry if it wasn't already removed
-            const oldPlayer = remix.players.playerMap.get(cleanOld);
-            if (oldPlayer && !oldPlayer._destroyed) {
-              remix.players.playerMap.delete(cleanOld);
-              try { oldPlayer.destroy(); } catch (_) {}
-            }
-          } else if (hasPendingSpawn) {
-            logger.voice247(
-              `[247] Bot disconnected from ${cleanOld} in guild ${guildId} — ` +
-              `pending spawn in progress, skipping recovery to avoid race.`
-            );
-          } else {
-            const set = remix.settingsMgr.getServer(guildId);
-            if (!set) {
-              logger.voice247(
-                `[247] Skipping recovery for ${cleanOld} in guild ${guildId} — ` +
-                `settings not loaded yet (race with GuildCreate).`
-              );
-              return;
-            }
-            const raw = set.get("stay_247");
-            if (raw && raw !== "none") {
-              const channels = Array.isArray(raw)
-                  ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15))
-                  : new Set();
-              if (channels.has(cleanOld)) {
-                // Per-channel mode: check the mode for this specific channel
-                const mode = get247ChannelMode(set, cleanOld);
-                if (mode === "on" || mode === "auto") {
-                  // Check persistent 401 ban — if this guild was recently
-                  // 401-banned, don't attempt recovery (it will fail).
-                  const banExpiry = this.recoveryManager._guild401Ban?.get(cleanGuild) ?? 0;
-                  if (banExpiry > Date.now()) {
-                    logger.voice247(
-                      `[247] Skipping recovery for ${cleanOld} in guild ${guildId} — ` +
-                      `guild is 401-banned (${Math.round((banExpiry - Date.now()) / 1000)}s remaining).`
-                    );
-                    // Remove the old player entry and destroy it
-                    remix.players.playerMap.delete(cleanOld);
-                    try { remix.players.playerMap.get(cleanOld)?.destroy(); } catch (_) {}
-                    return;
-                  }
-
-                  // Match the specific player by channel ID
-                  const player = remix.players.playerMap.get(cleanOld);
-                  if (player && !player.leaving) {
-                    logger.voice247("[247] Fluxer gateway disconnected us. Forcing player recovery...");
-
-                    // Set a gateway disconnect cooldown for this guild to
-                    // prevent recovery cascades. If recovery rejoins and the
-                    // gateway force-disconnects again, we don't want to
-                    // immediately retry.
-                    this._gatewayDisconnectCooldown.set(cleanGuild, Date.now() + 15_000);
-                    // Auto-clear the cooldown after 30 seconds
-                    setTimeout(() => this._gatewayDisconnectCooldown.delete(cleanGuild), 30_000);
-
-                    // Mark the disconnect reason on the player for smarter recovery
-                    player._lastDisconnectReason = "gateway";
-                    player._lastDisconnectTime = Date.now();
-
-                    if (typeof player._recoverConnection === "function") {
-                      player._recoverConnection();
-                    } else {
-                      remix.players.playerMap.delete(cleanOld);
-                      try { player.destroy(); } catch (_) {}
-                      this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, "gateway-disconnect");
-                    }
-                  } else {
-                    this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, "gateway-disconnect");
-                  }
-                } else {
-                  logger.voice247(`[247] Channel ${cleanOld} mode='${mode}' — not rejoining.`);
-                  channels.delete(cleanOld);
-                  set.set("stay_247", channels.size > 0 ? [...channels] : "none");
-                  // Also clean up the per-channel mode entry
-                  const modes = set.get("stay_247_modes");
-                  if (modes && typeof modes === "object" && !Array.isArray(modes)) {
-                    delete modes[cleanOld];
-                    set.set("stay_247_modes", modes);
-                  }
-                  if (channels.size === 0) set.set("stay_247_mode", "off");
-                  else {
-                    const first = [...channels][0];
-                    set.set("stay_247_mode", modes?.[first] ?? "auto");
-                  }
-                }
-              }
-            }
+          const player = remix.players.playerMap.get(cleanOld);
+          if (player && !player.leaving && !player._destroyed) {
+            logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — emitting autoleave.`);
+            player.emit("autoleave");
           }
         }
       } catch (e) {
-        logger.warn("[247] Rejoin on disconnect failed:", e.message);
+        logger.warn("[VoiceState] Bot disconnect handler failed:", e.message);
       }
     }
   }
@@ -1317,15 +1120,11 @@ export class GatewayHandler {
 
   /**
    * Invoke after the bot has connected and Moonlink has been initialised.
-   * Seeds voice states, attaches raw WS listener, signals botReady, and
-   * kicks off presence rotation.
+   * Seeds voice states, attaches raw WS listener, and kicks off presence rotation.
    */
   onReady() {
     this.seedVoiceStatesFromGuilds();
     this.attachRawListener();
-
-    this.recoveryManager.botReady = true;
-    this.recoveryManager.tryAutoJoin();
 
     this.setupPresenceRotation();
 

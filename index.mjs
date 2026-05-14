@@ -13,7 +13,6 @@ import { FluxerRevoice } from "./src/constants/FluxerRevoice.mjs";
 import { MoonlinkManager } from "./src/MoonlinkManager.mjs";
 import { Dashboard } from "./src/dashboard/Dashboard.mjs";
 import { Locale } from "./src/constants/Locale.mjs";
-import { RecoveryManager } from "./src/RecoveryManager.mjs";
 import { GatewayHandler } from "./src/GatewayHandler.mjs";
 import { LastFmManager } from "./src/LastFmManager.mjs";
 
@@ -168,24 +167,11 @@ export class Remix {
     this._announcementChannelCache = new Map();
     this.intentionalLeaves = new Map();
 
-    // ── Recovery Manager (24/7 auto-join + spawn) ──────────────────────────
-    // Handles 24/7 auto-join on boot and player spawning.
-    // The boot-time session recovery system has been removed.
-    this.recoveryManager = new RecoveryManager(this);
-
-    // Expose recoveryManager on the Fluxer client so that Player.mjs and
-    // other modules that only have a client reference can access it.
-    client._recoveryManager = this.recoveryManager;
-
     // ── Gateway Handler ─────────────────────────────────────────────────────
     // Handles raw WS gateway events, voice-state tracking, presence rotation,
     // and high-level Fluxer event handlers (GuildCreate, GuildDelete,
     // VoiceStateUpdate).
-    this.gatewayHandler = new GatewayHandler(this, this.recoveryManager);
-
-    // Give RecoveryManager a back-reference to GatewayHandler so it can call
-    // reseedVoiceStatesForChannel() after spawning a player.
-    this.recoveryManager.gatewayHandler = this.gatewayHandler;
+    this.gatewayHandler = new GatewayHandler(this);
 
     // Register GuildCreate, GuildDelete, VoiceStateUpdate handlers now so they
     // are active before the first Ready event fires.
@@ -240,8 +226,7 @@ export class Remix {
           }
         }
       }
-      this.recoveryManager.settingsReady = true;
-      this.recoveryManager.tryAutoJoin();
+
     });
 
     // ── Bot ready ─────────────────────────────────────────────────────────────
@@ -317,7 +302,6 @@ export class Remix {
       player: this.playerContext,
       dashboard: this.dashboard,
       locale: this.locale,
-      spawnPlayer: this._spawnPlayer,
       timers: this.T,
     });
     this.players.observedVoiceUsers = this.observedVoiceUsers;
@@ -705,13 +689,6 @@ export class Remix {
       }
     }
 
-    // ── Snapshot other 247 auto channels before leaving ────────────────
-    const other247AutoChannels = [...channels].filter(id => {
-      if (id === cleanId) return false;
-      const mode = get247ChannelMode(set, id);
-      return mode === "auto";
-    });
-
     if (channels.has(cleanId)) {
       channels.delete(cleanId);
       set.set("stay_247", channels.size > 0 ? [...channels] : "none");
@@ -731,38 +708,6 @@ export class Remix {
     if (message) {
       const guildIdForLocale = message?.channel?.channel?.guildId ?? message?.guildId ?? cleanGuildId;
       message.replyEmbed(this.locale.translate(guildIdForLocale, "responses._common.successfullyLeft"));
-    }
-
-    // ── Rejoin other 24/7 auto channels that may have been collateral-disconnected ──
-    // When the gateway sends a guild-level leave (because leaveChannel() API
-    // was unavailable), ALL voice connections in the guild are dropped.  We
-    // must schedule rejoins for every other 24/7 auto channel that lost its
-    // player as a side effect.
-    if (other247AutoChannels.length > 0) {
-      const rejoinBaseDelay = this.T?.leave247RejoinDelay ?? 5000;
-      const rejoinStagger = this.T?.rejoin247Delay ?? 3000;
-      for (let i = 0; i < other247AutoChannels.length; i++) {
-        const otherChannelId = other247AutoChannels[i];
-        const otherPlayer = this.players.playerMap.get(otherChannelId);
-        // Only rejoin if the player is gone (was collateral-disconnected)
-        if (!otherPlayer || otherPlayer._destroyed) {
-          if (otherPlayer) {
-            this.players.playerMap.delete(otherChannelId);
-            try { otherPlayer.destroy(); } catch (_) {}
-          }
-          const delay = rejoinBaseDelay + (i + 1) * rejoinStagger;
-          logger.recovery(
-            `[leaveChannel] Scheduling 247 auto-rejoin for collateral-disconnected channel ${otherChannelId} in ${delay}ms`
-          );
-          setTimeout(() => {
-            if (this._spawnPlayer) {
-              this._spawnPlayer(guildId, otherChannelId).catch(e =>
-                  logger.warn("[leaveChannel] 247 collateral rejoin failed for", otherChannelId, e.message)
-              );
-            }
-          }, delay);
-        }
-      }
     }
 
     return true;

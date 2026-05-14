@@ -117,7 +117,6 @@ export class PlayerManager {
     this.playerConfig = config.player;
     this.dashboard    = config.dashboard ?? null;
     this.locale       = config.locale ?? null;
-    this.spawnPlayer  = config.spawnPlayer ?? null;   // RecoveryManager.spawnPlayer — for 24/7 rejoin
     this.timers       = config.timers ?? {};
     this._lastfm      = null;   // Set later by Remix class after init
   }
@@ -817,16 +816,9 @@ export class PlayerManager {
       player.destroy();
 
       if (isIn247List && (mode247 === "on" || mode247 === "auto")) {
-        // 24/7 is active — rejoin after a short delay (same as RecoveryManager.spawnPlayer autoleave)
-        const delay = this.timers?.rejoin247Delay ?? 3000;
-        if (this.spawnPlayer) {
-          logger.recovery(`[AutoLeave] 24/7 rejoin scheduled for ${homeChannelId} (mode ${mode247}) in ${delay}ms`);
-          setTimeout(() => {
-            this.spawnPlayer(guildId, homeChannelId).catch(e =>
-              logger.warn("[AutoLeave] 24/7 rejoin failed for", homeChannelId, e.message)
-            );
-          }, delay);
-        }
+        // 24/7 mode active — just leave the player, no auto-rejoin.
+        // Users can re-invoke the play command to restart the bot in the channel.
+        logger.voice247(`[AutoLeave] 24/7 channel ${homeChannelId} (mode ${mode247}) auto-left — no auto-rejoin (recovery system removed).`);
       } else {
         // Not 24/7 — send inactivity message
         const prefix = (() => {

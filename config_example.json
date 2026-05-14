@@ -117,7 +117,7 @@
     "mediaplayer": true,
     "commands":    true,
     "guild":       true,
-    "recovery":    true,
+    "recovery":    false,
     "settings":    true,
     "worker":      true,
     "moonlink":    true,
@@ -134,10 +134,6 @@
     "playerUpdateInterval":   5000,
     "searchSessionTimeout":  30000,
     "playerSessionTimeout":  300000,
-    "intentionalLeaveTTL":   10000,
-    "recoveryStaggerMs":     2000,
-    "recoveryConcurrency":   2,
-    "maxTransientRetries":    5,
-    "retryBaseDelay":        15000
+    "intentionalLeaveTTL":   10000
   }
 }

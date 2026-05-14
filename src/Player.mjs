@@ -302,7 +302,6 @@ export default class Player extends EventEmitter {
   // that even if the bot is temporarily in a transit channel (e.g. "move"),
   // the player knows its intended home channel and can check 247 correctly.
   _home247Channel   = null;
-  _recoveryTimer    = null;
 
   // Components
   queue        = null;
@@ -324,12 +323,7 @@ export default class Player extends EventEmitter {
   _paused           = false;
   _pausedAt         = null; // track exact moment of pause for clock sync
   _playingNext      = false;
-  _isRecovering     = false;
   startedPlaying    = null;
-
-  // Track last disconnect reason for smarter recovery
-  _lastDisconnectReason = null; // "401" | "gateway" | "unexpected" | null
-  _lastDisconnectTime   = 0;    // timestamp of last disconnect
   // searches Map with max-size eviction to prevent memory leak on busy servers.
   searches          = new Map();
   _searchMaxSize    = 50;
@@ -457,16 +451,6 @@ export default class Player extends EventEmitter {
     return false;
   }
 
-  _getRecoveryChannelId() {
-    const cleanCurrent = String(this._channelId ?? "").replace(/\D/g, "");
-    if (cleanCurrent) return cleanCurrent;
-
-    const cleanHome = String(this._home247Channel ?? "").replace(/\D/g, "");
-    if (cleanHome && this._is247Enabled()) return cleanHome;
-
-    return cleanHome || null;
-  }
-
   /**
    * Resolve the guild ID for this player, using the channel cache
    * as a fallback if _guildId is not set. This is needed for
@@ -513,198 +497,6 @@ export default class Player extends EventEmitter {
     if (savedVol !== undefined && savedVol !== null) {
       this.preferredVolume = Utils.clamp(savedVol / 100, 0, 2);
       logger.player(`[Player] Restored volume ${savedVol}% for guild ${this._guildId}`);
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Connection Recovery
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  async _recoverConnection() {
-    // bail immediately if the player has been destroyed or a recovery is
-    // already in-flight or scheduled (covers the gap between attempts).
-    if (this._isRecovering || this._recoveryPending || this._destroyed) return;
-    const targetChannelId = this._getRecoveryChannelId();
-    if (!targetChannelId) {
-      logger.warn(`[Player] Recovery aborted for guild ${this._guildId} - no channel target available.`);
-      this.emit("autoleave");
-      return;
-    }
-
-    // ── 401 Permission-based recovery guard ──────────────────────────────
-    // If the last disconnect was due to a 401 Unauthorized error, don't
-    // keep retrying — 401 is a permission problem, not a transient failure.
-    // Retrying just creates more 401 errors and recovery loops.
-    // Instead, give up on recovery and let the 24/7 system schedule a
-    // delayed respawn.
-    if (this._lastDisconnectReason === "401") {
-      const timeSinceDisconnect = Date.now() - this._lastDisconnectTime;
-      if (timeSinceDisconnect < 60_000) {
-        logger.warn(
-          `[Player] Skipping recovery for guild ${this._guildId} — ` +
-          `last disconnect was 401 Unauthorized (${timeSinceDisconnect / 1000}s ago). ` +
-          `Delegating to 24/7 respawn system.`
-        );
-        this._isRecovering = false;
-        this._recoveryPending = false;
-        this.emit("autoleave");
-        return;
-      }
-      // If more than 60s have passed since the 401, try again — permissions
-      // may have been restored.
-      logger.player(
-        `[Player] 401 was ${timeSinceDisconnect / 1000}s ago — retrying recovery ` +
-        `(permissions may have been restored).`
-      );
-    }
-
-    this._isRecovering = true;
-    this._recoveryPending = true;
-
-    this._recoveryAttempts = (this._recoveryAttempts ?? 0) + 1;
-    const MAX_RECOVERY = 5;
-    if (this._recoveryAttempts > MAX_RECOVERY) {
-      logger.error(`[Player] Recovery failed after ${MAX_RECOVERY} attempts for guild ${this._guildId} — giving up.`);
-      this._isRecovering = false;
-      this._recoveryPending = false;
-      this._recoveryAttempts = 0;
-      this.emit("autoleave");
-      return;
-    }
-    // Exponential backoff: 2s, 4s, 8s, 16s, 32s (was linear: 2s, 4s, 6s, 8s, 10s)
-    // If last disconnect was a gateway force-disconnect, use longer backoff
-    // to avoid the recovery cascade where rejoining causes another disconnect.
-    let backoffMs;
-    if (this._lastDisconnectReason === "gateway") {
-      // Gateway force-disconnects need longer recovery time to avoid cascading
-      backoffMs = Math.min(5000 * Math.pow(2, this._recoveryAttempts - 1), 60_000);
-    } else {
-      backoffMs = Math.min(2000 * Math.pow(2, this._recoveryAttempts - 1), 30_000);
-    }
-    logger.mediaplayer(`[Player] Recovery attempt ${this._recoveryAttempts}/${MAX_RECOVERY} for ${this._guildId} (backoff ${backoffMs}ms, reason: ${this._lastDisconnectReason ?? "unknown"})`);
-    await Utils.sleep(backoffMs);
-
-    // re-check after await — player may have been destroyed during backoff
-    if (this._destroyed) {
-      this._isRecovering = false;
-      return;
-    }
-
-    // Wait for _isJoining to clear — if another operation (e.g. spawnPlayer or
-    // a concurrent _recoverConnection from a different event path) is currently
-    // calling join(), we must not race against it.  Poll every 500ms for up to
-    // 15s, then give up on this attempt and schedule a retry.
-    let waited = 0;
-    while (this._isJoining && waited < 15_000) {
-      logger.mediaplayer(`[Player] Waiting for _isJoining to clear before recovery attempt...`);
-      await Utils.sleep(500);
-      waited += 500;
-    }
-    if (this._isJoining) {
-      logger.warn("[Player] _isJoining still busy after 15s — deferring recovery attempt.");
-      this._isRecovering = false;
-      this._recoveryPending = false;
-      // Schedule a retry via setTimeout so we don't stack synchronous calls
-      this._recoveryTimer = setTimeout(() => {
-        this._recoveryTimer = null;
-        this._recoverConnection().catch(() => {});
-      }, 2000);
-      return;
-    }
-
-    logger.mediaplayer(`[Player] Attempting to recover voice connection for ${this._guildId}`);
-
-    try {
-      if (this.connection) {
-        // Clean up the old connection. FluxerVoiceConnection.disconnect()
-        // handles native @fluxerjs/voice disconnect + LiveKit room close.
-        // We also need to send a gateway leave signal so the gateway
-        // processes the leave before we attempt to rejoin.
-        try { await this.connection.disconnect(); } catch (_) {}
-
-        // Explicitly send a gateway leave signal via @fluxerjs/voice so
-        // the gateway knows the bot left the channel.  Without this, the
-        // gateway may still think the bot is in the channel and won't
-        // send a fresh VOICE_SERVER_UPDATE on the next joinVoiceChannel().
-        try {
-          const vm = getVoiceManager(this.client);
-          if (vm && typeof vm.updateVoiceState === "function") {
-            // IMPORTANT: Always use guild-scoped leave. An unscoped
-            // updateVoiceState(null, opts) disconnects ALL guilds' voice
-            // connections, causing cascading failures.
-            const guildIdForLeave = this._guildId ?? this._resolveGuildId();
-            if (guildIdForLeave) {
-              try {
-                vm.updateVoiceState(guildIdForLeave, null, { self_deaf: false, self_mute: false });
-              } catch (e1) {
-                // Older @fluxerjs/voice may not accept 3-arg form
-                try { vm.updateVoiceState(guildIdForLeave, null); } catch (e2) {}
-              }
-              logger.mediaplayer(`[Player] Sent guild-scoped gateway leave signal for guild ${guildIdForLeave} before recovery rejoin`);
-            } else {
-              logger.warn(`[Player] Cannot send guild-scoped leave — no guildId available. Skipping to avoid disconnecting all guilds.`);
-            }
-          }
-        } catch (e) {
-          logger.warn(`[Player] Gateway leave signal failed: ${e?.message}`);
-        }
-
-        // Also remove the stale connection from FluxerRevoice's map
-        // so the next _revoice.join() doesn't return the dead connection.
-        if (this._revoice && this._channelId) {
-          try { this._revoice.deleteConnection(this._channelId); } catch (_) {}
-        }
-      }
-
-      await Utils.sleep(3000);
-      if (this.leaving || this._destroyed) return;
-
-      logger.mediaplayer(`[Player] Rejoining channel ${targetChannelId}`);
-      await this.join(targetChannelId);
-
-      // Do NOT re-read room.isConnected/room.connectionState here —
-      // join() already awaited ConnectionStateChanged and only resolved when
-      // the room was truly connected, so reaching this line means success.
-      // The old check using room.state (which doesn't exist in @livekit/rtc-node)
-      // always threw "unexpected state: undefined" and emitted autoleave,
-      // causing the infinite reconnect storm in the logs.
-      this._isRecovering = false;
-      this._recoveryPending = false;
-      this._recoveryAttempts = 0;
-      if (this._recoveryTimer) {
-        clearTimeout(this._recoveryTimer);
-        this._recoveryTimer = null;
-      }
-      // Keep _home247Channel in sync with the channel we successfully recovered to.
-      if (this._channelId) this._home247Channel = this._channelId;
-
-      const current = this.queue.getCurrent();
-      if (current) {
-        logger.player(`[Player] Resuming track after recovery: ${current.title}`);
-        this.queue.data.unshift(current);
-        this.queue.current = null;
-        this._playingNext = false;
-        await this.playNext();
-      } else if (!this.queue.isEmpty()) {
-        this._playingNext = false;
-        await this.playNext();
-      }
-    } catch (e) {
-      logger.error("[Player] Recovery failed:", e.message);
-      this._isRecovering = false;
-      // _recoveryPending stays true during the retry delay to block duplicate
-      // calls from stacking up (e.g. two rapid disconnect events).
-      if (!this._destroyed && !this.leaving) {
-        const delay = Math.min(2000 * (this._recoveryAttempts ?? 1), 30_000);
-        if (this._recoveryTimer) clearTimeout(this._recoveryTimer);
-        this._recoveryTimer = setTimeout(() => {
-          this._recoveryTimer = null;
-          this._recoveryPending = false;
-          if (!this._destroyed && !this.leaving) this._recoverConnection();
-        }, delay);
-      } else {
-        this._recoveryPending = false;
-      }
     }
   }
 
@@ -920,7 +712,6 @@ export default class Player extends EventEmitter {
         logger.error("[Player] Error stopping media player:", e.message);
       }
 
-      await new Promise(r => setTimeout(r, 150));
       // Null the reference so the native revoice.js/LiveKit object can be GC'd.
       this._mediaPlayer = null;
     }
@@ -1287,10 +1078,10 @@ export default class Player extends EventEmitter {
           try { this._revoice.deleteConnection(this._channelId); } catch (_) {}
         }
 
-        // Wait longer (1500ms instead of 500ms) to give the Fluxer gateway
-        // time to process the voice state leave before we join a new channel.
-        // 500ms was too short and caused 401 errors on the subsequent join.
-        await Utils.sleep(1500);
+        // Wait to give the Fluxer gateway time to process the voice state
+        // leave before we join a new channel. FluxerRevoice adds its own
+        // _globalJoinDelay before the actual join, so 500ms here is enough.
+        await Utils.sleep(500);
         this.connection  = null;
         this._mediaPlayer = null;
       }
@@ -1423,12 +1214,11 @@ export default class Player extends EventEmitter {
           try { connection.removeAllListeners(); } catch (_) {}
           return;
         }
-        const causeStr = err?.cause ? ` (Cause: ${err.cause})` : "";
-        logger.error("[Player] Voice error:", err?.message ?? err, causeStr);
+        logger.error("[Player] Voice error:", err?.message ?? err);
         this._stopMediaPlayer()
             .catch(() => {})
             .finally(() => {
-              if (!this.leaving && !this._destroyed) this._recoverConnection();
+              if (!this.leaving && !this._destroyed) this.emit("autoleave");
             });
       });
 
@@ -1438,19 +1228,10 @@ export default class Player extends EventEmitter {
           return;
         }
         if (!this.leaving && !this._destroyed) {
-          // Detect the reason for the disconnect to make smarter recovery decisions
-          const room = connection.room;
-          const lastSignalErr = room?._lastSignalError;
-          if (lastSignalErr?.includes?.("401") || lastSignalErr?.includes?.("Unauthorized")) {
-            this._lastDisconnectReason = "401";
-          } else {
-            this._lastDisconnectReason = "unexpected";
-          }
-          this._lastDisconnectTime = Date.now();
-          logger.mediaplayer(`[Player] Unexpected disconnect detected (reason: ${this._lastDisconnectReason})`);
+          logger.mediaplayer("[Player] Unexpected disconnect detected");
           this._stopMediaPlayer()
               .catch(() => {})
-              .finally(() => this._recoverConnection());
+              .finally(() => this.emit("autoleave"));
         } else {
           try { connection.removeAllListeners(); } catch (_) {}
         }
@@ -1475,7 +1256,7 @@ export default class Player extends EventEmitter {
       const playerReady = await this._ensureMediaPlayer();
       if (!playerReady) {
         logger.mediaplayer("[Player] First MediaPlayer attempt failed, retrying after delay...");
-        await Utils.sleep(3000);
+        await Utils.sleep(1500);
         if (this._destroyed || this.leaving) throw new Error("Player destroyed during MediaPlayer retry");
         const roomAlive = this.connection?.room?.isConnected ?? false;
         if (!roomAlive) {
@@ -1506,10 +1287,9 @@ export default class Player extends EventEmitter {
       const causeStr = e.cause ? ` (Cause: ${e.cause})` : "";
       logger.error("[Player] Join failed:", e.message, causeStr);
 
-      // Track the disconnect reason for smarter recovery decisions
       if (e.message?.includes("401") || e.message?.includes("Unauthorized")) {
-        this._lastDisconnectReason = "401";
-        this._lastDisconnectTime = Date.now();
+        // Track 401 errors for logging purposes
+        logger.warn(`[Player] Join failed with 401 Unauthorized for guild ${this._guildId}`);
       }
 
       if (this.connection) {
@@ -1527,12 +1307,6 @@ export default class Player extends EventEmitter {
     try {
       this.leaving = true;
       this._stopInactivityTimer();
-      if (this._recoveryTimer) {
-        clearTimeout(this._recoveryTimer);
-        this._recoveryTimer = null;
-      }
-      this._recoveryPending = false;
-      this._isRecovering = false;
       this._streamingStopped = true;
 
       if (this._mediaPlayer) {
@@ -1797,9 +1571,6 @@ export default class Player extends EventEmitter {
     this._streamingStopped = true;
     await this._stopMediaPlayer().catch(() => {});
     this._streamingStopped = false;
-
-    // Small delay to let the old pipe fully drain
-    await Utils.sleep(100);
 
     // _stopMediaPlayer sets _mediaPlayer to null — must recreate before streaming
     const hasPlayer = await this._ensureMediaPlayer();
@@ -2343,7 +2114,6 @@ export default class Player extends EventEmitter {
       this._mediaPlayer.setVolume(this.preferredVolume);
     }
 
-    await Utils.sleep(200);
     if (!this.connection || this.leaving) return;
 
     let streamUrl = null;
@@ -2416,7 +2186,7 @@ export default class Player extends EventEmitter {
         this.queue.data.unshift(songData);
         this.queue.current = null;
         this._streamingStopped = false;
-        await Utils.sleep(1500);
+        await Utils.sleep(500);
         if (!this.leaving && !this._skipping) return this._doPlayNext();
       } else {
         if (!this._paused) {

@@ -151,7 +151,7 @@ export async function run(msg) {
     for (const control of row) {
       try {
         await message.message.react(control.emoji);
-        await Utils.sleep(200);
+        await Utils.sleep(50);
       } catch (_) {}
     }
   }
