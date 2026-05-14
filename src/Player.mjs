@@ -1253,18 +1253,28 @@ export default class Player extends EventEmitter {
         logger.warn("[Player] Self-deafen failed:", e.message);
       }
 
-      const playerReady = await this._ensureMediaPlayer();
-      if (!playerReady) {
-        logger.mediaplayer("[Player] First MediaPlayer attempt failed, retrying after delay...");
-        await Utils.sleep(1500);
+      // ── MediaPlayer creation with progressive retries ───────────────────
+      // LiveKit's publishToRoom can time out on slow servers ("track publication
+      // timed out, no response received from the server"). The room itself is
+      // connected fine — only the audio track publishing fails.  Progressive
+      // retries with increasing delays give the LiveKit server time to recover.
+      const MP_RETRIES = [
+        { delay: 2000,  label: "1st retry (2s)"  },
+        { delay: 4000,  label: "2nd retry (4s)"  },
+        { delay: 8000,  label: "3rd retry (8s)"  },
+      ];
+      let playerReady = await this._ensureMediaPlayer();
+      for (const { delay, label } of MP_RETRIES) {
+        if (playerReady) break;
         if (this._destroyed || this.leaving) throw new Error("Player destroyed during MediaPlayer retry");
         const roomAlive = this.connection?.room?.isConnected ?? false;
-        if (!roomAlive) {
-          throw new Error("Room disconnected during MediaPlayer retry");
-        }
-        const retryReady = await this._ensureMediaPlayer();
-        if (!retryReady) throw new Error("Failed to create MediaPlayer after retry");
+        if (!roomAlive) throw new Error("Room disconnected during MediaPlayer retry");
+        logger.mediaplayer(`[Player] MediaPlayer attempt failed — ${label}...`);
+        await Utils.sleep(delay);
+        if (this._destroyed || this.leaving) throw new Error("Player destroyed during MediaPlayer retry");
+        playerReady = await this._ensureMediaPlayer();
       }
+      if (!playerReady) throw new Error("Failed to create MediaPlayer after all retries");
 
       this._restoreVolume();
       this.emit("roomfetched");

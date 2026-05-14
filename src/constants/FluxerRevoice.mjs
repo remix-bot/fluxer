@@ -31,19 +31,6 @@ import { Room, RoomEvent, ConnectionState } from "@livekit/rtc-node";
 import { joinVoiceChannel, getVoiceManager } from "@fluxerjs/voice";
 import { logger } from "./Logger.mjs";
 
-// ── Suppress LiveKit SDK's pino logger (console.log monkey-patch) ───────────
-// The @livekit/rtc-node SDK uses pino for logging, which writes JSON lines
-// like {"level":20,"time":...,"name":"lk-rtc","msg":"..."} directly to
-// console.log. These are noisy and not useful for debugging. Since we can't
-// use environment variables (no .env, zip deployment), we monkey-patch
-// console.log to filter out pino's structured log lines from "lk-rtc".
-//
-// How it works:
-//   1. Save the original console.log
-//   2. Replace console.log with a wrapper that checks if the argument is a
-//      JSON string from pino (starts with '{' and contains "lk-rtc")
-//   3. If it is, silently drop it (or log at trace level if logger is available)
-//   4. Otherwise, pass through to the original console.log
 {
   const _originalConsoleLog = console.log;
   console.log = function (...args) {
@@ -67,6 +54,33 @@ import { logger } from "./Logger.mjs";
       return; // silently drop
     }
     _originalConsoleLog.apply(console, args);
+  };
+
+  // ── Also monkey-patch process.stdout.write ──────────────────────────────
+  // Pino writes directly to process.stdout.write, bypassing console.log
+  // entirely. This is the primary path for the JSON log lines like:
+  //   {"level":20,"time":1778784504183,"pid":961949,"name":"lk-rtc",...}
+  // We intercept these and silently drop them.
+  const _originalStdoutWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = function (chunk, encoding, callback) {
+    // Only intercept string chunks that look like pino JSON logs
+    if (typeof chunk === "string" && chunk.startsWith("{")) {
+      try {
+        // Fast check: does it contain lk-rtc before full parse?
+        if (chunk.includes('"lk-rtc"')) {
+          const parsed = JSON.parse(chunk);
+          if (parsed.name === "lk-rtc") {
+            // Silently drop — call callback to signal "written" so pino doesn't stall
+            if (typeof encoding === "function") { encoding(); }
+            else if (typeof callback === "function") { callback(); }
+            return true;
+          }
+        }
+      } catch (_) {
+        // Not valid JSON — pass through
+      }
+    }
+    return _originalStdoutWrite(chunk, encoding, callback);
   };
 }
 

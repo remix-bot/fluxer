@@ -60,6 +60,8 @@ export class GatewayHandler {
     this._startupDeleteGraceMs = 15_000;
     /** @type {boolean} Whether we're still in the startup grace period */
     this._inStartupGrace = true;
+    /** @type {number} Counter for deferred deletions (used for batch summary log) */
+    this._deferredDeleteCount = 0;
   }
 
   // ── Voice-state key helpers ──────────────────────────────────────────────────
@@ -719,10 +721,14 @@ export class GatewayHandler {
       // come back via GUILD_CREATE moments later.  Defer cleanup during
       // the startup grace period; if GuildCreate arrives first, cancel.
       if (this._inStartupGrace) {
-        logger.guild(
-          `[GuildDelete] Deferring cleanup for server ${guildId} ` +
-          `(startup grace — will confirm after ${this._startupDeleteGraceMs / 1000}s).`
-        );
+        this._deferredDeleteCount++;
+        // Only log the first few deferrals individually, then suppress
+        if (this._deferredDeleteCount <= 3) {
+          logger.guild(
+            `[GuildDelete] Deferring cleanup for server ${guildId} ` +
+            `(startup grace — will confirm after ${this._startupDeleteGraceMs / 1000}s).`
+          );
+        }
         // Cancel any existing deferred timer for this guild
         const existing = this._deferredGuildDeletes.get(guildId);
         if (existing) clearTimeout(existing.timer);
@@ -730,7 +736,6 @@ export class GatewayHandler {
         const timer = setTimeout(() => {
           this._deferredGuildDeletes.delete(guildId);
           // Grace period expired without GuildCreate — this guild is really gone
-          logger.guild(`[GuildDelete] Confirmed removal from server ${guildId} — cleaning up.`);
           this._processGuildDelete(guildId);
         }, this._startupDeleteGraceMs);
 
@@ -1165,10 +1170,16 @@ export class GatewayHandler {
       if (pending > 0) {
         logger.guild(
           `[GuildDelete] Startup grace period ended. ` +
-          `${pending} deferred deletion(s) will be processed by their timers.`
+          `${pending} deferred deletion(s) confirmed — cleaning up.`
         );
       } else {
         logger.guild(`[GuildDelete] Startup grace period ended. No deferred deletions.`);
+      }
+      // Log suppressed count if we had more than 3 deferred deletes
+      if (this._deferredDeleteCount > 3) {
+        logger.guild(
+          `[GuildDelete] (Suppressed ${this._deferredDeleteCount - 3} deferral log lines for brevity)`
+        );
       }
     }, this._startupDeleteGraceMs);
 
@@ -1261,13 +1272,15 @@ export class GatewayHandler {
   _processGuildDelete(guildId) {
     const { remix } = this;
     const cleanGuildId = String(guildId).replace(/\D/g, "");
+    // During startup grace batch, suppress individual cleanup logs to reduce spam
+    const batchMode = this._deferredDeleteCount > 3;
 
     for (const [channelId, player] of remix.players.playerMap) {
       if (String(player._guildId ?? "").replace(/\D/g, "") === cleanGuildId) {
         remix.players.playerMap.delete(channelId);
         try { player.leave().catch(() => {}); } catch (_) {}
         try { player.destroy();               } catch (_) {}
-        logger.guild(`[GuildDelete] Destroyed player for channel ${channelId}.`);
+        if (!batchMode) logger.guild(`[GuildDelete] Destroyed player for channel ${channelId}.`);
       }
     }
 
@@ -1285,6 +1298,6 @@ export class GatewayHandler {
     remix.settingsMgr.removeServer(guildId);
     remix._announcementChannelCache.delete(guildId);
 
-    logger.guild(`[GuildDelete] Cleanup complete for server ${guildId}.`);
+    if (!batchMode) logger.guild(`[GuildDelete] Cleanup complete for server ${guildId}.`);
   }
 }
