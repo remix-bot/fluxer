@@ -357,8 +357,11 @@ export class RecoveryManager {
 
       // ── Autoleave handler ───────────────────────────────────────────────────
       p.on("autoleave", async () => {
-        const activeChannelId = String(p._channelId ?? cleanChannelId).replace(/\D/g, "") || cleanChannelId;
-        const homeChannelId = String(p._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
+        const { activeChannelId, homeChannelId } = remix.players.detachPlayer?.(p, cleanChannelId)
+          ?? {
+            activeChannelId: String(p._channelId ?? cleanChannelId).replace(/\D/g, "") || cleanChannelId,
+            homeChannelId: String(p._home247Channel ?? cleanChannelId).replace(/\D/g, "") || cleanChannelId,
+          };
 
         const raw2      = remix.settingsMgr.getServer(guildId).get("stay_247");
         const channels2 = (!raw2 || raw2 === "none")
@@ -375,13 +378,14 @@ export class RecoveryManager {
             ? get247ChannelMode(remix.settingsMgr.getServer(guildId), matchChannel)
             : "off";
 
-        // Remove player from map and destroy it now that we've read the state.
-        remix.players.playerMap.delete(activeChannelId);
-        if (activeChannelId !== cleanChannelId) remix.players.playerMap.delete(cleanChannelId);
         p.destroy();
 
         if (matchChannel && (mode2 === "on" || mode2 === "auto")) {
-          this.scheduleSpawn(guildId, homeChannelId, this.T.rejoin247Delay, "247-autoleave");
+          remix.players.schedule247Respawns?.(guildId, [homeChannelId], {
+            baseDelay: this.T.rejoin247Delay,
+            stagger: 0,
+            source: "247-autoleave",
+          });
         } else {
           try {
             const prefix = remix.handler?.getPrefix?.(guildId) ?? "%";

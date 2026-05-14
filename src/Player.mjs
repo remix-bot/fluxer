@@ -1364,6 +1364,7 @@ export default class Player extends EventEmitter {
 
   async leave() {
     if (!this.connection) return false;
+    let leftCleanly = false;
     try {
       this.leaving = true;
       this._stopInactivityTimer();
@@ -1393,19 +1394,22 @@ export default class Player extends EventEmitter {
       }
 
       await this.connection.leave();
-
+      leftCleanly = true;
+    } catch (e) {
+      logger.warn("[Player] leave warning:", e.message);
+      try {
+        await this.connection?.disconnect?.();
+      } catch (_) {}
+    } finally {
       this.queue.reset();
       this.connection  = null;
       this._paused     = false;
       this._pausedAt   = null;
       this._playingNext = false;
       this.leaving     = false;
-    } catch (e) {
-      logger.error("[Player] leave error:", e.message);
-      return false;
     }
-    this.emit("leave");
-    return true;
+    if (leftCleanly) this.emit("leave");
+    return leftCleanly;
   }
 
   destroy() {

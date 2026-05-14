@@ -350,6 +350,78 @@ export class PlayerManager {
     return this.locale.translate(guildId, key, replacements);
   }
 
+  findPlayerEntryByChannelId(channelId) {
+    const cleanChannelId = cleanId(channelId);
+    if (!cleanChannelId) return null;
+
+    const direct = this.playerMap.get(cleanChannelId);
+    if (direct) return { mapKey: cleanChannelId, player: direct };
+
+    for (const [mapKey, player] of this.playerMap.entries()) {
+      const activeChannelId = getPlayerChannelId(player, mapKey);
+      const homeChannelId = cleanId(player?._home247Channel);
+      if (activeChannelId === cleanChannelId || homeChannelId === cleanChannelId) {
+        return { mapKey: cleanId(mapKey), player };
+      }
+    }
+
+    return null;
+  }
+
+  findGuildPlayers(guildId) {
+    const cleanGuildId = cleanId(guildId);
+    if (!cleanGuildId) return [];
+
+    return [...this.playerMap.entries()].filter(([mapKey, player]) => {
+      if (!player || player._destroyed) return false;
+      const fallbackChannel = this.commands.client?.channels?.get?.(cleanId(mapKey)) ?? null;
+      return getPlayerGuildId(player, fallbackChannel) === cleanGuildId;
+    });
+  }
+
+  detachPlayer(player, fallbackChannelId = null) {
+    const activeChannelId = getPlayerChannelId(player, fallbackChannelId) || cleanId(fallbackChannelId);
+    const homeChannelId = cleanId(player?._home247Channel) || activeChannelId;
+    const keysToRemove = [...new Set([
+      cleanId(fallbackChannelId),
+      activeChannelId,
+      homeChannelId,
+    ].filter(Boolean))];
+
+    for (const key of keysToRemove) {
+      this.playerMap.delete(key);
+      const pendingScrobble = this._pendingScrobbleTimers.get(key);
+      if (pendingScrobble) {
+        clearTimeout(pendingScrobble.timer);
+        this._pendingScrobbleTimers.delete(key);
+      }
+    }
+
+    return { activeChannelId, homeChannelId, removedKeys: keysToRemove };
+  }
+
+  schedule247Respawns(guildId, channelIds, opts = {}) {
+    if (typeof this.spawnPlayer !== "function") return;
+
+    const cleanGuildId = cleanId(guildId);
+    const uniqueChannels = [...new Set((channelIds ?? []).map(cleanId).filter(Boolean))];
+    if (!cleanGuildId || uniqueChannels.length === 0) return;
+
+    const baseDelay = Math.max(0, Number(opts.baseDelay ?? this.timers?.leave247RejoinDelay ?? 5_000));
+    const stagger = Math.max(0, Number(opts.stagger ?? this.timers?.rejoin247Delay ?? 3_000));
+    const source = opts.source ?? "247";
+
+    uniqueChannels.forEach((channelId, index) => {
+      const delay = baseDelay + (index * stagger);
+      logger.recovery(`[${source}] Scheduling 24/7 respawn for ${channelId} in ${delay}ms`);
+      setTimeout(() => {
+        this.spawnPlayer(cleanGuildId, channelId).catch((err) => {
+          logger.warn(`[${source}] 24/7 respawn failed for ${channelId}:`, err?.message ?? err);
+        });
+      }, delay);
+    });
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Voice Channel Detection
   // ═══════════════════════════════════════════════════════════════════════════
@@ -724,28 +796,19 @@ export class PlayerManager {
     if (!cid) {
       const guildId = getMessageGuildId(msg);
       if (guildId) {
-        const matchedEntry = [...this.playerMap.entries()].find(([, player]) =>
-          getPlayerGuildId(player) === cleanId(guildId)
-        );
+        const matchedEntry = this.findGuildPlayers(guildId)[0] ?? null;
         cid = getPlayerChannelId(matchedEntry?.[1], matchedEntry?.[0]) || matchedEntry?.[0] || null;
       }
     }
 
     const cleanChannelId = cleanId(cid);
-    const player = cleanChannelId
-      ? this.playerMap.get(cleanChannelId) ??
-        [...this.playerMap.values()].find((entry) => getPlayerChannelId(entry) === cleanChannelId)
-      : null;
+    const playerEntry = cleanChannelId ? this.findPlayerEntryByChannelId(cleanChannelId) : null;
+    const player = playerEntry?.player ?? null;
     if (!player) return msg.reply(mkEmbed(this._t(msg, "responses._common.notInVoice")));
 
-    const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;
-    this.playerMap.delete(activeChannelId);
-    // Clean up pending scrobble timer
-    const pendingScrobble = this._pendingScrobbleTimers.get(activeChannelId);
-    if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this._pendingScrobbleTimers.delete(activeChannelId); }
-    if (activeChannelId !== cleanChannelId) this.playerMap.delete(cleanChannelId);
+    this.detachPlayer(player, cleanChannelId);
     await msg.reply(mkEmbed(this._t(msg, "responses._common.successfullyLeft")));
-    await player.leave();
+    await player.leave().catch(() => {});
     player.destroy();
   }
 
@@ -806,8 +869,7 @@ export class PlayerManager {
     });
 
     player.on("autoleave", () => {
-      const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;
-      const homeChannelId = cleanId(player._home247Channel) || activeChannelId;
+      const { activeChannelId, homeChannelId } = this.detachPlayer(player, cleanChannelId);
       const ch       = player.textChannel;
       const guildId = cleanId(player._guildId ?? ch?.guildId ?? ch?.guild?.id ?? getMessageGuildId({ channel: ch }));
 
@@ -833,26 +895,15 @@ export class PlayerManager {
           ? get247ChannelMode(this.settings.getServer(guildId), matchChannel)
           : "off";
 
-      // Remove player from map and destroy
-      this.playerMap.delete(activeChannelId);
-      // Clean up pending scrobble timer
-      const pendingScrobble = this._pendingScrobbleTimers.get(activeChannelId);
-      if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this._pendingScrobbleTimers.delete(activeChannelId); }
-      if (activeChannelId !== cleanChannelId) this.playerMap.delete(cleanChannelId);
-      if (homeChannelId !== activeChannelId) this.playerMap.delete(homeChannelId);
       player.destroy();
 
       if (isIn247List && (mode247 === "on" || mode247 === "auto")) {
-        // 24/7 is active — rejoin after a short delay (same as RecoveryManager.spawnPlayer autoleave)
         const delay = this.timers?.rejoin247Delay ?? 3000;
-        if (this.spawnPlayer) {
-          logger.recovery(`[AutoLeave] 24/7 rejoin scheduled for ${homeChannelId} (mode ${mode247}) in ${delay}ms`);
-          setTimeout(() => {
-            this.spawnPlayer(guildId, homeChannelId).catch(e =>
-              logger.warn("[AutoLeave] 24/7 rejoin failed for", homeChannelId, e.message)
-            );
-          }, delay);
-        }
+        this.schedule247Respawns(guildId, [homeChannelId], {
+          baseDelay: delay,
+          stagger: 0,
+          source: "AutoLeave",
+        });
       } else {
         // Not 24/7 — send inactivity message
         const prefix = (() => {

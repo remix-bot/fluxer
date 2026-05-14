@@ -721,10 +721,11 @@ export class Remix {
     }
 
     this.markIntentionalLeave(cleanId);
+    const playerEntry = this.players.findPlayerEntryByChannelId?.(cleanId) ?? null;
+    const player = playerEntry?.player ?? null;
 
-    const player = this.players.playerMap.get(cleanId);
     if (player) {
-      this.players.playerMap.delete(cleanId);
+      this.players.detachPlayer?.(player, cleanId);
       await player.leave().catch(() => {});
       player.destroy();
     }
@@ -742,28 +743,22 @@ export class Remix {
     if (other247AutoChannels.length > 0) {
       const rejoinBaseDelay = this.T?.leave247RejoinDelay ?? 5000;
       const rejoinStagger = this.T?.rejoin247Delay ?? 3000;
-      for (let i = 0; i < other247AutoChannels.length; i++) {
-        const otherChannelId = other247AutoChannels[i];
-        const otherPlayer = this.players.playerMap.get(otherChannelId);
-        // Only rejoin if the player is gone (was collateral-disconnected)
+      const channelsToRespawn = [];
+      for (const otherChannelId of other247AutoChannels) {
+        const otherPlayer = this.players.findPlayerEntryByChannelId?.(otherChannelId)?.player ?? null;
         if (!otherPlayer || otherPlayer._destroyed) {
           if (otherPlayer) {
-            this.players.playerMap.delete(otherChannelId);
+            this.players.detachPlayer?.(otherPlayer, otherChannelId);
             try { otherPlayer.destroy(); } catch (_) {}
           }
-          const delay = rejoinBaseDelay + (i + 1) * rejoinStagger;
-          logger.recovery(
-            `[leaveChannel] Scheduling 247 auto-rejoin for collateral-disconnected channel ${otherChannelId} in ${delay}ms`
-          );
-          setTimeout(() => {
-            if (this._spawnPlayer) {
-              this._spawnPlayer(guildId, otherChannelId).catch(e =>
-                  logger.warn("[leaveChannel] 247 collateral rejoin failed for", otherChannelId, e.message)
-              );
-            }
-          }, delay);
+          channelsToRespawn.push(otherChannelId);
         }
       }
+      this.players.schedule247Respawns?.(guildId, channelsToRespawn, {
+        baseDelay: rejoinBaseDelay,
+        stagger: rejoinStagger,
+        source: "leaveChannel",
+      });
     }
 
     return true;
