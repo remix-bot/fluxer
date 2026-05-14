@@ -273,7 +273,7 @@ export async function run(msg) {
     for (const emoji of allEmojisForPage(p)) {
       try {
         await menuMsg.message.react(emoji);
-        await Utils.sleep(25);
+        await Utils.sleep(150);
       } catch (_) {}
     }
   };
@@ -389,7 +389,7 @@ export async function run(msg) {
           .setDescription(this.t(msg, "responses.filter.nothingPlaying"))
           ;
       await menuMsg.edit({ embeds: [errEmbed] }).catch(() => {});
-      await Utils.sleep(500);
+      await Utils.sleep(2000);
       await menuMsg.edit({
         embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, null)]
       }).catch(() => {});
@@ -430,7 +430,7 @@ export async function run(msg) {
           )
           ;
       await menuMsg.edit({ embeds: [errEmbed] }).catch(() => {});
-      await Utils.sleep(900);
+      await Utils.sleep(3000);
       await menuMsg.edit({
         embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, track)]
       }).catch(() => {});
@@ -462,7 +462,7 @@ export async function run(msg) {
         ;
 
     await menuMsg.edit({ embeds: [confirmEmbed] }).catch(() => {});
-    await Utils.sleep(700);
+    await Utils.sleep(2500);
 
     // Restore picker (session stays open)
     if (!settled) {

@@ -9,436 +9,217 @@ export const command = new CommandBuilder()
     .addAliases("info")
     .setCategory("util");
 
-const CACHE_TTL_MS = 5 * 60 * 1000;
-const GUILD_FETCH_TIMEOUT_MS = 4_000;
-const REST_PAGE_TIMEOUT_MS = 1_000;
-const LASTFM_TIMEOUT_MS = 3_000;
+// ── Stats cache ───────────────────────────────────────────────────────────────
 
-let cachedStats = null;
-let cacheExpiresAt = 0;
-let inflightStatsPromise = null;
+const CACHE_TTL_MS = 5 * 60 * 1000; // refresh every 5 minutes
 
-function isAbortError(err) {
-  const name = String(err?.name ?? "");
-  const code = String(err?.code ?? "");
-  const message = String(err?.message ?? err ?? "");
-  return name === "AbortError" ||
-    code === "ABORT_ERR" ||
-    message.includes("This operation was aborted");
-}
+let cachedStats = null;   // { guildCount, userCount } or null
+let cacheExpiresAt  = 0;
+let inflightPromise = null;
 
-function getMessageGuildId(message) {
-  return message?.channel?.channel?.guildId ??
-    message?.message?.guildId ??
-    message?.guildId ??
-    null;
-}
-
-function createTranslator(remix) {
-  return (message, key, data = {}) => {
-    const guildId = getMessageGuildId(message);
-    return remix?.locale?.translate?.(guildId, key, data) ?? key;
-  };
-}
-
-function withTimeout(promise, ms, fallback) {
-  return Promise.race([
-    Promise.resolve(promise),
-    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ]);
-}
-
-async function runLimited(tasks, limit = 6) {
-  const results = new Array(tasks.length);
-  let index = 0;
-
-  async function worker() {
-    while (index < tasks.length) {
-      const current = index++;
-      try {
-        results[current] = await tasks[current]();
-      } catch (_) {
-        results[current] = null;
-      }
-    }
-  }
-
-  const workers = Array.from({ length: Math.min(limit, tasks.length) }, () => worker());
-  await Promise.all(workers);
-  return results;
-}
-
-function getCachedGuildCount(client) {
-  return Number(client?.guilds?.size ?? 0);
-}
-
-function getFastCachedUserCount() {
-  return Number(cachedStats?.userCount ?? 0);
-}
-
-function getCachedUserCount(client) {
-  const uniqueUsers = new Set();
-
-  for (const guild of client?.guilds?.values?.() ?? []) {
-    const members = guild?.members;
-    const iterable = typeof members?.values === "function"
-      ? members.values()
-      : Array.isArray(members)
-        ? members
-        : Object.values(members ?? {});
-
-    for (const member of iterable) {
-      const id = member?.id ?? member?.user?.id ?? null;
-      if (id) uniqueUsers.add(String(id));
-    }
-  }
-
-  return uniqueUsers.size;
-}
-
-async function fetchGuildCount(client) {
-  if (typeof client?.user?.fetchGuilds === "function") {
+/**
+ * Accurate guild count — same multi-layer strategy as ErinJS:
+ *   1. Try client.fetchTotalGuildCount() (shard-aware, if available)
+ *   2. Try client.fetchAllStats().guilds (shard-aware, if available)
+ *   3. Paginate REST API via /users/@me/guilds?limit=200
+ *   4. Fallback to client.guilds.size (local shard only)
+ */
+async function fetchAccurateGuildCount(client) {
+  // Strategy 1: built-in shard-aware method
+  if (typeof client.fetchTotalGuildCount === "function") {
     try {
-      const guilds = await withTimeout(client.user.fetchGuilds(), GUILD_FETCH_TIMEOUT_MS, null);
-      if (Array.isArray(guilds)) return guilds.length;
-      if (typeof guilds?.size === "number") return guilds.size;
-      if (typeof guilds?.values === "function") return [...guilds.values()].length;
-    } catch (_) {}
+      const count = await client.fetchTotalGuildCount();
+      if (typeof count === "number" && count >= 0) return count;
+    } catch {}
   }
 
-  if (typeof client?.fetchTotalGuildCount === "function") {
+  // Strategy 2: built-in stats aggregator
+  if (typeof client.fetchAllStats === "function") {
     try {
-      const total = await withTimeout(client.fetchTotalGuildCount(), GUILD_FETCH_TIMEOUT_MS, null);
-      if (typeof total === "number" && total >= 0) return total;
-    } catch (_) {}
-  }
-
-  if (typeof client?.fetchAllStats === "function") {
-    try {
-      const stats = await withTimeout(client.fetchAllStats(), GUILD_FETCH_TIMEOUT_MS, null);
+      const stats = await client.fetchAllStats();
       if (typeof stats?.guilds === "number" && stats.guilds >= 0) return stats.guilds;
-    } catch (_) {}
+    } catch {}
   }
 
-  if (client?.rest && typeof client.rest.get === "function") {
+  // Strategy 3: REST API pagination — gets all guilds across shards
+  if (client.rest && typeof client.rest.get === "function") {
     try {
       let total = 0;
-      let after = null;
-
-      for (let page = 0; page < 25; page++) {
+      let after = undefined;
+      for (let page = 0; page < 500; page++) {
         const route = `/users/@me/guilds?limit=200${after ? `&after=${after}` : ""}`;
-        const response = await withTimeout(client.rest.get(route), REST_PAGE_TIMEOUT_MS, null);
-        if (!response) break;
-
+        const response = await client.rest.get(route);
         const batch = Array.isArray(response) ? response : (response?.guilds ?? []);
         total += batch.length;
         if (batch.length < 200) break;
-
-        after = batch[batch.length - 1]?.id ?? null;
+        after = batch[batch.length - 1]?.id;
         if (!after) break;
       }
-
-      if (total > 0) return total;
-    } catch (_) {}
+      return total;
+    } catch {}
   }
 
-  return getCachedGuildCount(client);
+  // Strategy 4: fallback — local shard cache only
+  return client.guilds?.size ?? 0;
 }
 
-function collectIdsFromMembers(guild) {
-  const ids = new Set();
-  const members = guild?.members;
-  const iterable = typeof members?.values === "function"
-    ? members.values()
-    : Array.isArray(members)
-      ? members
-      : Object.values(members ?? {});
-
-  for (const member of iterable) {
-    const id = member?.id ?? member?.user?.id ?? null;
-    if (id) ids.add(String(id));
+/**
+ * Accurate user count — sum memberCount across all guilds.
+ * Uses guild.memberCount from the GUILD_CREATE payload (O(1), no API calls).
+ * Falls back to guild.members.size if memberCount is missing.
+ */
+function computeUserCount(client) {
+  let total = 0;
+  for (const [, guild] of client.guilds) {
+    total += guild.memberCount ?? guild.members?.size ?? 0;
   }
-
-  return ids;
-}
-
-async function fetchGuildMemberIds(guild) {
-  if (typeof guild?.members?.fetch !== "function") {
-    return collectIdsFromMembers(guild);
-  }
-
-  try {
-    const ids = new Set();
-    let after = undefined;
-
-    for (let page = 0; page < 1000; page++) {
-      const raw = await guild.members.fetch({ limit: 1000, after });
-      const batch = Array.isArray(raw)
-        ? raw
-        : typeof raw?.values === "function"
-          ? [...raw.values()]
-          : Object.values(raw ?? {});
-
-      for (const member of batch) {
-        const id = member?.id ?? member?.user?.id ?? null;
-        if (id) ids.add(String(id));
-      }
-
-      if (batch.length < 1000) break;
-
-      after = batch.reduce((max, member) => {
-        const id = String(member?.id ?? member?.user?.id ?? "");
-        return id > max ? id : max;
-      }, "0");
-
-      if (!after) break;
-    }
-
-    return ids;
-  } catch (_) {
-    return collectIdsFromMembers(guild);
-  }
-}
-
-async function fetchUserCount(client) {
-  const guilds = [...(client?.guilds?.values?.() ?? [])];
-  if (guilds.length === 0) return 0;
-
-  const idSets = await runLimited(
-    guilds.map((guild) => () => fetchGuildMemberIds(guild)),
-    8
-  );
-
-  const uniqueUsers = new Set();
-  for (const idSet of idSets) {
-    if (!idSet || typeof idSet[Symbol.iterator] !== "function") continue;
-    for (const id of idSet) uniqueUsers.add(String(id));
-  }
-
-  return uniqueUsers.size;
+  return total;
 }
 
 async function refreshStats(client) {
   try {
-    cachedStats = {
-      guildCount: await fetchGuildCount(client),
-      userCount: await fetchUserCount(client),
-    };
-  } catch (_) {
-    cachedStats = {
-      guildCount: getCachedGuildCount(client),
-      userCount: getCachedUserCount(client),
-    };
-  } finally {
-    cacheExpiresAt = Date.now() + CACHE_TTL_MS;
-    inflightStatsPromise = null;
+    const [guildCount, userCount] = await Promise.all([
+      fetchAccurateGuildCount(client),
+      Promise.resolve(computeUserCount(client)),
+    ]);
+    cachedStats = { guildCount, userCount };
+  } catch (err) {
+    console.error("[stats] refreshStats failed:", err);
+    // Keep old cache instead of overwriting with bad data
+    if (cachedStats) {
+      cacheExpiresAt = Date.now() + CACHE_TTL_MS;
+      inflightPromise = null;
+      return cachedStats;
+    }
+    cachedStats = { guildCount: client.guilds?.size ?? 0, userCount: 0 };
   }
-
+  cacheExpiresAt  = Date.now() + CACHE_TTL_MS;
+  inflightPromise = null;
   return cachedStats;
 }
 
 function getStats(client) {
-  if (cachedStats && Date.now() < cacheExpiresAt) {
-    return Promise.resolve(cachedStats);
-  }
-
-  if (!inflightStatsPromise) {
-    inflightStatsPromise = refreshStats(client);
-  }
-
-  return inflightStatsPromise;
-}
-
-function getLastfmSnapshot(lastfm) {
-  return {
-    scrobbleCount: Number(lastfm?._totalScrobblesCache ?? 0),
-    linkedUsers: Number(lastfm?._linkedUsersCache ?? 0),
-  };
+  if (cachedStats && Date.now() < cacheExpiresAt) return Promise.resolve(cachedStats);
+  if (!inflightPromise) inflightPromise = refreshStats(client);
+  return inflightPromise;
 }
 
 function getLivePlayerCount(playerMap) {
-  let count = 0;
+  let live = 0;
 
-  for (const player of playerMap?.values?.() ?? []) {
-    if (!player || player._destroyed || player.leaving || player._isJoining) continue;
+  for (const [, player] of playerMap ?? []) {
+    if (!player || player._destroyed || player.leaving) continue;
+    if (player._isJoining) continue;
 
-    const room = player?.connection?.room;
-    if (room && !room.isConnected && (room.connectionState === 0 || room.connectionState === "disconnected")) {
-      continue;
+    const conn = player.connection;
+    if (!conn) continue;
+
+    const room = conn.room;
+    if (room) {
+      const isConnected = room.isConnected;
+      const connectionState = room.connectionState;
+      if (!isConnected && (connectionState === 0 || connectionState === "disconnected")) continue;
     }
 
-    if (!player.connection) continue;
-    count++;
+    live++;
   }
 
-  return count;
+  return live;
 }
 
-function buildEmbed(t, message, stats) {
-  const num = (value) => Utils.formatNumber(Number(value ?? 0));
-  const maybeLoading = (value, loading) => loading ? "..." : value;
+// ── Embed builder ─────────────────────────────────────────────────────────────
 
-  const lines = [
-    `${t(message, "responses.stats.servers")} — \`${num(stats.guildCount)}\``,
-    `${t(message, "responses.stats.users")} — \`${maybeLoading(num(stats.userCount), stats.loading)}\``,
-    `${t(message, "responses.stats.players")} — \`${num(stats.playerCount)}\``,
+function buildEmbed(t, msg, { guildCount, userCount, playerCount, scrobbleCount, linkedUsers, ping, uptime, comHash, comLink, reason, footer, loading, lastfmEnabled }) {
+  const num = (v) => Utils.formatNumber(v);
+  const ld  = (v) => loading ? "..." : v;
+
+  const description = [
+    `${t(msg, "responses.stats.servers")} — \`${num(guildCount)}\``,
+    `${t(msg, "responses.stats.users")} — \`${ld(num(userCount))}\``,
+    `${t(msg, "responses.stats.players")} — \`${num(playerCount)}\``,
   ];
 
-  if (stats.lastfmEnabled) {
-    lines.push(`${t(message, "responses.stats.scrobbles")} — \`${maybeLoading(num(stats.scrobbleCount), stats.loading)}\``);
-    lines.push(`${t(message, "responses.stats.linkedUsers")} — \`${maybeLoading(num(stats.linkedUsers), stats.loading)}\``);
+  // Add Last.fm stats if the integration is enabled
+  if (lastfmEnabled) {
+    description.push(`${t(msg, "responses.stats.scrobbles")} — \`${ld(num(scrobbleCount))}\``);
+    description.push(`${t(msg, "responses.stats.linkedUsers")} — \`${ld(num(linkedUsers))}\``);
   }
 
-  lines.push(
-    `${t(message, "responses.stats.ping")} — \`${maybeLoading(`${num(stats.ping)}ms`, stats.loading)}\``,
-    `${t(message, "responses.stats.uptime")} — \`${stats.uptime}\``,
-    `${t(message, "responses.stats.build")} — [\`${stats.comHash}\`](${stats.comLink})`
+  description.push(
+      `${t(msg, "responses.stats.ping")} — \`${ld(`${num(ping)}ms`)}\``,
+      `${t(msg, "responses.stats.uptime")} — \`${uptime}\``,
+      `${t(msg, "responses.stats.build")} — [\`${comHash}\`](${comLink})`,
+      reason ? `${t(msg, "responses.stats.lastRestart")} — \`${reason}\`` : null,
+      ``,
+      t(msg, "responses.stats.supportKofi"),
+      t(msg, "responses.stats.community"),
   );
 
-  if (stats.reason) {
-    lines.push(`${t(message, "responses.stats.lastRestart")} — \`${stats.reason}\``);
-  }
+  const desc = description.filter(l => l !== null).join("\n");
 
-  lines.push("", t(message, "responses.stats.supportKofi"), t(message, "responses.stats.community"));
-
-  const embed = new EmbedBuilder()
+  const builder = new EmbedBuilder()
       .setColor(getGlobalColor())
-      .setAuthor({ name: t(message, "responses.stats.title") })
-      .setDescription(lines.join("\n"))
-      .setFooter({ text: stats.footer || t(message, "responses.stats.title") });
+      .setAuthor({ name: t(msg, "responses.stats.title") })
+      .setDescription(desc)
+      .setFooter({ text: footer || t(msg, "responses.stats.title") });
 
-  if (typeof embed.setTimestamp === "function") {
-    embed.setTimestamp();
-  }
-
-  return embed;
+  if (typeof builder.setTimestamp === "function") builder.setTimestamp();
+  return builder;
 }
 
-async function editOrReply(messageRef, payload, fallbackMessage) {
-  try {
-    if (typeof messageRef?.edit === "function") {
-      await messageRef.edit(payload);
-      return true;
-    }
-
-    if (typeof messageRef?.message?.edit === "function") {
-      await messageRef.message.edit(payload);
-      return true;
-    }
-  } catch (err) {
-    console.error("[stats] edit failed:", err);
-  }
-
-  try {
-    await fallbackMessage.reply(payload);
-    return false;
-  } catch (err) {
-    if (!isAbortError(err)) {
-      console.error("[stats] fallback reply failed:", err);
-    }
-    return false;
-  }
-}
-
-async function safeReply(message, payload) {
-  try {
-    return await message.reply(payload);
-  } catch (err) {
-    if (!isAbortError(err)) {
-      throw err;
-    }
-
-    console.warn("[stats] reply aborted by Fluxer timeout");
-    return null;
-  }
-}
+// ── Runner ────────────────────────────────────────────────────────────────────
 
 export async function run(message) {
-  const t = createTranslator(this);
   const lastfm = this.lastfm;
   const lastfmEnabled = lastfm?.enabled ?? false;
-  const lastfmSnapshot = getLastfmSnapshot(lastfm);
 
-  const baseStats = {
-    guildCount: getCachedGuildCount(this.client),
-    userCount: getFastCachedUserCount(),
+  const shared = {
+    guildCount:  this.client.guilds.size,
     playerCount: getLivePlayerCount(this.players.playerMap),
-    scrobbleCount: lastfmSnapshot.scrobbleCount,
-    linkedUsers: lastfmSnapshot.linkedUsers,
+    scrobbleCount: 0,
+    linkedUsers: 0,
     lastfmEnabled,
-    uptime: Utils.prettifyMS(Math.round(process.uptime()) * 1000),
-    comHash: this.comHash,
-    comLink: this.comLink,
-    reason: this.config.restart ?? null,
-    footer: this.config.customStatsFooter || null,
-    ping: 0,
-    loading: !cachedStats,
+    uptime:      Utils.prettifyMS(Math.round(process.uptime()) * 1000),
+    comHash:     this.comHash,
+    comLink:     this.comLink,
+    reason:      this.config.restart ?? null,
+    footer:      this.config.customStatsFooter || null,
   };
 
-  const cachedOrFallbackStats = cachedStats ?? {
-    guildCount: baseStats.guildCount,
-    userCount: getCachedUserCount(this.client),
-  };
+  // Fetch Last.fm stats (non-blocking for initial reply)
+  const scrobblePromise = lastfmEnabled ? lastfm.getTotalScrobbles() : Promise.resolve(0);
+  const linkedPromise   = lastfmEnabled ? lastfm.getLinkedUsersCount()  : Promise.resolve(0);
 
-  try {
-    const start = Date.now();
-    const reply = await safeReply(message, {
-      embeds: [
-        buildEmbed(t, message, {
-          ...baseStats,
-          guildCount: cachedOrFallbackStats.guildCount,
-          userCount: cachedOrFallbackStats.userCount,
-        }),
-      ],
-    });
-    if (!reply) return;
+  const hasCached = cachedStats !== null;
 
-    const ping = Date.now() - start;
+  // Measure real round-trip latency
+  const start = Date.now();
+  const msg = await message.reply({
+    embeds: [buildEmbed((...a) => this.t(...a), message, {
+      ...shared,
+      guildCount: hasCached ? cachedStats.guildCount : shared.guildCount,
+      userCount:  hasCached ? cachedStats.userCount : 0,
+      ping: 0,
+      loading: !hasCached,
+    })]
+  });
+  const ping = Date.now() - start;
 
-    const statsPromise = getStats(this.client).catch(() => cachedOrFallbackStats);
-    const scrobblePromise = lastfmEnabled
-      ? withTimeout(
-          lastfm.getStoredTotalScrobbles?.() ?? Promise.resolve(lastfmSnapshot.scrobbleCount),
-          LASTFM_TIMEOUT_MS,
-          lastfmSnapshot.scrobbleCount
-        ).catch(() => lastfmSnapshot.scrobbleCount)
-      : Promise.resolve(0);
-    const linkedPromise = lastfmEnabled
-      ? withTimeout(
-          lastfm.getLinkedUsersCount?.() ?? Promise.resolve(lastfmSnapshot.linkedUsers),
-          LASTFM_TIMEOUT_MS,
-          lastfmSnapshot.linkedUsers
-        ).catch(() => lastfmSnapshot.linkedUsers)
-      : Promise.resolve(0);
+  const [stats, scrobbleCount, linkedUsers] = await Promise.all([
+    getStats(this.client),
+    scrobblePromise,
+    linkedPromise,
+  ]);
 
-    const [stats, scrobbleCount, linkedUsers] = await Promise.all([
-      statsPromise,
-      scrobblePromise,
-      linkedPromise,
-    ]);
-
-    await editOrReply(reply, {
-      embeds: [
-        buildEmbed(t, message, {
-          ...baseStats,
-          guildCount: stats?.guildCount ?? cachedOrFallbackStats.guildCount,
-          userCount: stats?.userCount ?? cachedOrFallbackStats.userCount,
-          scrobbleCount,
-          linkedUsers,
-          ping,
-          loading: false,
-        }),
-      ],
-    }, message);
-  } catch (err) {
-    if (!isAbortError(err)) {
-      console.error("[stats] run failed:", err);
-    }
-
-    const fallback = new EmbedBuilder()
-        .setColor(getGlobalColor())
-        .setDescription("Failed to load full stats. Please try again in a moment.");
-
-    await safeReply(message, { embeds: [fallback] }).catch(() => {});
-  }
+  await msg.edit({
+    embeds: [buildEmbed((...a) => this.t(...a), message, {
+      ...shared,
+      guildCount:   stats.guildCount,
+      userCount:    stats.userCount,
+      scrobbleCount,
+      linkedUsers,
+      ping,
+      loading: false,
+    })]
+  }).catch((err) => console.error("[stats] editEmbed failed:", err));
 }

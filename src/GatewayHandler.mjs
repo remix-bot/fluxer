@@ -1255,18 +1255,15 @@ export class GatewayHandler {
                       `guild is 401-banned (${Math.round((banExpiry - Date.now()) / 1000)}s remaining).`
                     );
                     // Remove the old player entry and destroy it
-                    const bannedPlayer = remix.players.playerMap.get(cleanOld);
                     remix.players.playerMap.delete(cleanOld);
-                    try { bannedPlayer?.destroy(); } catch (_) {}
+                    try { remix.players.playerMap.get(cleanOld)?.destroy(); } catch (_) {}
                     return;
                   }
 
                   // Match the specific player by channel ID
                   const player = remix.players.playerMap.get(cleanOld);
                   if (player && !player.leaving) {
-                    logger.voice247(
-                      `[247] Fluxer gateway disconnected ${cleanOld} in guild ${guildId} — scheduling 24/7 respawn.`
-                    );
+                    logger.voice247("[247] Fluxer gateway disconnected us. Forcing player recovery...");
 
                     // Set a gateway disconnect cooldown for this guild to
                     // prevent recovery cascades. If recovery rejoins and the
@@ -1276,12 +1273,17 @@ export class GatewayHandler {
                     // Auto-clear the cooldown after 30 seconds
                     setTimeout(() => this._gatewayDisconnectCooldown.delete(cleanGuild), 30_000);
 
-                    // Mark the disconnect reason before shutting the player down.
+                    // Mark the disconnect reason on the player for smarter recovery
                     player._lastDisconnectReason = "gateway";
                     player._lastDisconnectTime = Date.now();
-                    remix.players.playerMap.delete(cleanOld);
-                    try { player.destroy({ disconnect: false }); } catch (_) {}
-                    this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, "gateway-disconnect");
+
+                    if (typeof player._recoverConnection === "function") {
+                      player._recoverConnection();
+                    } else {
+                      remix.players.playerMap.delete(cleanOld);
+                      try { player.destroy(); } catch (_) {}
+                      this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, "gateway-disconnect");
+                    }
                   } else {
                     this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, "gateway-disconnect");
                   }

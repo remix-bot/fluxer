@@ -606,7 +606,6 @@ export class Remix {
    */
   _attachWsErrorHandlers() {
     try {
-      if (this._wsErrorHandlersAttached) return;
       const wsManager = this.client?.ws;
       if (!wsManager) return;
 
@@ -658,7 +657,7 @@ export class Remix {
         });
       }
 
-      this._wsErrorHandlersAttached = true;
+      logger.player("[WS] Proactive error handlers attached to gateway sockets.");
     } catch (e) {
       logger.warn("[WS] Failed to attach WS error handlers:", e.message);
     }
@@ -721,11 +720,10 @@ export class Remix {
     }
 
     this.markIntentionalLeave(cleanId);
-    const playerEntry = this.players.findPlayerEntryByChannelId?.(cleanId) ?? null;
-    const player = playerEntry?.player ?? null;
 
+    const player = this.players.playerMap.get(cleanId);
     if (player) {
-      this.players.detachPlayer?.(player, cleanId);
+      this.players.playerMap.delete(cleanId);
       await player.leave().catch(() => {});
       player.destroy();
     }
@@ -743,22 +741,28 @@ export class Remix {
     if (other247AutoChannels.length > 0) {
       const rejoinBaseDelay = this.T?.leave247RejoinDelay ?? 5000;
       const rejoinStagger = this.T?.rejoin247Delay ?? 3000;
-      const channelsToRespawn = [];
-      for (const otherChannelId of other247AutoChannels) {
-        const otherPlayer = this.players.findPlayerEntryByChannelId?.(otherChannelId)?.player ?? null;
+      for (let i = 0; i < other247AutoChannels.length; i++) {
+        const otherChannelId = other247AutoChannels[i];
+        const otherPlayer = this.players.playerMap.get(otherChannelId);
+        // Only rejoin if the player is gone (was collateral-disconnected)
         if (!otherPlayer || otherPlayer._destroyed) {
           if (otherPlayer) {
-            this.players.detachPlayer?.(otherPlayer, otherChannelId);
+            this.players.playerMap.delete(otherChannelId);
             try { otherPlayer.destroy(); } catch (_) {}
           }
-          channelsToRespawn.push(otherChannelId);
+          const delay = rejoinBaseDelay + (i + 1) * rejoinStagger;
+          logger.recovery(
+            `[leaveChannel] Scheduling 247 auto-rejoin for collateral-disconnected channel ${otherChannelId} in ${delay}ms`
+          );
+          setTimeout(() => {
+            if (this._spawnPlayer) {
+              this._spawnPlayer(guildId, otherChannelId).catch(e =>
+                  logger.warn("[leaveChannel] 247 collateral rejoin failed for", otherChannelId, e.message)
+              );
+            }
+          }, delay);
         }
       }
-      this.players.schedule247Respawns?.(guildId, channelsToRespawn, {
-        baseDelay: rejoinBaseDelay,
-        stagger: rejoinStagger,
-        source: "leaveChannel",
-      });
     }
 
     return true;
@@ -908,21 +912,8 @@ const isIgnorableWsCrash = (err) => {
       );
 };
 
-const isAbortError = (err) => {
-  const name = String(err?.name ?? "");
-  const code = String(err?.code ?? "");
-  const message = String(err?.message ?? err ?? "");
-  return name === "AbortError" ||
-    code === "ABORT_ERR" ||
-    message.includes("This operation was aborted");
-};
-
 process.on("unhandledRejection", (reason, p) => {
   if (reason?.message?.includes("AudioSource is closed")) return;
-  if (isAbortError(reason)) {
-    logger.warn("[Error_Handling] Suppressed AbortError from a timed-out request.");
-    return;
-  }
   logger.error("[Error_Handling] Unhandled Rejection/Catch");
   logger.error("Reason:", reason, p);
 });
@@ -932,16 +923,11 @@ process.on("uncaughtException", (err, origin) => {
     logger.warn("Error:", err?.stack ?? err, origin);
     return;
   }
-  if (isAbortError(err)) {
-    logger.warn("[Error_Handling] Suppressed AbortError from a timed-out request.");
-    return;
-  }
   logger.error("[Error_Handling] Uncaught Exception/Catch");
   logger.error("Error:", err, origin);
   process.exit(1);
 });
 process.on("uncaughtExceptionMonitor", (err, origin) => {
-  if (isAbortError(err)) return;
   logger.error("[Error_Handling] Uncaught Exception/Catch (MONITOR)");
   logger.error("Error:", err, origin);
 });

@@ -5,15 +5,17 @@ import Player from "./Player.mjs";
 import { get247ChannelMode } from "./constants/Helpers247.mjs";
 
 /**
- * RecoveryManager — handles player spawning without background recovery loops.
+ * RecoveryManager — handles 24/7 auto-join on boot and player spawning.
  *
  * The boot-time recovery system (session persistence via recovery.json) has
  * been removed. On restart the bot starts clean; only 24/7 channels configured
  * in each guild's settings are automatically rejoined.
  *
  * This module still provides:
- *   - spawnPlayer()       — create a Player and join a voice channel when explicitly requested
+ *   - spawnPlayer()       — create a Player, join a voice channel (used by 24/7)
+ *   - scheduleSpawn()     — delayed player spawn (used by 24/7 autoleave rejoin)
  *   - cleanStaleGuild()   — purge all state for a guild the bot left
+ *   - tryAutoJoin()       — auto-join 24/7 channels when bot + settings are ready
  */
 export class RecoveryManager {
   /**
@@ -28,7 +30,6 @@ export class RecoveryManager {
       aloneCheckInterval: timers.aloneCheckInterval  ?? 30_000,
       aloneCheckDebounce: timers.aloneCheckDebounce  ?? 500,
       rejoin247Delay:     timers.rejoin247Delay       ?? 3_000,
-      startupGuildGrace:  timers.startupGuildGrace    ?? 45_000,
     };
 
     // ── Internal state ────────────────────────────────────────────────────────
@@ -40,7 +41,6 @@ export class RecoveryManager {
     // ── Ready flags ───────────────────────────────────────────────────────────
     this.botReady = false;
     this.settingsReady = false;
-    this._botReadyAt = 0;
 
     // ── Auto-join guard ───────────────────────────────────────────────────────
     this._autoJoinRunning = false;
@@ -54,7 +54,6 @@ export class RecoveryManager {
     /** @type {Map<string, number>} Guild ID → consecutive 401 retry count.
      *  Used for exponential backoff: 1st retry after 15s, 2nd after 45s, 3rd = ban. */
     this._guild401Retries = new Map();
-    this._spawnQueue = Promise.resolve();
 
     // ── Expose convenience methods on the Remix instance ──────────────────────
     remix._spawnPlayer = this.spawnPlayer.bind(this);
@@ -67,78 +66,6 @@ export class RecoveryManager {
 
   normalizeChannelId(value) {
     return String(value ?? "").replace(/\D/g, "");
-  }
-
-  _inStartupGuildGrace() {
-    return this._botReadyAt > 0 && (Date.now() - this._botReadyAt) < this.T.startupGuildGrace;
-  }
-
-  _isGuildAvailable(guildId) {
-    const { remix } = this;
-    const cleanGuildId = String(guildId).replace(/\D/g, "");
-    return remix.client.guilds.has(guildId) || remix.client.guilds.has(cleanGuildId);
-  }
-
-  _enqueueSpawn(guildId, channelId, reason = "spawn") {
-    const cleanChannelId = this.normalizeChannelId(channelId);
-    if (!cleanChannelId) return Promise.resolve();
-
-    const run = async () => {
-      try {
-        await this.spawnPlayer(guildId, cleanChannelId);
-      } catch (e) {
-        logger.warn(`[PlayerSpawn] Scheduled ${reason} failed for ${cleanChannelId}:`, e?.message ?? e);
-      }
-    };
-
-    const queued = this._spawnQueue.then(run, run);
-    this._spawnQueue = queued.catch(() => {});
-    return queued;
-  }
-
-  _disable247Channel(guildId, channelId, reason = "disabled") {
-    const { remix } = this;
-    const cleanGuildId = String(guildId).replace(/\D/g, "");
-    const cleanChannelId = this.normalizeChannelId(channelId);
-    if (!cleanGuildId || !cleanChannelId) return false;
-
-    const set = remix.settingsMgr.getServer(guildId) ?? remix.settingsMgr.getServer(cleanGuildId);
-    if (!set) return false;
-
-    const raw = set.get("stay_247");
-    if (!raw || raw === "none") return false;
-
-    const channels = Array.isArray(raw)
-      ? raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
-      : [String(raw).replace(/\D/g, "")].filter(Boolean);
-
-    const nextChannels = channels.filter(id => id !== cleanChannelId);
-    const changed = nextChannels.length !== channels.length;
-
-    if (!changed) return false;
-
-    set.set("stay_247", nextChannels.length > 0 ? nextChannels : "none");
-
-    const modes = set.get("stay_247_modes");
-    if (modes && typeof modes === "object" && !Array.isArray(modes)) {
-      delete modes[cleanChannelId];
-      set.set("stay_247_modes", modes);
-    }
-
-    if (nextChannels.length === 0) {
-      set.set("stay_247_mode", "off");
-    } else {
-      const first = nextChannels[0];
-      const nextMode = (modes && typeof modes === "object" && !Array.isArray(modes))
-        ? (modes[first] ?? "auto")
-        : "auto";
-      set.set("stay_247_mode", nextMode);
-    }
-
-    logger.warn(
-      `[247] Removed channel ${cleanChannelId} from stay_247 in guild ${cleanGuildId} (${reason}).`
-    );
-    return true;
   }
 
   /**
@@ -202,7 +129,9 @@ export class RecoveryManager {
 
     const timer = setTimeout(() => {
       this.scheduledSpawns.delete(cleanChannelId);
-      this._enqueueSpawn(guildId, cleanChannelId, reason);
+      this.spawnPlayer(guildId, cleanChannelId).catch(e => {
+        logger.warn(`[PlayerSpawn] Scheduled ${reason} failed for ${cleanChannelId}:`, e?.message ?? e);
+      });
     }, Math.max(0, delayMs));
 
     this.scheduledSpawns.set(cleanChannelId, { timer, guildId, reason });
@@ -237,9 +166,13 @@ export class RecoveryManager {
     // messages.  The GuildCreate handler will schedule the 24/7 spawn for
     // late-arriving guilds.  cleanStaleGuild is only appropriate when we
     // know for sure the bot was kicked (i.e. a GuildDelete was received).
-    if (!this._isGuildAvailable(guildId)) {
-      if (this._autoJoinRunning || !this._autoJoinDone || this._inStartupGuildGrace()) {
-        // Startup phase — guild cache not populated yet, just skip quietly.
+    if (!remix.client.guilds.has(guildId) && !remix.client.guilds.has(cleanGuildId)) {
+      if (this._autoJoinRunning || !this._autoJoinDone) {
+        // Startup phase — guild cache not populated yet, just skip
+        logger.recovery(
+          `[PlayerSpawn] Skipping channel ${cleanChannelId} in guild ${cleanGuildId} — ` +
+          `guild cache not populated yet (startup race). GuildCreate will schedule spawn.`
+        );
       } else {
         // Runtime — bot was actually removed from the guild
         logger.recovery(
@@ -357,11 +290,8 @@ export class RecoveryManager {
 
       // ── Autoleave handler ───────────────────────────────────────────────────
       p.on("autoleave", async () => {
-        const { activeChannelId, homeChannelId } = remix.players.detachPlayer?.(p, cleanChannelId)
-          ?? {
-            activeChannelId: String(p._channelId ?? cleanChannelId).replace(/\D/g, "") || cleanChannelId,
-            homeChannelId: String(p._home247Channel ?? cleanChannelId).replace(/\D/g, "") || cleanChannelId,
-          };
+        const activeChannelId = String(p._channelId ?? cleanChannelId).replace(/\D/g, "") || cleanChannelId;
+        const homeChannelId = String(p._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
 
         const raw2      = remix.settingsMgr.getServer(guildId).get("stay_247");
         const channels2 = (!raw2 || raw2 === "none")
@@ -378,15 +308,15 @@ export class RecoveryManager {
             ? get247ChannelMode(remix.settingsMgr.getServer(guildId), matchChannel)
             : "off";
 
+        // Remove player from map and destroy it now that we've read the state.
+        remix.players.playerMap.delete(activeChannelId);
+        if (activeChannelId !== cleanChannelId) remix.players.playerMap.delete(cleanChannelId);
         p.destroy();
 
         if (matchChannel && (mode2 === "on" || mode2 === "auto")) {
-          remix.players.schedule247Respawns?.(guildId, [homeChannelId], {
-            baseDelay: this.T.rejoin247Delay,
-            stagger: 0,
-            source: "247-autoleave",
-          });
+          this.scheduleSpawn(guildId, homeChannelId, this.T.rejoin247Delay, "247-autoleave");
         } else {
+          // 24/7 is off — send inactivity message with hint to enable 247
           try {
             const prefix = remix.handler?.getPrefix?.(guildId) ?? "%";
             const guild  = remix.client.guilds.get(guildId);
@@ -494,29 +424,62 @@ export class RecoveryManager {
         logger.warn("[PlayerSpawn] Failed to join channel", cleanChannelId, "guild", guildId, e.message);
 
         // ── 401 Unauthorized handling ─────────────────────────────────────
-        const errMsg = String(e?.message ?? e ?? "");
-        const isCooldownBlock = errMsg.includes("active 401 cooldown");
-        const is401Error = !isCooldownBlock && (
-            /\b401\b/.test(errMsg) ||
-            errMsg.includes("Unauthorized") ||
-            errMsg.includes("no permissions to access the room") ||
-            errMsg.includes("signal failure: client error")
-        );
+        const is401Error = /\b401\b/.test(e.message) ||
+            e.message?.includes("Unauthorized") ||
+            e.message?.includes("no permissions to access the room") ||
+            e.message?.includes("signal failure: client error");
 
         if (is401Error) {
-          this._disable247Channel(cleanGuildId, cleanChannelId, "401 room permission failure");
-          logger.warn(
-            `[PlayerSpawn] 401 for guild ${cleanGuildId} on channel ${cleanChannelId}. ` +
-            "Channel removed from 24/7 autojoin; leaving it disconnected until re-enabled manually."
-          );
-          return;
-        }
+          // Bot not in guild cache — but during startup, the cache might not
+          // be populated yet. Same race as the pre-flight check.
+          if (!remix.client.guilds.has(guildId) && !remix.client.guilds.has(cleanGuildId)) {
+            if (this._autoJoinRunning || !this._autoJoinDone) {
+              logger.warn(
+                `[PlayerSpawn] 401 on guild ${guildId} — guild cache not populated yet (startup race). Will retry.`
+              );
+              // Schedule a retry — don't clean up
+              const retryCount = (this._guild401Retries.get(cleanGuildId) ?? 0) + 1;
+              this._guild401Retries.set(cleanGuildId, retryCount);
+              if (retryCount < 3) {
+                this.scheduleSpawn(guildId, cleanChannelId, 15_000, `401-startup-retry-${retryCount}`);
+              }
+              return;
+            }
+            // Runtime — bot was actually removed
+            logger.warn(
+              `[PlayerSpawn] 401 on guild ${guildId} — bot no longer in server. Cleaning up.`
+            );
+            this.cleanStaleGuild(guildId, "401 and bot not in guild");
+            return;
+          }
 
-        if (isCooldownBlock) {
+          // Bot IS still in the guild — the 401 may be transient (gateway slow
+          // to provision voice room). Retry with exponential backoff instead of
+          // permanently giving up on the first failure.
+          const retryCount = (this._guild401Retries.get(cleanGuildId) ?? 0) + 1;
+          this._guild401Retries.set(cleanGuildId, retryCount);
+
+          if (retryCount >= 3) {
+            // After 3 consecutive 401s, ban this guild for 5 minutes to avoid
+            // infinite retry loops. The FluxerRevoice 45s cooldown + this ban
+            // prevent wasting resources on guilds where voice is truly broken.
+            const banDuration = 5 * 60 * 1000; // 5 minutes
+            this._guild401Ban.set(cleanGuildId, Date.now() + banDuration);
+            this._guild401Retries.delete(cleanGuildId);
+            logger.warn(
+              `[PlayerSpawn] 401 for guild ${cleanGuildId} — ` +
+              `${retryCount} consecutive failures. Banning for 5 minutes.`
+            );
+            return;
+          }
+
+          // Exponential backoff: 1st retry after 15s, 2nd after 45s
+          const backoffMs = retryCount === 1 ? 15_000 : 45_000;
           logger.warn(
-            `[PlayerSpawn] Cooldown blocked autojoin for channel ${cleanChannelId} in guild ${cleanGuildId}. ` +
-            "Keeping 24/7 setting unchanged."
+            `[PlayerSpawn] 401 for guild ${cleanGuildId} — ` +
+            `transient? Retry ${retryCount}/3 in ${backoffMs / 1000}s.`
           );
+          this.scheduleSpawn(guildId, cleanChannelId, backoffMs, `401-retry-${retryCount}`);
           return;
         }
 
@@ -542,16 +505,14 @@ export class RecoveryManager {
   async tryAutoJoin() {
     if (!this.botReady || !this.settingsReady) return;
     if (this._autoJoinRunning || this._autoJoinDone) return;
-    if (!this._botReadyAt) this._botReadyAt = Date.now();
     this._autoJoinRunning = true;
 
     const { remix } = this;
     const joinList = [];
 
+    // Collect all 24/7 channels from loaded guild settings
     for (const [guildId, serverSettings] of remix.settingsMgr.guilds) {
       try {
-        if (!this._isGuildAvailable(guildId)) continue;
-
         const raw = serverSettings.get("stay_247");
         if (!raw || raw === "none") continue;
 
@@ -573,6 +534,11 @@ export class RecoveryManager {
       `[AutoJoin] Found ${joinList.length} 24/7 channel(s) to join.`
     );
 
+    // Schedule all 24/7 spawns immediately (no stagger). The FluxerRevoice
+    // global join queue handles serialization — only one join is in-flight
+    // at a time across all guilds, with a 3s gap between each. Staggering
+    // here is no longer needed and just adds unnecessary delay before the
+    // joins start queuing.
     for (let i = 0; i < joinList.length; i++) {
       const { guildId, channelId } = joinList[i];
       this.scheduleSpawn(guildId, channelId, 0, "247-autojoin");

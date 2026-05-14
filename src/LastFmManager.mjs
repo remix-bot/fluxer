@@ -864,29 +864,11 @@ export class LastFmManager {
     try {
       const pool = await this._getPool();
       const [rows] = await pool.execute(
-        "SELECT COUNT(*) AS total FROM lastfm_users"
+        "SELECT linked_users FROM lastfm_stats WHERE id = 1"
       );
-      const count = Number(rows[0]?.total ?? 0);
-      this._linkedUsersCache = count;
-      return count;
+      return Number(rows[0]?.linked_users ?? 0);
     } catch {
-      return this._linkedUsersCache ?? 0;
-    }
-  }
-
-  async getStoredTotalScrobbles() {
-    if (!this.enabled) return 0;
-    try {
-      const pool = await this._getPool();
-      const [rows] = await pool.execute(
-        "SELECT COALESCE(SUM(scrobble_count), 0) AS total FROM lastfm_users"
-      );
-      const total = Number(rows[0]?.total ?? this._totalScrobblesCache ?? 0);
-      this._totalScrobblesCache = total;
-      this._totalScrobblesCacheExpiry = Date.now() + 10 * 60 * 1000;
-      return total;
-    } catch {
-      return this._totalScrobblesCache ?? 0;
+      return 0;
     }
   }
 
