@@ -9,119 +9,108 @@ export const command = new CommandBuilder()
     .addAliases("info")
     .setCategory("util");
 
-// ── Stats cache ───────────────────────────────────────────────────────────────
+// ── User count cache ──────────────────────────────────────────────────────────
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // refresh every 5 minutes
 
-let cachedStats = null;   // { guildCount, userCount } or null
+let cachedUserCount = null; // null = never fetched, 0 = real zero
 let cacheExpiresAt  = 0;
 let inflightPromise = null;
 
-/**
- * Accurate guild count — same multi-layer strategy as ErinJS:
- *   1. Try client.fetchTotalGuildCount() (shard-aware, if available)
- *   2. Try client.fetchAllStats().guilds (shard-aware, if available)
- *   3. Paginate REST API via /users/@me/guilds?limit=200
- *   4. Fallback to client.guilds.size (local shard only)
- */
-async function fetchAccurateGuildCount(client) {
-  // Strategy 1: built-in shard-aware method
-  if (typeof client.fetchTotalGuildCount === "function") {
-    try {
-      const count = await client.fetchTotalGuildCount();
-      if (typeof count === "number" && count >= 0) return count;
-    } catch {}
+async function pool(limit, tasks) {
+  const results   = [];
+  const executing = new Set();
+  for (const task of tasks) {
+    const p = Promise.resolve().then(task).then(r => { results.push(r); executing.delete(p); });
+    executing.add(p);
+    if (executing.size >= limit) await Promise.race(executing);
   }
-
-  // Strategy 2: built-in stats aggregator
-  if (typeof client.fetchAllStats === "function") {
-    try {
-      const stats = await client.fetchAllStats();
-      if (typeof stats?.guilds === "number" && stats.guilds >= 0) return stats.guilds;
-    } catch {}
-  }
-
-  // Strategy 3: REST API pagination — gets all guilds across shards
-  if (client.rest && typeof client.rest.get === "function") {
-    try {
-      let total = 0;
-      let after = undefined;
-      for (let page = 0; page < 500; page++) {
-        const route = `/users/@me/guilds?limit=200${after ? `&after=${after}` : ""}`;
-        const response = await client.rest.get(route);
-        const batch = Array.isArray(response) ? response : (response?.guilds ?? []);
-        total += batch.length;
-        if (batch.length < 200) break;
-        after = batch[batch.length - 1]?.id;
-        if (!after) break;
-      }
-      return total;
-    } catch {}
-  }
-
-  // Strategy 4: fallback — local shard cache only
-  return client.guilds?.size ?? 0;
+  await Promise.all(executing);
+  return results;
 }
 
-/**
- * Accurate user count — sum memberCount across all guilds.
- * Uses guild.memberCount from the GUILD_CREATE payload (O(1), no API calls).
- * Falls back to guild.members.size if memberCount is missing.
- */
-function computeUserCount(client) {
-  let total = 0;
-  for (const [, guild] of client.guilds) {
-    total += guild.memberCount ?? guild.members?.size ?? 0;
-  }
-  return total;
-}
-
-async function refreshStats(client) {
+async function fetchGuildMemberCount(guild) {
   try {
-    const [guildCount, userCount] = await Promise.all([
-      fetchAccurateGuildCount(client),
-      Promise.resolve(computeUserCount(client)),
-    ]);
-    cachedStats = { guildCount, userCount };
-  } catch (err) {
-    console.error("[stats] refreshStats failed:", err);
-    // Keep old cache instead of overwriting with bad data
-    if (cachedStats) {
-      cacheExpiresAt = Date.now() + CACHE_TTL_MS;
-      inflightPromise = null;
-      return cachedStats;
+    let after = undefined;
+    let total = 0;
+    // Guard against runaway pagination: Fluxer may have far fewer than 1000 members
+    // but return a Collection (Map-like) instead of an array, causing batch.length
+    // to be undefined and the loop to run forever. Normalise to an array first.
+    for (let page = 0; page < 1000; page++) {
+      const raw   = await guild.members.fetch({ limit: 1000, after });
+      // Normalise: Collection (Map), array, or plain object → array
+      const batch = Array.isArray(raw)
+          ? raw
+          : typeof raw?.values === "function"
+              ? [...raw.values()]
+              : Object.values(raw ?? {});
+      total += batch.length;
+      if (batch.length < 1000) break;
+      after = batch.reduce((max, m) => {
+        const id = m.id ?? m.user?.id ?? "";
+        return id > max ? id : max;
+      }, "0");
     }
-    cachedStats = { guildCount: client.guilds?.size ?? 0, userCount: 0 };
+    return total;
+  } catch {
+    return guild.memberCount ?? guild.members?.size ?? 0;
   }
+}
+
+async function refreshUserCount(client) {
+  const guilds = [...client.guilds.values()];
+  const counts = await pool(10, guilds.map(g => () => fetchGuildMemberCount(g)));
+  cachedUserCount = counts.reduce((a, b) => a + b, 0);
   cacheExpiresAt  = Date.now() + CACHE_TTL_MS;
   inflightPromise = null;
-  return cachedStats;
+  return cachedUserCount;
 }
 
-function getStats(client) {
-  if (cachedStats && Date.now() < cacheExpiresAt) return Promise.resolve(cachedStats);
-  if (!inflightPromise) inflightPromise = refreshStats(client);
+function getUserCount(client) {
+  if (cachedUserCount !== null && Date.now() < cacheExpiresAt) return Promise.resolve(cachedUserCount);
+  if (!inflightPromise) inflightPromise = refreshUserCount(client);
   return inflightPromise;
 }
 
 function getLivePlayerCount(playerMap) {
   let live = 0;
+  const seenGuilds = new Set();
 
-  for (const [, player] of playerMap ?? []) {
+  for (const [mapKey, player] of playerMap ?? []) {
+    // Skip null / destroyed / leaving entries
     if (!player || player._destroyed || player.leaving) continue;
+
+    // Skip players still in the join() phase — they don't have a voice
+    // connection yet and may fail to connect.
     if (player._isJoining) continue;
 
+    // A player is only "live" if it has an actual voice connection.
+    // Stale entries (gateway disconnect, LiveKit drop) that haven't been
+    // cleaned up yet will have connection = null or a dead room state.
     const conn = player.connection;
-    if (!conn) continue;
-
-    const room = conn.room;
-    if (room) {
-      const isConnected = room.isConnected;
-      const connectionState = room.connectionState;
-      if (!isConnected && (connectionState === 0 || connectionState === "disconnected")) continue;
+    if (conn) {
+      const room = conn.room;
+      if (room) {
+        // Use @livekit/rtc-node Node.js SDK API:
+        // room.isConnected — boolean getter (true when connected)
+        // room.connectionState — ConnectionState enum (0=disconnected, 1=connected, 2=reconnecting)
+        // room.state does NOT exist in the Node.js SDK (browser-only API)
+        const isConnected = room.isConnected;
+        const connectionState = room.connectionState;
+        // Explicitly dead states → skip
+        if (!isConnected && (connectionState === 0 || connectionState === "disconnected")) continue;
+      }
+      // conn exists but no room → still a valid LiveKit connection reference
+    } else {
+      // No connection at all → not live
+      continue;
     }
 
     live++;
+
+    // Also track unique guilds so we can report server count
+    const guildId = String(player._guildId ?? "").replace(/\D/g, "");
+    if (guildId) seenGuilds.add(guildId);
   }
 
   return live;
@@ -186,40 +175,27 @@ export async function run(message) {
     footer:      this.config.customStatsFooter || null,
   };
 
-  // Fetch Last.fm stats (non-blocking for initial reply)
+  // Fetch Last.fm stats in the background (non-blocking for initial reply)
+  // getTotalScrobbles() syncs all linked users' lifetime scrobble counts from Last.fm
   const scrobblePromise = lastfmEnabled ? lastfm.getTotalScrobbles() : Promise.resolve(0);
   const linkedPromise   = lastfmEnabled ? lastfm.getLinkedUsersCount()  : Promise.resolve(0);
 
-  const hasCached = cachedStats !== null;
+  const hasCached = cachedUserCount !== null;
 
   // Measure real round-trip latency
   const start = Date.now();
   const msg = await message.reply({
-    embeds: [buildEmbed((...a) => this.t(...a), message, {
-      ...shared,
-      guildCount: hasCached ? cachedStats.guildCount : shared.guildCount,
-      userCount:  hasCached ? cachedStats.userCount : 0,
-      ping: 0,
-      loading: !hasCached,
-    })]
+    embeds: [buildEmbed((...a) => this.t(...a), message, { ...shared, userCount: hasCached ? cachedUserCount : 0, ping: 0, loading: !hasCached })]
   });
   const ping = Date.now() - start;
 
-  const [stats, scrobbleCount, linkedUsers] = await Promise.all([
-    getStats(this.client),
+  const [users, scrobbleCount, linkedUsers] = await Promise.all([
+    getUserCount(this.client),
     scrobblePromise,
     linkedPromise,
   ]);
 
   await msg.edit({
-    embeds: [buildEmbed((...a) => this.t(...a), message, {
-      ...shared,
-      guildCount:   stats.guildCount,
-      userCount:    stats.userCount,
-      scrobbleCount,
-      linkedUsers,
-      ping,
-      loading: false,
-    })]
+    embeds: [buildEmbed((...a) => this.t(...a), message, { ...shared, userCount: users, scrobbleCount, linkedUsers, ping, loading: false })]
   }).catch((err) => console.error("[stats] editEmbed failed:", err));
 }
