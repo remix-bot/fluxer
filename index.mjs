@@ -606,6 +606,7 @@ export class Remix {
    */
   _attachWsErrorHandlers() {
     try {
+      if (this._wsErrorHandlersAttached) return;
       const wsManager = this.client?.ws;
       if (!wsManager) return;
 
@@ -657,7 +658,7 @@ export class Remix {
         });
       }
 
-      logger.player("[WS] Proactive error handlers attached to gateway sockets.");
+      this._wsErrorHandlersAttached = true;
     } catch (e) {
       logger.warn("[WS] Failed to attach WS error handlers:", e.message);
     }
