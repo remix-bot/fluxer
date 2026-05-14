@@ -28,6 +28,7 @@ export class RecoveryManager {
       aloneCheckInterval: timers.aloneCheckInterval  ?? 30_000,
       aloneCheckDebounce: timers.aloneCheckDebounce  ?? 500,
       rejoin247Delay:     timers.rejoin247Delay       ?? 3_000,
+      startupGuildGrace:  timers.startupGuildGrace    ?? 45_000,
     };
 
     // ── Internal state ────────────────────────────────────────────────────────
@@ -39,6 +40,7 @@ export class RecoveryManager {
     // ── Ready flags ───────────────────────────────────────────────────────────
     this.botReady = false;
     this.settingsReady = false;
+    this._botReadyAt = 0;
 
     // ── Auto-join guard ───────────────────────────────────────────────────────
     this._autoJoinRunning = false;
@@ -64,6 +66,55 @@ export class RecoveryManager {
 
   normalizeChannelId(value) {
     return String(value ?? "").replace(/\D/g, "");
+  }
+
+  _inStartupGuildGrace() {
+    return this._botReadyAt > 0 && (Date.now() - this._botReadyAt) < this.T.startupGuildGrace;
+  }
+
+  _disable247Channel(guildId, channelId, reason = "disabled") {
+    const { remix } = this;
+    const cleanGuildId = String(guildId).replace(/\D/g, "");
+    const cleanChannelId = this.normalizeChannelId(channelId);
+    if (!cleanGuildId || !cleanChannelId) return false;
+
+    const set = remix.settingsMgr.getServer(guildId) ?? remix.settingsMgr.getServer(cleanGuildId);
+    if (!set) return false;
+
+    const raw = set.get("stay_247");
+    if (!raw || raw === "none") return false;
+
+    const channels = Array.isArray(raw)
+      ? raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
+      : [String(raw).replace(/\D/g, "")].filter(Boolean);
+
+    const nextChannels = channels.filter(id => id !== cleanChannelId);
+    const changed = nextChannels.length !== channels.length;
+
+    if (!changed) return false;
+
+    set.set("stay_247", nextChannels.length > 0 ? nextChannels : "none");
+
+    const modes = set.get("stay_247_modes");
+    if (modes && typeof modes === "object" && !Array.isArray(modes)) {
+      delete modes[cleanChannelId];
+      set.set("stay_247_modes", modes);
+    }
+
+    if (nextChannels.length === 0) {
+      set.set("stay_247_mode", "off");
+    } else {
+      const first = nextChannels[0];
+      const nextMode = (modes && typeof modes === "object" && !Array.isArray(modes))
+        ? (modes[first] ?? "auto")
+        : "auto";
+      set.set("stay_247_mode", nextMode);
+    }
+
+    logger.warn(
+      `[247] Removed channel ${cleanChannelId} from stay_247 in guild ${cleanGuildId} (${reason}).`
+    );
+    return true;
   }
 
   /**
@@ -165,7 +216,7 @@ export class RecoveryManager {
     // late-arriving guilds.  cleanStaleGuild is only appropriate when we
     // know for sure the bot was kicked (i.e. a GuildDelete was received).
     if (!remix.client.guilds.has(guildId) && !remix.client.guilds.has(cleanGuildId)) {
-      if (this._autoJoinRunning || !this._autoJoinDone) {
+      if (this._autoJoinRunning || !this._autoJoinDone || this._inStartupGuildGrace()) {
         // Startup phase — guild cache not populated yet, just skip
         logger.recovery(
           `[PlayerSpawn] Skipping channel ${cleanChannelId} in guild ${cleanGuildId} — ` +
@@ -421,15 +472,28 @@ export class RecoveryManager {
         logger.warn("[PlayerSpawn] Failed to join channel", cleanChannelId, "guild", guildId, e.message);
 
         // ── 401 Unauthorized handling ─────────────────────────────────────
-        const is401Error = /\b401\b/.test(e.message) ||
-            e.message?.includes("Unauthorized") ||
-            e.message?.includes("no permissions to access the room") ||
-            e.message?.includes("signal failure: client error");
+        const errMsg = String(e?.message ?? e ?? "");
+        const isCooldownBlock = errMsg.includes("active 401 cooldown");
+        const is401Error = !isCooldownBlock && (
+            /\b401\b/.test(errMsg) ||
+            errMsg.includes("Unauthorized") ||
+            errMsg.includes("no permissions to access the room") ||
+            errMsg.includes("signal failure: client error")
+        );
 
         if (is401Error) {
+          this._disable247Channel(cleanGuildId, cleanChannelId, "401 room permission failure");
           logger.warn(
             `[PlayerSpawn] 401 for guild ${cleanGuildId} on channel ${cleanChannelId}. ` +
-            "Recovery retries are disabled; leaving this channel disconnected."
+            "Channel removed from 24/7 autojoin; leaving it disconnected until re-enabled manually."
+          );
+          return;
+        }
+
+        if (isCooldownBlock) {
+          logger.warn(
+            `[PlayerSpawn] Cooldown blocked autojoin for channel ${cleanChannelId} in guild ${cleanGuildId}. ` +
+            "Keeping 24/7 setting unchanged."
           );
           return;
         }
@@ -456,6 +520,7 @@ export class RecoveryManager {
   async tryAutoJoin() {
     if (!this.botReady || !this.settingsReady) return;
     if (this._autoJoinRunning || this._autoJoinDone) return;
+    if (!this._botReadyAt) this._botReadyAt = Date.now();
     this._autoJoinRunning = true;
 
     const { remix } = this;
