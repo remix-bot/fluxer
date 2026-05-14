@@ -54,6 +54,7 @@ export class RecoveryManager {
     /** @type {Map<string, number>} Guild ID → consecutive 401 retry count.
      *  Used for exponential backoff: 1st retry after 15s, 2nd after 45s, 3rd = ban. */
     this._guild401Retries = new Map();
+    this._spawnQueue = Promise.resolve();
 
     // ── Expose convenience methods on the Remix instance ──────────────────────
     remix._spawnPlayer = this.spawnPlayer.bind(this);
@@ -70,6 +71,29 @@ export class RecoveryManager {
 
   _inStartupGuildGrace() {
     return this._botReadyAt > 0 && (Date.now() - this._botReadyAt) < this.T.startupGuildGrace;
+  }
+
+  _isGuildAvailable(guildId) {
+    const { remix } = this;
+    const cleanGuildId = String(guildId).replace(/\D/g, "");
+    return remix.client.guilds.has(guildId) || remix.client.guilds.has(cleanGuildId);
+  }
+
+  _enqueueSpawn(guildId, channelId, reason = "spawn") {
+    const cleanChannelId = this.normalizeChannelId(channelId);
+    if (!cleanChannelId) return Promise.resolve();
+
+    const run = async () => {
+      try {
+        await this.spawnPlayer(guildId, cleanChannelId);
+      } catch (e) {
+        logger.warn(`[PlayerSpawn] Scheduled ${reason} failed for ${cleanChannelId}:`, e?.message ?? e);
+      }
+    };
+
+    const queued = this._spawnQueue.then(run, run);
+    this._spawnQueue = queued.catch(() => {});
+    return queued;
   }
 
   _disable247Channel(guildId, channelId, reason = "disabled") {
@@ -178,9 +202,7 @@ export class RecoveryManager {
 
     const timer = setTimeout(() => {
       this.scheduledSpawns.delete(cleanChannelId);
-      this.spawnPlayer(guildId, cleanChannelId).catch(e => {
-        logger.warn(`[PlayerSpawn] Scheduled ${reason} failed for ${cleanChannelId}:`, e?.message ?? e);
-      });
+      this._enqueueSpawn(guildId, cleanChannelId, reason);
     }, Math.max(0, delayMs));
 
     this.scheduledSpawns.set(cleanChannelId, { timer, guildId, reason });
@@ -215,13 +237,9 @@ export class RecoveryManager {
     // messages.  The GuildCreate handler will schedule the 24/7 spawn for
     // late-arriving guilds.  cleanStaleGuild is only appropriate when we
     // know for sure the bot was kicked (i.e. a GuildDelete was received).
-    if (!remix.client.guilds.has(guildId) && !remix.client.guilds.has(cleanGuildId)) {
+    if (!this._isGuildAvailable(guildId)) {
       if (this._autoJoinRunning || !this._autoJoinDone || this._inStartupGuildGrace()) {
-        // Startup phase — guild cache not populated yet, just skip
-        logger.recovery(
-          `[PlayerSpawn] Skipping channel ${cleanChannelId} in guild ${cleanGuildId} — ` +
-          `guild cache not populated yet (startup race). GuildCreate will schedule spawn.`
-        );
+        // Startup phase — guild cache not populated yet, just skip quietly.
       } else {
         // Runtime — bot was actually removed from the guild
         logger.recovery(
@@ -528,6 +546,8 @@ export class RecoveryManager {
 
     for (const [guildId, serverSettings] of remix.settingsMgr.guilds) {
       try {
+        if (!this._isGuildAvailable(guildId)) continue;
+
         const raw = serverSettings.get("stay_247");
         if (!raw || raw === "none") continue;
 
