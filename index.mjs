@@ -658,6 +658,111 @@ export class Remix {
     }, ttlMs));
   }
 
+  /**
+   * Spawn a player for a voice channel without requiring a user message.
+   * Used by the 24/7 settings command and the leave command's auto-rejoin.
+   *
+   * @param {string} guildId   — The guild ID
+   * @param {string} channelId — The voice channel ID to join
+   * @returns {Promise<Player>} The created player
+   */
+  async _spawnPlayer(guildId, channelId) {
+    const cleanGuildId   = String(guildId).replace(/\D/g, "");
+    const cleanChannelId = String(channelId).replace(/\D/g, "");
+
+    if (!cleanChannelId) throw new Error("_spawnPlayer: invalid channelId");
+
+    // Already have a player for this channel?
+    const existing = this.players.playerMap.get(cleanChannelId)
+        ?? [...this.players.playerMap.values()].find(p =>
+          String(p?._channelId ?? "").replace(/\D/g, "") === cleanChannelId
+        );
+    if (existing) return existing;
+
+    // Guard: moonlink must be ready
+    if (!this.moonlink) throw new Error("Audio node not ready yet — try again in a moment");
+
+    // Guard: channel must exist and be a voice channel
+    const channel = this.client?.channels?.get?.(cleanChannelId);
+    if (!channel) throw new Error("Channel not found");
+    if (channel.type !== 2) throw new Error("Not a voice channel");
+
+    // Guard: no duplicate pending join
+    if (this.players._pendingJoins?.has?.(cleanChannelId)) {
+      throw new Error("Join already in progress for this channel");
+    }
+
+    const Player = (await import("./src/Player.mjs")).default;
+
+    const player = new Player(this.config.token, {
+      client:             this.client,
+      config:             this.config,
+      nodelink:           this.config.nodelink,
+      moonlink:           this.moonlink ?? null,
+      revoice:            this.revoice ?? null,
+      settingsMgr:        this.settingsMgr ?? this.settings ?? null,
+      observedVoiceUsers: this.observedVoiceUsers ?? null,
+      locale:             this.locale ?? null,
+    });
+
+    // Set 24/7 home channel so _is247Enabled() works correctly
+    player._home247Channel = cleanChannelId;
+
+    // Set up dashboard and lifecycle events (same as normal joins)
+    this.players.setupEvents(player, {
+      channelId: cleanChannelId,
+      guildId:   cleanGuildId,
+    });
+
+    // Handle autoleave — clean up the player map and destroy the player
+    player.on("autoleave", () => {
+      const activeChId = String(player._channelId ?? cleanChannelId).replace(/\D/g, "") || cleanChannelId;
+      const homeChId   = String(player._home247Channel ?? activeChId).replace(/\D/g, "") || activeChId;
+      this.players.playerMap.delete(activeChId);
+      if (activeChId !== cleanChannelId) this.players.playerMap.delete(cleanChannelId);
+      if (homeChId !== activeChId) this.players.playerMap.delete(homeChId);
+      player.destroy();
+    });
+
+    // Handle player messages (song announcements etc.)
+    player.on("message", (m) => {
+      // No text channel for headless spawns — skip announcements
+    });
+
+    // Mark as pending join
+    if (this.players._pendingJoins) {
+      this.players._pendingJoins.add(cleanChannelId);
+    }
+
+    try {
+      await player.join(cleanChannelId);
+
+      // Add to playerMap only after join succeeds
+      this.players.playerMap.set(cleanChannelId, player);
+      if (this.players._pendingJoins) {
+        this.players._pendingJoins.delete(cleanChannelId);
+      }
+
+      // Restore saved volume for this guild
+      const savedVol = this.settingsMgr?.getServer?.(cleanGuildId)?.get?.("volume");
+      if (savedVol !== undefined && savedVol !== null) {
+        const vol = Number(savedVol);
+        if (!isNaN(vol)) player.setVolume(vol / 100);
+      }
+
+      logger.player(`[_spawnPlayer] Spawned player for channel ${cleanChannelId} in guild ${cleanGuildId}`);
+      return player;
+    } catch (err) {
+      if (this.players._pendingJoins) {
+        this.players._pendingJoins.delete(cleanChannelId);
+      }
+      this.players.playerMap.delete(cleanChannelId);
+      try { player.destroy(); } catch (_) {}
+      logger.warn(`[_spawnPlayer] Failed to spawn player for channel ${cleanChannelId}:`, err.message);
+      throw err;
+    }
+  }
+
   async leaveChannel(channelId, guildId, message, force = false) {
     const cleanId = String(channelId).replace(/\D/g, "");
     const cleanGuildId = String(guildId).replace(/\D/g, "");
