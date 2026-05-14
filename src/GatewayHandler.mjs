@@ -1280,7 +1280,7 @@ export class GatewayHandler {
                     player._lastDisconnectReason = "gateway";
                     player._lastDisconnectTime = Date.now();
                     remix.players.playerMap.delete(cleanOld);
-                    try { player.destroy(); } catch (_) {}
+                    try { player.destroy({ disconnect: false }); } catch (_) {}
                     this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, "gateway-disconnect");
                   } else {
                     this.recoveryManager.scheduleSpawn(guildId, cleanOld, this.T.rejoin247Delay, "gateway-disconnect");

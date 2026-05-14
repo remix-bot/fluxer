@@ -1412,8 +1412,9 @@ export default class Player extends EventEmitter {
     return leftCleanly;
   }
 
-  destroy() {
+  destroy(options = {}) {
     if (this._destroyed) return;
+    const skipDisconnect = options?.disconnect === false;
     this._destroyed = true;
 
     try {
@@ -1445,11 +1446,13 @@ export default class Player extends EventEmitter {
       this._stopMediaPlayer().catch(() => {}).then(() => {
         if (connToDestroy) {
           try { connToDestroy.removeAllListeners?.(); } catch (_) {}
-          const disconnectPromise = connToDestroy.disconnect?.();
-          if (disconnectPromise instanceof Promise) {
-            disconnectPromise.catch((err) => {
-              logger.error("[Player] Deferred disconnect failed:", err.message);
-            });
+          if (!skipDisconnect) {
+            const disconnectPromise = connToDestroy.disconnect?.();
+            if (disconnectPromise instanceof Promise) {
+              disconnectPromise.catch((err) => {
+                logger.error("[Player] Deferred disconnect failed:", err.message);
+              });
+            }
           }
         }
       });
