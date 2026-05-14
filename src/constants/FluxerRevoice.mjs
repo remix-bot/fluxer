@@ -31,24 +31,41 @@ import { Room, RoomEvent, ConnectionState } from "@livekit/rtc-node";
 import { joinVoiceChannel, getVoiceManager } from "@fluxerjs/voice";
 import { logger } from "./Logger.mjs";
 
-// ── Suppress verbose LiveKit SDK logging ──────────────────────────────────
-// @livekit/rtc-node removed the `setLogLevel` export in newer versions,
-// causing a SyntaxError crash when importing it. The SDK uses console.debug
-// for verbose trace-level logs. Monkey-patch console.debug to filter out
-// noisy LiveKit messages — no env vars needed.
-const _origConsoleDebug = console.debug;
-console.debug = function(...args) {
-  const msg = typeof args[0] === 'string' ? args[0] : (args[0]?.toString?.() ?? '');
-  if (typeof msg === 'string' && (
-    msg.includes('[LiveKit') ||
-    msg.includes('livekit') ||
-    msg.includes('RTCKit') ||
-    msg.includes('SignalClient') ||
-    msg.includes('Room connect') ||
-    msg.includes('ICE') ||
-    msg.includes('DTLS')
-  )) return;
-  return _origConsoleDebug.apply(console, args);
+// Suppress LiveKit SDK's verbose pino/JSON logs (lk-rtc, [voice LiveKitRtc]).
+// setLogLevel was removed in newer @livekit/rtc-node versions.
+// The LiveKit SDK uses pino which writes JSON directly to process.stdout.write,
+// bypassing console.log entirely. We must patch BOTH to fully suppress noise.
+// This works without env vars and across all versions.
+
+// ── Patch 1: console.log ──────────────────────────────────────────────────
+// Catches [voice LiveKitRtc] lines and any SDK logs that go through console.
+const _origConsoleLog = console.log;
+console.log = function (...args) {
+  const msg = args.length > 0 ? String(args[0]) : '';
+  if (msg.includes('lk-rtc') || msg.includes('[voice LiveKitRtc]') ||
+      msg.includes('Connect callback received') || msg.includes('connected to room') ||
+      msg.includes('Room disconnected') || msg.includes('emitting disconnect') ||
+      msg.includes('room reconnecting') || msg.includes('SignalResumed')) {
+    return;
+  }
+  return _origConsoleLog.apply(console, args);
+};
+
+// ── Patch 2: process.stdout.write ─────────────────────────────────────────
+// Catches pino JSON logs ({"level":20,"name":"lk-rtc",...}) that bypass
+// console.log entirely.  pino writes NDJSON directly to stdout.
+const _origStdoutWrite = process.stdout.write.bind(process.stdout);
+process.stdout.write = function (chunk, encoding, callback) {
+  if (typeof chunk === 'string') {
+    if (chunk.includes('"lk-rtc"') || chunk.includes('[voice LiveKitRtc]')) {
+      // Swallow the noisy LiveKit SDK output.
+      // If callback was provided, call it immediately so the caller
+      // doesn't hang waiting for the write to "complete".
+      if (typeof callback === 'function') callback();
+      return true;
+    }
+  }
+  return _origStdoutWrite(chunk, encoding, callback);
 };
 
 // ConnectionState enum values for reference:
@@ -490,7 +507,7 @@ export class FluxerRevoice extends EventEmitter {
       const elapsed = Date.now() - lastJoin;
       if (elapsed < this._guildMinJoinInterval) {
         const extraWait = this._guildMinJoinInterval - elapsed;
-        logger.player(
+        logger.mediaplayer(
           `[FluxerRevoice] Guild ${guildId} was joined ${elapsed}ms ago — ` +
           `waiting additional ${extraWait}ms to avoid 401 race`
         );
@@ -507,7 +524,7 @@ export class FluxerRevoice extends EventEmitter {
             `aborting join for channel ${channelId} to avoid guaranteed failure. `
           );
         }
-        logger.player(
+        logger.mediaplayer(
           `[FluxerRevoice] Guild ${guildId} has 401 cooldown — ` +
           `waiting ${Math.round(cooldownRemaining / 1000)}s before attempting join`
         );
@@ -532,18 +549,16 @@ export class FluxerRevoice extends EventEmitter {
       // up fully and rejoin instead of returning a dead connection that will
       // fail with "LiveKit disconnected (connectionState: 0)".
       if (existing && !existing._destroyed && existing.room && existing.room.isConnected) {
-        logger.player(`[FluxerRevoice] Already connected to ${channelId}, returning existing connection`);
+      logger.mediaplayer(`[FluxerRevoice] Already connected to ${channelId}, returning existing connection`);
         return existing;
       }
-      logger.player(
-        `[FluxerRevoice] Stale connection for ${channelId} ` +
-        `(isConnected: ${existing?.room?.isConnected ?? false}, ` +
-        `destroyed: ${existing?._destroyed ?? true}) — cleaning up and rejoining`
+      logger.mediaplayer(
+        `[FluxerRevoice] Stale connection for ${channelId} — cleaning up and rejoining`
       );
       await this._destroyStaleConnection(channelId, existing);
     }
 
-    logger.player(`[FluxerRevoice] Joining channel ${channelId} via Fluxer gateway...`);
+    logger.mediaplayer(`[FluxerRevoice] Joining channel ${channelId} via Fluxer gateway...`);
 
     // Fetch the channel object from the client cache (or REST)
     let channel = this.client.channels?.get?.(channelId);
@@ -561,34 +576,48 @@ export class FluxerRevoice extends EventEmitter {
     // Resolve the guild ID for this channel (used for guild-scoped leave signals)
     const channelGuildId = guildId ?? channel?.guildId ?? channel?.guild?.id ?? null;
 
-    // Use @fluxerjs/voice to join the channel via the Fluxer gateway.
+    // Use the official @fluxerjs/voice API: voiceManager.join(channel)
     // This handles the VOICE_STATE_UPDATE → VOICE_SERVER_UPDATE flow
     // and creates a LiveKit connection with the returned credentials.
+    // Per Fluxer docs: voiceManager.join(channel) is the recommended API.
     let nativeConnection;
     try {
-      nativeConnection = await joinVoiceChannel(this.client, channel);
+      const vm = getVoiceManager(this.client);
+      if (vm && typeof vm.join === "function") {
+        // Official API — voiceManager.join(channel)
+        nativeConnection = await vm.join(channel);
+      } else {
+        // Fallback for older @fluxerjs/voice versions that don't have vm.join()
+        nativeConnection = await joinVoiceChannel(this.client, channel);
+      }
     } catch (e) {
-      // If the error is 401 Unauthorized, set a cooldown for this guild
-      // so subsequent join attempts wait longer before retrying.
-      if (e.message?.includes("401") || e.message?.includes("Unauthorized")) {
+      // If the error is 401 Unauthorized (or FluxerAPIError equivalent),
+      // set a cooldown for this guild so subsequent join attempts wait longer.
+      // Fluxer uses FluxerAPIError / FluxerError for API errors, but the
+      // underlying LiveKit/gateway error may still surface as "401" or
+      // "Unauthorized" in the message. Check both patterns.
+      const errMsg = e?.message ?? String(e ?? "");
+      const is401 = errMsg.includes("401") || errMsg.includes("Unauthorized") ||
+          errMsg.includes("NOT_LOGGED_IN") || errMsg.includes("Forbidden");
+      if (is401) {
         const gId = channelGuildId ?? this._resolveGuildForChannel(channelId);
         if (gId) {
           // Set 15-second cooldown for this guild to prevent rapid 401 retries
           this._guild401Cooldown.set(gId, Date.now() + 15_000);
           logger.warn(
-            `[FluxerRevoice] 401 error for channel ${channelId} — ` +
-            `setting 15s cooldown for guild ${gId}`
+            `[FluxerRevoice] 401/auth error for channel ${channelId} — ` +
+            `setting 15s cooldown for guild ${gId}: ${errMsg}`
           );
         }
       }
-      throw new Error(`Fluxer voice join failed for ${channelId}: ${e.message}`);
+      throw new Error(`Fluxer voice join failed for ${channelId}: ${errMsg}`);
     }
 
     if (!nativeConnection) {
       throw new Error(`Fluxer voice join returned null for ${channelId}`);
     }
 
-    logger.player(`[FluxerRevoice] Gateway join successful, extracting LiveKit room...`);
+    logger.mediaplayer(`[FluxerRevoice] Gateway join successful, extracting LiveKit room...`);
 
     // The @fluxerjs/voice connection wraps a LiveKit Room.
     // Extract it so we can use it with revoice.js's MediaPlayer.
@@ -597,7 +626,7 @@ export class FluxerRevoice extends EventEmitter {
     // Try to get the LiveKit Room from the native connection
     if (nativeConnection.room) {
       room = nativeConnection.room;
-      logger.player(`[FluxerRevoice] Got LiveKit room from native connection (isConnected: ${room.isConnected}, connectionState: ${stateLabel(room.connectionState)})`);
+      logger.mediaplayer(`[FluxerRevoice] Got LiveKit room from native connection (isConnected: ${room.isConnected}, connectionState: ${stateLabel(room.connectionState)})`);
     }
 
     // (non-LiveKit) which we don't support for music playback.
@@ -662,7 +691,7 @@ export class FluxerRevoice extends EventEmitter {
       throw new Error(`LiveKit room in disconnected state: ${stateLabel(finalCS)}`);
     }
 
-    logger.player(`[FluxerRevoice] LiveKit room ready (isConnected: ${finalConnected}, connectionState: ${stateLabel(finalCS)})`);
+    logger.mediaplayer(`[FluxerRevoice] LiveKit room ready (isConnected: ${finalConnected}, connectionState: ${stateLabel(finalCS)})`);
 
     // Record the successful join time for this guild so future joins
     // can enforce the minimum interval and avoid 401 races.
@@ -689,7 +718,7 @@ export class FluxerRevoice extends EventEmitter {
     room.on(RoomEvent.Disconnected, (reason) => {
       const isIntentional = this._intentionalDisconnects.has(String(channelId));
       const reasonLabel = isIntentional ? "intentional" : (reason ?? "unexpected");
-      logger.player(`[FluxerRevoice] Room disconnected: ${reasonLabel}${isIntentional ? " (bot-initiated, recovery suppressed)" : ""}`);
+      logger.mediaplayer(`[FluxerRevoice] Room disconnected: ${reasonLabel}${isIntentional ? " (bot-initiated, recovery suppressed)" : ""}`);
       this._intentionalDisconnects.delete(String(channelId));
       connection._connected = false;
       connection._destroyed = true;
@@ -714,11 +743,11 @@ export class FluxerRevoice extends EventEmitter {
     });
 
     room.on(RoomEvent.Reconnecting, () => {
-      logger.player("[FluxerRevoice] Room reconnecting...");
+      logger.mediaplayer("[FluxerRevoice] Room reconnecting...");
     });
 
     room.on(RoomEvent.Reconnected, () => {
-      logger.player("[FluxerRevoice] Room reconnected");
+      logger.mediaplayer("[FluxerRevoice] Room reconnected");
       connection._connected = true;
     });
 
@@ -742,6 +771,30 @@ export class FluxerRevoice extends EventEmitter {
 
     // Track the connection
     this.connections.set(channelId, connection);
+
+    // ── serverLeave event (official Fluxer reconnection API) ────────────
+    // Per Fluxer docs: connection.on?.('serverLeave') fires when LiveKit
+    // disconnects the bot. This is the recommended way to handle reconnects.
+    if (typeof nativeConnection?.on === "function") {
+      try {
+        nativeConnection.on("serverLeave", async () => {
+          const isIntentional = this._intentionalDisconnects.has(String(channelId));
+          if (isIntentional) {
+            logger.mediaplayer(`[FluxerRevoice] serverLeave for ${channelId} — intentional, skipping reconnect`);
+            return;
+          }
+          logger.mediaplayer(`[FluxerRevoice] serverLeave for ${channelId} — server disconnected, will reconnect via 24/7 recovery`);
+          // Don't reconnect here directly — the VoiceStateUpdate handler
+          // in GatewayHandler.mjs handles bot disconnect recovery.
+          // Just mark the connection as disconnected so recovery picks it up.
+          connection._connected = false;
+          this.connections.delete(channelId);
+          connection.emit("disconnect");
+        });
+      } catch (_) {
+        // nativeConnection.on may not be available in all versions
+      }
+    }
 
     // Auto-leave when room empties (if requested)
     if (_leaveIfEmpty) {
