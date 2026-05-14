@@ -23,7 +23,7 @@ export class GatewayHandler {
     const timers = remix.config.timers ?? {};
     this.T = {
       aloneCheckDebounce: timers.aloneCheckDebounce ?? 500,
-      rejoin247Delay:     timers.rejoin247Delay     ?? 3_000,
+      rejoin247Delay:     timers.rejoin247Delay     ?? 2_000,
     };
 
     // ── Presence rotation config ─────────────────────────────────────────────
@@ -57,7 +57,7 @@ export class GatewayHandler {
     /** @type {Map<string, {guild, timer}>} guildId → deferred cleanup data */
     this._deferredGuildDeletes = new Map();
     /** @type {number} How long to defer GuildDelete processing during startup (ms) */
-    this._startupDeleteGraceMs = 15_000;
+    this._startupDeleteGraceMs = 10_000;
     /** @type {boolean} Whether we're still in the startup grace period */
     this._inStartupGrace = true;
   }
@@ -587,10 +587,7 @@ export class GatewayHandler {
       if (deferred) {
         clearTimeout(deferred.timer);
         this._deferredGuildDeletes.delete(guildId);
-        logger.guild(
-          `[GuildDelete] Cancelled deferred cleanup for server ${guildId} — ` +
-          `guild came back (GuildCreate received during grace period).`
-        );
+        // Silently cancel — no need to log every guild that comes back during startup
       }
 
       // Part 1: Voice state population
@@ -719,18 +716,12 @@ export class GatewayHandler {
       // come back via GUILD_CREATE moments later.  Defer cleanup during
       // the startup grace period; if GuildCreate arrives first, cancel.
       if (this._inStartupGrace) {
-        logger.guild(
-          `[GuildDelete] Deferring cleanup for server ${guildId} ` +
-          `(startup grace — will confirm after ${this._startupDeleteGraceMs / 1000}s).`
-        );
-        // Cancel any existing deferred timer for this guild
+        // Silently buffer — log one summary after all deferrals are collected
         const existing = this._deferredGuildDeletes.get(guildId);
         if (existing) clearTimeout(existing.timer);
 
         const timer = setTimeout(() => {
           this._deferredGuildDeletes.delete(guildId);
-          // Grace period expired without GuildCreate — this guild is really gone
-          logger.guild(`[GuildDelete] Confirmed removal from server ${guildId} — cleaning up.`);
           this._processGuildDelete(guildId);
         }, this._startupDeleteGraceMs);
 
@@ -1136,19 +1127,16 @@ export class GatewayHandler {
       const pending = this._deferredGuildDeletes.size;
       if (pending > 0) {
         logger.guild(
-          `[GuildDelete] Startup grace period ended. ` +
-          `${pending} deferred deletion(s) will be processed by their timers.`
+          `[GuildDelete] Grace period ended — ${pending} server(s) confirmed removed, cleaning up.`
         );
-      } else {
-        logger.guild(`[GuildDelete] Startup grace period ended. No deferred deletions.`);
       }
     }, this._startupDeleteGraceMs);
 
     // ── Boot 24/7 auto-rejoin ────────────────────────────────────────────────
     // After a reboot/crash, automatically rejoin all voice channels that have
     // 24/7 mode enabled (stay_247 setting with mode "on" or "auto").
-    // Delayed slightly to let the gateway settle and Moonlink initialise.
-    setTimeout(() => this.rejoin247Channels(), 5_000);
+    // Minimal delay — Moonlink is already ready by onReady time.
+    setTimeout(() => this.rejoin247Channels(), 2_000);
   }
 
   /**
@@ -1233,13 +1221,14 @@ export class GatewayHandler {
   _processGuildDelete(guildId) {
     const { remix } = this;
     const cleanGuildId = String(guildId).replace(/\D/g, "");
+    let destroyedPlayers = 0;
 
     for (const [channelId, player] of remix.players.playerMap) {
       if (String(player._guildId ?? "").replace(/\D/g, "") === cleanGuildId) {
         remix.players.playerMap.delete(channelId);
         try { player.leave().catch(() => {}); } catch (_) {}
         try { player.destroy();               } catch (_) {}
-        logger.guild(`[GuildDelete] Destroyed player for channel ${channelId}.`);
+        destroyedPlayers++;
       }
     }
 
@@ -1257,6 +1246,7 @@ export class GatewayHandler {
     remix.settingsMgr.removeServer(guildId);
     remix._announcementChannelCache.delete(guildId);
 
-    logger.guild(`[GuildDelete] Cleanup complete for server ${guildId}.`);
+    const extra = destroyedPlayers > 0 ? ` (${destroyedPlayers} player(s) destroyed)` : "";
+    logger.guild(`[GuildDelete] Cleaned up server ${guildId}${extra}`);
   }
 }

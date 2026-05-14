@@ -129,7 +129,7 @@
     "inactivityTimeout":    180000,
     "aloneCheckInterval":    30000,
     "aloneCheckDebounce":      500,
-    "rejoin247Delay":         3000,
+    "rejoin247Delay":         2000,
     "leave247RejoinDelay":    5000,
     "playerUpdateInterval":   5000,
     "searchSessionTimeout":  30000,
