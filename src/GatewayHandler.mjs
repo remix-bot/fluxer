@@ -1121,14 +1121,18 @@ export class GatewayHandler {
 
     // End the startup grace period after the configured delay.
     // Any deferred GuildDelete events that weren't cancelled by a GuildCreate
-    // will be processed at this point.
+    // are processed in one batch here.
     setTimeout(() => {
       this._inStartupGrace = false;
-      const pending = this._deferredGuildDeletes.size;
-      if (pending > 0) {
-        logger.guild(
-          `[GuildDelete] Grace period ended — ${pending} server(s) confirmed removed, cleaning up.`
-        );
+      const pending = this._deferredGuildDeletes;
+      if (pending.size > 0) {
+        const ids = [...pending.keys()];
+        // Clear all individual deferred timers — we'll process them all at once
+        for (const [, data] of pending) {
+          clearTimeout(data.timer);
+        }
+        pending.clear();
+        this._processGuildDelete(ids);
       }
     }, this._startupDeleteGraceMs);
 
@@ -1213,40 +1217,52 @@ export class GatewayHandler {
   // ── GuildDelete cleanup (extracted for deferred processing) ────────────────
 
   /**
-   * Perform the actual cleanup for a guild that the bot was removed from.
-   * Extracted from the GuildDelete handler so it can be called after the
-   * startup grace period expires.
-   * @param {string} guildId
+   * Perform the actual cleanup for guild(s) that the bot was removed from.
+   * Accepts a single guildId (string) or an array of guildIds for batch
+   * processing (used when the startup grace period expires with multiple
+   * deferred deletes). Logs ONE summary line with all cleaned guild IDs.
+   * @param {string|string[]} guildIds
    */
-  _processGuildDelete(guildId) {
+  _processGuildDelete(guildIds) {
+    const ids = Array.isArray(guildIds) ? guildIds : [guildIds];
     const { remix } = this;
-    const cleanGuildId = String(guildId).replace(/\D/g, "");
-    let destroyedPlayers = 0;
+    const cleanedIds = [];
+    let totalDestroyedPlayers = 0;
 
-    for (const [channelId, player] of remix.players.playerMap) {
-      if (String(player._guildId ?? "").replace(/\D/g, "") === cleanGuildId) {
-        remix.players.playerMap.delete(channelId);
-        try { player.leave().catch(() => {}); } catch (_) {}
-        try { player.destroy();               } catch (_) {}
-        destroyedPlayers++;
+    for (const guildId of ids) {
+      const cleanGuildId = String(guildId).replace(/\D/g, "");
+      let destroyedPlayers = 0;
+
+      for (const [channelId, player] of remix.players.playerMap) {
+        if (String(player._guildId ?? "").replace(/\D/g, "") === cleanGuildId) {
+          remix.players.playerMap.delete(channelId);
+          try { player.leave().catch(() => {}); } catch (_) {}
+          try { player.destroy();               } catch (_) {}
+          destroyedPlayers++;
+        }
       }
+
+      for (const [userId, info] of [...remix.observedVoiceUsers]) {
+        if (String(info.guildId).replace(/\D/g, "") === cleanGuildId) remix.observedVoiceUsers.delete(userId);
+      }
+      for (const [userId, info] of [...remix.observedVoiceBots]) {
+        if (String(info.guildId).replace(/\D/g, "") === cleanGuildId) remix.observedVoiceBots.delete(userId);
+      }
+      for (const [stateKey, info] of [...this._prevVoiceState]) {
+        if (String(info.guildId).replace(/\D/g, "") === cleanGuildId)
+          this._prevVoiceState.delete(stateKey);
+      }
+
+      remix.settingsMgr.removeServer(guildId);
+      remix._announcementChannelCache.delete(guildId);
+
+      cleanedIds.push(guildId);
+      totalDestroyedPlayers += destroyedPlayers;
     }
 
-    for (const [userId, info] of [...remix.observedVoiceUsers]) {
-      if (String(info.guildId).replace(/\D/g, "") === cleanGuildId) remix.observedVoiceUsers.delete(userId);
+    if (cleanedIds.length > 0) {
+      const extra = totalDestroyedPlayers > 0 ? ` (${totalDestroyedPlayers} player(s) destroyed)` : "";
+      logger.guild(`[GuildDelete] Cleaned up ${cleanedIds.length} server(s): ${cleanedIds.join(", ")}${extra}`);
     }
-    for (const [userId, info] of [...remix.observedVoiceBots]) {
-      if (String(info.guildId).replace(/\D/g, "") === cleanGuildId) remix.observedVoiceBots.delete(userId);
-    }
-    for (const [stateKey, info] of [...this._prevVoiceState]) {
-      if (String(info.guildId).replace(/\D/g, "") === cleanGuildId)
-        this._prevVoiceState.delete(stateKey);
-    }
-
-    remix.settingsMgr.removeServer(guildId);
-    remix._announcementChannelCache.delete(guildId);
-
-    const extra = destroyedPlayers > 0 ? ` (${destroyedPlayers} player(s) destroyed)` : "";
-    logger.guild(`[GuildDelete] Cleaned up server ${guildId}${extra}`);
   }
 }
