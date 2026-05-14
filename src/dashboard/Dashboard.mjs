@@ -71,13 +71,8 @@ export class Dashboard {
         }
 
         case "allServers": {
-          // Return ALL guilds the bot is in (no member check). The backend
-          // filters by the user's own guild list to produce the mutual set.
-          const guilds = this.remix.client.guilds;
-          const guildValues = guilds && typeof guilds.values === "function"
-              ? [...guilds.values()]
-              : guilds ? Object.values(guilds) : [];
-          return guildValues.map(g => Dashboard.convertServer(g));
+          const guilds = await this.remix.client.user.fetchGuilds();
+          return guilds.map(g => Dashboard.convertServer(g));
         }
 
         case "commands":
