@@ -12,7 +12,7 @@ export const command = new CommandBuilder()
 // ── Stats cache ──────────────────────────────────────────────────────────────
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const FAST_WAIT_MS = 1_500;
+const FAST_WAIT_MS = 8_000;
 
 let cachedStats = null; // { guildCount, userCount }
 let cacheExpiresAt = 0;
@@ -25,25 +25,65 @@ function withTimeout(promise, ms, fallback) {
   ]);
 }
 
-function computeUserCount(client) {
-  let total = 0;
-  for (const [, guild] of client.guilds ?? []) {
-    total += guild.memberCount ?? guild.members?.size ?? 0;
+async function pool(limit, tasks) {
+  const results = [];
+  const executing = new Set();
+  for (const task of tasks) {
+    const p = Promise.resolve()
+      .then(task)
+      .then((value) => {
+        results.push(value);
+        executing.delete(p);
+      })
+      .catch(() => {
+        results.push(0);
+        executing.delete(p);
+      });
+    executing.add(p);
+    if (executing.size >= limit) await Promise.race(executing);
   }
-  return total;
+  await Promise.all(executing);
+  return results;
+}
+
+function computeUserCount(client) {
+  const uniqueUsers = new Set();
+  for (const [, guild] of client.guilds ?? []) {
+    const members = guild?.members;
+    const iterable = typeof members?.values === "function"
+      ? members.values()
+      : Array.isArray(members)
+        ? members
+        : Object.values(members ?? {});
+
+    for (const member of iterable) {
+      const id = member?.id ?? member?.user?.id ?? null;
+      if (id) uniqueUsers.add(String(id));
+    }
+  }
+  return uniqueUsers.size;
 }
 
 async function fetchAccurateGuildCount(client) {
+  if (typeof client?.user?.fetchGuilds === "function") {
+    try {
+      const guilds = await withTimeout(client.user.fetchGuilds(), 4_000, null);
+      if (Array.isArray(guilds)) return guilds.length;
+      if (typeof guilds?.size === "number") return guilds.size;
+      if (typeof guilds?.values === "function") return [...guilds.values()].length;
+    } catch (_) {}
+  }
+
   if (typeof client.fetchTotalGuildCount === "function") {
     try {
-      const count = await withTimeout(client.fetchTotalGuildCount(), 1_200, null);
+      const count = await withTimeout(client.fetchTotalGuildCount(), 4_000, null);
       if (typeof count === "number" && count >= 0) return count;
     } catch (_) {}
   }
 
   if (typeof client.fetchAllStats === "function") {
     try {
-      const stats = await withTimeout(client.fetchAllStats(), 1_500, null);
+      const stats = await withTimeout(client.fetchAllStats(), 4_000, null);
       if (typeof stats?.guilds === "number" && stats.guilds >= 0) return stats.guilds;
     } catch (_) {}
   }
@@ -69,16 +109,55 @@ async function fetchAccurateGuildCount(client) {
   return client.guilds?.size ?? 0;
 }
 
-async function fetchAccurateUserCount(client) {
-  if (typeof client.fetchAllStats === "function") {
-    try {
-      const stats = await withTimeout(client.fetchAllStats(), 1_500, null);
-      if (typeof stats?.users === "number" && stats.users >= 0) return stats.users;
-      if (typeof stats?.members === "number" && stats.members >= 0) return stats.members;
-    } catch (_) {}
+async function fetchGuildMemberIds(guild) {
+  try {
+    let after = undefined;
+    const ids = new Set();
+    for (let page = 0; page < 1000; page++) {
+      const raw = await guild.members.fetch({ limit: 1000, after });
+      const batch = Array.isArray(raw)
+        ? raw
+        : typeof raw?.values === "function"
+          ? [...raw.values()]
+          : Object.values(raw ?? {});
+      for (const member of batch) {
+        const id = member?.id ?? member?.user?.id ?? null;
+        if (id) ids.add(String(id));
+      }
+      if (batch.length < 1000) break;
+      after = batch.reduce((max, member) => {
+        const id = member.id ?? member.user?.id ?? "";
+        return id > max ? id : max;
+      }, "0");
+      if (!after) break;
+    }
+    return ids;
+  } catch {
+    const ids = new Set();
+    const members = guild?.members;
+    const iterable = typeof members?.values === "function"
+      ? members.values()
+      : Array.isArray(members)
+        ? members
+        : Object.values(members ?? {});
+    for (const member of iterable) {
+      const id = member?.id ?? member?.user?.id ?? null;
+      if (id) ids.add(String(id));
+    }
+    return ids;
   }
+}
 
-  return computeUserCount(client);
+async function fetchAccurateUserCount(client) {
+  const guilds = [...(client.guilds?.values?.() ?? [])];
+  if (guilds.length === 0) return 0;
+  const idSets = await pool(8, guilds.map((guild) => () => fetchGuildMemberIds(guild)));
+  const uniqueUsers = new Set();
+  for (const idSet of idSets) {
+    if (!idSet || typeof idSet[Symbol.iterator] !== "function") continue;
+    for (const id of idSet) uniqueUsers.add(String(id));
+  }
+  return uniqueUsers.size;
 }
 
 async function refreshStats(client) {
@@ -188,70 +267,101 @@ function buildEmbed(t, msg, {
   return builder;
 }
 
+async function safeEditStatsMessage(messageRef, payload, fallbackMessage) {
+  try {
+    if (messageRef && typeof messageRef.edit === "function") {
+      await messageRef.edit(payload);
+      return true;
+    }
+    if (messageRef?.message && typeof messageRef.message.edit === "function") {
+      await messageRef.message.edit(payload);
+      return true;
+    }
+  } catch (err) {
+    console.error("[stats] edit failed:", err);
+  }
+
+  try {
+    await fallbackMessage.reply(payload);
+    return false;
+  } catch (err) {
+    console.error("[stats] fallback reply failed:", err);
+    return false;
+  }
+}
+
 // ── Runner ────────────────────────────────────────────────────────────────────
 
 export async function run(message) {
-  const lastfm = this.lastfm;
-  const lastfmEnabled = lastfm?.enabled ?? false;
-  const lastfmSnapshot = getLastfmSnapshot(lastfm);
+  try {
+    const lastfm = this.lastfm;
+    const lastfmEnabled = lastfm?.enabled ?? false;
+    const lastfmSnapshot = getLastfmSnapshot(lastfm);
 
-  const shared = {
-    guildCount: this.client.guilds?.size ?? 0,
-    playerCount: getLivePlayerCount(this.players.playerMap),
-    scrobbleCount: lastfmSnapshot.scrobbleCount,
-    linkedUsers: lastfmSnapshot.linkedUsers,
-    lastfmEnabled,
-    uptime: Utils.prettifyMS(Math.round(process.uptime()) * 1000),
-    comHash: this.comHash,
-    comLink: this.comLink,
-    reason: this.config.restart ?? null,
-    footer: this.config.customStatsFooter || null,
-  };
+    const shared = {
+      guildCount: this.client.guilds?.size ?? 0,
+      playerCount: getLivePlayerCount(this.players.playerMap),
+      scrobbleCount: lastfmSnapshot.scrobbleCount,
+      linkedUsers: lastfmSnapshot.linkedUsers,
+      lastfmEnabled,
+      uptime: Utils.prettifyMS(Math.round(process.uptime()) * 1000),
+      comHash: this.comHash,
+      comLink: this.comLink,
+      reason: this.config.restart ?? null,
+      footer: this.config.customStatsFooter || null,
+    };
 
-  const statsFallback = cachedStats ?? {
-    guildCount: shared.guildCount,
-    userCount: computeUserCount(this.client),
-  };
+    const statsFallback = cachedStats ?? {
+      guildCount: shared.guildCount,
+      userCount: computeUserCount(this.client),
+    };
 
-  const scrobblePromise = lastfmEnabled
-    ? withTimeout(
-        lastfm.getStoredTotalScrobbles?.() ?? Promise.resolve(lastfmSnapshot.scrobbleCount),
-        3_000,
-        lastfmSnapshot.scrobbleCount
-      )
-    : Promise.resolve(0);
+    const scrobblePromise = lastfmEnabled
+      ? withTimeout(
+          lastfm.getStoredTotalScrobbles?.() ?? Promise.resolve(lastfmSnapshot.scrobbleCount),
+          3_000,
+          lastfmSnapshot.scrobbleCount
+        ).catch(() => lastfmSnapshot.scrobbleCount)
+      : Promise.resolve(0);
 
-  const linkedPromise = lastfmEnabled
-    ? withTimeout(lastfm.getLinkedUsersCount(), FAST_WAIT_MS, lastfmSnapshot.linkedUsers)
-    : Promise.resolve(0);
+    const linkedPromise = lastfmEnabled
+      ? withTimeout(lastfm.getLinkedUsersCount(), FAST_WAIT_MS, lastfmSnapshot.linkedUsers).catch(() => lastfmSnapshot.linkedUsers)
+      : Promise.resolve(0);
 
-  const start = Date.now();
-  const msg = await message.reply({
-    embeds: [buildEmbed((...args) => this.t(...args), message, {
-      ...shared,
-      guildCount: statsFallback.guildCount,
-      userCount: statsFallback.userCount,
-      ping: 0,
-      loading: !cachedStats,
-    })],
-  });
-  const ping = Date.now() - start;
+    const start = Date.now();
+    const msg = await message.reply({
+      embeds: [buildEmbed((...args) => this.t(...args), message, {
+        ...shared,
+        guildCount: statsFallback.guildCount,
+        userCount: statsFallback.userCount,
+        ping: 0,
+        loading: !cachedStats,
+      })],
+    });
+    const ping = Date.now() - start;
 
-  const [stats, scrobbleCount, linkedUsers] = await Promise.all([
-    withTimeout(getStats(this.client), FAST_WAIT_MS, statsFallback),
-    scrobblePromise,
-    linkedPromise,
-  ]);
+    const [stats, scrobbleCount, linkedUsers] = await Promise.all([
+      getStats(this.client).catch(() => statsFallback),
+      scrobblePromise,
+      linkedPromise,
+    ]);
 
-  await msg.edit({
-    embeds: [buildEmbed((...args) => this.t(...args), message, {
-      ...shared,
-      guildCount: stats.guildCount,
-      userCount: stats.userCount,
-      scrobbleCount,
-      linkedUsers,
-      ping,
-      loading: false,
-    })],
-  }).catch((err) => console.error("[stats] editEmbed failed:", err));
+    await safeEditStatsMessage(msg, {
+      embeds: [buildEmbed((...args) => this.t(...args), message, {
+        ...shared,
+        guildCount: stats?.guildCount ?? statsFallback.guildCount,
+        userCount: stats?.userCount ?? statsFallback.userCount,
+        scrobbleCount,
+        linkedUsers,
+        ping,
+        loading: false,
+      })],
+    }, message);
+  } catch (err) {
+    console.error("[stats] run failed:", err);
+    const fallback = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setDescription("Failed to load full stats. Please try again in a moment.");
+    await message.reply({ embeds: [fallback] }).catch(() => {});
+  }
 }

@@ -1332,10 +1332,22 @@ export default class Player extends EventEmitter {
 
     } catch (e) {
       const causeStr = e.cause ? ` (Cause: ${e.cause})` : "";
-      logger.error("[Player] Join failed:", e.message, causeStr);
+      const joinMsg = String(e?.message ?? e ?? "");
+      const isPermissionJoinFailure =
+        joinMsg.includes("401") ||
+        joinMsg.includes("Unauthorized") ||
+        joinMsg.includes("no permissions to access the room") ||
+        joinMsg.includes("signal failure: client error") ||
+        joinMsg.includes("active 401 cooldown");
+
+      if (isPermissionJoinFailure) {
+        logger.warn(`[Player] Join blocked for ${channelId}: ${joinMsg}`);
+      } else {
+        logger.error("[Player] Join failed:", joinMsg, causeStr);
+      }
 
       // Track the disconnect reason for smarter recovery decisions
-      if (e.message?.includes("401") || e.message?.includes("Unauthorized")) {
+      if (joinMsg.includes("401") || joinMsg.includes("Unauthorized")) {
         this._lastDisconnectReason = "401";
         this._lastDisconnectTime = Date.now();
       }
