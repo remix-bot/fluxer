@@ -816,9 +816,21 @@ export class PlayerManager {
       player.destroy();
 
       if (isIn247List && (mode247 === "on" || mode247 === "auto")) {
-        // 24/7 mode active — just leave the player, no auto-rejoin.
-        // Users can re-invoke the play command to restart the bot in the channel.
-        logger.voice247(`[AutoLeave] 24/7 channel ${homeChannelId} (mode ${mode247}) auto-left — no auto-rejoin (recovery system removed).`);
+        // 24/7 mode active — auto-rejoin the channel after a delay
+        const rejoinDelay = this.timers?.rejoin247Delay ?? 3_000;
+        logger.voice247(`[AutoLeave] 24/7 channel ${homeChannelId} (mode ${mode247}) auto-left — scheduling rejoin in ${rejoinDelay}ms`);
+        setTimeout(async () => {
+          try {
+            if (typeof this.commands?.context?._spawnPlayer === "function") {
+              await this.commands.context._spawnPlayer(guildId, homeChannelId);
+              logger.voice247(`[AutoLeave] 24/7 auto-rejoin succeeded for channel ${homeChannelId}`);
+            } else {
+              logger.warn(`[AutoLeave] 24/7 auto-rejoin failed: _spawnPlayer not available`);
+            }
+          } catch (e) {
+            logger.warn(`[AutoLeave] 24/7 auto-rejoin failed for channel ${homeChannelId}: ${e.message}`);
+          }
+        }, rejoinDelay);
       } else {
         // Not 24/7 — send inactivity message
         const prefix = (() => {

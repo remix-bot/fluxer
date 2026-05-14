@@ -1,6 +1,7 @@
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 import Player from "../src/Player.mjs";
 
 function getGuildId(message) {
@@ -57,27 +58,62 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
     const activeChannelId = String(p._channelId ?? cid).replace(/\D/g, "") || cid;
     const homeChannelId = String(p._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
     const guildId = getGuildId(message);
+
+    // Check 24/7 mode for this channel
     const is247 = (() => {
       try {
         const raw = this.settingsMgr?.getServer?.(guildId)?.get?.("stay_247");
         return raw && raw !== "none";
       } catch (_) { return false; }
     })();
-    const prefix = (() => {
+
+    // Determine per-channel mode
+    const mode247 = (() => {
+      if (!is247) return "off";
       try {
-        return this._commands?.getPrefix?.(guildId) ?? "%";
-      } catch (_) { return "%"; }
+        const set = this.settingsMgr?.getServer?.(guildId);
+        const modes = set?.get?.("stay_247_modes");
+        const matchCh = homeChannelId || activeChannelId;
+        if (modes && typeof modes === "object" && !Array.isArray(modes) && modes[matchCh]) {
+          return modes[matchCh];
+        }
+        return set?.get?.("stay_247_mode") ?? "off";
+      } catch (_) { return "off"; }
     })();
-    const desc = is247
-        ? this.t(message, "responses.join.autoLeaveInactive247", { channel: activeChannelId, prefix })
-        : this.t(message, "responses.join.autoLeaveInactive", { channel: activeChannelId });
-    const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription(desc);
-    message.channel.send({ embeds: [embed] });
+
     this.players.playerMap.delete(activeChannelId);
     if (activeChannelId !== cid) this.players.playerMap.delete(cid);
     if (homeChannelId !== activeChannelId) this.players.playerMap.delete(homeChannelId);
     p.destroy();
+
+    if (is247 && (mode247 === "on" || mode247 === "auto")) {
+      // 24/7 mode — auto-rejoin after a delay
+      const rejoinDelay = this.config?.timers?.rejoin247Delay ?? 3_000;
+      const prefix = (() => {
+        try { return this._commands?.getPrefix?.(guildId) ?? "%"; } catch (_) { return "%"; }
+      })();
+      const embed = new EmbedBuilder().setColor(getGlobalColor())
+          .setDescription(this.t(message, "responses.join.autoLeaveInactive247", { channel: activeChannelId, prefix }));
+      message.channel.send({ embeds: [embed] });
+
+      setTimeout(async () => {
+        try {
+          if (typeof this._spawnPlayer === "function") {
+            await this._spawnPlayer(guildId, homeChannelId);
+          }
+        } catch (e) {
+          logger.warn(`[join/autoleave] 24/7 auto-rejoin failed for ${homeChannelId}: ${e.message}`);
+        }
+      }, rejoinDelay);
+    } else {
+      // Not 24/7 — send inactivity message
+      const prefix = (() => {
+        try { return this._commands?.getPrefix?.(guildId) ?? "%"; } catch (_) { return "%"; }
+      })();
+      const embed = new EmbedBuilder().setColor(getGlobalColor())
+          .setDescription(this.t(message, "responses.join.autoLeaveInactive", { channel: activeChannelId }));
+      message.channel.send({ embeds: [embed] });
+    }
   });
 
   p.on("message", m => {

@@ -1143,6 +1143,83 @@ export class GatewayHandler {
         logger.guild(`[GuildDelete] Startup grace period ended. No deferred deletions.`);
       }
     }, this._startupDeleteGraceMs);
+
+    // ── Boot 24/7 auto-rejoin ────────────────────────────────────────────────
+    // After a reboot/crash, automatically rejoin all voice channels that have
+    // 24/7 mode enabled (stay_247 setting with mode "on" or "auto").
+    // Delayed slightly to let the gateway settle and Moonlink initialise.
+    setTimeout(() => this.rejoin247Channels(), 5_000);
+  }
+
+  /**
+   * Rejoin all 24/7 voice channels after a bot reboot/crash.
+   * Reads stay_247 settings from all guilds and spawns players for channels
+   * that aren't already active.
+   */
+  async rejoin247Channels() {
+    const { remix } = this;
+    const settings = remix.settingsMgr;
+    if (!settings?.guilds) return;
+
+    const rejoinDelay = this.T.rejoin247Delay ?? 3_000;
+    const channels = [];
+
+    // Collect all 24/7 channels with mode "on" or "auto"
+    for (const [guildId, serverSettings] of settings.guilds) {
+      const raw = serverSettings.get("stay_247");
+      if (!raw || raw === "none") continue;
+
+      const rawArr = Array.isArray(raw) ? raw : [raw];
+      const cleaned = rawArr
+          .map(id => String(id).replace(/\D/g, ""))
+          .filter(id => id.length >= 15);
+
+      const modes = serverSettings.get("stay_247_modes");
+
+      for (const channelId of cleaned) {
+        const mode = (modes && typeof modes === "object" && !Array.isArray(modes))
+            ? modes[channelId] ?? "off"
+            : serverSettings.get("stay_247_mode") ?? "off";
+
+        if (mode !== "on" && mode !== "auto") continue;
+
+        // Skip if we already have an active player for this channel
+        const existing = remix.players.playerMap.get(channelId)
+            ?? [...remix.players.playerMap.values()].find(p =>
+              String(p?._channelId ?? "").replace(/\D/g, "") === channelId
+            );
+        if (existing && !existing._destroyed) continue;
+
+        channels.push({ guildId, channelId, mode });
+      }
+    }
+
+    if (channels.length === 0) return;
+
+    logger.voice247(`[BootRecovery] Found ${channels.length} 24/7 channel(s) to rejoin`);
+
+    // Stagger the joins to avoid overloading the gateway
+    for (let i = 0; i < channels.length; i++) {
+      const { guildId, channelId, mode } = channels[i];
+      const delay = i * rejoinDelay;
+
+      setTimeout(async () => {
+        try {
+          // Verify the channel still exists
+          const ch = remix.client?.channels?.get?.(channelId);
+          if (!ch) {
+            logger.voice247(`[BootRecovery] Channel ${channelId} no longer exists — skipping`);
+            return;
+          }
+
+          logger.voice247(`[BootRecovery] Rejoining 24/7 channel ${channelId} (guild ${guildId}, mode ${mode})`);
+          await remix._spawnPlayer(guildId, channelId);
+          logger.voice247(`[BootRecovery] Successfully rejoined 24/7 channel ${channelId}`);
+        } catch (e) {
+          logger.warn(`[BootRecovery] Failed to rejoin 24/7 channel ${channelId}: ${e.message}`);
+        }
+      }, delay);
+    }
   }
 
   // ── GuildDelete cleanup (extracted for deferred processing) ────────────────
