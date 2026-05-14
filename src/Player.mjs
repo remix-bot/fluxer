@@ -1003,7 +1003,7 @@ export default class Player extends EventEmitter {
     if (this._destroyed) return;
 
     if (this._isJoining) {
-      logger.mediaplayer(`[Player] Busy joining. Ignoring: ${channelId}`);
+      logger.player(`[Player] Busy joining. Ignoring: ${channelId}`);
       return;
     }
     if (this.connection && this._channelId === channelId) {
@@ -1289,7 +1289,7 @@ export default class Player extends EventEmitter {
 
       if (e.message?.includes("401") || e.message?.includes("Unauthorized")) {
         // Track 401 errors for logging purposes
-        logger.warn(`[Player] Join failed with 401 Unauthorized for guild ${this._guildId ?? this._resolveGuildId() ?? 'unknown'}`);
+        logger.warn(`[Player] Join failed with 401 Unauthorized for guild ${this._guildId}`);
       }
 
       if (this.connection) {
