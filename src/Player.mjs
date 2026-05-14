@@ -1003,7 +1003,7 @@ export default class Player extends EventEmitter {
     if (this._destroyed) return;
 
     if (this._isJoining) {
-      logger.mediaplayer(`[Player] Busy joining. Ignoring: ${channelId}`);
+      logger.player(`[Player] Busy joining. Ignoring: ${channelId}`);
       return;
     }
     if (this.connection && this._channelId === channelId) {
@@ -1078,10 +1078,8 @@ export default class Player extends EventEmitter {
           try { this._revoice.deleteConnection(this._channelId); } catch (_) {}
         }
 
-        // Wait to give the Fluxer gateway time to process the voice state
-        // leave before we join a new channel. FluxerRevoice adds its own
-        // _globalJoinDelay before the actual join, so 500ms here is enough.
-        await Utils.sleep(500);
+        // FluxerRevoice.join() already adds a _globalJoinDelay (500ms) before
+        // the actual join, so no additional sleep is needed here.
         this.connection  = null;
         this._mediaPlayer = null;
       }
@@ -1256,7 +1254,7 @@ export default class Player extends EventEmitter {
       const playerReady = await this._ensureMediaPlayer();
       if (!playerReady) {
         logger.mediaplayer("[Player] First MediaPlayer attempt failed, retrying after delay...");
-        await Utils.sleep(1500);
+        await Utils.sleep(500);
         if (this._destroyed || this.leaving) throw new Error("Player destroyed during MediaPlayer retry");
         const roomAlive = this.connection?.room?.isConnected ?? false;
         if (!roomAlive) {
@@ -1280,7 +1278,7 @@ export default class Player extends EventEmitter {
           if (this.queue.isEmpty() && !this.queue.getCurrent()) {
             this._startInactivityTimer();
           }
-        }, 3000);
+        }, 1500);
       }
 
     } catch (e) {
@@ -1289,7 +1287,7 @@ export default class Player extends EventEmitter {
 
       if (e.message?.includes("401") || e.message?.includes("Unauthorized")) {
         // Track 401 errors for logging purposes
-        logger.warn(`[Player] Join failed with 401 Unauthorized for guild ${this._guildId ?? this._resolveGuildId() ?? 'unknown'}`);
+        logger.warn(`[Player] Join failed with 401 Unauthorized for guild ${this._guildId}`);
       }
 
       if (this.connection) {

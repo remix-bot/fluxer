@@ -2,7 +2,7 @@ import { Events, GatewayOpcodes } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { logger } from "./constants/Logger.mjs";
 import { ServerSettings } from "./Settings.mjs";
-import { get247ChannelMode } from "./constants/Helpers247.mjs";
+import { get247ChannelMode, remove247ChannelMode } from "./constants/Helpers247.mjs";
 import mysql from "mysql2";
 
 /**
@@ -23,7 +23,7 @@ export class GatewayHandler {
     const timers = remix.config.timers ?? {};
     this.T = {
       aloneCheckDebounce: timers.aloneCheckDebounce ?? 500,
-      rejoin247Delay:     timers.rejoin247Delay     ?? 2_000,
+      rejoin247Delay:     timers.rejoin247Delay     ?? 3_000,
     };
 
     // ── Presence rotation config ─────────────────────────────────────────────
@@ -57,7 +57,7 @@ export class GatewayHandler {
     /** @type {Map<string, {guild, timer}>} guildId → deferred cleanup data */
     this._deferredGuildDeletes = new Map();
     /** @type {number} How long to defer GuildDelete processing during startup (ms) */
-    this._startupDeleteGraceMs = 10_000;
+    this._startupDeleteGraceMs = 15_000;
     /** @type {boolean} Whether we're still in the startup grace period */
     this._inStartupGrace = true;
   }
@@ -587,7 +587,10 @@ export class GatewayHandler {
       if (deferred) {
         clearTimeout(deferred.timer);
         this._deferredGuildDeletes.delete(guildId);
-        // Silently cancel — no need to log every guild that comes back during startup
+        logger.guild(
+          `[GuildDelete] Cancelled deferred cleanup for server ${guildId} — ` +
+          `guild came back (GuildCreate received during grace period).`
+        );
       }
 
       // Part 1: Voice state population
@@ -716,12 +719,18 @@ export class GatewayHandler {
       // come back via GUILD_CREATE moments later.  Defer cleanup during
       // the startup grace period; if GuildCreate arrives first, cancel.
       if (this._inStartupGrace) {
-        // Silently buffer — log one summary after all deferrals are collected
+        logger.guild(
+          `[GuildDelete] Deferring cleanup for server ${guildId} ` +
+          `(startup grace — will confirm after ${this._startupDeleteGraceMs / 1000}s).`
+        );
+        // Cancel any existing deferred timer for this guild
         const existing = this._deferredGuildDeletes.get(guildId);
         if (existing) clearTimeout(existing.timer);
 
         const timer = setTimeout(() => {
           this._deferredGuildDeletes.delete(guildId);
+          // Grace period expired without GuildCreate — this guild is really gone
+          logger.guild(`[GuildDelete] Confirmed removal from server ${guildId} — cleaning up.`);
           this._processGuildDelete(guildId);
         }, this._startupDeleteGraceMs);
 
@@ -1121,26 +1130,25 @@ export class GatewayHandler {
 
     // End the startup grace period after the configured delay.
     // Any deferred GuildDelete events that weren't cancelled by a GuildCreate
-    // are processed in one batch here.
+    // will be processed at this point.
     setTimeout(() => {
       this._inStartupGrace = false;
-      const pending = this._deferredGuildDeletes;
-      if (pending.size > 0) {
-        const ids = [...pending.keys()];
-        // Clear all individual deferred timers — we'll process them all at once
-        for (const [, data] of pending) {
-          clearTimeout(data.timer);
-        }
-        pending.clear();
-        this._processGuildDelete(ids);
+      const pending = this._deferredGuildDeletes.size;
+      if (pending > 0) {
+        logger.guild(
+          `[GuildDelete] Startup grace period ended. ` +
+          `${pending} deferred deletion(s) will be processed by their timers.`
+        );
+      } else {
+        logger.guild(`[GuildDelete] Startup grace period ended. No deferred deletions.`);
       }
     }, this._startupDeleteGraceMs);
 
     // ── Boot 24/7 auto-rejoin ────────────────────────────────────────────────
     // After a reboot/crash, automatically rejoin all voice channels that have
     // 24/7 mode enabled (stay_247 setting with mode "on" or "auto").
-    // Minimal delay — Moonlink is already ready by onReady time.
-    setTimeout(() => this.rejoin247Channels(), 2_000);
+    // Delayed slightly to let the gateway settle and Moonlink initialise.
+    setTimeout(() => this.rejoin247Channels(), 5_000);
   }
 
   /**
@@ -1208,61 +1216,114 @@ export class GatewayHandler {
           await remix._spawnPlayer(guildId, channelId);
           logger.voice247(`[BootRecovery] Successfully rejoined 24/7 channel ${channelId}`);
         } catch (e) {
-          logger.warn(`[BootRecovery] Failed to rejoin 24/7 channel ${channelId}: ${e.message}`);
+          const is401 = e?.message?.includes("401") || e?.message?.includes("Unauthorized");
+          if (is401) {
+            logger.warn(
+              `[BootRecovery] 401 error rejoining 24/7 channel ${channelId} (guild ${guildId}) — ` +
+              `auto-removing 24/7 state for this channel`
+            );
+            this._remove247ForChannel(guildId, channelId);
+          } else {
+            logger.warn(`[BootRecovery] Failed to rejoin 24/7 channel ${channelId}: ${e.message}`);
+          }
         }
       }, delay);
     }
   }
 
+  // ── 401 auto-cleanup for boot rejoin ──────────────────────────────────────
+
+  /**
+   * Remove the 24/7 state for a channel when a 401 error occurs during
+   * boot rejoin. This prevents the bot from repeatedly trying to rejoin
+   * a channel that it no longer has access to (e.g. bot was removed from
+   * the server, channel was deleted, or permissions were revoked).
+   *
+   * @param {string} guildId
+   * @param {string} channelId
+   */
+  _remove247ForChannel(guildId, channelId) {
+    const { remix } = this;
+    const settings = remix.settingsMgr;
+    if (!settings?.guilds) return;
+
+    const serverSettings = settings.guilds.get(guildId);
+    if (!serverSettings) return;
+
+    const cleanChannelId = String(channelId).replace(/\D/g, "");
+
+    // Get the current stay_247 channels
+    const raw = serverSettings.get("stay_247");
+    if (!raw || raw === "none") return;
+
+    const rawArr = Array.isArray(raw) ? raw : [raw];
+    const currentSet = new Set(
+      rawArr.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15)
+    );
+
+    // Remove the channel from the set
+    if (!currentSet.has(cleanChannelId)) return; // already removed
+    currentSet.delete(cleanChannelId);
+
+    // Update stay_247 setting
+    if (currentSet.size === 0) {
+      serverSettings.set("stay_247", "none");
+    } else {
+      serverSettings.set("stay_247", [...currentSet]);
+    }
+
+    // Remove the per-channel mode
+    remove247ChannelMode(serverSettings, cleanChannelId, currentSet);
+
+    // Remove the playerMap entry if present
+    const existingPlayer = remix.players.playerMap.get(cleanChannelId);
+    if (existingPlayer) {
+      remix.players.playerMap.delete(cleanChannelId);
+      try { existingPlayer.leave().catch(() => {}); } catch (_) {}
+      try { existingPlayer.destroy(); } catch (_) {}
+    }
+
+    logger.voice247(
+      `[BootRecovery] Auto-removed 24/7 for channel ${cleanChannelId} ` +
+      `in guild ${guildId} due to 401 error`
+    );
+  }
+
   // ── GuildDelete cleanup (extracted for deferred processing) ────────────────
 
   /**
-   * Perform the actual cleanup for guild(s) that the bot was removed from.
-   * Accepts a single guildId (string) or an array of guildIds for batch
-   * processing (used when the startup grace period expires with multiple
-   * deferred deletes). Logs ONE summary line with all cleaned guild IDs.
-   * @param {string|string[]} guildIds
+   * Perform the actual cleanup for a guild that the bot was removed from.
+   * Extracted from the GuildDelete handler so it can be called after the
+   * startup grace period expires.
+   * @param {string} guildId
    */
-  _processGuildDelete(guildIds) {
-    const ids = Array.isArray(guildIds) ? guildIds : [guildIds];
+  _processGuildDelete(guildId) {
     const { remix } = this;
-    const cleanedIds = [];
-    let totalDestroyedPlayers = 0;
+    const cleanGuildId = String(guildId).replace(/\D/g, "");
 
-    for (const guildId of ids) {
-      const cleanGuildId = String(guildId).replace(/\D/g, "");
-      let destroyedPlayers = 0;
-
-      for (const [channelId, player] of remix.players.playerMap) {
-        if (String(player._guildId ?? "").replace(/\D/g, "") === cleanGuildId) {
-          remix.players.playerMap.delete(channelId);
-          try { player.leave().catch(() => {}); } catch (_) {}
-          try { player.destroy();               } catch (_) {}
-          destroyedPlayers++;
-        }
+    for (const [channelId, player] of remix.players.playerMap) {
+      if (String(player._guildId ?? "").replace(/\D/g, "") === cleanGuildId) {
+        remix.players.playerMap.delete(channelId);
+        try { player.leave().catch(() => {}); } catch (_) {}
+        try { player.destroy();               } catch (_) {}
+        logger.guild(`[GuildDelete] Destroyed player for channel ${channelId}.`);
       }
-
-      for (const [userId, info] of [...remix.observedVoiceUsers]) {
-        if (String(info.guildId).replace(/\D/g, "") === cleanGuildId) remix.observedVoiceUsers.delete(userId);
-      }
-      for (const [userId, info] of [...remix.observedVoiceBots]) {
-        if (String(info.guildId).replace(/\D/g, "") === cleanGuildId) remix.observedVoiceBots.delete(userId);
-      }
-      for (const [stateKey, info] of [...this._prevVoiceState]) {
-        if (String(info.guildId).replace(/\D/g, "") === cleanGuildId)
-          this._prevVoiceState.delete(stateKey);
-      }
-
-      remix.settingsMgr.removeServer(guildId);
-      remix._announcementChannelCache.delete(guildId);
-
-      cleanedIds.push(guildId);
-      totalDestroyedPlayers += destroyedPlayers;
     }
 
-    if (cleanedIds.length > 0) {
-      const extra = totalDestroyedPlayers > 0 ? ` (${totalDestroyedPlayers} player(s) destroyed)` : "";
-      logger.guild(`[GuildDelete] Cleaned up ${cleanedIds.length} server(s): ${cleanedIds.join(", ")}${extra}`);
+    for (const [userId, info] of [...remix.observedVoiceUsers]) {
+      if (String(info.guildId).replace(/\D/g, "") === cleanGuildId) remix.observedVoiceUsers.delete(userId);
     }
+    for (const [userId, info] of [...remix.observedVoiceBots]) {
+      if (String(info.guildId).replace(/\D/g, "") === cleanGuildId) remix.observedVoiceBots.delete(userId);
+    }
+    for (const [stateKey, info] of [...this._prevVoiceState]) {
+      if (String(info.guildId).replace(/\D/g, "") === cleanGuildId)
+        this._prevVoiceState.delete(stateKey);
+    }
+
+    remix.settingsMgr.removeServer(guildId);
+    remix._announcementChannelCache.delete(guildId);
+
+    logger.guild(`[GuildDelete] Cleanup complete for server ${guildId}.`);
   }
 }

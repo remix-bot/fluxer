@@ -1,12 +1,19 @@
 {
+  "Comment": "Fluxer music bot configuration. IMPORTANT: Node.js >= 22.0.0 is required (moonlink.js v5 dependency). Run 'node --version' to verify.",
   "token": "your bot token",
   "fluxer.js": {
     "rest": {
+      "Comment": "REST client options. 'timeout' is ms before a request to api.fluxer.app is aborted (default: 15000). Raise if you see DOMException AbortError in logs.",
       "timeout": 30000,
       "retries": 3
     }
   },
+  "fluxer-api": {
+    "Comment": "Configuration options for a fluxer REST client if self-hosting. See: https://docs.fluxer.app"
+  },
   "prefix": "your desired prefix (such as %)",
+  "presenceInterval": null,
+  "presenceContents-Comment": "Each entry can be a plain string (e.g. 'Ping for Prefix') or an object. Objects support: text (required), emoji_name (unicode emoji or custom emoji name), emoji_id (snowflake ID for custom guild emojis only), activity ({ name, type, url? }). Activity types: 0=Playing, 1=Streaming, 2=Listening, 3=Watching, 5=Competing. For custom guild emojis, provide both emoji_name AND emoji_id. For unicode emojis, only emoji_name is needed.",
   "presenceContents": [
     {
       "text": "Ping for Prefix | Hosted by https://kyun.sh/",
@@ -18,9 +25,13 @@
       "text": "Ping for Prefix",
       "emoji_name": "🎧",
       "activity": { "name": "music", "type": 2 }
+    },
+    {
+      "text": "Ping for Prefix | By RedTech & NoLogicAlan",
+      "emoji_name": "🎶",
+      "activity": { "name": "RedTech & NoLogicAlan", "type": 2 }
     }
   ],
-  "presenceInterval": 30000,
   "spotify": {
     "clientId": "your spotify client id",
     "clientSecret": "your spotify client secret"
@@ -29,12 +40,34 @@
     "host": "localhost",
     "port": 3000,
     "password": "youshallnotpass",
-    "requestTimeout": 60000
+    "requestTimeout": 60000,
+    "Comment": "requestTimeout: ms before a NodeLink HTTP request is aborted. Default: 60000 (60s). Raise if you see 'NodeLink request timeout' errors."
+  },
+  "comment-radio": {
+    "message": "If you have radio stations you'd like to connect, add them to the array below. Radio stations must be rendered like following:",
+    "station": {
+      "name": "zamrock",
+      "detailedName": "ᘔᗩᗰᘔᗩᗰᖴOᖴᒪIᖴE",
+      "thumbnail": "https://zamrock.net/wp-content/uploads/2024/06/Zamrock_rd_logo_0004-1.gif",
+      "url": "url to stream from; this will be kept private",
+      "description": "Genre: Zamrock, provided by [Zamrock.net](https://zamrock.net/)",
+      "author": {
+        "name": "Zamrock",
+        "url": "https://zamrock.net"
+      },
+      "keyWords": ["radio", "zamrock", "psychedelic", "blues", "rock"]
+    }
   },
   "radio": [],
   "cache": {
-    "guilds": { "enabled": true, "max": 5000 },
-    "members": { "enabled": true, "max": 10000 }
+    "guilds": {
+      "enabled": true,
+      "max": 5000
+    },
+    "members": {
+      "enabled": true,
+      "max": 10000
+    }
   },
   "helpCatalog": true,
   "helpPagination": true,
@@ -48,7 +81,9 @@
   "webPort": 80,
   "dashboard": {
     "enabled": false,
-    "redis": { "url": "redis://localhost:6379" }
+    "redis": {
+      "url": "redis://localhost:6379"
+    }
   },
   "dashboardUrl": "The url the dashboard is accessible with.",
   "ssl": {
@@ -57,40 +92,45 @@
     "useSSL": false,
     "httpPort": 80
   },
-  "sessionSecret": "secret for the expressjs session middleware",
-  "geniusToken": "Genius access token (optional, used for lyrics)",
+  "sessionSecret": "secret for the expressjs session middleware; https://www.npmjs.com/package/express-session#user-content-secret",
+  "geniusToken": "Genius access token (Used for lyrics); optional",
   "lastfm": {
+    "Comment": "Last.fm integration: auto-scrobble songs, play loved/top/recent tracks. Register at https://www.last.fm/api/account/create",
     "apiKey": "your_lastfm_api_key",
     "apiSecret": "your_lastfm_api_secret",
     "scrobbleThreshold": 0.5,
-    "scrobbleMinMs": 240000
+    "scrobbleMinMs": 240000,
+    "Comment2": "scrobbleThreshold: fraction of track duration before scrobbling (0.5 = 50%). scrobbleMinMs: minimum ms played before scrobble (default 4 min). Both must be met."
   },
-  "owners": ["user id for owner-only commands"],
+  "owners": ["user id for owner-only commands", "another user id"],
+  "playerAFKTimeout": 60000,
+  "Comment": "The above specifies the time in ms after which a player goes inactive; Optional.",
   "customStatsFooter": "Text shown in the footer of the %stats embed; optional.",
   "embedColor": "0xe9196c",
   "logging": {
+    "Comment": "Control which log categories appear in the console. Set 'enabled' to false to silence everything except errors. Set any category to false to silence just that group.",
     "enabled": true,
     "player":      true,
-    "inactivity":  false,
+    "inactivity":  true,
+    "voiceState":  true,
     "voice247":    true,
-    "voiceState":  false,
-    "mediaplayer": true,
+    "mediaplayer": false,
     "commands":    true,
     "guild":       true,
     "recovery":    false,
-    "settings":    false,
-    "worker":      false,
-    "moonlink":    false,
-    "voice":       false,
-    "dashboard":   false,
-    "redis":       false
+    "settings":    true,
+    "worker":      true,
+    "moonlink":    true,
+    "dashboard":   true,
+    "redis":       true
   },
   "timers": {
+    "Comment": "All timing values in milliseconds (ms). 1000ms = 1 second, 60000ms = 1 minute.",
     "inactivityTimeout":    180000,
-    "aloneCheckInterval":    30000,
+    "aloneCheckInterval":    15000,
     "aloneCheckDebounce":      500,
-    "rejoin247Delay":         2000,
-    "leave247RejoinDelay":    3000,
+    "rejoin247Delay":         3000,
+    "leave247RejoinDelay":    5000,
     "playerUpdateInterval":   5000,
     "searchSessionTimeout":  30000,
     "playerSessionTimeout":  300000,
