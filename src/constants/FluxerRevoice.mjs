@@ -194,10 +194,9 @@ export class FluxerRevoice extends EventEmitter {
   /** @type {number} Minimum delay between ANY two joins (ms), even across guilds.
    *  This delay runs AFTER the previous join completes and BEFORE the next
    *  one starts, giving the Fluxer gateway time to clean up the previous
-   *  voice session. 3 seconds is needed because the gateway's Erlang backend
-   *  needs time to process the voice state transition before a new join
-   *  can succeed without 401 errors. */
-  _globalJoinDelay = 3_000;
+   *  voice session. Keep this short for snappy manual joins while still
+   *  preserving serialization across the whole bot. */
+  _globalJoinDelay = 1_000;
 
   /** @type {Set<string>} Channel IDs where disconnect is expected (bot-initiated) */
   _intentionalDisconnects = new Set();
@@ -211,12 +210,9 @@ export class FluxerRevoice extends EventEmitter {
 
   /** @type {number} Minimum time between guild joins (ms) — enforced on top of
    *  the per-join delay. If a new join is requested within this window, we
-   *  wait the remaining time before proceeding. Increased from 7000 to 8000
-   *  because 7000ms was insufficient to prevent 401 errors when the bot
-   *  re-joins a channel in the same guild quickly after a disconnect,
-   *  especially during boot recovery when multiple guilds compete for
-   *  gateway attention. */
-  _guildMinJoinInterval = 8000;
+   *  wait the remaining time before proceeding. Keep this lower than the old
+   *  recovery-focused value so user-triggered joins don't feel sluggish. */
+  _guildMinJoinInterval = 3_000;
 
   /** @type {Map<string, number>} Guild IDs that recently had a 401 error.
    *  Used to add an even longer backoff before retrying joins in that guild. */
@@ -390,10 +386,8 @@ export class FluxerRevoice extends EventEmitter {
     existing._connected = false;
     try { existing.removeAllListeners(); } catch (_) {}
 
-    // 4. Brief delay to let the gateway process the leave before we rejoin.
-    //    Increased from 1500ms to 2000ms to give the Erlang gateway backend
-    //    more time to clean up the previous voice session.
-    await new Promise(r => setTimeout(r, 2000));
+    // Brief delay to let the gateway process the leave before we rejoin.
+    await new Promise(r => setTimeout(r, 750));
   }
 
   /**

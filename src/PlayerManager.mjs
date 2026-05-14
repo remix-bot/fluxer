@@ -519,7 +519,12 @@ export class PlayerManager {
       }
       // Also check if a join is in-progress for this channel
       if (this._pendingJoins.has(cleanUserChannelId)) {
-        return null; // A player is being created — caller should retry
+        const pendingPlayer = await this._waitForPendingJoin(cleanUserChannelId);
+        if (pendingPlayer) {
+          pendingPlayer.textChannel = message.channel;
+          return pendingPlayer;
+        }
+        return null;
       }
     }
 
@@ -590,6 +595,22 @@ export class PlayerManager {
     }
 
     return null;
+  }
+
+  async _waitForPendingJoin(channelId, timeoutMs = 5_000) {
+    const cleanChannelId = cleanId(channelId);
+    const startedAt = Date.now();
+
+    while (this._pendingJoins.has(cleanChannelId) && (Date.now() - startedAt) < timeoutMs) {
+      const player = this.playerMap.get(cleanChannelId)
+        ?? [...this.playerMap.values()].find((entry) => getPlayerChannelId(entry) === cleanChannelId);
+      if (player) return player;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    return this.playerMap.get(cleanChannelId)
+      ?? [...this.playerMap.values()].find((entry) => getPlayerChannelId(entry) === cleanChannelId)
+      ?? null;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

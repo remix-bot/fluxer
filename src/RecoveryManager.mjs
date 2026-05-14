@@ -5,17 +5,15 @@ import Player from "./Player.mjs";
 import { get247ChannelMode } from "./constants/Helpers247.mjs";
 
 /**
- * RecoveryManager — handles 24/7 auto-join on boot and player spawning.
+ * RecoveryManager — handles player spawning without background recovery loops.
  *
  * The boot-time recovery system (session persistence via recovery.json) has
  * been removed. On restart the bot starts clean; only 24/7 channels configured
  * in each guild's settings are automatically rejoined.
  *
  * This module still provides:
- *   - spawnPlayer()       — create a Player, join a voice channel (used by 24/7)
- *   - scheduleSpawn()     — delayed player spawn (used by 24/7 autoleave rejoin)
+ *   - spawnPlayer()       — create a Player and join a voice channel when explicitly requested
  *   - cleanStaleGuild()   — purge all state for a guild the bot left
- *   - tryAutoJoin()       — auto-join 24/7 channels when bot + settings are ready
  */
 export class RecoveryManager {
   /**
@@ -316,7 +314,6 @@ export class RecoveryManager {
         if (matchChannel && (mode2 === "on" || mode2 === "auto")) {
           this.scheduleSpawn(guildId, homeChannelId, this.T.rejoin247Delay, "247-autoleave");
         } else {
-          // 24/7 is off — send inactivity message with hint to enable 247
           try {
             const prefix = remix.handler?.getPrefix?.(guildId) ?? "%";
             const guild  = remix.client.guilds.get(guildId);
@@ -430,56 +427,10 @@ export class RecoveryManager {
             e.message?.includes("signal failure: client error");
 
         if (is401Error) {
-          // Bot not in guild cache — but during startup, the cache might not
-          // be populated yet. Same race as the pre-flight check.
-          if (!remix.client.guilds.has(guildId) && !remix.client.guilds.has(cleanGuildId)) {
-            if (this._autoJoinRunning || !this._autoJoinDone) {
-              logger.warn(
-                `[PlayerSpawn] 401 on guild ${guildId} — guild cache not populated yet (startup race). Will retry.`
-              );
-              // Schedule a retry — don't clean up
-              const retryCount = (this._guild401Retries.get(cleanGuildId) ?? 0) + 1;
-              this._guild401Retries.set(cleanGuildId, retryCount);
-              if (retryCount < 3) {
-                this.scheduleSpawn(guildId, cleanChannelId, 15_000, `401-startup-retry-${retryCount}`);
-              }
-              return;
-            }
-            // Runtime — bot was actually removed
-            logger.warn(
-              `[PlayerSpawn] 401 on guild ${guildId} — bot no longer in server. Cleaning up.`
-            );
-            this.cleanStaleGuild(guildId, "401 and bot not in guild");
-            return;
-          }
-
-          // Bot IS still in the guild — the 401 may be transient (gateway slow
-          // to provision voice room). Retry with exponential backoff instead of
-          // permanently giving up on the first failure.
-          const retryCount = (this._guild401Retries.get(cleanGuildId) ?? 0) + 1;
-          this._guild401Retries.set(cleanGuildId, retryCount);
-
-          if (retryCount >= 3) {
-            // After 3 consecutive 401s, ban this guild for 5 minutes to avoid
-            // infinite retry loops. The FluxerRevoice 45s cooldown + this ban
-            // prevent wasting resources on guilds where voice is truly broken.
-            const banDuration = 5 * 60 * 1000; // 5 minutes
-            this._guild401Ban.set(cleanGuildId, Date.now() + banDuration);
-            this._guild401Retries.delete(cleanGuildId);
-            logger.warn(
-              `[PlayerSpawn] 401 for guild ${cleanGuildId} — ` +
-              `${retryCount} consecutive failures. Banning for 5 minutes.`
-            );
-            return;
-          }
-
-          // Exponential backoff: 1st retry after 15s, 2nd after 45s
-          const backoffMs = retryCount === 1 ? 15_000 : 45_000;
           logger.warn(
-            `[PlayerSpawn] 401 for guild ${cleanGuildId} — ` +
-            `transient? Retry ${retryCount}/3 in ${backoffMs / 1000}s.`
+            `[PlayerSpawn] 401 for guild ${cleanGuildId} on channel ${cleanChannelId}. ` +
+            "Recovery retries are disabled; leaving this channel disconnected."
           );
-          this.scheduleSpawn(guildId, cleanChannelId, backoffMs, `401-retry-${retryCount}`);
           return;
         }
 
@@ -510,7 +461,6 @@ export class RecoveryManager {
     const { remix } = this;
     const joinList = [];
 
-    // Collect all 24/7 channels from loaded guild settings
     for (const [guildId, serverSettings] of remix.settingsMgr.guilds) {
       try {
         const raw = serverSettings.get("stay_247");
@@ -534,11 +484,6 @@ export class RecoveryManager {
       `[AutoJoin] Found ${joinList.length} 24/7 channel(s) to join.`
     );
 
-    // Schedule all 24/7 spawns immediately (no stagger). The FluxerRevoice
-    // global join queue handles serialization — only one join is in-flight
-    // at a time across all guilds, with a 3s gap between each. Staggering
-    // here is no longer needed and just adds unnecessary delay before the
-    // joins start queuing.
     for (let i = 0; i < joinList.length; i++) {
       const { guildId, channelId } = joinList[i];
       this.scheduleSpawn(guildId, channelId, 0, "247-autojoin");

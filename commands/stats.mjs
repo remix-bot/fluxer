@@ -12,10 +12,18 @@ export const command = new CommandBuilder()
 // ── Stats cache ───────────────────────────────────────────────────────────────
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // refresh every 5 minutes
+const FAST_WAIT_MS = 1_500;
 
 let cachedStats = null;   // { guildCount, userCount } or null
 let cacheExpiresAt  = 0;
 let inflightPromise = null;
+
+function withTimeout(promise, ms, fallback) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
 
 /**
  * Accurate guild count — same multi-layer strategy as ErinJS:
@@ -46,16 +54,17 @@ async function fetchAccurateGuildCount(client) {
     try {
       let total = 0;
       let after = undefined;
-      for (let page = 0; page < 500; page++) {
+      for (let page = 0; page < 25; page++) {
         const route = `/users/@me/guilds?limit=200${after ? `&after=${after}` : ""}`;
-        const response = await client.rest.get(route);
+        const response = await withTimeout(client.rest.get(route), 800, null);
+        if (!response) break;
         const batch = Array.isArray(response) ? response : (response?.guilds ?? []);
         total += batch.length;
         if (batch.length < 200) break;
         after = batch[batch.length - 1]?.id;
         if (!after) break;
       }
-      return total;
+      if (total > 0) return total;
     } catch {}
   }
 
@@ -102,6 +111,13 @@ function getStats(client) {
   if (cachedStats && Date.now() < cacheExpiresAt) return Promise.resolve(cachedStats);
   if (!inflightPromise) inflightPromise = refreshStats(client);
   return inflightPromise;
+}
+
+function getLastfmSnapshot(lastfm) {
+  return {
+    scrobbleCount: Number(lastfm?._totalScrobblesCache ?? 0),
+    linkedUsers: Number(lastfm?._linkedUsersCache ?? 0),
+  };
 }
 
 function getLivePlayerCount(playerMap) {
@@ -172,12 +188,13 @@ function buildEmbed(t, msg, { guildCount, userCount, playerCount, scrobbleCount,
 export async function run(message) {
   const lastfm = this.lastfm;
   const lastfmEnabled = lastfm?.enabled ?? false;
+  const lastfmSnapshot = getLastfmSnapshot(lastfm);
 
   const shared = {
     guildCount:  this.client.guilds.size,
     playerCount: getLivePlayerCount(this.players.playerMap),
-    scrobbleCount: 0,
-    linkedUsers: 0,
+    scrobbleCount: lastfmSnapshot.scrobbleCount,
+    linkedUsers: lastfmSnapshot.linkedUsers,
     lastfmEnabled,
     uptime:      Utils.prettifyMS(Math.round(process.uptime()) * 1000),
     comHash:     this.comHash,
@@ -187,8 +204,12 @@ export async function run(message) {
   };
 
   // Fetch Last.fm stats (non-blocking for initial reply)
-  const scrobblePromise = lastfmEnabled ? lastfm.getTotalScrobbles() : Promise.resolve(0);
-  const linkedPromise   = lastfmEnabled ? lastfm.getLinkedUsersCount()  : Promise.resolve(0);
+  const scrobblePromise = lastfmEnabled
+    ? withTimeout(lastfm.getStoredTotalScrobbles?.() ?? Promise.resolve(lastfmSnapshot.scrobbleCount), FAST_WAIT_MS, lastfmSnapshot.scrobbleCount)
+    : Promise.resolve(0);
+  const linkedPromise   = lastfmEnabled
+    ? withTimeout(lastfm.getLinkedUsersCount(), FAST_WAIT_MS, lastfmSnapshot.linkedUsers)
+    : Promise.resolve(0);
 
   const hasCached = cachedStats !== null;
 
@@ -206,7 +227,10 @@ export async function run(message) {
   const ping = Date.now() - start;
 
   const [stats, scrobbleCount, linkedUsers] = await Promise.all([
-    getStats(this.client),
+    withTimeout(getStats(this.client), FAST_WAIT_MS, cachedStats ?? {
+      guildCount: shared.guildCount,
+      userCount: 0,
+    }),
     scrobblePromise,
     linkedPromise,
   ]);
