@@ -666,27 +666,81 @@ export default class Player extends EventEmitter {
     // re-check after async stop — player may have been destroyed
     if (this._destroyed) return false;
 
-    try {
-      this._mediaPlayer = new MediaPlayer();
-      this._mediaPlayer.setMaxListeners(0);
-      await this._mediaPlayer.publishToRoom(room);
-      logger.mediaplayer("[Player] MediaPlayer published successfully");
-      return true;
-    } catch (e) {
-      // "engine is closed" = LiveKit room disconnected mid-publish (transient race).
-      // Anything else = real failure. Both return false so the caller can retry,
-      // but we distinguish them in the log for easier diagnosis.
-      const isTransient = e.message?.includes("engine is closed") ||
-          e.message?.includes("engine: connection error");
-      if (isTransient) {
-        logger.mediaplayer(`[Player] publishToRoom transient fail (room mid-teardown): ${e.message}`);
-      } else {
-        logger.error(`[Player] publishToRoom failed: ${e.message}`);
+    // publishToRoom with timeout and retry ──
+    // publishToRoom has no internal timeout and can hang indefinitely if the
+    // LiveKit server is slow or the network is congested. We wrap it in a
+    // Promise.race with a timeout, and retry up to 3 times with exponential
+    // backoff. On final failure, we DON'T leave the channel — the player
+    // stays connected and can retry later (critical for 24/7 channels).
+    const PUBLISH_TIMEOUT_MS = 15_000; // 15s timeout per attempt
+    const MAX_RETRIES = 3;
+    const BASE_BACKOFF_MS = 2_000;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      // Re-check room state before each attempt
+      if (!room.isConnected || this._destroyed) {
+        logger.mediaplayer(`[Player] Room disconnected or player destroyed before attempt ${attempt} — aborting`);
+        return false;
       }
-      try { this._mediaPlayer?.stop?.(); } catch (_) {}
-      this._mediaPlayer = null;
-      return false;
+
+      try {
+        this._mediaPlayer = new MediaPlayer();
+        this._mediaPlayer.setMaxListeners(0);
+
+        // Race publishToRoom against a timeout
+        await Promise.race([
+          this._mediaPlayer.publishToRoom(room),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`publishToRoom timed out after ${PUBLISH_TIMEOUT_MS}ms`)), PUBLISH_TIMEOUT_MS)
+          ),
+        ]);
+
+        logger.mediaplayer(`[Player] MediaPlayer published successfully on attempt ${attempt}`);
+        return true;
+      } catch (e) {
+        const msg = e?.message ?? String(e);
+        const isTransient = msg.includes("engine is closed") ||
+            msg.includes("engine: connection error");
+        const isTimeout = msg.includes("timed out");
+
+        if (isTransient) {
+          logger.mediaplayer(`[Player] publishToRoom transient fail on attempt ${attempt} (room mid-teardown): ${msg}`);
+        } else if (isTimeout) {
+          logger.warn(`[Player] publishToRoom timed out on attempt ${attempt}/${MAX_RETRIES}: ${msg}`);
+        } else {
+          logger.error(`[Player] publishToRoom failed on attempt ${attempt}/${MAX_RETRIES}: ${msg}`);
+        }
+
+        // Clean up the failed MediaPlayer
+        try { this._mediaPlayer?.stop?.(); } catch (_) {}
+        this._mediaPlayer = null;
+
+        // If the room disconnected mid-attempt, don't retry
+        if (!room.isConnected || this._destroyed) {
+          logger.mediaplayer(`[Player] Room disconnected during publish attempt — aborting retries`);
+          return false;
+        }
+
+        // If we have more retries left, wait with backoff before retrying
+        if (attempt < MAX_RETRIES) {
+          const backoff = Math.min(BASE_BACKOFF_MS * Math.pow(2, attempt - 1), 10_000);
+          logger.mediaplayer(`[Player] Retrying publishToRoom in ${backoff}ms...`);
+          await new Promise(r => setTimeout(r, backoff));
+        } else {
+          // On final failure, DON'T leave the channel. The voice
+          // connection is still alive — just the audio publishing failed.
+          // Leaving the channel on play failure causes 24/7 drops. The
+          // player can retry publishing when the next track is played.
+          logger.error(
+            `[Player] All ${MAX_RETRIES} publishToRoom attempts failed — ` +
+            `staying in channel (connection still alive). Playback will retry on next track.`
+          );
+          return false;
+        }
+      }
     }
+
+    return false;
   }
 
   async _stopMediaPlayer() {

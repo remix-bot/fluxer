@@ -1275,13 +1275,37 @@ export class GatewayHandler {
     // During startup grace batch, suppress individual cleanup logs to reduce spam
     const batchMode = this._deferredDeleteCount > 3;
 
+    // Protect 24/7 voice connections from GuildDelete cleanup ──
+    // During startup, the gateway sends GuildDelete for guilds that are
+    // temporarily unavailable. If we destroy players for 24/7 channels,
+    // BootRecovery has to rejoin from scratch, causing audio interruption.
+    // Instead, skip destroying players that have an active 24/7 mode
+    // and still have a healthy LiveKit room connection — the guild will
+    // come back via GuildCreate, and the voice connection stays alive.
     for (const [channelId, player] of remix.players.playerMap) {
-      if (String(player._guildId ?? "").replace(/\D/g, "") === cleanGuildId) {
-        remix.players.playerMap.delete(channelId);
-        try { player.leave().catch(() => {}); } catch (_) {}
-        try { player.destroy();               } catch (_) {}
-        if (!batchMode) logger.guild(`[GuildDelete] Destroyed player for channel ${channelId}.`);
+      if (String(player._guildId ?? "").replace(/\D/g, "") !== cleanGuildId) continue;
+
+      // Check if this player is a 24/7 channel with an active connection
+      const is247 = player._is247Enabled();
+      const roomAlive = player.connection?.room?.isConnected ?? false;
+
+      if (is247 && roomAlive) {
+        // The LiveKit room is still connected and this is a 24/7 channel.
+        // The GuildDelete is stale (guild is temporarily unavailable).
+        // Keep the player alive — the guild will come back via GuildCreate.
+        if (!batchMode) {
+          logger.guild(
+            `[GuildDelete] Preserving 24/7 player for channel ${channelId} ` +
+            `(LiveKit room still connected — guild ${cleanGuildId} likely temporarily unavailable).`
+          );
+        }
+        continue;
       }
+
+      remix.players.playerMap.delete(channelId);
+      try { player.leave().catch(() => {}); } catch (_) {}
+      try { player.destroy();               } catch (_) {}
+      if (!batchMode) logger.guild(`[GuildDelete] Destroyed player for channel ${channelId}.`);
     }
 
     for (const [userId, info] of [...remix.observedVoiceUsers]) {

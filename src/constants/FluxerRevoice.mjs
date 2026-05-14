@@ -606,11 +606,14 @@ export class FluxerRevoice extends EventEmitter {
       if (e.message?.includes("401") || e.message?.includes("Unauthorized")) {
         const gId = channelGuildId ?? this._resolveGuildForChannel(channelId);
         if (gId) {
-          // Set 15-second cooldown for this guild to prevent rapid 401 retries
-          this._guild401Cooldown.set(gId, Date.now() + 15_000);
+          // Reduced cooldown from 15s to 5s. 15s was too aggressive —
+          // it blocked all join attempts for the guild for too long, causing
+          // BootRecovery to fail entirely. 5s is enough for the gateway to
+          // clean up the stale voice session.
+          this._guild401Cooldown.set(gId, Date.now() + 5_000);
           logger.warn(
             `[FluxerRevoice] 401 error for channel ${channelId} — ` +
-            `setting 15s cooldown for guild ${gId}`
+            `setting 5s cooldown for guild ${gId}`
           );
         }
       }
@@ -740,6 +743,44 @@ export class FluxerRevoice extends EventEmitter {
         // leaves because it can collapse multi-voice into a guild-wide leave.
         if (nativeConnection && typeof nativeConnection.disconnect === "function") {
           try { nativeConnection.disconnect(); } catch (_) {}
+        }
+
+        // Auto-rejoin on unexpected disconnect (serverLeave) ──
+        // Per the Fluxer.js Voice guide: "If using LiveKit, the server may
+        // emit serverLeave. Listen and reconnect if needed." When the LiveKit
+        // room disconnects unexpectedly (token expiry, server restart, network
+        // blip), we attempt to rejoin the same channel after a short delay.
+        // The rejoin triggers a fresh VOICE_STATE_UPDATE → VOICE_SERVER_UPDATE
+        // flow, giving us a new LiveKit token. The global join queue ensures
+        // we don't collide with other in-flight joins.
+        if (channelGuildId) {
+          const rejoinDelay = 3_000; // 3s delay to let the gateway settle
+          logger.player(
+            `[FluxerRevoice] Scheduling auto-rejoin for channel ${channelId} ` +
+            `in ${rejoinDelay}ms after unexpected disconnect`
+          );
+          setTimeout(async () => {
+            try {
+              // Check if the bot was intentionally disconnected in the meantime
+              if (this._intentionalDisconnects.has(String(channelId))) {
+                logger.player(`[FluxerRevoice] Skipping auto-rejoin — intentional disconnect detected for ${channelId}`);
+                return;
+              }
+              // Check if another connection already exists (e.g. user ran !join)
+              if (this.connections.has(channelId)) {
+                logger.player(`[FluxerRevoice] Skipping auto-rejoin — connection already exists for ${channelId}`);
+                return;
+              }
+              logger.player(`[FluxerRevoice] Auto-rejoining channel ${channelId}...`);
+              await this.join(channelId);
+              logger.player(`[FluxerRevoice] Auto-rejoin succeeded for channel ${channelId}`);
+            } catch (e) {
+              logger.warn(
+                `[FluxerRevoice] Auto-rejoin failed for channel ${channelId}: ${e?.message ?? e}. ` +
+                `BootRecovery will retry on next restart.`
+              );
+            }
+          }, rejoinDelay);
         }
       }
 
