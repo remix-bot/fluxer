@@ -372,17 +372,15 @@ export class PlayerManager {
     const seedObserved = (channelId) => {
       const cleanChannelId = cleanId(channelId);
       if (!cleanChannelId) return null;
-      if (!this.observedVoiceUsers?.has(userId)) {
+      const current = this.observedVoiceUsers?.get?.(userId) ?? null;
+      if (
+        cleanId(current?.guildId) !== cleanGuild ||
+        cleanId(current?.channelId) !== cleanChannelId
+      ) {
         this.observedVoiceUsers?.set(userId, { channelId: cleanChannelId, guildId: cleanGuild });
       }
-      return cleanId(this.observedVoiceUsers?.get(userId)?.channelId) || cleanChannelId;
+      return cleanChannelId;
     };
-
-    const observed = this.observedVoiceUsers?.get?.(userId);
-    if (cleanId(observed?.guildId) === cleanGuild) {
-      const observedChannelId = cleanId(observed?.channelId);
-      if (observedChannelId) return observedChannelId;
-    }
 
     try {
       const vm = getVoiceManager(this.commands.client);
@@ -479,6 +477,13 @@ export class PlayerManager {
         } catch (_) {}
       }
     }
+
+    const observed = this.observedVoiceUsers?.get?.(userId);
+    if (cleanId(observed?.guildId) === cleanGuild) {
+      const observedChannelId = cleanId(observed?.channelId);
+      if (observedChannelId) return observedChannelId;
+    }
+
     return null;
   }
 

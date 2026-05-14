@@ -913,8 +913,21 @@ const isIgnorableWsCrash = (err) => {
       );
 };
 
+const isAbortError = (err) => {
+  const name = String(err?.name ?? "");
+  const code = String(err?.code ?? "");
+  const message = String(err?.message ?? err ?? "");
+  return name === "AbortError" ||
+    code === "ABORT_ERR" ||
+    message.includes("This operation was aborted");
+};
+
 process.on("unhandledRejection", (reason, p) => {
   if (reason?.message?.includes("AudioSource is closed")) return;
+  if (isAbortError(reason)) {
+    logger.warn("[Error_Handling] Suppressed AbortError from a timed-out request.");
+    return;
+  }
   logger.error("[Error_Handling] Unhandled Rejection/Catch");
   logger.error("Reason:", reason, p);
 });
@@ -924,11 +937,16 @@ process.on("uncaughtException", (err, origin) => {
     logger.warn("Error:", err?.stack ?? err, origin);
     return;
   }
+  if (isAbortError(err)) {
+    logger.warn("[Error_Handling] Suppressed AbortError from a timed-out request.");
+    return;
+  }
   logger.error("[Error_Handling] Uncaught Exception/Catch");
   logger.error("Error:", err, origin);
   process.exit(1);
 });
 process.on("uncaughtExceptionMonitor", (err, origin) => {
+  if (isAbortError(err)) return;
   logger.error("[Error_Handling] Uncaught Exception/Catch (MONITOR)");
   logger.error("Error:", err, origin);
 });

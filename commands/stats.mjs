@@ -9,166 +9,186 @@ export const command = new CommandBuilder()
     .addAliases("info")
     .setCategory("util");
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Stats cache ──────────────────────────────────────────────────────────────
 
-const CACHE_TTL_MS       = 5 * 60 * 1000;  // 5 min cache lifetime
-const MEMBER_FETCH_LIMIT = 1_000;            // Discord max per page
-const POOL_CONCURRENCY   = 6;               // guilds fetched in parallel
-const GUILD_FETCH_MS     = 4_000;           // timeout per guild member fetch
-const TOTAL_STATS_MS     = 15_000;          // hard cap for the whole refresh
-const SCROBBLE_MS        = 3_000;
-const LINKED_MS          = 5_000;
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const FAST_WAIT_MS = 8_000;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+let cachedStats = null; // { guildCount, userCount }
+let cacheExpiresAt = 0;
+let inflightPromise = null;
 
-/** Resolve `promise` within `ms`, otherwise return `fallback`. */
-function withTimeout(promise, ms, fallback) {
-  let timer;
-  return Promise.race([
-    promise,
-    new Promise((resolve) => { timer = setTimeout(() => resolve(fallback), ms); }),
-  ]).finally(() => clearTimeout(timer));
+function getMessageGuildId(message) {
+  return message?.channel?.channel?.guildId ??
+    message?.message?.guildId ??
+    message?.guildId ??
+    null;
 }
 
-/** Run `tasks` (thunks) with at most `limit` in flight at once. */
+function createTranslator(remix) {
+  return (message, key, data = {}) => {
+    const guildId = getMessageGuildId(message);
+    return remix?.locale?.translate?.(guildId, key, data) ?? key;
+  };
+}
+
+function withTimeout(promise, ms, fallback) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 async function pool(limit, tasks) {
   const results = [];
   const executing = new Set();
-
   for (const task of tasks) {
     const p = Promise.resolve()
-        .then(task)
-        .then((v) => { results.push(v); })
-        .catch(() => { results.push(new Set()); }) // never let one guild crash all
-        .finally(() => executing.delete(p));
-
+      .then(task)
+      .then((value) => {
+        results.push(value);
+        executing.delete(p);
+      })
+      .catch(() => {
+        results.push(0);
+        executing.delete(p);
+      });
     executing.add(p);
     if (executing.size >= limit) await Promise.race(executing);
   }
-
   await Promise.all(executing);
   return results;
 }
 
-// ── Member counting ───────────────────────────────────────────────────────────
-
-/** Fast path: count from whatever is already cached in memory. */
 function computeUserCount(client) {
   const uniqueUsers = new Set();
-  const guilds = client?.guilds?.cache ?? client?.guilds ?? [];
+  for (const [, guild] of client.guilds ?? []) {
+    const members = guild?.members;
+    const iterable = typeof members?.values === "function"
+      ? members.values()
+      : Array.isArray(members)
+        ? members
+        : Object.values(members ?? {});
 
-  for (const guild of (guilds.values ? guilds.values() : guilds)) {
-    const members = guild?.members?.cache ?? guild?.members ?? [];
-    const iter = members.values ? members.values() : Object.values(members);
-    for (const m of iter) {
-      const id = m?.id ?? m?.user?.id;
+    for (const member of iterable) {
+      const id = member?.id ?? member?.user?.id ?? null;
       if (id) uniqueUsers.add(String(id));
     }
   }
   return uniqueUsers.size;
 }
 
-/**
- * Fetch all member IDs for one guild, paginating if needed.
- * Wrapped with a per-guild timeout so a slow shard can't block everything.
- */
-async function fetchGuildMemberIds(guild) {
-  const ids = new Set();
+async function fetchAccurateGuildCount(client) {
+  if (typeof client?.user?.fetchGuilds === "function") {
+    try {
+      const guilds = await withTimeout(client.user.fetchGuilds(), 4_000, null);
+      if (Array.isArray(guilds)) return guilds.length;
+      if (typeof guilds?.size === "number") return guilds.size;
+      if (typeof guilds?.values === "function") return [...guilds.values()].length;
+    } catch (_) {}
+  }
 
-  const doFetch = async () => {
-    if (!guild?.members?.fetch) throw new Error("no fetch");
+  if (typeof client.fetchTotalGuildCount === "function") {
+    try {
+      const count = await withTimeout(client.fetchTotalGuildCount(), 4_000, null);
+      if (typeof count === "number" && count >= 0) return count;
+    } catch (_) {}
+  }
 
-    let after = "0";
-    while (true) {
-      const batch = await guild.members.fetch({ limit: MEMBER_FETCH_LIMIT, after });
-      const items = batch?.values ? [...batch.values()] : (Array.isArray(batch) ? batch : []);
-      if (!items.length) break;
+  if (typeof client.fetchAllStats === "function") {
+    try {
+      const stats = await withTimeout(client.fetchAllStats(), 4_000, null);
+      if (typeof stats?.guilds === "number" && stats.guilds >= 0) return stats.guilds;
+    } catch (_) {}
+  }
 
-      let lastId = "0";
-      for (const m of items) {
-        const id = String(m.id ?? m.user?.id ?? "");
-        if (id) { ids.add(id); if (id > lastId) lastId = id; }
+  if (client.rest && typeof client.rest.get === "function") {
+    try {
+      let total = 0;
+      let after = undefined;
+      for (let page = 0; page < 25; page++) {
+        const route = `/users/@me/guilds?limit=200${after ? `&after=${after}` : ""}`;
+        const response = await withTimeout(client.rest.get(route), 800, null);
+        if (!response) break;
+        const batch = Array.isArray(response) ? response : (response?.guilds ?? []);
+        total += batch.length;
+        if (batch.length < 200) break;
+        after = batch[batch.length - 1]?.id;
+        if (!after) break;
       }
-      if (items.length < MEMBER_FETCH_LIMIT) break;
-      after = lastId;
+      if (total > 0) return total;
+    } catch (_) {}
+  }
+
+  return client.guilds?.size ?? 0;
+}
+
+async function fetchGuildMemberIds(guild) {
+  try {
+    let after = undefined;
+    const ids = new Set();
+    for (let page = 0; page < 1000; page++) {
+      const raw = await guild.members.fetch({ limit: 1000, after });
+      const batch = Array.isArray(raw)
+        ? raw
+        : typeof raw?.values === "function"
+          ? [...raw.values()]
+          : Object.values(raw ?? {});
+      for (const member of batch) {
+        const id = member?.id ?? member?.user?.id ?? null;
+        if (id) ids.add(String(id));
+      }
+      if (batch.length < 1000) break;
+      after = batch.reduce((max, member) => {
+        const id = member.id ?? member.user?.id ?? "";
+        return id > max ? id : max;
+      }, "0");
+      if (!after) break;
     }
     return ids;
-  };
-
-  try {
-    return await withTimeout(doFetch(), GUILD_FETCH_MS, ids);
   } catch {
-    // Fall back to cached members for this guild
-    const members = guild?.members?.cache ?? guild?.members ?? [];
-    const iter = members.values ? members.values() : Object.values(members);
-    for (const m of iter) {
-      const id = m?.id ?? m?.user?.id;
+    const ids = new Set();
+    const members = guild?.members;
+    const iterable = typeof members?.values === "function"
+      ? members.values()
+      : Array.isArray(members)
+        ? members
+        : Object.values(members ?? {});
+    for (const member of iterable) {
+      const id = member?.id ?? member?.user?.id ?? null;
       if (id) ids.add(String(id));
     }
     return ids;
   }
 }
 
-/** Fetch accurate guild count, with a fallback to cache size. */
-async function fetchAccurateGuildCount(client) {
-  if (typeof client?.user?.fetchGuilds === "function") {
-    try {
-      const guilds = await withTimeout(client.user.fetchGuilds(), 4_000, null);
-      if (Array.isArray(guilds)) return guilds.length;
-      if (guilds?.size != null) return guilds.size;
-    } catch { /* fall through */ }
-  }
-  return client?.guilds?.cache?.size ?? client?.guilds?.size ?? 0;
-}
-
-/**
- * Fetch accurate unique user count across all guilds.
- * Hard-capped at TOTAL_STATS_MS so it can never hang the command.
- */
 async function fetchAccurateUserCount(client) {
-  const guildsMap = client?.guilds?.cache ?? client?.guilds;
-  const guilds = guildsMap?.values ? [...guildsMap.values()] : [...(guildsMap ?? [])];
-  if (!guilds.length) return 0;
-
-  const idSets = await pool(
-      POOL_CONCURRENCY,
-      guilds.map((g) => () => fetchGuildMemberIds(g))
-  );
-
-  const unique = new Set();
-  for (const set of idSets) for (const id of set) unique.add(id);
-  return unique.size;
+  const guilds = [...(client.guilds?.values?.() ?? [])];
+  if (guilds.length === 0) return 0;
+  const idSets = await pool(8, guilds.map((guild) => () => fetchGuildMemberIds(guild)));
+  const uniqueUsers = new Set();
+  for (const idSet of idSets) {
+    if (!idSet || typeof idSet[Symbol.iterator] !== "function") continue;
+    for (const id of idSet) uniqueUsers.add(String(id));
+  }
+  return uniqueUsers.size;
 }
-
-// ── Stats cache ───────────────────────────────────────────────────────────────
-
-let cachedStats      = null;
-let cacheExpiresAt   = 0;
-let inflightPromise  = null;
 
 async function refreshStats(client) {
   try {
-    const [guildCount, userCount] = await withTimeout(
-        Promise.all([
-          fetchAccurateGuildCount(client),
-          fetchAccurateUserCount(client),
-        ]),
-        TOTAL_STATS_MS,
-        [
-          client?.guilds?.cache?.size ?? client?.guilds?.size ?? 0,
-          computeUserCount(client),
-        ]
-    );
-    cachedStats = { guildCount, userCount };
+    cachedStats = {
+      guildCount: await fetchAccurateGuildCount(client),
+      userCount: await fetchAccurateUserCount(client),
+    };
   } catch {
     cachedStats = {
-      guildCount: client?.guilds?.cache?.size ?? client?.guilds?.size ?? 0,
+      guildCount: client.guilds?.size ?? 0,
       userCount: computeUserCount(client),
     };
-  } finally {
-    cacheExpiresAt  = Date.now() + CACHE_TTL_MS;
-    inflightPromise = null;       // always clear so future calls can retry
   }
+
+  cacheExpiresAt = Date.now() + CACHE_TTL_MS;
+  inflightPromise = null;
   return cachedStats;
 }
 
@@ -178,151 +198,185 @@ function getStats(client) {
   return inflightPromise;
 }
 
-// ── Live player count ─────────────────────────────────────────────────────────
+function getLastfmSnapshot(lastfm) {
+  return {
+    scrobbleCount: Number(lastfm?._totalScrobblesCache ?? 0),
+    linkedUsers: Number(lastfm?._linkedUsersCache ?? 0),
+  };
+}
 
 function getLivePlayerCount(playerMap) {
-  if (!playerMap) return 0;
   let live = 0;
-  const iter = playerMap.values ? playerMap.values() : Object.values(playerMap);
-  for (const player of iter) {
-    if (!player || player._destroyed || player.leaving || player._isJoining) continue;
+
+  for (const [, player] of playerMap ?? []) {
+    if (!player || player._destroyed || player.leaving) continue;
+    if (player._isJoining) continue;
+
     const conn = player.connection;
     if (!conn) continue;
+
     const room = conn.room;
-    if (room && !room.isConnected &&
-        (room.connectionState === 0 || room.connectionState === "disconnected")) continue;
+    if (room) {
+      const isConnected = room.isConnected;
+      const connectionState = room.connectionState;
+      if (!isConnected && (connectionState === 0 || connectionState === "disconnected")) continue;
+    }
+
     live++;
   }
+
   return live;
 }
 
 // ── Embed builder ─────────────────────────────────────────────────────────────
 
-function buildEmbed(translator, msg, data) {
-  const {
-    guildCount, userCount, playerCount, scrobbleCount,
-    linkedUsers, ping, uptime, comHash, comLink,
-    reason, footer, loading, lastfmEnabled,
-  } = data;
+function buildEmbed(t, msg, {
+  guildCount,
+  userCount,
+  playerCount,
+  scrobbleCount,
+  linkedUsers,
+  ping,
+  uptime,
+  comHash,
+  comLink,
+  reason,
+  footer,
+  loading,
+  lastfmEnabled,
+}) {
+  const num = (v) => Utils.formatNumber(v);
+  const ld = (v) => loading ? "..." : v;
 
-  const t   = (key) => { try { return translator(msg, key); } catch { return key.split(".").pop(); } };
-  const num = (v)   => Utils.formatNumber(v ?? 0);
-  const ld  = (v)   => (loading ? "…" : v);
-
-  const lines = [
-    `${t("responses.stats.servers")} — \`${num(guildCount)}\``,
-    `${t("responses.stats.users")}   — \`${ld(num(userCount))}\``,
-    `${t("responses.stats.players")} — \`${num(playerCount)}\``,
+  const description = [
+    `${t(msg, "responses.stats.servers")} — \`${num(guildCount)}\``,
+    `${t(msg, "responses.stats.users")} — \`${ld(num(userCount))}\``,
+    `${t(msg, "responses.stats.players")} — \`${num(playerCount)}\``,
   ];
 
   if (lastfmEnabled) {
-    lines.push(
-        `${t("responses.stats.scrobbles")}    — \`${ld(num(scrobbleCount))}\``,
-        `${t("responses.stats.linkedUsers")} — \`${ld(num(linkedUsers))}\``
-    );
+    description.push(`${t(msg, "responses.stats.scrobbles")} — \`${ld(num(scrobbleCount))}\``);
+    description.push(`${t(msg, "responses.stats.linkedUsers")} — \`${ld(num(linkedUsers))}\``);
   }
 
-  lines.push(
-      `${t("responses.stats.ping")}   — \`${ld(`${num(ping)}ms`)}\``,
-      `${t("responses.stats.uptime")} — \`${uptime}\``,
-      `${t("responses.stats.build")}  — [\`${comHash || "N/A"}\`](${comLink || "#"})`
+  description.push(
+      `${t(msg, "responses.stats.ping")} — \`${ld(`${num(ping)}ms`)}\``,
+      `${t(msg, "responses.stats.uptime")} — \`${uptime}\``,
+      `${t(msg, "responses.stats.build")} — [\`${comHash}\`](${comLink})`,
+      reason ? `${t(msg, "responses.stats.lastRestart")} — \`${reason}\`` : null,
+      "",
+      t(msg, "responses.stats.supportKofi"),
+      t(msg, "responses.stats.community"),
   );
 
-  if (reason) lines.push(`${t("responses.stats.lastRestart")} — \`${reason}\``);
+  const desc = description.filter((line) => line !== null).join("\n");
 
-  lines.push("", t("responses.stats.supportKofi"), t("responses.stats.community"));
-
-  return new EmbedBuilder()
+  const builder = new EmbedBuilder()
       .setColor(getGlobalColor())
-      .setAuthor({ name: t("responses.stats.title") })
-      .setDescription(lines.filter(Boolean).join("\n"))
-      .setFooter({ text: footer || t("responses.stats.title") })
-      .setTimestamp();
+      .setAuthor({ name: t(msg, "responses.stats.title") })
+      .setDescription(desc)
+      .setFooter({ text: footer || t(msg, "responses.stats.title") });
+
+  if (typeof builder.setTimestamp === "function") builder.setTimestamp();
+  return builder;
+}
+
+async function safeEditStatsMessage(messageRef, payload, fallbackMessage) {
+  try {
+    if (messageRef && typeof messageRef.edit === "function") {
+      await messageRef.edit(payload);
+      return true;
+    }
+    if (messageRef?.message && typeof messageRef.message.edit === "function") {
+      await messageRef.message.edit(payload);
+      return true;
+    }
+  } catch (err) {
+    console.error("[stats] edit failed:", err);
+  }
+
+  try {
+    await fallbackMessage.reply(payload);
+    return false;
+  } catch (err) {
+    console.error("[stats] fallback reply failed:", err);
+    return false;
+  }
 }
 
 // ── Runner ────────────────────────────────────────────────────────────────────
 
 export async function run(message) {
-  const lastfm        = this.lastfm;
-  const lastfmEnabled = !!lastfm?.enabled;
-  const translator    = typeof this.t === "function" ? this.t.bind(this) : (_m, k) => k;
-
-  const shared = {
-    playerCount:   getLivePlayerCount(this.players?.playerMap),
-    scrobbleCount: Number(lastfm?._totalScrobblesCache ?? 0),
-    linkedUsers:   Number(lastfm?._linkedUsersCache    ?? 0),
-    lastfmEnabled,
-    uptime:  Utils.prettifyMS(Math.round(process.uptime()) * 1000),
-    comHash: this.comHash,
-    comLink: this.comLink,
-    reason:  this.config?.restart            ?? null,
-    footer:  this.config?.customStatsFooter  ?? null,
-  };
-
-  // Use whatever we already have so the first reply is instant
-  const statsFallback = cachedStats ?? {
-    guildCount: this.client?.guilds?.cache?.size ?? this.client?.guilds?.size ?? 0,
-    userCount:  computeUserCount(this.client),
-  };
-
-  // ── 1. Reply immediately with a loading embed ─────────────────────────────
-  let sentMsg;
-  const sendStart = Date.now();
-
   try {
-    const loadingEmbed = buildEmbed(translator, message, {
-      ...shared,
-      ...statsFallback,
-      ping:    0,
-      loading: !cachedStats,
+    const t = createTranslator(this);
+    const lastfm = this.lastfm;
+    const lastfmEnabled = lastfm?.enabled ?? false;
+    const lastfmSnapshot = getLastfmSnapshot(lastfm);
+
+    const shared = {
+      guildCount: this.client.guilds?.size ?? 0,
+      playerCount: getLivePlayerCount(this.players.playerMap),
+      scrobbleCount: lastfmSnapshot.scrobbleCount,
+      linkedUsers: lastfmSnapshot.linkedUsers,
+      lastfmEnabled,
+      uptime: Utils.prettifyMS(Math.round(process.uptime()) * 1000),
+      comHash: this.comHash,
+      comLink: this.comLink,
+      reason: this.config.restart ?? null,
+      footer: this.config.customStatsFooter || null,
+    };
+
+    const statsFallback = cachedStats ?? {
+      guildCount: shared.guildCount,
+      userCount: computeUserCount(this.client),
+    };
+
+    const scrobblePromise = lastfmEnabled
+      ? withTimeout(
+          lastfm.getStoredTotalScrobbles?.() ?? Promise.resolve(lastfmSnapshot.scrobbleCount),
+          3_000,
+          lastfmSnapshot.scrobbleCount
+        ).catch(() => lastfmSnapshot.scrobbleCount)
+      : Promise.resolve(0);
+
+    const linkedPromise = lastfmEnabled
+      ? withTimeout(lastfm.getLinkedUsersCount(), FAST_WAIT_MS, lastfmSnapshot.linkedUsers).catch(() => lastfmSnapshot.linkedUsers)
+      : Promise.resolve(0);
+
+    const start = Date.now();
+    const msg = await message.reply({
+      embeds: [buildEmbed(t, message, {
+        ...shared,
+        guildCount: statsFallback.guildCount,
+        userCount: statsFallback.userCount,
+        ping: 0,
+        loading: !cachedStats,
+      })],
     });
-    sentMsg = await message.reply({ embeds: [loadingEmbed] });
-  } catch (err) {
-    console.error("[stats] initial reply failed:", err);
-    return; // nothing we can do without a message handle
-  }
+    const ping = Date.now() - start;
 
-  const ping = Date.now() - sendStart;
-
-  // ── 2. Fetch everything in parallel, all with timeouts ────────────────────
-  const scrobblePromise = lastfmEnabled && typeof lastfm.getStoredTotalScrobbles === "function"
-      ? withTimeout(lastfm.getStoredTotalScrobbles(), SCROBBLE_MS, shared.scrobbleCount)
-      : Promise.resolve(shared.scrobbleCount);
-
-  const linkedPromise = lastfmEnabled && typeof lastfm.getLinkedUsersCount === "function"
-      ? withTimeout(lastfm.getLinkedUsersCount(), LINKED_MS, shared.linkedUsers)
-      : Promise.resolve(shared.linkedUsers);
-
-  let stats, scrobbleCount, linkedUsers;
-  try {
-    [stats, scrobbleCount, linkedUsers] = await Promise.all([
+    const [stats, scrobbleCount, linkedUsers] = await Promise.all([
       getStats(this.client).catch(() => statsFallback),
-      scrobblePromise.catch(() => shared.scrobbleCount),
-      linkedPromise.catch(() => shared.linkedUsers),
+      scrobblePromise,
+      linkedPromise,
     ]);
-  } catch (err) {
-    console.error("[stats] background fetch failed:", err);
-    stats         = statsFallback;
-    scrobbleCount = shared.scrobbleCount;
-    linkedUsers   = shared.linkedUsers;
-  }
 
-  // ── 3. Edit with the final data ───────────────────────────────────────────
-  try {
-    const finalEmbed = buildEmbed(translator, message, {
-      ...shared,
-      guildCount: stats?.guildCount ?? statsFallback.guildCount,
-      userCount:  stats?.userCount  ?? statsFallback.userCount,
-      scrobbleCount,
-      linkedUsers,
-      ping,
-      loading: false,
-    });
-
-    if (typeof sentMsg?.edit === "function") {
-      await sentMsg.edit({ embeds: [finalEmbed] });
-    }
+    await safeEditStatsMessage(msg, {
+      embeds: [buildEmbed(t, message, {
+        ...shared,
+        guildCount: stats?.guildCount ?? statsFallback.guildCount,
+        userCount: stats?.userCount ?? statsFallback.userCount,
+        scrobbleCount,
+        linkedUsers,
+        ping,
+        loading: false,
+      })],
+    }, message);
   } catch (err) {
-    console.error("[stats] edit failed:", err);
+    console.error("[stats] run failed:", err);
+    const fallback = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setDescription("Failed to load full stats. Please try again in a moment.");
+    await message.reply({ embeds: [fallback] }).catch(() => {});
   }
 }
