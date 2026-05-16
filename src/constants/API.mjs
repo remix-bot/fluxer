@@ -100,7 +100,7 @@ export function buildFluxerListUrl(endpoint, resourceId, queryParams = {}) {
  */
 export function buildVoteLink(type, resourceId) {
   const path = type === "server" ? "servers" : "bots";
-  return `${FLUXERLIST.SITE_URL}/${path}/${resourceId}/vote`;
+  return `${FLUXERLIST.SITE_URL}/${path}/${resourceId}`;
 }
 
 /**

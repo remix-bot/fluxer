@@ -142,8 +142,7 @@ export async function run(msg, data) {
         .setDescription([
           `Support this ${label.toLowerCase()} by voting on FluxerList!`,
           ``,
-          `**[Vote Now](${voteUrl})**`,
-          `**[View Profile](${profileUrl})**`,
+          `**[Vote & View Profile](${voteUrl})**`,
           ``,
           `Your votes help this ${label.toLowerCase()} grow and reach more users.`,
         ].join("\n"));
