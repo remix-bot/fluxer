@@ -2,7 +2,7 @@ import { Events, GatewayOpcodes } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { logger } from "./constants/Logger.mjs";
 import { ServerSettings } from "./Settings.mjs";
-import { get247ChannelMode } from "./constants/Helpers247.mjs";
+import { get247ChannelMode, remove247ChannelMode } from "./constants/Helpers247.mjs";
 import mysql from "mysql2";
 
 /**
@@ -145,8 +145,8 @@ export class GatewayHandler {
           });
         }
         logger.voiceState(
-          `[Seed] Seeded from VoiceManager.voiceStates — ` +
-          `${remix.observedVoiceUsers.size} humans, ${remix.observedVoiceBots.size} bots tracked.`
+            `[Seed] Seeded from VoiceManager.voiceStates — ` +
+            `${remix.observedVoiceUsers.size} humans, ${remix.observedVoiceBots.size} bots tracked.`
         );
         return; // VoiceManager is the primary source — skip fallback
       }
@@ -241,7 +241,7 @@ export class GatewayHandler {
                 remix.observedVoiceUsers.set(userId, { channelId: cleanChannel, guildId: cleanGuild });
                 humansFound++;
                 logger.voiceState(
-                  `[Reseed] Found human ${userId} in channel ${cleanChannel} (guild ${cleanGuild}) via VoiceManager`
+                    `[Reseed] Found human ${userId} in channel ${cleanChannel} (guild ${cleanGuild}) via VoiceManager`
                 );
               }
             }
@@ -254,8 +254,8 @@ export class GatewayHandler {
           }
 
           logger.voiceState(
-            `[Reseed] Channel ${cleanChannel} (guild ${cleanGuild}): ` +
-            `found ${humansFound} human(s) via VoiceManager, observedVoiceUsers size now ${remix.observedVoiceUsers.size}`
+              `[Reseed] Channel ${cleanChannel} (guild ${cleanGuild}): ` +
+              `found ${humansFound} human(s) via VoiceManager, observedVoiceUsers size now ${remix.observedVoiceUsers.size}`
           );
 
           // If VoiceManager found humans, skip fallbacks
@@ -270,7 +270,7 @@ export class GatewayHandler {
     const guild = client.guilds.get(cleanGuild) ?? client.guilds.get(guildId);
     if (!guild) {
       logger.voiceState(
-        `[Reseed] Guild ${cleanGuild} not in cache — cannot reseed voice states.`
+          `[Reseed] Guild ${cleanGuild} not in cache — cannot reseed voice states.`
       );
     } else {
       const voiceStatesRaw =
@@ -291,7 +291,7 @@ export class GatewayHandler {
               remix.observedVoiceUsers.set(uid, { channelId: stateChannel, guildId: cleanGuild });
               humansFound++;
               logger.voiceState(
-                `[Reseed] Found human ${uid} in channel ${cleanChannel} (guild ${cleanGuild})`
+                  `[Reseed] Found human ${uid} in channel ${cleanChannel} (guild ${cleanGuild})`
               );
             }
           }
@@ -309,7 +309,7 @@ export class GatewayHandler {
               remix.observedVoiceUsers.set(userId, { channelId: stateChannel, guildId: cleanGuild });
               humansFound++;
               logger.voiceState(
-                `[Reseed] Found human ${userId} in channel ${cleanChannel} (guild ${cleanGuild})`
+                  `[Reseed] Found human ${userId} in channel ${cleanChannel} (guild ${cleanGuild})`
               );
             }
           }
@@ -323,8 +323,8 @@ export class GatewayHandler {
 
         if (humansFound > 0) {
           logger.voiceState(
-            `[Reseed] Channel ${cleanChannel} (guild ${cleanGuild}): ` +
-            `found ${humansFound} human(s), observedVoiceUsers size now ${remix.observedVoiceUsers.size}`
+              `[Reseed] Channel ${cleanChannel} (guild ${cleanGuild}): ` +
+              `found ${humansFound} human(s), observedVoiceUsers size now ${remix.observedVoiceUsers.size}`
           );
           return humansFound;
         }
@@ -339,7 +339,7 @@ export class GatewayHandler {
         if (infoGuild === cleanGuild && infoChannel === cleanChannel) {
           humansFound++;
           logger.voiceState(
-            `[Reseed] Found human ${uid} in channel ${cleanChannel} (guild ${cleanGuild}) via observedVoiceUsers`
+              `[Reseed] Found human ${uid} in channel ${cleanChannel} (guild ${cleanGuild}) via observedVoiceUsers`
           );
         }
       }
@@ -363,7 +363,7 @@ export class GatewayHandler {
               humansFound++;
               remix.observedVoiceUsers.set(userId, { channelId: cleanChannel, guildId: cleanGuild });
               logger.voiceState(
-                `[Reseed] Found human ${userId} in channel ${cleanChannel} (guild ${cleanGuild}) via LiveKit participants`
+                  `[Reseed] Found human ${userId} in channel ${cleanChannel} (guild ${cleanGuild}) via LiveKit participants`
               );
             }
           }
@@ -374,8 +374,8 @@ export class GatewayHandler {
     }
 
     logger.voiceState(
-      `[Reseed] Channel ${cleanChannel} (guild ${cleanGuild}): ` +
-      `found ${humansFound} human(s), observedVoiceUsers size now ${remix.observedVoiceUsers.size}`
+        `[Reseed] Channel ${cleanChannel} (guild ${cleanGuild}): ` +
+        `found ${humansFound} human(s), observedVoiceUsers size now ${remix.observedVoiceUsers.size}`
     );
 
     return humansFound;
@@ -590,8 +590,8 @@ export class GatewayHandler {
         clearTimeout(deferred.timer);
         this._deferredGuildDeletes.delete(guildId);
         logger.guild(
-          `[GuildDelete] Cancelled deferred cleanup for server ${guildId} — ` +
-          `guild came back (GuildCreate received during grace period).`
+            `[GuildDelete] Cancelled deferred cleanup for server ${guildId} — ` +
+            `guild came back (GuildCreate received during grace period).`
         );
       }
 
@@ -606,7 +606,7 @@ export class GatewayHandler {
           guild.voice_states ??
           guild.voiceStates ??
           null;
-      
+
       if (voiceStatesRaw) {
         // Build a set of user IDs from the new voice_states data
         const newUserIds = new Set();
@@ -624,7 +624,7 @@ export class GatewayHandler {
             if (userId) newUserIds.add(userId);
           }
         }
-        
+
         // Only purge entries for users/bots that are being replaced by new data.
         // Previously, ALL observedVoiceBots entries for the guild were deleted,
         // which removed the bot's own entry that was set up during recovery.
@@ -725,8 +725,8 @@ export class GatewayHandler {
         // Only log the first few deferrals individually, then suppress
         if (this._deferredDeleteCount <= 3) {
           logger.guild(
-            `[GuildDelete] Deferring cleanup for server ${guildId} ` +
-            `(startup grace — will confirm after ${this._startupDeleteGraceMs / 1000}s).`
+              `[GuildDelete] Deferring cleanup for server ${guildId} ` +
+              `(startup grace — will confirm after ${this._startupDeleteGraceMs / 1000}s).`
           );
         }
         // Cancel any existing deferred timer for this guild
@@ -910,7 +910,7 @@ export class GatewayHandler {
     // ── Bot-only logic below ───────────────────────────────────────────────
 
     const activeGuildPlayers = [...remix.players.playerMap.entries()].filter(([, player]) =>
-      String(player?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
+        String(player?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
     );
     const multiVoiceGuild = activeGuildPlayers.length > 1;
 
@@ -932,9 +932,9 @@ export class GatewayHandler {
 
         if (saved247Channels.length > 1) {
           logger.voice247(
-            `[247] Ignoring move-style bot voice update ${cleanOld} → ${cleanId} ` +
-            `because guild ${guildId} already has multiple saved 24/7 channels ` +
-            `[${saved247Channels.join(", ")}]`
+              `[247] Ignoring move-style bot voice update ${cleanOld} → ${cleanId} ` +
+              `because guild ${guildId} already has multiple saved 24/7 channels ` +
+              `[${saved247Channels.join(", ")}]`
           );
           return;
         }
@@ -957,12 +957,12 @@ export class GatewayHandler {
             remix.players?._pendingJoins?.has?.(cleanId) ||
             false;
         const targetChannel = client.channels.get(cleanId)
-          ?? client.channels.get?.(cleanId)
-          ?? null;
+            ?? client.channels.get?.(cleanId)
+            ?? null;
         const targetGuildId = String(targetChannel?.guildId ?? targetChannel?.guild?.id ?? guildId ?? "").replace(/\D/g, "");
         const playerGuildId = String(existingPlayer?._guildId ?? "").replace(/\D/g, "");
         const guildPlayers = [...remix.players.playerMap.entries()].filter(([, player]) =>
-          String(player?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
+            String(player?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
         );
         const guildIsAmbiguous = guildPlayers.length > 1;
 
@@ -974,8 +974,8 @@ export class GatewayHandler {
             // situation we must NOT re-key the old player or rewrite stay_247,
             // otherwise one saved channel gets collapsed into the newer one.
             logger.voice247(
-              `[247] Keeping both channels ${cleanOld} and ${cleanId} ` +
-              `(saved=${newChannelAlreadySaved} pending=${newChannelPendingSpawn})`
+                `[247] Keeping both channels ${cleanOld} and ${cleanId} ` +
+                `(saved=${newChannelAlreadySaved} pending=${newChannelPendingSpawn})`
             );
             rekeyed = false;
           } else
@@ -992,9 +992,9 @@ export class GatewayHandler {
               if (targetGuildId) existingPlayer._guildId = targetGuildId;
               rekeyed = false;
               logger.voice247(
-                `[247] Updated player channel ${cleanOld} → ${cleanId} ` +
-                `(guild ${guildId} has ${guildPlayers.length} active players, ` +
-                `new key occupied by another player — skipped re-key)`
+                  `[247] Updated player channel ${cleanOld} → ${cleanId} ` +
+                  `(guild ${guildId} has ${guildPlayers.length} active players, ` +
+                  `new key occupied by another player — skipped re-key)`
               );
             } else {
               // Safe to re-key: no collision
@@ -1005,8 +1005,8 @@ export class GatewayHandler {
               if (targetGuildId) existingPlayer._guildId = targetGuildId;
               rekeyed = true;
               logger.voice247(
-                `[247] Re-keyed playerMap ${cleanOld} → ${cleanId} ` +
-                `(guild ${guildId} has ${guildPlayers.length} active players)`
+                  `[247] Re-keyed playerMap ${cleanOld} → ${cleanId} ` +
+                  `(guild ${guildId} has ${guildPlayers.length} active players)`
               );
             }
           } else if (playerGuildId && targetGuildId && playerGuildId !== targetGuildId) {
@@ -1017,8 +1017,8 @@ export class GatewayHandler {
             // In this case, just update the observed bot state without re-keying.
             if (!existingPlayer) {
               logger.voice247(
-                `[247] Stale cross-guild move ${cleanOld} → ${cleanId} ` +
-                `(no player in playerMap for old channel — updating bot state only)`
+                  `[247] Stale cross-guild move ${cleanOld} → ${cleanId} ` +
+                  `(no player in playerMap for old channel — updating bot state only)`
               );
             } else {
               // There IS a player in the old channel but the guilds don't match.
@@ -1040,13 +1040,13 @@ export class GatewayHandler {
                 remix.players.playerMap.set(cleanId, existingPlayer);
                 rekeyed = true;
                 logger.voice247(
-                  `[247] Fixed stale guild during recovery: re-keyed ${cleanOld} → ${cleanId} ` +
-                  `(playerGuild ${playerGuildId} → ${targetGuildId})`
+                    `[247] Fixed stale guild during recovery: re-keyed ${cleanOld} → ${cleanId} ` +
+                    `(playerGuild ${playerGuildId} → ${targetGuildId})`
                 );
               } else {
                 logger.warn(
-                  `[247] Refused cross-guild re-key ${cleanOld} → ${cleanId} ` +
-                  `(playerGuild=${playerGuildId} targetGuild=${targetGuildId})`
+                    `[247] Refused cross-guild re-key ${cleanOld} → ${cleanId} ` +
+                    `(playerGuild=${playerGuildId} targetGuild=${targetGuildId})`
                 );
               }
             }
@@ -1070,8 +1070,8 @@ export class GatewayHandler {
           if (channels.has(cleanOld) && cleanOld !== cleanId && cleanId.length >= 15) {
             if (channels.has(cleanId) || newChannelAlreadySaved || newChannelPendingSpawn) {
               logger.voice247(
-                `[247] Preserved stay_247 channels ${cleanOld} and ${cleanId} ` +
-                `(saved=${channels.has(cleanId) || newChannelAlreadySaved} pending=${newChannelPendingSpawn})`
+                  `[247] Preserved stay_247 channels ${cleanOld} and ${cleanId} ` +
+                  `(saved=${channels.has(cleanId) || newChannelAlreadySaved} pending=${newChannelPendingSpawn})`
               );
               return;
             }
@@ -1119,7 +1119,7 @@ export class GatewayHandler {
 
           if (mode === "auto") {
             logger.voice247(
-              `[VoiceState] Bot unexpectedly disconnected from ${cleanOld} (24/7 auto) — cleaning up and scheduling rejoin.`
+                `[VoiceState] Bot unexpectedly disconnected from ${cleanOld} (24/7 auto) — cleaning up and scheduling rejoin.`
             );
             const player = remix.players.playerMap.get(cleanOld);
             if (player && !player._destroyed) {
@@ -1153,7 +1153,7 @@ export class GatewayHandler {
             const player = remix.players.playerMap.get(cleanOld);
             if (player && !player.leaving && !player._destroyed) {
               logger.voiceState(
-                `[VoiceState] Bot disconnected from ${cleanOld} (24/7 mode: ${mode}) — emitting autoleave.`
+                  `[VoiceState] Bot disconnected from ${cleanOld} (24/7 mode: ${mode}) — emitting autoleave.`
               );
               player.emit("autoleave");
             }
@@ -1233,7 +1233,7 @@ export class GatewayHandler {
 
     const maxRetries = GatewayHandler.MAX_REJOIN_RETRIES;
     logger.voice247(
-      `[Rejoin] Attempting to rejoin channel ${cleanChannelId} in guild ${cleanGuildId} (attempt ${attempt}/${maxRetries})...`
+        `[Rejoin] Attempting to rejoin channel ${cleanChannelId} in guild ${cleanGuildId} (attempt ${attempt}/${maxRetries})...`
     );
 
     try {
@@ -1256,8 +1256,8 @@ export class GatewayHandler {
         // Retry with exponential backoff: 5s, 10s, 20s
         const backoffMs = 5_000 * Math.pow(2, attempt - 1);
         logger.voice247(
-          `[Rejoin] Track publication failed for channel ${cleanChannelId} (attempt ${attempt}/${maxRetries}) — ` +
-          `retrying in ${backoffMs / 1000}s: ${errMsg}`
+            `[Rejoin] Track publication failed for channel ${cleanChannelId} (attempt ${attempt}/${maxRetries}) — ` +
+            `retrying in ${backoffMs / 1000}s: ${errMsg}`
         );
         this._rejoinInProgress.delete(cleanChannelId);
 
@@ -1267,7 +1267,7 @@ export class GatewayHandler {
       }
 
       logger.warn(
-        `[Rejoin] Failed to rejoin channel ${cleanChannelId} (attempt ${attempt}/${maxRetries}): ${errMsg}`
+          `[Rejoin] Failed to rejoin channel ${cleanChannelId} (attempt ${attempt}/${maxRetries}): ${errMsg}`
       );
       this._rejoinAttempts.delete(cleanChannelId);
 
@@ -1300,8 +1300,8 @@ export class GatewayHandler {
       const pending = this._deferredGuildDeletes.size;
       if (pending > 0) {
         logger.guild(
-          `[GuildDelete] Startup grace period ended. ` +
-          `${pending} deferred deletion(s) confirmed — cleaning up.`
+            `[GuildDelete] Startup grace period ended. ` +
+            `${pending} deferred deletion(s) confirmed — cleaning up.`
         );
       } else {
         logger.guild(`[GuildDelete] Startup grace period ended. No deferred deletions.`);
@@ -1309,7 +1309,7 @@ export class GatewayHandler {
       // Log suppressed count if we had more than 3 deferred deletes
       if (this._deferredDeleteCount > 3) {
         logger.guild(
-          `[GuildDelete] (Suppressed ${this._deferredDeleteCount - 3} deferral log lines for brevity)`
+            `[GuildDelete] (Suppressed ${this._deferredDeleteCount - 3} deferral log lines for brevity)`
         );
       }
     }, this._startupDeleteGraceMs);
@@ -1357,8 +1357,8 @@ export class GatewayHandler {
     }
 
     logger.voice247(
-      `[BootRecovery] Found ${channelsToRejoin.length} 24/7 channel(s) to rejoin: ` +
-      channelsToRejoin.map(c => `${c.channelId}(${c.mode})`).join(", ")
+        `[BootRecovery] Found ${channelsToRejoin.length} 24/7 channel(s) to rejoin: ` +
+        channelsToRejoin.map(c => `${c.channelId}(${c.mode})`).join(", ")
     );
 
     const baseStagger = remix.config?.timers?.bootRejoinStagger ?? 5_000;
@@ -1386,7 +1386,7 @@ export class GatewayHandler {
       }
 
       logger.voice247(
-        `[BootRecovery] Rejoining channel ${channelId} in guild ${guildId} (mode: ${mode}) [${i + 1}/${channelsToRejoin.length}]`
+          `[BootRecovery] Rejoining channel ${channelId} in guild ${guildId} (mode: ${mode}) [${i + 1}/${channelsToRejoin.length}]`
       );
 
       const BOOT_MAX_RETRIES = 3;
@@ -1401,8 +1401,8 @@ export class GatewayHandler {
           this.reseedVoiceStatesForChannel(guildId, channelId);
 
           logger.voice247(
-            `[BootRecovery] Successfully rejoined channel ${channelId} (mode: ${mode}) [${i + 1}/${channelsToRejoin.length}]` +
-            (bootRetries > 0 ? ` (after ${bootRetries} retry/retries)` : '')
+              `[BootRecovery] Successfully rejoined channel ${channelId} (mode: ${mode}) [${i + 1}/${channelsToRejoin.length}]` +
+              (bootRetries > 0 ? ` (after ${bootRetries} retry/retries)` : '')
           );
           break; // success — move to next channel
         } catch (err) {
@@ -1416,24 +1416,52 @@ export class GatewayHandler {
           if (isTrackTimeout && bootRetries < BOOT_MAX_RETRIES) {
             const backoffMs = BOOT_BASE_RETRY_MS * Math.pow(2, bootRetries - 1);
             logger.warn(
-              `[BootRecovery] Track publication failed for channel ${channelId} (attempt ${bootRetries}/${BOOT_MAX_RETRIES}) — ` +
-              `retrying in ${backoffMs / 1000}s: ${errMsg}`
+                `[BootRecovery] Track publication failed for channel ${channelId} (attempt ${bootRetries}/${BOOT_MAX_RETRIES}) — ` +
+                `retrying in ${backoffMs / 1000}s: ${errMsg}`
             );
             await new Promise(resolve => setTimeout(resolve, backoffMs));
             continue;
           }
 
           logger.warn(
-            `[BootRecovery] Failed to rejoin channel ${channelId} (mode: ${mode}): ${errMsg}` +
-            (bootRetries > 1 ? ` (after ${bootRetries} attempts)` : '')
+              `[BootRecovery] Failed to rejoin channel ${channelId} (mode: ${mode}): ${errMsg}` +
+              (bootRetries > 1 ? ` (after ${bootRetries} attempts)` : '')
           );
+
+          // Auto-cleanup: if all retries exhausted due to track publication
+          // failure, remove the channel from 24/7 so it doesn't block boot
+          // recovery on every restart.
+          if (isTrackTimeout && bootRetries >= BOOT_MAX_RETRIES) {
+            try {
+              const set = remix.settingsMgr.getServer(guildId);
+              if (set) {
+                const raw = set.get("stay_247");
+                const channels = new Set(
+                    (Array.isArray(raw) ? raw : [raw])
+                        .filter(id => id && id !== "none" && String(id).replace(/\D/g, "") !== channelId)
+                );
+                set.set("stay_247", channels.size > 0 ? [...channels] : "none");
+                remove247ChannelMode(set, channelId, channels);
+                logger.warn(
+                    `[BootRecovery] Auto-removed channel ${channelId} from 24/7 ` +
+                    `in guild ${guildId} after persistent track publication failure`
+                );
+              }
+            } catch (cleanupErr) {
+              logger.error(
+                  `[BootRecovery] Failed to auto-remove channel ${channelId} from 24/7:`,
+                  cleanupErr?.message ?? cleanupErr
+              );
+            }
+          }
+
           break; // non-retryable error or max retries exhausted
         }
       }
     }
 
     logger.voice247(
-      `[BootRecovery] Boot recovery complete. ${channelsToRejoin.length} channel(s) processed.`
+        `[BootRecovery] Boot recovery complete. ${channelsToRejoin.length} channel(s) processed.`
     );
   }
 
@@ -1471,8 +1499,8 @@ export class GatewayHandler {
         // Keep the player alive — the guild will come back via GuildCreate.
         if (!batchMode) {
           logger.guild(
-            `[GuildDelete] Preserving 24/7 player for channel ${channelId} ` +
-            `(LiveKit room still connected — guild ${cleanGuildId} likely temporarily unavailable).`
+              `[GuildDelete] Preserving 24/7 player for channel ${channelId} ` +
+              `(LiveKit room still connected — guild ${cleanGuildId} likely temporarily unavailable).`
           );
         }
         continue;
