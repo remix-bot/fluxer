@@ -217,8 +217,13 @@ export class Flag extends Option {
 export class PrefixManager {
   /** @type {SettingsManager} */
   settings;
-  constructor(settings) { this.settings = settings; }
-  getPrefix(guildId) { return this.settings.getServer(guildId).get("prefix"); }
+  /** @type {string|null} Prefix from config.json — used as fallback when DB has no value */
+  configPrefix;
+  constructor(settings, configPrefix = null) { this.settings = settings; this.configPrefix = configPrefix; }
+  getPrefix(guildId) {
+    const serverPrefix = this.settings.getServer(guildId).get("prefix");
+    return serverPrefix ?? this.configPrefix ?? "%";
+  }
 }
 
 export class HelpHandler {

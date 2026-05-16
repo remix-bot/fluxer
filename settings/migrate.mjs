@@ -4,11 +4,15 @@ import { logger } from "../src/constants/Logger.mjs";
 
 const config = JSON.parse(fs.readFileSync(new URL("../config.json", import.meta.url)));
 
+// Pass bot ID from config if available, so migrations are bot-isolated.
+// If no botId in config, all rows are migrated (legacy behavior).
+const botId = config.botId ?? null;
+
 // Both source and destination use RemoteSettingsManager to ensure the
 // `guilds` Map is populated from MySQL.  The abstract SettingsManager base
 // class has no implementation (no guilds, no load, no defaults).
-const sm = new RemoteSettingsManager(config.mysql, "./storage/defaults.json");
-const rsm = new RemoteSettingsManager(config.mysql, "./storage/defaults.json");
+const sm = new RemoteSettingsManager(config.mysql, "./storage/defaults.json", botId);
+const rsm = new RemoteSettingsManager(config.mysql, "./storage/defaults.json", botId);
 
 // Ensure source manager is fully loaded BEFORE starting migration.
 // Previously, rsm's "ready" could fire before sm finished loading,

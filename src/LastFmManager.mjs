@@ -95,6 +95,11 @@ export class LastFmManager {
     this._mysqlConfig = mysqlConfig;
     this._pool = null;
 
+    /** @type {string|null} Bot user ID — used to isolate rows per-bot in shared databases */
+    this.botId = null;
+    /** @type {boolean} Whether the bot_id column exists in the lastfm tables */
+    this._hasBotIdColumn = false;
+
     // In-memory user cache: Map<userId, { sessionKey, username, scrobbleEnabled }>
     this._userCache = new Map();
 
@@ -106,6 +111,64 @@ export class LastFmManager {
     if (!this.enabled) {
       logger.settings("[LastFm] Disabled — apiKey or apiSecret missing in config.");
     }
+  }
+
+  // ── Bot ID isolation ─────────────────────────────────────────────────────
+
+  /**
+   * Set the bot ID for multi-bot database isolation.
+   * Ensures bot_id column exists in lastfm tables, then clears caches.
+   * @param {string} id - The bot's Discord user ID
+   */
+  async setBotId(id) {
+    const changed = this.botId !== id;
+    this.botId = id;
+    if (changed) {
+      await this._ensureBotIdColumn();
+      this._userCache.clear();
+    }
+  }
+
+  /**
+   * Auto-migrate: add bot_id column to lastfm_users and lastfm_stats if missing.
+   */
+  async _ensureBotIdColumn() {
+    if (this._hasBotIdColumn) return;
+    const pool = await this._getPool();
+
+    // Check lastfm_users
+    const [cols] = await pool.execute(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lastfm_users' AND COLUMN_NAME = 'bot_id'`
+    );
+    if (cols.length === 0) {
+      logger.settings("[LastFm] Auto-migrating: adding bot_id column to lastfm_users...");
+      await pool.execute("ALTER TABLE `lastfm_users` ADD COLUMN `bot_id` VARCHAR(32) DEFAULT NULL");
+      await pool.execute("ALTER TABLE `lastfm_users` DROP PRIMARY KEY, ADD PRIMARY KEY (user_id, bot_id)");
+      logger.settings("[LastFm] Auto-migration complete: lastfm_users.bot_id added.");
+    }
+
+    // Check lastfm_stats
+    const [statsCols] = await pool.execute(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lastfm_stats' AND COLUMN_NAME = 'bot_id'`
+    );
+    if (statsCols.length === 0) {
+      logger.settings("[LastFm] Auto-migrating: adding bot_id column to lastfm_stats...");
+      await pool.execute("ALTER TABLE `lastfm_stats` ADD COLUMN `bot_id` VARCHAR(32) DEFAULT NULL");
+      await pool.execute("ALTER TABLE `lastfm_stats` DROP PRIMARY KEY, ADD PRIMARY KEY (id, bot_id)");
+      logger.settings("[LastFm] Auto-migration complete: lastfm_stats.bot_id added.");
+    }
+
+    this._hasBotIdColumn = true;
+  }
+
+  /**
+   * Returns SQL WHERE fragment for bot_id filtering.
+   * Uses prepared statement placeholder (?) for safety.
+   * @returns {{ where: string, params: string[] }}
+   */
+  _botIdFilter() {
+    if (!this.botId || !this._hasBotIdColumn) return { where: "", params: [] };
+    return { where: " AND bot_id = ?", params: [String(this.botId)] };
   }
 
   // ── MySQL ──────────────────────────────────────────────────────────────────
@@ -166,9 +229,10 @@ export class LastFmManager {
     if (cached) return cached;
 
     const pool = await this._getPool();
+    const f = this._botIdFilter();
     const [rows] = await pool.execute(
-      "SELECT session_key, username, scrobble FROM lastfm_users WHERE user_id = ?",
-      [String(userId)]
+      `SELECT session_key, username, scrobble FROM lastfm_users WHERE user_id = ?${f.where}`,
+      [String(userId), ...f.params]
     );
 
     if (!rows.length) return null;
@@ -185,11 +249,12 @@ export class LastFmManager {
 
   async saveUser(userId, sessionKey, username) {
     const pool = await this._getPool();
+    const f = this._botIdFilter();
     await pool.execute(
-      `INSERT INTO lastfm_users (user_id, session_key, username, scrobble)
-       VALUES (?, ?, ?, 1)
+      `INSERT INTO lastfm_users (user_id, session_key, username, scrobble${f.where ? ', bot_id' : ''})
+       VALUES (?, ?, ?, 1${f.where ? ', ?' : ''})
        ON DUPLICATE KEY UPDATE session_key = VALUES(session_key), username = VALUES(username)`,
-      [String(userId), sessionKey, username ?? ""]
+      [String(userId), sessionKey, username ?? "", ...f.params]
     );
     const data = { sessionKey, username: username ?? "", scrobbleEnabled: true };
     this._userCache.set(userId, data);
@@ -197,8 +262,8 @@ export class LastFmManager {
     // Increment linked_users counter (only on new links, not re-links)
     try {
       await pool.execute(
-        "UPDATE lastfm_stats SET linked_users = linked_users + 1 WHERE id = 1 AND NOT EXISTS (SELECT 1 FROM (SELECT 1 FROM lastfm_users WHERE user_id = ? AND linked_at < NOW()) AS tmp)",
-        [String(userId)]
+        `UPDATE lastfm_stats SET linked_users = linked_users + 1 WHERE id = 1${f.where} AND NOT EXISTS (SELECT 1 FROM (SELECT 1 FROM lastfm_users WHERE user_id = ?${f.where} AND linked_at < NOW()) AS tmp)`,
+        [...f.params, String(userId), ...f.params]
       );
     } catch {
       // Non-critical — don't fail the save
@@ -209,15 +274,17 @@ export class LastFmManager {
 
   async removeUser(userId) {
     const pool = await this._getPool();
-    await pool.execute("DELETE FROM lastfm_users WHERE user_id = ?", [String(userId)]);
+    const f = this._botIdFilter();
+    await pool.execute(`DELETE FROM lastfm_users WHERE user_id = ?${f.where}`, [String(userId), ...f.params]);
     this._userCache.delete(userId);
   }
 
   async setScrobble(userId, enabled) {
     const pool = await this._getPool();
+    const f = this._botIdFilter();
     await pool.execute(
-      "UPDATE lastfm_users SET scrobble = ? WHERE user_id = ?",
-      [enabled ? 1 : 0, String(userId)]
+      `UPDATE lastfm_users SET scrobble = ? WHERE user_id = ?${f.where}`,
+      [enabled ? 1 : 0, String(userId), ...f.params]
     );
     const cached = this._userCache.get(userId);
     if (cached) cached.scrobbleEnabled = enabled;
@@ -818,8 +885,10 @@ export class LastFmManager {
       const pool = await this._getPool();
 
       // Get all linked user IDs
+      const f = this._botIdFilter();
       const [rows] = await pool.execute(
-        "SELECT user_id FROM lastfm_users"
+        `SELECT user_id FROM lastfm_users WHERE 1=1${f.where}`,
+        [...f.params]
       );
 
       if (!rows.length) {
@@ -839,7 +908,8 @@ export class LastFmManager {
 
       // Now sum up all scrobble_count values from the DB
       const [sumRows] = await pool.execute(
-        "SELECT COALESCE(SUM(scrobble_count), 0) AS total FROM lastfm_users"
+        `SELECT COALESCE(SUM(scrobble_count), 0) AS total FROM lastfm_users WHERE 1=1${f.where}`,
+        [...f.params]
       );
 
       const total = Number(sumRows[0]?.total ?? 0);
@@ -863,8 +933,10 @@ export class LastFmManager {
     if (!this.enabled) return 0;
     try {
       const pool = await this._getPool();
+      const f = this._botIdFilter();
       const [rows] = await pool.execute(
-        "SELECT linked_users FROM lastfm_stats WHERE id = 1"
+        `SELECT linked_users FROM lastfm_stats WHERE id = 1${f.where}`,
+        [...f.params]
       );
       return Number(rows[0]?.linked_users ?? 0);
     } catch {
@@ -882,10 +954,12 @@ export class LastFmManager {
     if (!this.enabled) return { entries: [], totalUsers: 0, page: 0, perPage: 10, totalPages: 0 };
 
     const pool = await this._getPool();
+    const f = this._botIdFilter();
 
     // Get total count
     const [countRows] = await pool.execute(
-      "SELECT COUNT(*) AS total FROM lastfm_users WHERE scrobble_count > 0"
+      `SELECT COUNT(*) AS total FROM lastfm_users WHERE scrobble_count > 0${f.where}`,
+      [...f.params]
     );
     const totalUsers = Number(countRows[0]?.total ?? 0);
     const totalPages = Math.max(1, Math.ceil(totalUsers / perPage));
@@ -895,8 +969,8 @@ export class LastFmManager {
 
     const offset = page * perPage;
     const [rows] = await pool.execute(
-      "SELECT user_id, username, scrobble_count FROM lastfm_users WHERE scrobble_count > 0 ORDER BY scrobble_count DESC LIMIT ? OFFSET ?",
-      [String(perPage), String(offset)]
+      `SELECT user_id, username, scrobble_count FROM lastfm_users WHERE scrobble_count > 0${f.where} ORDER BY scrobble_count DESC LIMIT ? OFFSET ?`,
+      [...f.params, String(perPage), String(offset)]
     );
 
     const entries = rows.map(r => ({
@@ -921,9 +995,10 @@ export class LastFmManager {
       const info = await this.getUserInfo(userId);
       const playcount = Number(info.playcount ?? 0);
       const pool = await this._getPool();
+      const f = this._botIdFilter();
       await pool.execute(
-        "UPDATE lastfm_users SET scrobble_count = ? WHERE user_id = ?",
-        [String(playcount), String(userId)]
+        `UPDATE lastfm_users SET scrobble_count = ? WHERE user_id = ?${f.where}`,
+        [String(playcount), String(userId), ...f.params]
       );
       return playcount;
     } catch {
@@ -943,10 +1018,11 @@ export class LastFmManager {
    */
   _incrementScrobbleCount(userId) {
     if (!userId) return;
+    const f = this._botIdFilter();
     this._getPool().then(pool => {
       pool.execute(
-        "UPDATE lastfm_users SET scrobble_count = scrobble_count + 1 WHERE user_id = ?",
-        [String(userId)]
+        `UPDATE lastfm_users SET scrobble_count = scrobble_count + 1 WHERE user_id = ?${f.where}`,
+        [String(userId), ...f.params]
       ).catch(() => {});
     }).catch(() => {});
   }

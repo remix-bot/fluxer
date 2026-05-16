@@ -151,13 +151,27 @@ export class Remix {
     const settings    = new RemoteSettingsManager(config.mysql, "./storage/defaults.json");
     this.settingsMgr  = settings;
 
+    // Override the default prefix with config.json value if set.
+    // This ensures that when the bot joins a NEW server (no DB row yet), it uses
+    // the config prefix instead of the hardcoded "%" from defaults.json.
+    // Existing servers keep whatever prefix they already have in the DB.
+    const configPrefix = config.prefix ?? null;
+    if (configPrefix && settings.defaults) {
+      settings.defaults.prefix = configPrefix;
+    }
+
     this.locale.bind(this.settingsMgr);
 
     // ── Command handler ──────────────────────────────────────────────────────
-    const commands = new CommandHandler(messages);
+    // config.prefix from config.json overrides the defaults.json prefix.
+    // This way, if you run multiple bots in the same server (e.g. Remix + test bot),
+    // each can have its own default prefix (Remix=%, test bot=!) without needing
+    // a separate database or manual %prefix per server.
+    const commands = new CommandHandler(messages, configPrefix);
     this.handler   = commands;
 
-    commands.setPrefixManager(new PrefixManager(settings));
+    const prefixMgr = new PrefixManager(settings, configPrefix);
+    commands.setPrefixManager(prefixMgr);
     commands.setLocale(this.locale);
     messages.setLocale(this.locale);
 
@@ -284,6 +298,13 @@ export class Remix {
       // VOICE_STATES_SYNC event registration). No need to re-initialize here.
 
       const botId = client.user?.id ?? "0";
+
+      // Set the bot ID on all managers that use the shared MySQL database.
+      // This isolates each bot's data (settings, Last.fm users, Redis channels)
+      // so multiple bots can share the same database without conflicts.
+      await this.settingsMgr.setBotId(botId);
+      await this.lastfm.setBotId(botId);
+      this.dashboard.setBotId(botId);
 
       // MoonlinkManager initialisation — stays here because it's audio
       // infrastructure, not gateway handling.  The guard prevents stacking

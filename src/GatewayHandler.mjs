@@ -5,7 +5,7 @@ import { ServerSettings } from "./Settings.mjs";
 import { get247ChannelMode, remove247ChannelMode } from "./constants/Helpers247.mjs";
 import { VoiceStateCache } from "./constants/VoiceStateCache.mjs";
 import { REQUIRED_BOT_PERMISSIONS, CRITICAL_PERMISSIONS } from "./MessageHandler.mjs";
-import mysql from "mysql2";
+
 
 /**
  * GatewayHandler — manages raw WebSocket gateway events, voice-state tracking,
@@ -732,9 +732,7 @@ export class GatewayHandler {
         try {
           const cleanGuildId = String(guildId).replace(/\D/g, "");
           if (!cleanGuildId) throw new Error("Invalid guildId: " + guildId);
-          const res = await remix.settingsMgr.query(
-              `SELECT * FROM settings WHERE id=${mysql.escape(cleanGuildId)}`
-          );
+          const res = await remix.settingsMgr.selectGuild(cleanGuildId);
           if (res?.results?.length) {
             const row    = res.results[0];
             const server = new ServerSettings(guildId, remix.settingsMgr);

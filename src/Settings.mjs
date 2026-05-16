@@ -37,17 +37,24 @@ export class RemoteSettingsManager extends EventEmitter {
   descriptions = {};
   defaults = {};
   db = null;
+  /** @type {string|null} Bot user ID — used to isolate rows per-bot in shared databases */
+  botId = null;
+  /** @type {boolean} Whether the bot_id column exists in the settings table */
+  _hasBotIdColumn = false;
 
   // track retry count and apply exponential backoff on load failures
   _loadAttempts = 0;
+  /** @type {Promise|null} Tracks the in-flight load() so setBotId() can wait for it */
+  _loadPromise = null;
   // Per-server debounce timers: serverId → NodeJS.Timeout
   // Batches rapid set() calls (e.g. 24/7 mode changes that write stay_247 + stay_247_mode)
   // into a single remoteSave() 80ms after the last write, rather than firing one UPDATE
   // per key.
   _debounceTimers = new Map();
 
-  constructor(config, defaultsPath) {
+  constructor(config, defaultsPath, botId = null) {
     super();
+    this.botId = botId;
     this.db = mysql.createPool({ connectionLimit: 15, ...config });
     // Without this listener, any pool-level error (connection drop, timeout, protocol error)
     // fires an unhandled 'error' event which crashes the entire process with no log output.
@@ -55,7 +62,111 @@ export class RemoteSettingsManager extends EventEmitter {
       logger.error("[DB] MySQL pool error:", err.code ?? err.message);
     });
     if (defaultsPath) this.loadDefaultsSync(defaultsPath);
-    this.load().catch(err => logger.error("[Settings] Initial load failed:", err?.message ?? err));
+    this._loadPromise = this.load().catch(err => logger.error("[Settings] Initial load failed:", err?.message ?? err));
+  }
+
+  /**
+   * Check whether the `bot_id` column exists in the settings table.
+   * If it doesn't, auto-migrate by adding the column and updating the primary key.
+   * This ensures old databases work seamlessly with the new multi-bot code.
+   */
+  async _ensureBotIdColumn() {
+    if (this._hasBotIdColumn) return; // already checked, column exists
+
+    const res = await this.query(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS `
+      + `WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'settings' AND COLUMN_NAME = 'bot_id'`
+    );
+
+    if (res.error) {
+      logger.error("[Settings] Failed to check bot_id column:", res.error);
+      return;
+    }
+
+    if (res.results.length > 0) {
+      // Column already exists
+      this._hasBotIdColumn = true;
+      return;
+    }
+
+    // Auto-migrate: add bot_id column and update primary key
+    logger.settings("[Settings] Auto-migrating: adding bot_id column to settings table...");
+
+    const alterRes = await this.query(
+      `ALTER TABLE settings ADD COLUMN bot_id VARCHAR(32) DEFAULT NULL`
+    );
+    if (alterRes.error) {
+      logger.error("[Settings] Failed to add bot_id column:", alterRes.error);
+      return;
+    }
+
+    // Update primary key from (id) to (id, bot_id)
+    const pkRes = await this.query(
+      `ALTER TABLE settings DROP PRIMARY KEY, ADD PRIMARY KEY (id, bot_id)`
+    );
+    if (pkRes.error) {
+      logger.error("[Settings] Failed to update primary key:", pkRes.error);
+      // Column was added but PK update failed — still mark as available
+      // since the column exists and queries will work
+    }
+
+    this._hasBotIdColumn = true;
+    logger.settings("[Settings] Auto-migration complete: bot_id column added.");
+  }
+
+  /**
+   * Set or update the bot ID used for database row isolation.
+   * Called after login when the bot user ID becomes available.
+   * Ensures the bot_id column exists (auto-migrates if needed), then
+   * reloads guild data filtered by the bot's ID.
+   * @param {string} id
+   */
+  async setBotId(id) {
+    const changed = this.botId !== id;
+    this.botId = id;
+    if (changed) {
+      // Wait for the initial load to finish before clearing and reloading
+      if (this._loadPromise) await this._loadPromise;
+      // Ensure the DB schema supports bot_id before querying with it
+      await this._ensureBotIdColumn();
+      // Reload with the new botId so we pick up this bot's rows
+      this.guilds.clear();
+      this._loadPromise = this.load();
+      await this._loadPromise;
+    }
+  }
+
+  /**
+   * Returns the SQL WHERE clause fragment for bot_id filtering.
+   * When botId is set AND the bot_id column exists in the table,
+   * includes "AND bot_id = <escaped>" in queries.
+   * Otherwise no filter is applied (backward-compatible with old schemas).
+   * @returns {string}
+   */
+  _botIdWhere() {
+    if (!this.botId || !this._hasBotIdColumn) return "";
+    return ` AND bot_id = ${mysql.escape(String(this.botId))}`;
+  }
+
+  /**
+   * Returns the bot_id column + value for INSERT statements.
+   * Only includes bot_id when both the botId is set AND the column exists.
+   * @returns {{ col: string, val: string }}
+   */
+  _botIdInsert() {
+    if (!this.botId || !this._hasBotIdColumn) return { col: "", val: "" };
+    return { col: ", bot_id", val: `, ${mysql.escape(String(this.botId))}` };
+  }
+
+  /**
+   * Fetch a single guild's settings row from the database, filtered by bot_id.
+   * Used by GatewayHandler when a guild is (re-)joined and not in the cache.
+   * @param {string} guildId
+   * @returns {Promise<{error: object|null, results: Array, fields: Array}>}
+   */
+  selectGuild(guildId) {
+    const escapedId = mysql.escape(String(guildId));
+    return this.query(`SELECT * FROM settings WHERE id=${escapedId}${this._botIdWhere()}`);
   }
 
   query(q) {
@@ -65,7 +176,7 @@ export class RemoteSettingsManager extends EventEmitter {
   }
 
   async load() {
-    const res = await this.query("SELECT * FROM settings");
+    const res = await this.query(`SELECT * FROM settings WHERE 1=1${this._botIdWhere()}`);
     if (res.error) {
       this._loadAttempts++;
       // exponential backoff with a cap of 30s instead of forever-at-2s
@@ -105,14 +216,14 @@ export class RemoteSettingsManager extends EventEmitter {
         ? mysql.escape(val)
         : mysql.escape(String(val));
     const escapedId   = mysql.escape(server.id);
-    const r = await this.query(`UPDATE settings SET data = JSON_SET(data, ${escapedPath}, ${escapedVal}) WHERE id=${escapedId}`);
+    const r = await this.query(`UPDATE settings SET data = JSON_SET(data, ${escapedPath}, ${escapedVal}) WHERE id=${escapedId}${this._botIdWhere()}`);
     if (r.error) logger.error("[Settings] remoteUpdate error:", r.error);
   }
 
   async remoteSave(server) {
     const escapedData = mysql.escape(JSON.stringify(server.data));
     const escapedId   = mysql.escape(server.id);
-    const r = await this.query(`UPDATE settings SET data = ${escapedData} WHERE id=${escapedId}`);
+    const r = await this.query(`UPDATE settings SET data = ${escapedData} WHERE id=${escapedId}${this._botIdWhere()}`);
     if (r.error) logger.error("[Settings] remoteSave error:", r.error);
   }
 
@@ -136,7 +247,8 @@ export class RemoteSettingsManager extends EventEmitter {
   async create(id, server) {
     const escapedId   = mysql.escape(id);
     const escapedData = mysql.escape(JSON.stringify(server.data));
-    const r = await this.query(`INSERT INTO settings (id, data) VALUES (${escapedId}, ${escapedData})`);
+    const bi = this._botIdInsert();
+    const r = await this.query(`INSERT INTO settings (id, data${bi.col}) VALUES (${escapedId}, ${escapedData}${bi.val})`);
     if (r.error) logger.error("[Settings] create error:", r.error);
   }
 

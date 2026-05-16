@@ -92,6 +92,20 @@ export class Dashboard {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // ── Bot ID isolation ──────────────────────────────────────────────────────
+
+  /**
+   * Set the bot ID for multi-bot Redis namespace isolation.
+   * Updates the Redis platform string so each bot uses its own channel namespace.
+   * @param {string} botId - The bot's Discord user ID
+   */
+  setBotId(botId) {
+    if (!this.enabled || !this.redis) return;
+    // Use "fluxer_<botId>" as the platform so each bot's Redis messages
+    // are isolated. The dashboard backend must also be configured to match.
+    this.redis.platform = `fluxer_${botId}`;
+  }
+
   // Dashboard Function Dispatch
   // ═══════════════════════════════════════════════════════════════════════════
 
