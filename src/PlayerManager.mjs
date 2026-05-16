@@ -956,7 +956,13 @@ export class PlayerManager {
         desc = this.locale?.translate(guildId, "responses.join.autoLeaveInactive247", { channel: `<#${activeChannelId}>`, prefix })
           ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
       }
-      if (typeof ch?.send === "function") ch.send(mkEmbed(desc));
+      if (typeof ch?.send === "function") {
+        ch.send(mkEmbed(desc)).catch(err => {
+          if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
+            logger.warn(`[PlayerManager] Cannot send autoleave message in channel ${ch.id} — missing permissions`);
+          }
+        });
+      }
     });
 
     player.on("leave", () => {});
@@ -968,7 +974,13 @@ export class PlayerManager {
       const disabled = raw === false || raw === 0 ||
           ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
       if (disabled) return;
-      if (typeof ch?.send === "function") ch.send(typeof m === "object" && Array.isArray(m.embeds) ? m : mkEmbed(m));
+      if (typeof ch?.send === "function") {
+        ch.send(typeof m === "object" && Array.isArray(m.embeds) ? m : mkEmbed(m)).catch(err => {
+          if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
+            logger.warn(`[PlayerManager] Cannot send player message in channel ${ch.id} — missing permissions`);
+          }
+        });
+      }
     });
 
     // Mark as "pending join" so concurrent getPlayer() / checkVoiceChannels()

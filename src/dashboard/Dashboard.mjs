@@ -1,4 +1,5 @@
 import { CommandBuilder, CommandHandler, Option } from "../CommandHandler.mjs";
+import { PermissionFlags } from "@fluxerjs/core";
 import Player from "../Player.mjs";
 import { Utils } from "../Utils.mjs";
 import { DatabaseManager } from "./DatabaseManager.mjs";
@@ -59,12 +60,12 @@ export class Dashboard {
             }
             server.channels = server.channels.filter(c => {
               const ch = channels.find(cl => c.id === cl.id);
-              return ch ? ch.permissionsFor?.(member)?.has?.("ViewChannel") ?? true : true;
+              return ch ? ch.permissionsFor?.(member)?.has?.(PermissionFlags.ViewChannel) ?? true : true;
             });
             server.voiceChannels = server.voiceChannels.filter(c => {
               if (c.type !== 2) return false;
               const ch = channels.find(cl => c.id === cl.id);
-              return ch ? ch.permissionsFor?.(member)?.has?.("ViewChannel") ?? true : true;
+              return ch ? ch.permissionsFor?.(member)?.has?.(PermissionFlags.ViewChannel) ?? true : true;
             });
             return server;
           } catch (e) {

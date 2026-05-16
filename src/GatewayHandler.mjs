@@ -4,6 +4,7 @@ import { logger } from "./constants/Logger.mjs";
 import { ServerSettings } from "./Settings.mjs";
 import { get247ChannelMode, remove247ChannelMode } from "./constants/Helpers247.mjs";
 import { VoiceStateCache } from "./constants/VoiceStateCache.mjs";
+import { REQUIRED_BOT_PERMISSIONS, CRITICAL_PERMISSIONS } from "./MessageHandler.mjs";
 import mysql from "mysql2";
 
 /**
@@ -99,6 +100,84 @@ export class GatewayHandler {
     }
 
     return { key: null, value: null };
+  }
+
+  // ── Guild permission check on join ────────────────────────────────────────
+
+  /**
+   * Check if the bot has all required permissions in a newly joined guild.
+   * If critical permissions are missing, log a warning and attempt to send
+   * a notification to the guild's system channel (or first text channel).
+   *
+   * @param {import('@fluxerjs/core').Guild} guild
+   * @param {string} guildId
+   */
+  async _checkGuildPermissions(guild, guildId) {
+    const { remix } = this;
+
+    // Ensure the bot's member is cached so we can check permissions
+    try {
+      if (guild.members && !guild.members.me) {
+        await guild.members.fetchMe();
+      }
+    } catch (_) { /* fetch failed — we'll still try */ }
+
+    // Find a text channel to check permissions in (prefer system channel)
+    const channels = guild.channels;
+    if (!channels) return;
+
+    let targetChannel = null;
+    // Try system channel first
+    if (guild.systemChannelId) {
+      targetChannel = channels.get?.(guild.systemChannelId)
+          ?? channels.cache?.get?.(guild.systemChannelId)
+          ?? null;
+    }
+    // Fall back to first text channel the bot can see
+    if (!targetChannel) {
+      for (const ch of (channels.values?.() ?? [])) {
+        if (ch.isTextBased?.() || ch.type === 0 || ch.type === "GUILD_TEXT") {
+          targetChannel = ch;
+          break;
+        }
+      }
+    }
+    if (!targetChannel) return;
+
+    const result = remix.messages.checkAllBotPermissions(targetChannel);
+    if (result.missing.length === 0) return; // All good!
+
+    // Log the missing permissions
+    const missingNames = result.missing.map(k => REQUIRED_BOT_PERMISSIONS.get(k)?.name ?? k);
+    if (result.criticalMissing.length > 0) {
+      logger.warn(
+        `[GuildCreate] Server ${guildId} is missing CRITICAL bot permissions: ${result.criticalMissing.join(", ")}\n` +
+        `  All missing: ${missingNames.join(", ")}`
+      );
+    } else {
+      logger.info(
+        `[GuildCreate] Server ${guildId} is missing optional permissions: ${result.optionalMissing.join(", ")}`
+      );
+    }
+
+    // Try to send a permission warning embed to the channel
+    try {
+      const permEmbed = remix.messages.buildPermissionEmbed(result.missing, guildId);
+      await targetChannel.send({ embeds: [permEmbed] });
+    } catch (e) {
+      // Can't send embed (missing SendMessages/EmbedLinks) — try plain text
+      logger.warn(`[GuildCreate] Cannot send permission warning to server ${guildId}: ${e.message}`);
+      try {
+        await targetChannel.send(
+          "⚠️ I'm missing permissions I need to work properly! " +
+          "Missing: **" + missingNames.join("**, **") + "**. " +
+          "Please ask a server administrator to grant these permissions in Server Settings → Roles."
+        );
+      } catch (_) {
+        // Completely blocked — can't notify the server at all. The log message above is the only recourse.
+        logger.warn(`[GuildCreate] Cannot send ANY notification to server ${guildId} — bot is missing SendMessages permission.`);
+      }
+    }
   }
 
   // ── Voice-state seeding from guild cache ─────────────────────────────────────
@@ -677,6 +756,12 @@ export class GatewayHandler {
           logger.warn("[GuildCreate] Settings init failed for", guildId, err.message);
         }
       }
+
+      // ── Bot permission check ────────────────────────────────────────────
+      // After the bot joins a server, check if it has the required permissions
+      // in the first available text channel. If critical permissions are missing,
+      // log a warning and try to notify the server via system channel.
+      this._checkGuildPermissions(guild, guildId);
 
     });
 

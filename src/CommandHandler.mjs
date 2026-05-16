@@ -2,7 +2,7 @@ import { pathToFileURL } from "node:url";
 import { logger } from "./constants/Logger.mjs";
 import { Utils } from "./Utils.mjs";
 import { EventEmitter } from "node:events";
-import { Message, MessageHandler, PageBuilder } from "./MessageHandler.mjs";
+import { Message, MessageHandler, PageBuilder, REQUIRED_BOT_PERMISSIONS, CRITICAL_PERMISSIONS } from "./MessageHandler.mjs";
 import { Client, PermissionFlags } from "@fluxerjs/core";
 import { SettingsManager } from "./Settings.mjs";
 import path from "node:path";
@@ -510,6 +510,30 @@ export class CommandHandler extends EventEmitter {
   processCommand(cmd, args, msg, previous = false, external = false) {
     // Guard first — cmd could be undefined if called from an edge case
     if (!cmd) return logger.warn("[CommandHandler.processCommand] Invalid case: `cmd` falsy.");
+
+    // Check if the bot itself has the critical permissions it needs in this channel.
+    // This runs BEFORE user-requirement checks so the user gets a clear error
+    // about what the bot is missing, rather than a generic 403 crash later.
+    if (!external) {
+      const channel = msg.channel?.channel ?? msg.channel;
+      if (channel?.guild) {
+        const botPermResult = this.messages.checkAllBotPermissions(channel);
+        if (botPermResult.criticalMissing.length > 0) {
+          const permEmbed = this.messages.buildPermissionEmbed(botPermResult.missing, channel.guildId);
+          try {
+            msg.message?.reply?.({ embeds: [permEmbed] }, { ping: false });
+          } catch (_) {
+            // Last resort: plain text
+            try {
+              const names = botPermResult.missing.map(k => REQUIRED_BOT_PERMISSIONS.get(k)?.name ?? k);
+              msg.message?.reply?.("I'm missing critical permissions: **" + names.join("**, **") + "**. Ask an admin to fix this.", { ping: false });
+            } catch (__) { /* completely blocked */ }
+          }
+          return;
+        }
+      }
+    }
+
     if (cmd.requirements.length > 0 && !external) {
       if (!this.assertRequirements(cmd, msg)) return;
     }

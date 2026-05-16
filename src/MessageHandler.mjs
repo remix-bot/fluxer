@@ -1,6 +1,31 @@
-import { Client, Events, EmbedBuilder } from "@fluxerjs/core";
+import { Client, Events, EmbedBuilder, PermissionFlags } from "@fluxerjs/core";
 import { logger } from "./constants/Logger.mjs";
 import { Utils } from "./Utils.mjs";
+
+/**
+ * All permissions the bot needs to function correctly, mapped to
+ * human-readable names and explanations.
+ * Ordered by importance — text perms first, then voice perms.
+ *
+ * @type {ReadonlyMap<string, { name: string, desc: string }>}
+ */
+export const REQUIRED_BOT_PERMISSIONS = Object.freeze(new Map([
+  ["ViewChannel",    { name: "View Channels",          desc: "See channels and read their content" }],
+  ["SendMessages",   { name: "Send Messages",          desc: "Respond to commands and send messages" }],
+  ["EmbedLinks",     { name: "Embed Links",            desc: "Send rich embed messages (bot responses, now playing, etc.)" }],
+  ["AddReactions",   { name: "Add Reactions",          desc: "Add pagination reactions (help pages, queue, etc.)" }],
+  ["ReadMessageHistory", { name: "Read Message History", desc: "Read previous messages for context" }],
+  ["ManageMessages", { name: "Manage Messages",         desc: "Pin messages, clean up bot responses" }],
+  ["AttachFiles",    { name: "Attach Files",            desc: "Send files and thumbnails" }],
+  ["Connect",        { name: "Connect (Join Voice)",    desc: "Join voice channels to play music" }],
+  ["Speak",          { name: "Speak",                  desc: "Stream audio in voice channels" }],
+]));
+
+/** Permission flag keys that are absolutely critical — bot cannot work without these. */
+export const CRITICAL_PERMISSIONS = ["ViewChannel", "SendMessages", "EmbedLinks", "Connect", "Speak"];
+
+/** Permission flag keys that are nice-to-have but bot can partially work without. */
+export const OPTIONAL_PERMISSIONS = ["AddReactions", "ReadMessageHistory", "ManageMessages", "AttachFiles"];
 
 /** Parse a color value from config — accepts hex string "0xe9196c", "#e9196c", or number */
 export function parseColor(value, fallback = 0xe9196c) {
@@ -88,20 +113,94 @@ export class MessageHandler {
   /**
    * Checks if the bot has the specified permissions in a specific channel.
    *
-   * @param {string[]} permissions An array of permissions to check for.
+   * @param {string[]} permissions An array of permission flag keys to check for.
    * @param {BaseChannel} channel The channel to check the permissions in.
-   * @returns {string[]} Missing permissions.
+   * @returns {string[]} Missing permission flag keys.
    */
   checkPermissions(permissions, channel) {
     if (!channel?.guild) return []; // DMs — no guild perms
-    // guild.members.me and channel.permissionsFor()
-    // @fluxerjs/core may expose them or may not — guard with optional chaining so
-    // a missing implementation fails open (assume OK) rather than throwing.
     const me = channel.guild.members?.me ?? null;
-    if (!me) return []; // can't verify — assume OK
+    if (!me) {
+      logger.warn("[MessageHandler] Cannot check permissions — guild.members.me is null");
+      return []; // can't verify
+    }
     const perms = channel.permissionsFor?.(me) ?? null;
-    if (!perms) return []; // API unavailable — assume OK
-    return permissions.filter(p => !perms.has(p));
+    if (!perms) {
+      logger.warn("[MessageHandler] Cannot check permissions — channel.permissionsFor() unavailable");
+      return []; // can't verify
+    }
+    // Convert string names (e.g. "SendMessages") to numeric PermissionFlags values,
+    // same as CommandHandler.assertRequirements does.
+    return permissions.filter(p => !perms.has(PermissionFlags[p] ?? p));
+  }
+
+  /**
+   * Check ALL required bot permissions in a channel.
+   * Returns an object with critical vs optional missing permissions
+   * so the caller can decide how severe the problem is.
+   *
+   * @param {BaseChannel} channel The channel to check.
+   * @returns {{ missing: string[], criticalMissing: string[], optionalMissing: string[] }}
+   */
+  checkAllBotPermissions(channel) {
+    const allKeys = [...REQUIRED_BOT_PERMISSIONS.keys()];
+    const missing = this.checkPermissions(allKeys, channel);
+    return {
+      missing,
+      criticalMissing: missing.filter(p => CRITICAL_PERMISSIONS.includes(p)),
+      optionalMissing: missing.filter(p => OPTIONAL_PERMISSIONS.includes(p)),
+    };
+  }
+
+  /**
+   * Build a rich permission-error embed listing all missing permissions
+   * with human-readable names and explanations.
+   *
+   * @param {string[]} missingKeys Permission flag keys that are missing.
+   * @param {string} [guildId] Guild ID for locale translation.
+   * @returns {EmbedBuilder}
+   */
+  buildPermissionEmbed(missingKeys, guildId) {
+    const criticalItems = [];
+    const optionalItems = [];
+
+    for (const key of missingKeys) {
+      const info = REQUIRED_BOT_PERMISSIONS.get(key);
+      const isCritical = CRITICAL_PERMISSIONS.includes(key);
+      const line = info
+          ? `**${info.name}** — ${info.desc}`
+          : `**${key}**`;
+      if (isCritical) {
+        criticalItems.push("❌ " + line);
+      } else {
+        optionalItems.push("⚠️ " + line);
+      }
+    }
+
+    const embed = new EmbedBuilder().setColor(0xFF4444); // Red for errors
+
+    if (criticalItems.length > 0) {
+      embed.setTitle("Missing Permissions — Bot Cannot Work Properly");
+      embed.setDescription(
+          "The bot is missing **critical permissions** it needs to function. " +
+          "Please ask a server administrator to grant them.\n\n" +
+          criticalItems.join("\n")
+      );
+    } else if (optionalItems.length > 0) {
+      embed.setTitle("Missing Optional Permissions");
+      embed.setDescription(
+          "Some features may not work without these permissions, but the bot can still play music.\n\n" +
+          optionalItems.join("\n")
+      );
+      embed.setColor(0xFFA500); // Orange for warnings
+    }
+
+    embed.setFooter({
+      text: "Re-invite the bot with correct permissions using the invite link, " +
+            "or edit the bot's role in Server Settings → Roles."
+    });
+
+    return embed;
   }
 
   /**
@@ -110,7 +209,12 @@ export class MessageHandler {
    * @returns {Promise<boolean>} If all permissions are given.
    */
   async assertPermissions(permissions, message) {
-    const missing = this.checkPermissions(permissions, message.channel);
+    // Ensure bot's guild member is cached before checking
+    const guild = message.guild ?? await message.client?.guilds?.resolve?.(message.guildId);
+    if (guild && !guild.members?.me) {
+      try { await guild.members.fetchMe(); } catch (_) { /* fetch failed, checkPermissions will warn */ }
+    }
+    const missing = this.checkPermissions(permissions, message.channel ?? message.channel?.channel);
     if (missing.length === 0) return true;
 
     if (missing.includes("SendMessages")) {
@@ -125,7 +229,18 @@ export class MessageHandler {
       return false;
     }
 
-    this.replyEmbed(message, "I need the following permissions: `" + missing.join(",") + "`. Please contact a server administrator to address this.", { mention: true });
+    // Build a rich embed listing what's missing and why
+    const permEmbed = this.buildPermissionEmbed(missing, message.guildId);
+    try {
+      await message.reply({ embeds: [permEmbed] }, { ping: false });
+    } catch (e) {
+      // If reply fails (e.g. also missing EmbedLinks), fall back to plain text
+      logger.warn("[MessageHandler] Failed to send permission embed:", e.message);
+      try {
+        const names = missing.map(k => REQUIRED_BOT_PERMISSIONS.get(k)?.name ?? k);
+        await message.reply("I need the following permissions: **" + names.join("**, **") + "**. Please ask a server admin to grant them.", { ping: false });
+      } catch (_) { /* completely blocked */ }
+    }
     return false;
   }
 
@@ -272,7 +387,7 @@ export class MessageHandler {
    * @returns {Promise<Message>}
    */
   async reply(replyingTo, message, mention = false) {
-    if (!(await this.assertPermissions(["SendMessages"], replyingTo))) return null;
+    if (!(await this.assertPermissions(["SendMessages", "EmbedLinks"], replyingTo))) return null;
     let opts;
     if (typeof message === "string") {
       // Auto-wrap plain text in an embed (matches old replyEmbed behavior)
@@ -290,7 +405,7 @@ export class MessageHandler {
    * @returns {Promise<Message>}
    */
   async replyEmbed(replyingTo, message, options = {}) {
-    if (!(await this.assertPermissions(["SendMessages"], replyingTo))) return null;
+    if (!(await this.assertPermissions(["SendMessages", "EmbedLinks"], replyingTo))) return null;
 
     // Raw embed payload — pass straight through without re-wrapping
     if (typeof message === "object" && Array.isArray(message.embeds)) {
@@ -317,8 +432,8 @@ export class MessageHandler {
    * @returns {Promise<Message>}
    */
   async sendMessage(channel, message) {
-    if (this.checkPermissions(["SendMessages"], channel).length !== 0) {
-      logger.warn("[MessageHandler] Missing SendMessages permission in channel", channel.id);
+    if (this.checkPermissions(["SendMessages", "EmbedLinks"], channel).length !== 0) {
+      logger.warn("[MessageHandler] Missing SendMessages/EmbedLinks permission in channel", channel.id);
       return null;
     }
     let opts;
