@@ -1,10 +1,10 @@
 import * as fs from "fs";
 import path from "path";
 import { initLogger, logger } from "./src/constants/Logger.mjs";
-import { Client, Events } from "@fluxerjs/core";
+import { Client, Events, EmbedBuilder } from "@fluxerjs/core";
 import { get247ChannelMode, remove247ChannelMode } from "./src/constants/Helpers247.mjs";
 import { CommandHandler, CommandLoader, PrefixManager } from "./src/CommandHandler.mjs";
-import { MessageHandler, PageBuilder, HelpCommand, setGlobalColor } from "./src/MessageHandler.mjs";
+import { MessageHandler, PageBuilder, HelpCommand, setGlobalColor, getGlobalColor } from "./src/MessageHandler.mjs";
 import { RemoteSettingsManager } from "./src/Settings.mjs";
 import { PlayerManager } from "./src/PlayerManager.mjs";
 import childProcess from "node:child_process";
@@ -41,6 +41,11 @@ function createBotView(voiceCache) {
     *values()             { for (const [, v] of voiceCache.iterateBotUsers()) yield v; },
     get observedVoiceBotsSize() { return voiceCache.botLocations.size; },
   };
+}
+
+/** Helper — build a plain embed payload from a description string */
+function mkEmbed(desc) {
+  return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] };
 }
 
 export class Remix {
@@ -796,8 +801,55 @@ export class Remix {
     });
 
     // Handle player messages (song announcements etc.)
-    player.on("message", (m) => {
-      // No text channel for headless spawns — skip announcements
+    // On reboot, there's no textChannel from a user command, so we resolve
+    // one from the saved announcementChannelId setting or fall back to the
+    // guild's system channel / first visible text channel.
+    player.on("message", async (m) => {
+      try {
+        // Check if song announcements are disabled for this guild
+        const serverSettings = this.settingsMgr?.getServer?.(cleanGuildId);
+        const raw = serverSettings?.get?.("songAnnouncements");
+        const disabled = raw === false || raw === 0 ||
+            ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
+        if (disabled) return;
+
+        // Resolve the text channel: prefer player.textChannel, then saved
+        // announcementChannelId, then guild system channel, then first text channel
+        let ch = player.textChannel;
+        if (!ch || typeof ch.send !== "function") {
+          const savedAnnChId = serverSettings?.get?.("announcementChannelId");
+          if (savedAnnChId) {
+            ch = this.client?.channels?.get?.(String(savedAnnChId).replace(/\D/g, "")) ?? null;
+          }
+        }
+        if (!ch || typeof ch.send !== "function") {
+          const guild = this.client?.guilds?.get?.(cleanGuildId);
+          if (guild?.systemChannelId) {
+            ch = guild.channels?.get?.(guild.systemChannelId) ?? null;
+          }
+        }
+        if (!ch || typeof ch.send !== "function") {
+          const guild = this.client?.guilds?.get?.(cleanGuildId);
+          if (guild?.channels) {
+            for (const c of (guild.channels.values?.() ?? [])) {
+              if (c.isTextBased?.() || c.type === 0 || c.type === "GUILD_TEXT") {
+                ch = c;
+                break;
+              }
+            }
+          }
+        }
+        if (!ch || typeof ch.send !== "function") return;
+
+        // Cache the resolved channel so future announcements don't need to re-resolve
+        if (!player.textChannel) player.textChannel = ch;
+
+        ch.send(typeof m === "object" && Array.isArray(m.embeds) ? m : mkEmbed(m)).catch(err => {
+          if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
+            logger.warn(`[_spawnPlayer] Cannot send announcement in channel ${ch.id} — missing permissions`);
+          }
+        });
+      } catch (_) {}
     });
 
     // Mark as pending join

@@ -968,19 +968,55 @@ export class PlayerManager {
     player.on("leave", () => {});
 
     player.on("message", (m) => {
-      const ch       = player.textChannel;
+      let ch       = player.textChannel;
       const guildId = cleanId(player._guildId ?? ch?.guildId ?? ch?.guild?.id ?? getMessageGuildId({ channel: ch }));
       const raw      = this.settings.getServer(guildId)?.get("songAnnouncements");
       const disabled = raw === false || raw === 0 ||
           ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
       if (disabled) return;
-      if (typeof ch?.send === "function") {
-        ch.send(typeof m === "object" && Array.isArray(m.embeds) ? m : mkEmbed(m)).catch(err => {
-          if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
-            logger.warn(`[PlayerManager] Cannot send player message in channel ${ch.id} — missing permissions`);
+
+      // If textChannel is not set (e.g. after reboot recovery via _spawnPlayer),
+      // resolve it from the saved announcementChannelId or guild channels
+      if (!ch || typeof ch.send !== "function") {
+        try {
+          const serverSettings = this.settings.getServer(guildId);
+          const savedAnnChId = serverSettings?.get?.("announcementChannelId");
+          if (savedAnnChId) {
+            ch = this.commands?.client?.channels?.get?.(String(savedAnnChId).replace(/\D/g, "")) ?? null;
           }
-        });
+        } catch (_) {}
       }
+      if (!ch || typeof ch.send !== "function") {
+        try {
+          const guild = this.commands?.client?.guilds?.get?.(guildId);
+          if (guild?.systemChannelId) {
+            ch = guild.channels?.get?.(guild.systemChannelId) ?? null;
+          }
+        } catch (_) {}
+      }
+      if (!ch || typeof ch.send !== "function") {
+        try {
+          const guild = this.commands?.client?.guilds?.get?.(guildId);
+          if (guild?.channels) {
+            for (const c of (guild.channels.values?.() ?? [])) {
+              if (c.isTextBased?.() || c.type === 0 || c.type === "GUILD_TEXT") {
+                ch = c;
+                break;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+      if (!ch || typeof ch.send !== "function") return;
+
+      // Cache the resolved channel so future announcements don't need to re-resolve
+      if (!player.textChannel) player.textChannel = ch;
+
+      ch.send(typeof m === "object" && Array.isArray(m.embeds) ? m : mkEmbed(m)).catch(err => {
+        if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
+          logger.warn(`[PlayerManager] Cannot send player message in channel ${ch.id} — missing permissions`);
+        }
+      });
     });
 
     // Mark as "pending join" so concurrent getPlayer() / checkVoiceChannels()
