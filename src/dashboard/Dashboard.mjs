@@ -48,17 +48,19 @@ export class Dashboard {
 
         case "server": {
           try {
-            const guild = this.remix.client.guilds.get(data.key);
+            const guild = await this.remix.client.guilds.fetch(data.key);
             if (!guild) return { error: "Server not found" };
             const member = await guild.members.fetch(data.accessor).catch(() => null);
+            const channels = await guild.fetchChannels(); // execute before converting the guild, see caching
             const server = Dashboard.convertServer(guild);
             if (member) {
               server.channels = server.channels.filter(c => {
-                const ch = guild.channels.get(c.id);
+                const ch = channels.find(cl => c.id === cl.id);
                 return ch ? ch.permissionsFor?.(member)?.has?.("ViewChannel") ?? true : true;
               });
               server.voiceChannels = server.voiceChannels.filter(c => {
-                const ch = guild.channels.get(c.id);
+                if (c.type !== 2) return false;
+                const ch = channels.find(cl => c.id === cl.id);
                 return ch ? ch.permissionsFor?.(member)?.has?.("ViewChannel") ?? true : true;
               });
             }
@@ -127,7 +129,7 @@ export class Dashboard {
           // Validate textChannel: if it's a voice channel (type === 2) or missing,
           // find a suitable text channel from the guild instead
           const isText = (ch) => ch && (ch.type === 0 || ch.type === 5 || ch.type === 13 ||
-            (typeof ch.isText === "function" && ch.isText()));
+              (typeof ch.isText === "function" && ch.isText()));
 
           if (!isText(textChannel)) {
             // Auto-pick a text channel from the guild
@@ -470,8 +472,8 @@ export class Dashboard {
     // 5=announcement, 13=stage, 15=form, 16=forum, 17=media
     const isCategory = type === 4;
     const isText = !isVoice && !isCategory && (
-      type === 0 || type === 5 || type === 13 ||
-      (typeof channel.isText === "function" && channel.isText())
+        type === 0 || type === 5 || type === 13 ||
+        (typeof channel.isText === "function" && channel.isText())
     );
     let voiceParticipants = [];
     if (isVoice) {
@@ -519,8 +521,8 @@ export class Dashboard {
         ? [...channelStore.values()]
         : [];
     const allChannels = channelValues
-      .map(Dashboard.convertChannel)
-      .filter(c => !c.isCategory); // exclude categories — they are not joinable
+        .map(Dashboard.convertChannel)
+        .filter(c => !c.isCategory); // exclude categories — they are not joinable
 
     // Build icon URL using fluxerusercontent.com CDN pattern
     // guild.icon is the icon hash string; guild.id is the server ID
