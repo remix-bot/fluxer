@@ -48,17 +48,19 @@ export class Dashboard {
 
         case "server": {
           try {
-            const guild = this.remix.client.guilds.get(data.key);
+            const guild = await this.remix.client.guilds.fetch(data.key);
             if (!guild) return { error: "Server not found" };
             const member = await guild.members.fetch(data.accessor).catch(() => null);
+            const channels = await guild.fetchChannels(); // execute before converting the guild, see caching
             const server = Dashboard.convertServer(guild);
             if (member) {
               server.channels = server.channels.filter(c => {
-                const ch = guild.channels.get(c.id);
+                const ch = channels.find(cl => c.id === cl.id);
                 return ch ? ch.permissionsFor?.(member)?.has?.("ViewChannel") ?? true : true;
               });
               server.voiceChannels = server.voiceChannels.filter(c => {
-                const ch = guild.channels.get(c.id);
+                if (c.type !== 2) return false;
+                const ch = channels.find(cl => c.id === cl.id);
                 return ch ? ch.permissionsFor?.(member)?.has?.("ViewChannel") ?? true : true;
               });
             }
