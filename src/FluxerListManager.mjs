@@ -152,6 +152,10 @@ export class FluxerListManager {
     if (res.status === 403) {
       throw new Error("FluxerList API key does not belong to this resource owner.");
     }
+    if (res.status === 404) {
+      const label = type === "server" ? "Server" : "Bot";
+      throw new Error(`${label} "${resourceId}" was not found on FluxerList. Make sure the slug in your config is correct — it should match the URL slug (e.g. "remix" from fluxerlist.com/bots/remix).`);
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`FluxerList API error (HTTP ${res.status}): ${text.slice(0, 200)}`);
