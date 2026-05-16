@@ -503,6 +503,141 @@ export class VoiceStateCache {
     return this.botLocations.has(compositeKey);
   }
 
+  // ── Map-compatible iteration ─────────────────────────────────────────────
+  // Allows `for (const [uid, info] of voiceCache)` to work the same as
+  // `for (const [uid, info] of observedVoiceUsers)` on a raw Map.
+  // Delegates to iterateHumanUsers() so the yielded shape matches.
+
+  /**
+   * Default iterator — iterates human users.
+   * Yields [userId, {channelId, guildId}] — same shape as old observedVoiceUsers Map.
+   */
+  *[Symbol.iterator]() {
+    for (const [uKey, loc] of this.userLocations) {
+      yield [loc.userId, { channelId: loc.channelId, guildId: loc.guildId }];
+    }
+  }
+
+  /**
+   * Backward-compat with `observedVoiceUsers.size`.
+   */
+  get size() { return this.userLocations.size; }
+
+  /**
+   * Backward-compat with `observedVoiceUsers.has(userId)`.
+   * If called with a single argument (userId), scans all guilds.
+   * If called with two arguments (userId, guildId), does O(1) lookup.
+   *
+   * @param {string} userId
+   * @param {string} [guildId]
+   * @returns {boolean}
+   */
+  has(userId, guildId) {
+    if (guildId !== undefined) {
+      return this.userLocations.has(VoiceStateCache.userKey(guildId, userId));
+    }
+    // Legacy: scan for first match by userId only
+    const cleanUser = String(userId).replace(/\D/g, "");
+    for (const [, loc] of this.userLocations) {
+      if (loc.userId === cleanUser) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Backward-compat with `observedVoiceUsers.get(userId)`.
+   * If called with a single argument (userId), returns first match across all guilds.
+   * If called with two arguments (userId, guildId), does O(1) lookup.
+   *
+   * @param {string} userId
+   * @param {string} [guildId]
+   * @returns {{channelId: string, guildId: string}|undefined}
+   */
+  get(userId, guildId) {
+    if (guildId !== undefined) {
+      const loc = this.userLocations.get(VoiceStateCache.userKey(guildId, userId));
+      return loc ? { channelId: loc.channelId, guildId: loc.guildId } : undefined;
+    }
+    // Legacy: scan for first match by userId only
+    const cleanUser = String(userId).replace(/\D/g, "");
+    for (const [, loc] of this.userLocations) {
+      if (loc.userId === cleanUser) return { channelId: loc.channelId, guildId: loc.guildId };
+    }
+    return undefined;
+  }
+
+  /**
+   * Backward-compat with `observedVoiceUsers.set(userId, {channelId, guildId})`.
+   *
+   * @param {string} userId
+   * @param {{channelId: string, guildId: string}} info
+   */
+  set(userId, info) {
+    const guildId   = info?.guildId;
+    const channelId = info?.channelId;
+    if (guildId && channelId) {
+      this.updateUser({ guildId, userId, channelId, isBot: false });
+    }
+  }
+
+  /**
+   * Backward-compat with `observedVoiceUsers.delete(userId)`.
+   *
+   * @param {string} userId
+   * @param {string} [guildId]
+   */
+  delete(userId, guildId) {
+    if (guildId !== undefined) {
+      this.updateUser({ guildId, userId, channelId: null, isBot: false });
+    } else {
+      // Legacy: remove from ALL guilds
+      const cleanUser = String(userId).replace(/\D/g, "");
+      const toRemove = [];
+      for (const [uKey, loc] of this.userLocations) {
+        if (loc.userId === cleanUser) toRemove.push(loc);
+      }
+      for (const loc of toRemove) {
+        this.updateUser({ guildId: loc.guildId, userId: cleanUser, channelId: null, isBot: false });
+      }
+    }
+  }
+
+  /**
+   * Backward-compat with `observedVoiceUsers.forEach(fn)`.
+   *
+   * @param {Function} fn  callback(userId, info, cache)
+   */
+  forEach(fn) {
+    for (const [userId, info] of this) {
+      fn(userId, info, this);
+    }
+  }
+
+  /**
+   * Backward-compat with `observedVoiceUsers.entries()`.
+   */
+  *entries() {
+    yield* this;
+  }
+
+  /**
+   * Backward-compat with `observedVoiceUsers.keys()`.
+   */
+  *keys() {
+    for (const [userId] of this) {
+      yield userId;
+    }
+  }
+
+  /**
+   * Backward-compat with `observedVoiceUsers.values()`.
+   */
+  *values() {
+    for (const [, info] of this) {
+      yield info;
+    }
+  }
+
   // ── Debug / stats ────────────────────────────────────────────────────────
 
   get stats() {

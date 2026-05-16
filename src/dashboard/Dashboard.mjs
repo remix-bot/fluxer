@@ -129,7 +129,7 @@ export class Dashboard {
           // Validate textChannel: if it's a voice channel (type === 2) or missing,
           // find a suitable text channel from the guild instead
           const isText = (ch) => ch && (ch.type === 0 || ch.type === 5 || ch.type === 13 ||
-              (typeof ch.isText === "function" && ch.isText()));
+            (typeof ch.isText === "function" && ch.isText()));
 
           if (!isText(textChannel)) {
             // Auto-pick a text channel from the guild
@@ -272,9 +272,10 @@ export class Dashboard {
         // Return the user's current voice channel (if any)
         if (!user) return { channel: null };
         const userId = String(user.id).replace(/\D/g, "");
-        // Check observedVoiceUsers first (most reliable for Fluxer)
-        if (this.remix.observedVoiceUsers) {
-          for (const [mapUserId, info] of this.remix.observedVoiceUsers) {
+        // Check VoiceStateCache first (most reliable for Fluxer)
+        // Uses O(1) lookup via iterateHumanUsers() / [Symbol.iterator]
+        if (this.remix.voiceCache) {
+          for (const [mapUserId, info] of this.remix.voiceCache) {
             if (String(mapUserId).replace(/\D/g, "") === userId && info.channelId) {
               const ch = this.remix.client.channels.get(info.channelId);
               return {
@@ -362,8 +363,16 @@ export class Dashboard {
     const cleanChanId = String(player._channelId ?? "").replace(/\D/g, "");
     if (!cleanChanId) return "Player has no active channel";
 
-    const observed = this.remix.observedVoiceUsers;
+    const observed = this.remix.voiceCache;
     if (observed) {
+      // O(1) lookup: check if user is in the same channel as the player
+      const guildId = String(player._guildId ?? "").replace(/\D/g, "");
+      const userLoc = observed.get(cleanUserId, guildId || undefined);
+      if (userLoc) {
+        const infoChannelId = String(userLoc.channelId ?? "").replace(/\D/g, "");
+        if (infoChannelId === cleanChanId) return null;
+      }
+      // Legacy scan fallback (user might not have guildId)
       for (const [mapUserId, info] of observed) {
         if (String(mapUserId).replace(/\D/g, "") === cleanUserId) {
           const infoChannelId = String(info.channelId ?? "").replace(/\D/g, "");
@@ -472,8 +481,8 @@ export class Dashboard {
     // 5=announcement, 13=stage, 15=form, 16=forum, 17=media
     const isCategory = type === 4;
     const isText = !isVoice && !isCategory && (
-        type === 0 || type === 5 || type === 13 ||
-        (typeof channel.isText === "function" && channel.isText())
+      type === 0 || type === 5 || type === 13 ||
+      (typeof channel.isText === "function" && channel.isText())
     );
     let voiceParticipants = [];
     if (isVoice) {
@@ -521,8 +530,8 @@ export class Dashboard {
         ? [...channelStore.values()]
         : [];
     const allChannels = channelValues
-        .map(Dashboard.convertChannel)
-        .filter(c => !c.isCategory); // exclude categories — they are not joinable
+      .map(Dashboard.convertChannel)
+      .filter(c => !c.isCategory); // exclude categories — they are not joinable
 
     // Build icon URL using fluxerusercontent.com CDN pattern
     // guild.icon is the icon hash string; guild.id is the server ID
@@ -602,22 +611,36 @@ export class Dashboard {
             }
           }
         }
-        // Fallback: observedVoiceUsers (seeded from READY/GUILD_CREATE).
+        // Fallback: VoiceStateCache (seeded from READY/GUILD_CREATE).
         // After a bot reload, guild.voice_states may only contain the bot's
-        // own voice state, while observedVoiceUsers has ALL humans who were
+        // own voice state, while VoiceStateCache has ALL humans who were
         // already in voice when the bot reconnected.
-        const ovu = player._observedVoiceUsers;
-        if (ovu && cleanChannelId && cleanGuildId) {
-          for (const [mapUserId, info] of ovu) {
-            if (seen.has(mapUserId)) continue;
-            const infoCh = String(info.channelId ?? "").replace(/\D/g, "");
-            const infoG  = String(info.guildId   ?? "").replace(/\D/g, "");
-            if (infoCh === cleanChannelId && infoG === cleanGuildId) {
-              // Skip the bot itself
+        // Try O(1) channel lookup first, then fall back to iteration.
+        const vc = player._voiceCache ?? player._observedVoiceUsers;
+        if (vc && cleanChannelId && cleanGuildId) {
+          // O(1) lookup via getHumansInChannel
+          if (typeof vc.getHumansInChannel === "function") {
+            const channelHumans = vc.getHumansInChannel(cleanGuildId, cleanChannelId);
+            for (const hid of channelHumans) {
+              if (seen.has(hid)) continue;
               const botId = player.client?.user?.id;
-              if (botId && String(mapUserId) === String(botId)) continue;
-              ids.push(String(mapUserId));
-              seen.add(mapUserId);
+              if (botId && String(hid) === String(botId)) continue;
+              ids.push(String(hid));
+              seen.add(hid);
+            }
+          } else {
+            // Legacy iteration fallback
+            for (const [mapUserId, info] of vc) {
+              if (seen.has(mapUserId)) continue;
+              const infoCh = String(info.channelId ?? "").replace(/\D/g, "");
+              const infoG  = String(info.guildId   ?? "").replace(/\D/g, "");
+              if (infoCh === cleanChannelId && infoG === cleanGuildId) {
+                // Skip the bot itself
+                const botId = player.client?.user?.id;
+                if (botId && String(mapUserId) === String(botId)) continue;
+                ids.push(String(mapUserId));
+                seen.add(mapUserId);
+              }
             }
           }
         }

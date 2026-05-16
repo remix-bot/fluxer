@@ -324,17 +324,15 @@ export class GatewayHandler {
       }
     }
 
-    // ── Fallback: observedVoiceUsers ────────────────────────────────────────
-    if (humansFound === 0) {
-      for (const [uid, info] of remix.observedVoiceUsers) {
-        const infoGuild   = String(info.guildId ?? "").replace(/\D/g, "");
-        const infoChannel = String(info.channelId ?? "").replace(/\D/g, "");
-        if (infoGuild === cleanGuild && infoChannel === cleanChannel) {
-          humansFound++;
-          logger.voiceState(
-            `[Reseed] Found human ${uid} in channel ${cleanChannel} (guild ${cleanGuild}) via observedVoiceUsers`
-          );
-        }
+    // ── Fallback: VoiceStateCache (was observedVoiceUsers) ────────────────
+    if (humansFound === 0 && remix.voiceCache) {
+      // O(1) lookup via channelMembers index instead of full scan
+      const humans = remix.voiceCache.getHumansInChannel(cleanGuild, cleanChannel);
+      for (const uid of humans) {
+        humansFound++;
+        logger.voiceState(
+          `[Reseed] Found human ${uid} in channel ${cleanChannel} (guild ${cleanGuild}) via VoiceStateCache`
+        );
       }
 
       // Update bot's own entry

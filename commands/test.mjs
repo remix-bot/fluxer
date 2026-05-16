@@ -16,13 +16,28 @@ export async function run(msg, data) {
 
   const channelCounts = new Map();
 
-  for (const [, state] of this.observedVoiceUsers) {
-    if (state.guildId !== guild.id) continue;
-    channelCounts.set(state.channelId, (channelCounts.get(state.channelId) ?? 0) + 1);
-  }
-  for (const [, state] of this.observedVoiceBots) {
-    if (state.guildId !== guild.id) continue;
-    channelCounts.set(state.channelId, (channelCounts.get(state.channelId) ?? 0) + 1);
+  // Use VoiceStateCache API for both humans and bots
+  const cache = this.voiceCache ?? this.observedVoiceUsers;
+  if (cache) {
+    // Humans
+    if (typeof cache.iterateHumanUsers === "function") {
+      for (const [, state] of cache.iterateHumanUsers()) {
+        if (state.guildId !== guild.id) continue;
+        channelCounts.set(state.channelId, (channelCounts.get(state.channelId) ?? 0) + 1);
+      }
+    } else {
+      for (const [, state] of cache) {
+        if (state.guildId !== guild.id) continue;
+        channelCounts.set(state.channelId, (channelCounts.get(state.channelId) ?? 0) + 1);
+      }
+    }
+    // Bots
+    if (typeof cache.iterateBotUsers === "function") {
+      for (const [, state] of cache.iterateBotUsers()) {
+        if (state.guildId !== guild.id) continue;
+        channelCounts.set(state.channelId, (channelCounts.get(state.channelId) ?? 0) + 1);
+      }
+    }
   }
 
   if (channelCounts.size === 0) {

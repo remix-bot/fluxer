@@ -462,13 +462,17 @@ export class PlayerManager {
     const seedObserved = (channelId) => {
       const cleanChannelId = cleanId(channelId);
       if (!cleanChannelId) return null;
-      if (!this.observedVoiceUsers?.has(userId)) {
-        this.observedVoiceUsers?.set(userId, { channelId: cleanChannelId, guildId: cleanGuild });
+      // Use voiceCache (O(1) with guildId) or fall back to observedVoiceUsers
+      const cache = this.voiceCache ?? this.observedVoiceUsers;
+      if (cache && !cache.has(userId, cleanGuild)) {
+        cache.set(userId, { channelId: cleanChannelId, guildId: cleanGuild });
       }
-      return cleanId(this.observedVoiceUsers?.get(userId)?.channelId) || cleanChannelId;
+      const loc = cache?.get(userId, cleanGuild);
+      return cleanId(loc?.channelId) || cleanChannelId;
     };
 
-    const observed = this.observedVoiceUsers?.get?.(userId);
+    const cache = this.voiceCache ?? this.observedVoiceUsers;
+    const observed = cache?.get?.(userId, cleanGuild);
     if (cleanId(observed?.guildId) === cleanGuild) {
       const observedChannelId = cleanId(observed?.channelId);
       if (observedChannelId) return observedChannelId;
@@ -1018,8 +1022,8 @@ export class PlayerManager {
       const users = this.voiceCache.getHumansInChannel(guildId, channelId);
       humanUserIds.push(...users);
     } else if (this.observedVoiceUsers) {
-      // Legacy fallback
-      for (const [uid, info] of this.observedVoiceUsers.iterateHumanUsers()) {
+      // Legacy fallback (VoiceStateCache is iterable via [Symbol.iterator])
+      for (const [uid, info] of this.observedVoiceUsers) {
         if (cleanId(info.guildId) === guildId && cleanId(info.channelId) === channelId) {
           humanUserIds.push(uid);
         }
