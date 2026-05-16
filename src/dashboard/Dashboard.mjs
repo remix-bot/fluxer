@@ -103,7 +103,7 @@ export class Dashboard {
     if (!this.enabled || !this.redis) return;
     // Use "fluxer_<botId>" as the platform so each bot's Redis messages
     // are isolated. The dashboard backend must also be configured to match.
-    this.redis.platform = `fluxer_${botId}`;
+    this.redis.platform = `fluxer`;
   }
 
   // Dashboard Function Dispatch

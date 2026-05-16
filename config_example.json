@@ -106,7 +106,9 @@
     "Comment": "FluxerList integration: check voters for your server/bot. API keys are allocated by site admins, prefixed with fl_, and visible in your Dashboard. To request access, open a ticket in the Fluxer server.",
     "apiKey": "fl_your_api_key_here",
     "serverId": "remix-hq",
-    "botId": "remix"
+    "botId": "remix",
+    "serverSlug": "remix-hq",
+    "botSlug": "remix"
   },
   "owners": ["user id for owner-only commands", "another user id"],
   "playerAFKTimeout": 60000,

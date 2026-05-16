@@ -2,7 +2,7 @@ import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { Utils } from "../src/Utils.mjs";
-import { FLUXERLIST, buildVoteLink, buildProfileLink } from "../src/constants/API.mjs";
+import { FLUXERLIST, buildVoteLink } from "../src/constants/API.mjs";
 
 // Auto-remove timer for reaction navigation: 60 seconds
 const EMOJI_REMOVE_TIMEOUT = 60_000;
@@ -132,20 +132,28 @@ export async function run(msg, data) {
         });
       }
 
-      const voteUrl = buildVoteLink(resolvedType, id);
-      const profileUrl = buildProfileLink(resolvedType, id);
+      // Use slug for website links (slugs work on the website; numeric IDs don't)
+      const slug = resourceId || (resolvedType === "server" ? fluxerlist?.serverSlug : fluxerlist?.botSlug);
+      const voteUrl = slug ? buildVoteLink(resolvedType, slug) : null;
       const label = resolvedType === "server" ? "Server" : "Bot";
+
+      const descLines = [
+        `Support this ${label.toLowerCase()} by voting on FluxerList!`,
+        ``,
+      ];
+
+      if (voteUrl) {
+        descLines.push(`**[Vote & View Profile](${voteUrl})**`, ``);
+      } else {
+        descLines.push(`Visit [FluxerList](${FLUXERLIST.SITE_URL}) to find and vote for this ${label.toLowerCase()}.`, ``);
+      }
+
+      descLines.push(`Your votes help this ${label.toLowerCase()} grow and reach more users.`);
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
         .setTitle(`Vote on FluxerList`)
-        .setDescription([
-          `Support this ${label.toLowerCase()} by voting on FluxerList!`,
-          ``,
-          `**[Vote & View Profile](${voteUrl})**`,
-          ``,
-          `Your votes help this ${label.toLowerCase()} grow and reach more users.`,
-        ].join("\n"));
+        .setDescription(descLines.join("\n"));
 
       return msg.reply({ embeds: [embed] });
     }

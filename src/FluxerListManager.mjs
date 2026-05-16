@@ -26,12 +26,16 @@ export class FluxerListManager {
    * @param {string} [config.apiKey] - FluxerList API key (prefixed with fl_)
    * @param {string} [config.serverId] - Default server ID or slug for voter queries
    * @param {string} [config.botId] - Default bot ID or slug for voter queries
+   * @param {string} [config.serverSlug] - Server URL slug for website links (e.g. "remix-hq")
+   * @param {string} [config.botSlug] - Bot URL slug for website links (e.g. "remix")
    */
   constructor(config = {}) {
-    this.apiKey    = config?.apiKey ?? "";
-    this.serverId  = config?.serverId ?? "";
-    this.botId     = config?.botId ?? "";
-    this.enabled   = !!this.apiKey;
+    this.apiKey     = config?.apiKey ?? "";
+    this.serverId   = config?.serverId ?? "";
+    this.botId      = config?.botId ?? "";
+    this.serverSlug = config?.serverSlug ?? config?.serverId ?? "";
+    this.botSlug    = config?.botSlug ?? config?.botId ?? "";
+    this.enabled    = !!this.apiKey;
 
     // In-memory cache: Map<cacheKey, { data, expiresAt }>
     this._cache = new Map();
