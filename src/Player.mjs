@@ -327,6 +327,7 @@ export default class Player extends EventEmitter {
   // searches Map with max-size eviction to prevent memory leak on busy servers.
   searches          = new Map();
   _searchMaxSize    = 50;
+  _maxQueueSize     = 10_000; // Max tracks in queue to prevent unbounded memory growth
   resultLimit       = 5;
   preferredVolume   = 1;
 
@@ -370,6 +371,7 @@ export default class Player extends EventEmitter {
     this.settings     = opts.settings ?? null;
     this.settingsMgr  = opts.settingsMgr ?? null;
     this._observedVoiceUsers = opts.observedVoiceUsers ?? null;
+    this._voiceCache          = opts.voiceCache ?? null;
     this.locale       = opts.locale ?? null;
 
     // Merge NodeLink config (for stream URL building)
@@ -524,25 +526,34 @@ export default class Player extends EventEmitter {
     if (!this._channelId || !this._guildId) return false;
     const cleanChan  = String(this._channelId).replace(/\D/g, "");
     const cleanGuild = String(this._guildId).replace(/\D/g, "");
+
+    // O(1) lookup via VoiceStateCache channelMembers index
+    if (this._voiceCache && this._voiceCache.hasHumansInChannel(cleanGuild, cleanChan)) {
+      return true;
+    }
+
+    // Legacy fallback: iterate observedVoiceUsers (O(n))
     try {
       const voiceUsers = this._observedVoiceUsers;
-      if (voiceUsers) {
-        for ( const [, info] of voiceUsers) {
+      if (voiceUsers && typeof voiceUsers.iterateHumanUsers === "function") {
+        for (const [, info] of voiceUsers.iterateHumanUsers()) {
           if (
               String(info.guildId   ?? "").replace(/\D/g, "") === cleanGuild &&
               String(info.channelId ?? "").replace(/\D/g, "") === cleanChan
           ) return true;
         }
-        // Don't return false here — fall through to guild voice_states
-        // fallback in case observedVoiceUsers hasn't been populated yet
-        // (e.g., right after bot restart before reseed completes).
+      } else if (voiceUsers) {
+        // Raw Map fallback (shouldn't happen with new code)
+        for (const [, info] of voiceUsers) {
+          if (
+              String(info.guildId   ?? "").replace(/\D/g, "") === cleanGuild &&
+              String(info.channelId ?? "").replace(/\D/g, "") === cleanChan
+          ) return true;
+        }
       }
     } catch (_) {}
     try {
-      // @fluxerjs channels do NOT have a .members property.
-      // Use the guild's member manager and filter by voice state instead.
       const guild = this.client?.guilds?.get?.(this._guildId);
-      // Iterate raw voice_states on the guild object.
       const voiceStates = guild?.voice_states;
       if (voiceStates) {
         const entries = Array.isArray(voiceStates)
@@ -554,7 +565,6 @@ export default class Player extends EventEmitter {
           const stateChannelId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
           if (stateChannelId === cleanChan) {
             const userId = String(state?.userId ?? state?.user_id ?? "");
-            // Check if user is a bot — look up via members or observedVoiceUsers
             const member = guild?.members?.get?.(userId);
             const isBot = member?.user?.bot ?? false;
             if (!isBot) return true;
@@ -563,19 +573,11 @@ export default class Player extends EventEmitter {
       }
     } catch (_) {}
 
-    // ── LiveKit participant fallback ──────────────────────────────────────
-    // If the above methods didn't find any humans (e.g., because
-    // voice_states cache is empty and observedVoiceUsers hasn't been
-    // populated yet after a restart), check the LiveKit room's remote
-    // participants. This is the most reliable source of truth for who's
-    // actually in the voice channel, since LiveKit knows about every
-    // connected participant regardless of gateway cache state.
+    // LiveKit participant fallback
     try {
       const room = this.connection?.room;
       if (room?.isConnected && room.remoteParticipants) {
         for (const [, participant] of room.remoteParticipants) {
-          // Remote participants in the LiveKit room are humans (the bot is
-          // the local participant). If there's at least one, humans are present.
           if (participant?.identity || participant?.sid) {
             return true;
           }
@@ -1590,6 +1592,11 @@ export default class Player extends EventEmitter {
   isEmpty()           { return this.queue.isEmpty(); }
 
   addToQueue(d, t)    {
+    // Enforce queue size cap to prevent unbounded memory growth
+    if (this.queue.data.length >= this._maxQueueSize) {
+      logger.warn(`[Player] Queue size cap reached (${this._maxQueueSize}) — dropping oldest track`);
+      this.queue.data.shift();
+    }
     this.queue.add(d, t);
     this.emit("update", "queue");
     this._stopInactivityTimer();
@@ -1604,6 +1611,12 @@ export default class Player extends EventEmitter {
   }
 
   addManyToQueue(t, top = false) {
+    // Enforce queue size cap
+    const overflow = (this.queue.data.length + t.length) - this._maxQueueSize;
+    if (overflow > 0) {
+      logger.warn(`[Player] Queue size cap (${this._maxQueueSize}) — dropping ${overflow} oldest tracks`);
+      this.queue.data.splice(0, overflow);
+    }
     const added = this.queue.addMany(t, top);
     this.emit("update", "queue");
     this._stopInactivityTimer();

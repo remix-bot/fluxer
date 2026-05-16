@@ -81,8 +81,11 @@ export class PlayerManager {
   /** @type {CommandHandler} */
   commands;
 
-  /** @type {Map<string, Player>} */
+  /** @type {Map<string, Player>} Keyed by cleaned channel ID */
   playerMap = new Map();
+
+  /** @type {Map<string, Set<string>>} Reverse index: guildId → Set<channelId> for O(1) guild lookups */
+  _guildPlayerIndex = new Map();
 
   /** @type {Set<string>} Channel IDs currently being joined (not yet in playerMap) */
   _pendingJoins = new Set();
@@ -119,6 +122,94 @@ export class PlayerManager {
     this.locale       = config.locale ?? null;
     this.timers       = config.timers ?? {};
     this._lastfm      = null;   // Set later by Remix class after init
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Guild→Player Reverse Index — O(1) lookups instead of O(n) scans
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Add a channel to the guild→player reverse index.
+   * Called after a successful player join.
+   * @param {string} guildId
+   * @param {string} channelId
+   */
+  _indexPlayer(guildId, channelId) {
+    const gId = cleanId(guildId);
+    const cId = cleanId(channelId);
+    if (!gId || !cId) return;
+    let set = this._guildPlayerIndex.get(gId);
+    if (!set) { set = new Set(); this._guildPlayerIndex.set(gId, set); }
+    set.add(cId);
+  }
+
+  /**
+   * Remove a channel from the guild→player reverse index.
+   * Called on player leave/destroy.
+   * @param {string} guildId
+   * @param {string} channelId
+   */
+  _unindexPlayer(guildId, channelId) {
+    const gId = cleanId(guildId);
+    const cId = cleanId(channelId);
+    if (!gId) return;
+    const set = this._guildPlayerIndex.get(gId);
+    if (set) {
+      set.delete(cId);
+      if (set.size === 0) this._guildPlayerIndex.delete(gId);
+    }
+  }
+
+  /**
+   * Get all [channelId, Player] entries for a guild.
+   * Uses the reverse index for O(1) guild lookup instead of O(n) scan.
+   * @param {string} guildId
+   * @returns {Array<[string, Player]>}
+   */
+  getGuildPlayers(guildId) {
+    const gId = cleanId(guildId);
+    const set = this._guildPlayerIndex.get(gId);
+    if (!set) return [];
+    const result = [];
+    for (const channelId of set) {
+      const player = this.playerMap.get(channelId);
+      if (player && !player._destroyed) {
+        result.push([channelId, player]);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Find a player by guildId and channelId using the reverse index.
+   * @param {string} guildId
+   * @param {string} channelId
+   * @returns {Player|null}
+   */
+  getPlayerByGuildAndChannel(guildId, channelId) {
+    const cId = cleanId(channelId);
+    const players = this.getGuildPlayers(guildId);
+    for (const [mapChannelId, player] of players) {
+      if (getPlayerChannelId(player, mapChannelId) === cId) return player;
+    }
+    return null;
+  }
+
+  /**
+   * Find a player by channelId alone (scans guild index first, then fallback).
+   * @param {string} channelId
+   * @returns {Player|null}
+   */
+  getPlayerByChannelId(channelId) {
+    const cId = cleanId(channelId);
+    // Try all guild indexes
+    for (const [, channelSet] of this._guildPlayerIndex) {
+      for (const mapChannelId of channelSet) {
+        const player = this.playerMap.get(mapChannelId);
+        if (player && getPlayerChannelId(player, mapChannelId) === cId) return player;
+      }
+    }
+    return null;
   }
 
   /**
@@ -502,9 +593,7 @@ export class PlayerManager {
 
     if (cleanUserChannelId) {
       const player = this.playerMap.get(cleanUserChannelId)
-          ?? [...this.playerMap.values()].find(p =>
-            getPlayerChannelId(p) === cleanUserChannelId
-          );
+          ?? this.getPlayerByGuildAndChannel(cleanGuildId, cleanUserChannelId);
       if (player) {
         player.textChannel = message.channel;
         try {
@@ -523,9 +612,7 @@ export class PlayerManager {
     }
 
     const serverPlayers = cleanGuildId
-        ? [...this.playerMap.entries()].filter(([, player]) => {
-          return getPlayerGuildId(player) === cleanGuildId;
-        })
+        ? this.getGuildPlayers(cleanGuildId)
         : [];
 
     if (serverPlayers.length > 0) {
@@ -544,7 +631,7 @@ export class PlayerManager {
       }
 
       const match = serverPlayers.find(([, player]) =>
-        String(player?._channelId ?? "").replace(/\D/g, "") === cleanUserChannelId
+        getPlayerChannelId(player) === cleanUserChannelId
       );
       if (match) {
         match[1].textChannel = message.channel;
@@ -697,22 +784,24 @@ export class PlayerManager {
     if (!cid) {
       const guildId = getMessageGuildId(msg);
       if (guildId) {
-        const matchedEntry = [...this.playerMap.entries()].find(([, player]) =>
-          getPlayerGuildId(player) === cleanId(guildId)
-        );
-        cid = getPlayerChannelId(matchedEntry?.[1], matchedEntry?.[0]) || matchedEntry?.[0] || null;
+        const guildPlayers = this.getGuildPlayers(cleanId(guildId));
+        if (guildPlayers.length > 0) {
+          const [, firstPlayer] = guildPlayers[0];
+          cid = getPlayerChannelId(firstPlayer, guildPlayers[0][0]) || guildPlayers[0][0];
+        }
       }
     }
 
     const cleanChannelId = cleanId(cid);
     const player = cleanChannelId
       ? this.playerMap.get(cleanChannelId) ??
-        [...this.playerMap.values()].find((entry) => getPlayerChannelId(entry) === cleanChannelId)
+        this.getPlayerByChannelId(cleanChannelId)
       : null;
     if (!player) return msg.reply(mkEmbed(this._t(msg, "responses._common.notInVoice")));
 
     const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;
     this.playerMap.delete(activeChannelId);
+    this._unindexPlayer(player._guildId, activeChannelId);
     // Clean up pending scrobble timer
     const pendingScrobble = this._pendingScrobbleTimers.get(activeChannelId);
     if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this._pendingScrobbleTimers.delete(activeChannelId); }
@@ -749,7 +838,7 @@ export class PlayerManager {
 
     const cleanChannelId = cleanId(cid);
     const existing = this.playerMap.get(cleanChannelId)
-      ?? [...this.playerMap.values()].find((entry) => getPlayerChannelId(entry) === cleanChannelId);
+      ?? this.getPlayerByChannelId(cleanChannelId);
     if (existing) {
       existing.textChannel = message.channel;
       cb(existing);
@@ -769,6 +858,7 @@ export class PlayerManager {
       revoice:            this.playerConfig?.revoice ?? null,
       settingsMgr:        this.settings,
       observedVoiceUsers: this.observedVoiceUsers ?? null,
+      voiceCache:          this.voiceCache ?? null,
       locale:             this.locale ?? null,
     });
 
@@ -808,6 +898,7 @@ export class PlayerManager {
 
       // Remove player from map and destroy
       this.playerMap.delete(activeChannelId);
+      this._unindexPlayer(player._guildId, activeChannelId);
       // Clean up pending scrobble timer
       const pendingScrobble = this._pendingScrobbleTimers.get(activeChannelId);
       if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this._pendingScrobbleTimers.delete(activeChannelId); }
@@ -862,6 +953,7 @@ export class PlayerManager {
         // Only add to playerMap after join succeeds — this prevents phantom
         // entries from inflating the player count.
         this.playerMap.set(cleanChannelId, player);
+        this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
         this._pendingJoins.delete(cleanChannelId);
 
         await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joined", { channel: cid })));
@@ -892,6 +984,7 @@ export class PlayerManager {
         }
         await statusMsg.edit(mkEmbed(errorMsg)).catch(() => {});
         this.playerMap.delete(cleanChannelId);
+        this._unindexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
         player.destroy();
       }
     })();
@@ -920,9 +1013,13 @@ export class PlayerManager {
     const channelId = getPlayerChannelId(player);
     const humanUserIds = [];
 
-    // Check observedVoiceUsers first
-    if (this.observedVoiceUsers) {
-      for (const [uid, info] of this.observedVoiceUsers) {
+    // Use VoiceStateCache O(1) channel index instead of iterating all users
+    if (this.voiceCache) {
+      const users = this.voiceCache.getHumansInChannel(guildId, channelId);
+      humanUserIds.push(...users);
+    } else if (this.observedVoiceUsers) {
+      // Legacy fallback
+      for (const [uid, info] of this.observedVoiceUsers.iterateHumanUsers()) {
         if (cleanId(info.guildId) === guildId && cleanId(info.channelId) === channelId) {
           humanUserIds.push(uid);
         }

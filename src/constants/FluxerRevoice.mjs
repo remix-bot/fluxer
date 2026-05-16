@@ -123,11 +123,24 @@ export class FluxerVoiceConnection extends EventEmitter {
   channelId   = null;
   _voice      = null;  // parent FluxerRevoice instance
   _connected  = false; // internal flag, set by events
-  users       = [];
+  _users      = [];    // internal, derived from parent FluxerRevoice.users
   _destroyed  = false;
 
   // @fluxerjs/voice native connection reference (for proper disconnect)
   _nativeConn = null;
+
+  /**
+   * Users currently in this voice channel.
+   * Derived from the parent FluxerRevoice's unified users map (single source of truth).
+   * This prevents the old divergence bug where the array and Map could get out of sync.
+   */
+  get users() {
+    return this._users;
+  }
+
+  set users(val) {
+    this._users = Array.isArray(val) ? val : [];
+  }
 
   constructor(channelId, voice, opts = {}) {
     super();
@@ -223,6 +236,8 @@ export class FluxerRevoice extends EventEmitter {
   /** @type {import("@fluxerjs/core").Client} */
   client       = null;
   connections  = new Map();
+  // Unified users map: keyed by "channelId:userId", value is { id, connectedTo }
+  // This is the single source of truth; connection.users is derived from it.
   users        = new Map();
 
   /** @type {Map<string, Promise>} */
@@ -628,8 +643,10 @@ export class FluxerRevoice extends EventEmitter {
     room.on(RoomEvent.ParticipantConnected, (participant) => {
       const userId = participant?.identity ?? participant?.sid;
       if (userId) {
-        connection.users.push({ id: userId, connectedTo: channelId });
-        this.users.set(userId, { id: userId, connectedTo: channelId });
+        const uKey = `${channelId}:${userId}`;
+        this.users.set(uKey, { id: userId, connectedTo: channelId });
+        // Derive connection.users from the unified map (single source of truth)
+        connection._users = [...this.users.values()].filter(u => u.connectedTo === channelId);
         connection.emit("userjoin", userId);
       }
     });
@@ -637,8 +654,10 @@ export class FluxerRevoice extends EventEmitter {
     room.on(RoomEvent.ParticipantDisconnected, (participant) => {
       const userId = participant?.identity ?? participant?.sid;
       if (userId) {
-        connection.users = connection.users.filter(u => u.id !== userId);
-        this.users.delete(userId);
+        const uKey = `${channelId}:${userId}`;
+        this.users.delete(uKey);
+        // Derive connection.users from the unified map
+        connection._users = [...this.users.values()].filter(u => u.connectedTo === channelId);
         connection.emit("userleave", userId);
       }
     });

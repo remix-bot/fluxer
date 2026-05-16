@@ -13,6 +13,7 @@ import { FluxerRevoice } from "./src/constants/FluxerRevoice.mjs";
 import { MoonlinkManager } from "./src/MoonlinkManager.mjs";
 import { Dashboard } from "./src/dashboard/Dashboard.mjs";
 import { Locale } from "./src/constants/Locale.mjs";
+import { VoiceStateCache } from "./src/constants/VoiceStateCache.mjs";
 import { GatewayHandler } from "./src/GatewayHandler.mjs";
 import { LastFmManager } from "./src/LastFmManager.mjs";
 
@@ -159,12 +160,21 @@ export class Remix {
     this.moonlink = null;
     let moonlinkInitialised = false;
 
-    // ── Voice state tracking maps (created early so all modules can reference) ──
-    this.observedVoiceUsers = new Map();
-    this.observedVoiceBots  = new Map();
+    // ── Voice state tracking — indexed cache with LRU eviction ──────────
+    // Replaces raw observedVoiceUsers/observedVoiceBots Maps with O(1)
+    // channel-member lookups, composite keys, and bounded memory.
+    this.voiceCache = new VoiceStateCache({ maxUsers: 50_000, maxBots: 10_000 });
+
+    // ── Backward-compat aliases (deprecated — use voiceCache directly) ───
+    // These expose the same .size / .get / .set / .has / .delete / iteration
+    // interface so existing code (dashboard, commands) continues to work.
+    this.observedVoiceUsers = this.voiceCache;
+    this.observedVoiceBots  = this.voiceCache;
 
     // ── Caches ───────────────────────────────────────────────────────────────
+    // _announcementChannelCache: TTL-based (5 min), auto-evicts stale entries
     this._announcementChannelCache = new Map();
+    this._announcementChannelTTL  = 5 * 60 * 1000; // 5 min
     this.intentionalLeaves = new Map();
 
     // ── Gateway Handler ─────────────────────────────────────────────────────
@@ -305,9 +315,12 @@ export class Remix {
       timers: this.T,
     });
     this.players.observedVoiceUsers = this.observedVoiceUsers;
+    this.players.voiceCache = this.voiceCache;
     this.players._lastfm = this.lastfm;
 
     // ── Periodic alone-check ───────────────────────────────────────────────────
+    // Uses VoiceStateCache.channelMembers index for O(1) per-player lookup
+    // instead of iterating ALL observedVoiceUsers (which was O(N×M)).
     const ALONE_CHECK_INTERVAL = this.T.aloneCheckInterval;
     setInterval(() => {
       for (const [mapKey, player] of this.players.playerMap) {
@@ -334,17 +347,10 @@ export class Remix {
 
           if (player._is247Enabled()) continue;
 
-          let hasHuman = false;
-          for (const [, info] of this.observedVoiceUsers) {
-            const infoChannel = String(info.channelId ?? "").replace(/\D/g, "");
-            const infoGuild   = String(info.guildId   ?? "").replace(/\D/g, "");
-            if (infoGuild === cleanGuildId && infoChannel === cleanChanId) {
-              hasHuman = true;
-              break;
-            }
-          }
+          // O(1) lookup via VoiceStateCache channelMembers index
+          let hasHuman = this.voiceCache.hasHumansInChannel(cleanGuildId, cleanChanId);
 
-          // Fallback: check guild voice_states cache if observedVoiceUsers
+          // Fallback: check guild voice_states cache if voiceCache
           // didn't find anyone (can happen after bot restart before reseed).
           if (!hasHuman) {
             try {
@@ -364,9 +370,9 @@ export class Remix {
                     const isBot = member?.user?.bot ?? state?.member?.user?.bot ?? false;
                     if (!isBot) {
                       hasHuman = true;
-                      // Also update observedVoiceUsers so future checks are fast
+                      // Also update voiceCache so future checks are O(1)
                       if (stateUserId) {
-                        this.observedVoiceUsers.set(stateUserId, { channelId: cleanChanId, guildId: cleanGuildId });
+                        this.voiceCache.updateUser({ guildId: cleanGuildId, userId: stateUserId, channelId: cleanChanId, isBot: false });
                       }
                       break;
                     }
@@ -377,8 +383,6 @@ export class Remix {
           }
 
           // Fallback: check LiveKit remote participants if guild cache is empty.
-          // This is the most reliable source of truth — if the bot's LiveKit room
-          // has remote participants, those are real humans in the channel.
           if (!hasHuman) {
             try {
               const room = player.connection?.room;
@@ -427,10 +431,7 @@ export class Remix {
 
       logger.voice(`[checkVC] userId=${userId} guildId=${guildId}`);
       logger.voice(`[checkVC] channel keys: ${Object.keys(message?.channel ?? {}).join(",")}`);
-      logger.voice(`[checkVC] observedVoiceUsers size=${self.observedVoiceUsers.size}`);
-      for (const [uid, info] of self.observedVoiceUsers) {
-        logger.voice(`[checkVC]   stored: uid=${uid} channelId=${info.channelId} guildId=${info.guildId}`);
-      }
+      logger.voice(`[checkVC] voiceCache humans=${self.voiceCache.observedVoiceUsersSize} bots=${self.voiceCache.observedVoiceBotsSize}`);
 
       if (!userId || !guildId) {
         logger.voice(`[checkVC] BAIL — missing userId or guildId`);
@@ -440,16 +441,16 @@ export class Remix {
       const cleanGuild = String(guildId).replace(/\D/g, "");
 
       const seed = (channelId) => {
-        if (!self.observedVoiceUsers.has(userId)) {
-          self.observedVoiceUsers.set(userId, { channelId, guildId: cleanGuild });
+        if (!self.voiceCache.hasHumanUser(userId, cleanGuild)) {
+          self.voiceCache.updateUser({ guildId: cleanGuild, userId, channelId, isBot: false });
         }
-        return self.observedVoiceUsers.get(userId)?.channelId ?? channelId;
+        return self.voiceCache.getUserChannel(cleanGuild, userId) ?? channelId;
       };
 
-      const observed = self.observedVoiceUsers.get(userId);
+      const observed = self.voiceCache.getUserLocation(cleanGuild, userId);
       logger.voice(`[checkVC] observed=${JSON.stringify(observed)} cleanGuild=${cleanGuild}`);
-      if (observed && String(observed.guildId).replace(/\D/g, "") === cleanGuild) {
-        logger.voice(`[checkVC] HIT observedVoiceUsers → ${observed.channelId}`);
+      if (observed && observed.channelId) {
+        logger.voice(`[checkVC] HIT voiceCache → ${observed.channelId}`);
         return observed.channelId;
       }
 
@@ -505,13 +506,10 @@ export class Remix {
       } catch (e) { logger.voice(`[checkVC] guild error: ${e.message}`); }
 
       try {
-        for (const [uid, info] of self.observedVoiceUsers) {
-          if (uid !== userId) continue;
-          logger.voice(`[checkVC] last-resort: uid=${uid} stored.guildId=${info.guildId} cleanGuild=${cleanGuild}`);
-          if (String(info.guildId).replace(/\D/g, "") === cleanGuild) {
-            logger.voice(`[checkVC] HIT last-resort → ${info.channelId}`);
-            return info.channelId;
-          }
+        const loc = self.voiceCache.getHumanUser(userId);  // scan all guilds
+        if (loc && String(loc.guildId ?? "").replace(/\D/g, "") === cleanGuild) {
+          logger.voice(`[checkVC] HIT voiceCache scan → ${loc.channelId}`);
+          return loc.channelId;
         }
       } catch (e) { logger.voice(`[checkVC] last-resort error: ${e.message}`); }
 
@@ -673,10 +671,9 @@ export class Remix {
     if (!cleanChannelId) throw new Error("_spawnPlayer: invalid channelId");
 
     // Already have a player for this channel?
+    // Use guild→player reverse index for O(1) lookup, fallback to playerMap.get()
     const existing = this.players.playerMap.get(cleanChannelId)
-        ?? [...this.players.playerMap.values()].find(p =>
-          String(p?._channelId ?? "").replace(/\D/g, "") === cleanChannelId
-        );
+        ?? this.players.getPlayerByGuildAndChannel(cleanGuildId, cleanChannelId);
     if (existing) return existing;
 
     // Guard: moonlink must be ready
@@ -702,6 +699,7 @@ export class Remix {
       revoice:            this.revoice ?? null,
       settingsMgr:        this.settingsMgr ?? this.settings ?? null,
       observedVoiceUsers: this.observedVoiceUsers ?? null,
+      voiceCache:          this.voiceCache ?? null,
       locale:             this.locale ?? null,
     });
 
@@ -739,6 +737,7 @@ export class Remix {
 
       // Add to playerMap only after join succeeds
       this.players.playerMap.set(cleanChannelId, player);
+      this.players._indexPlayer(cleanGuildId, cleanChannelId);
       if (this.players._pendingJoins) {
         this.players._pendingJoins.delete(cleanChannelId);
       }
@@ -865,15 +864,14 @@ export class Remix {
         isMember = true;
       }
 
-      // 2. Fallback — observed voice users (REST-less)
+      // 2. Fallback — check voiceCache for this guild (O(1) per guild)
       if (!isMember) {
         const cleanGuildId = String(guild.id).replace(/\D/g, "");
-        for (const [, info] of (this.observedVoiceUsers ?? [])) {
-          if (String(info.guildId ?? "").replace(/\D/g, "") === cleanGuildId) {
-            isMember = true;
-            break;
-          }
-        }
+        // Check if any human users are tracked in this guild
+        const hasVoiceUsers = [...this.voiceCache.userLocations.values()].some(
+          loc => loc.guildId === cleanGuildId
+        );
+        if (hasVoiceUsers) isMember = true;
       }
 
       // 3. Slow path — REST fetch for large guilds with incomplete caches
