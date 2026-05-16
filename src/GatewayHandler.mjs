@@ -1044,11 +1044,28 @@ export class GatewayHandler {
               );
               return;
             }
-            // Replace the old channel with the new one in stay_247.
-            // Previously this kept BOTH channels, causing unbounded growth
-            // in the stay_247 list (e.g. guild 1480202154270605526 ended up
-            // with 5+ channels). Now we remove the old channel and add the
-            // new one so the list stays at the correct size.
+
+            // ── Multi-voice guard ──────────────────────────────────────────
+            const currentGuildPlayers = [...remix.players.playerMap.values()].filter(p =>
+              String(p?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
+            );
+            if (currentGuildPlayers.length > 1) {
+              if (!channels.has(cleanId)) {
+                channels.add(cleanId);
+                set.set("stay_247", [...channels]);
+                const modes2 = set.get("stay_247_modes");
+                if (modes2 && typeof modes2 === "object" && !Array.isArray(modes2) && !modes2[cleanId]) {
+                  modes2[cleanId] = modes2[cleanOld] ?? "auto";
+                  set.set("stay_247_modes", modes2);
+                }
+                logger.voice247(
+                  `[247] Added stay_247 channel ${cleanId} (kept ${cleanOld}) — guild has ${currentGuildPlayers.length} active players`
+                );
+              }
+              return;
+            }
+
+            // Single-voice guild: genuine move — replace old channel with new.
             channels.delete(cleanOld);
             channels.add(cleanId);
             set.set("stay_247", [...channels]);
@@ -1081,6 +1098,11 @@ export class GatewayHandler {
         const cleanGuild = String(guildId).replace(/\D/g, "");
         if (remix.intentionalLeaves.has(cleanOld)) {
           logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — intentional leave.`);
+        } else if (remix.revoice?._intentionalDisconnects?.has?.(cleanOld)) {
+          // The player's destroy() or FluxerRevoice internally marked this
+          // disconnect as intentional (e.g. cleaning up a stale connection
+          // during a rejoin).  Don't schedule another rejoin.
+          logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — intentional (revoice).`);
         } else {
           // Check 24/7 mode for this channel
           const set = remix.settingsMgr.getServer(guildId);

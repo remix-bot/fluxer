@@ -1365,6 +1365,13 @@ export default class Player extends EventEmitter {
       const connToDestroy = this.connection;
       this.connection   = null;
       this._mediaPlayer = null;
+      // Mark the disconnect as intentional BEFORE disconnecting so that
+      // the RoomEvent.Disconnected handler in FluxerRevoice (and the
+      // VoiceState bot-disconnect handler in GatewayHandler) do NOT treat
+      // this as an unexpected drop and schedule a spurious rejoin.
+      if (this._revoice && this._channelId) {
+        try { this._revoice.markIntentionalDisconnect(this._channelId); } catch (_) {}
+      }
       this._stopMediaPlayer().catch(() => {}).then(() => {
         if (connToDestroy) {
           try { connToDestroy.removeAllListeners?.(); } catch (_) {}
