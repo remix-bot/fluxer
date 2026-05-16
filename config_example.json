@@ -102,6 +102,12 @@
     "scrobbleMinMs": 240000,
     "Comment2": "scrobbleThreshold: fraction of track duration before scrobbling (0.5 = 50%). scrobbleMinMs: minimum ms played before scrobble (default 4 min). Both must be met."
   },
+  "fluxerlist": {
+    "Comment": "FluxerList integration: check voters for your server/bot. API keys are allocated by site admins, prefixed with fl_, and visible in your Dashboard. To request access, open a ticket in the Fluxer server.",
+    "apiKey": "fl_your_api_key_here",
+    "serverId": "your server UUID (optional, used as default for %vote check server)",
+    "botId": "your bot UUID (optional, used as default for %vote check bot)"
+  },
   "owners": ["user id for owner-only commands", "another user id"],
   "playerAFKTimeout": 60000,
   "Comment": "The above specifies the time in ms after which a player goes inactive; Optional.",

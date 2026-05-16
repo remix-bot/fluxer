@@ -16,6 +16,7 @@ import { Locale } from "./src/constants/Locale.mjs";
 import { VoiceStateCache } from "./src/constants/VoiceStateCache.mjs";
 import { GatewayHandler } from "./src/GatewayHandler.mjs";
 import { LastFmManager } from "./src/LastFmManager.mjs";
+import { FluxerListManager } from "./src/FluxerListManager.mjs";
 
 /**
  * Create a backward-compatible "bot view" wrapper around VoiceStateCache.
@@ -233,6 +234,10 @@ export class Remix {
     // ── Last.fm Manager ─────────────────────────────────────────────────────
     // Handles Last.fm API auth, scrobbling, and user data.
     this.lastfm = new LastFmManager(config.lastfm, config.mysql);
+
+    // ── FluxerList Manager ──────────────────────────────────────────────────
+    // Handles FluxerList API voter data queries.
+    this.fluxerlist = new FluxerListManager(config.fluxerlist);
 
     // ── Settings ready callback ──────────────────────────────────────────────
     settings.on("ready", () => {
