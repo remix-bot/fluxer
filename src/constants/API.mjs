@@ -71,7 +71,7 @@ export const FLUXERLIST_LIMITS = {
  * Build a full FluxerList API URL by replacing :id in the endpoint path.
  *
  * @param {string} endpoint - One of FLUXERLIST.ENDPOINTS values (e.g. "/servers/:id/voters")
- * @param {string} resourceId - The server or bot UUID to substitute for :id
+ * @param {string} resourceId - The server or bot slug to substitute for :id
  * @param {object} [queryParams] - Optional query parameters
  * @param {number} [queryParams.page] - Page number (default: 1)
  * @param {number} [queryParams.limit] - Results per page, max 100 (default: 50)
@@ -95,7 +95,7 @@ export function buildFluxerListUrl(endpoint, resourceId, queryParams = {}) {
  * Build the vote link for a resource on FluxerList.
  *
  * @param {"server"|"bot"} type - Resource type
- * @param {string} resourceId - The server or bot UUID
+ * @param {string} resourceId - The server or bot slug
  * @returns {string} URL to the vote page on FluxerList
  */
 export function buildVoteLink(type, resourceId) {
@@ -107,7 +107,7 @@ export function buildVoteLink(type, resourceId) {
  * Build the profile link for a resource on FluxerList.
  *
  * @param {"server"|"bot"} type - Resource type
- * @param {string} resourceId - The server or bot UUID
+ * @param {string} resourceId - The server or bot slug
  * @returns {string} URL to the profile page on FluxerList
  */
 export function buildProfileLink(type, resourceId) {

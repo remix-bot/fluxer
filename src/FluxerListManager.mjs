@@ -24,8 +24,8 @@ export class FluxerListManager {
   /**
    * @param {object} config - The `fluxerlist` section from config.json
    * @param {string} [config.apiKey] - FluxerList API key (prefixed with fl_)
-   * @param {string} [config.serverId] - Default server UUID for voter queries
-   * @param {string} [config.botId] - Default bot UUID for voter queries
+   * @param {string} [config.serverId] - Default server slug for voter queries
+   * @param {string} [config.botId] - Default bot slug for voter queries
    */
   constructor(config = {}) {
     this.apiKey    = config?.apiKey ?? "";
@@ -99,7 +99,7 @@ export class FluxerListManager {
    * Fetch the list of voters for a server or bot.
    *
    * @param {"server"|"bot"} type - Resource type
-   * @param {string} [id] - Server or bot UUID (falls back to config default)
+   * @param {string} [id] - Server or bot slug (falls back to config default)
    * @param {object} [options]
    * @param {number} [options.page=1] - Page number (1-based)
    * @param {number} [options.limit=50] - Results per page (max 100)
@@ -173,7 +173,7 @@ export class FluxerListManager {
 
   /**
    * Convenience: fetch voters for a server.
-   * @param {string} [id] - Server UUID (falls back to config default)
+   * @param {string} [id] - Server slug (falls back to config default)
    * @param {object} [options] - Same as getVoters options
    * @returns {Promise<object>}
    */
@@ -183,7 +183,7 @@ export class FluxerListManager {
 
   /**
    * Convenience: fetch voters for a bot.
-   * @param {string} [id] - Bot UUID (falls back to config default)
+   * @param {string} [id] - Bot slug (falls back to config default)
    * @param {object} [options] - Same as getVoters options
    * @returns {Promise<object>}
    */
@@ -196,7 +196,7 @@ export class FluxerListManager {
    * Use with caution on resources with many voters — this makes multiple API calls.
    *
    * @param {"server"|"bot"} type
-   * @param {string} [id] - Resource UUID
+   * @param {string} [id] - Resource slug
    * @param {object} [options]
    * @param {number} [options.limit=100] - Results per page (uses max to minimize calls)
    * @returns {Promise<Array<{ username: string, fluxerId: number, votedAt: string }>>}
