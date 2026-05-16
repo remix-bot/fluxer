@@ -352,6 +352,10 @@ export default class Player extends EventEmitter {
   // destroyed flag — prevents recovery/playback/worker spawn after destroy()
   _destroyed           = false;
 
+  // publishToRoom self-healing — scheduled retry timer and consecutive fail count
+  _publishRetryTimer   = null;
+  _publishFailCount    = 0;
+
   // NodeLink config (kept for direct stream URL building; session managed by moonlink)
   _nl = {
     host:           "localhost",
@@ -672,7 +676,7 @@ export default class Player extends EventEmitter {
     // Promise.race with a timeout, and retry up to 3 times with exponential
     // backoff. On final failure, we DON'T leave the channel — the player
     // stays connected and can retry later (critical for 24/7 channels).
-    const PUBLISH_TIMEOUT_MS = 15_000; // 15s timeout per attempt
+    const PUBLISH_TIMEOUT_MS = 8_000;  // 8s timeout per attempt (was 15s)
     const MAX_RETRIES = 3;
     const BASE_BACKOFF_MS = 2_000;
 
@@ -696,6 +700,11 @@ export default class Player extends EventEmitter {
         ]);
 
         logger.mediaplayer(`[Player] MediaPlayer published successfully on attempt ${attempt}`);
+        this._publishFailCount = 0;
+        if (this._publishRetryTimer) {
+          clearTimeout(this._publishRetryTimer);
+          this._publishRetryTimer = null;
+        }
         return true;
       } catch (e) {
         const msg = e?.message ?? String(e);
@@ -729,12 +738,50 @@ export default class Player extends EventEmitter {
         } else {
           // On final failure, DON'T leave the channel. The voice
           // connection is still alive — just the audio publishing failed.
-          // Leaving the channel on play failure causes 24/7 drops. The
-          // player can retry publishing when the next track is played.
+          // Schedule a self-healing retry so 24/7 channels recover automatically
+          // instead of staying silent forever.
+          this._publishFailCount = (this._publishFailCount ?? 0) + 1;
+          const SELF_HEAL_DELAY_MS = Math.min(30_000 * this._publishFailCount, 120_000);
+
           logger.error(
-            `[Player] All ${MAX_RETRIES} publishToRoom attempts failed — ` +
-            `staying in channel (connection still alive). Playback will retry on next track.`
+            `[Player] All ${MAX_RETRIES} publishToRoom attempts failed (fail #${this._publishFailCount}) — ` +
+            `scheduling self-heal retry in ${SELF_HEAL_DELAY_MS / 1000}s.`
           );
+
+          // Clear any existing retry timer before scheduling a new one
+          if (this._publishRetryTimer) {
+            clearTimeout(this._publishRetryTimer);
+            this._publishRetryTimer = null;
+          }
+
+          this._publishRetryTimer = setTimeout(async () => {
+            this._publishRetryTimer = null;
+            if (this._destroyed || this.leaving) return;
+            const roomStillAlive = this.connection?.room?.isConnected ?? false;
+            if (!roomStillAlive) {
+              // Room died — emit autoleave so the 24/7 handler can respawn
+              logger.warn("[Player] Self-heal: room no longer connected — emitting autoleave.");
+              this.emit("autoleave");
+              return;
+            }
+            logger.player(`[Player] Self-heal: retrying publishToRoom for channel ${this._channelId ?? "?"}`);
+            const ok = await this._ensureMediaPlayer().catch(() => false);
+            if (ok) {
+              this._publishFailCount = 0;
+              logger.player("[Player] Self-heal: publishToRoom succeeded — resuming playback.");
+              if (!this.queue.isEmpty() && !this.queue.getCurrent()) {
+                this.playNext();
+              }
+            } else {
+              logger.warn("[Player] Self-heal: publishToRoom still failing — will try full reconnect.");
+              // Final resort: destroy this player and let GatewayHandler's
+              // 24/7 protection respawn it via _spawnPlayer.
+              if (!this._destroyed && !this.leaving) {
+                this.emit("autoleave");
+              }
+            }
+          }, SELF_HEAL_DELAY_MS);
+
           return false;
         }
       }
@@ -1422,6 +1469,11 @@ export default class Player extends EventEmitter {
         clearTimeout(this._recoveryTimer);
         this._recoveryTimer = null;
       }
+      if (this._publishRetryTimer) {
+        clearTimeout(this._publishRetryTimer);
+        this._publishRetryTimer = null;
+      }
+      this._publishFailCount = 0;
       this._recoveryPending = false;
       this._isRecovering = false;
       this._recoveryAttempts = 0;

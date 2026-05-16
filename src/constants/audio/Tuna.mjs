@@ -1,4 +1,5 @@
-import { https } from "follow-redirects";
+import pkg from "follow-redirects";
+const { https } = pkg;
 
 class Tuna {
   apiKey = null;
