@@ -93,10 +93,11 @@ function isIgnorableMediaStateError(err) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class PlayerWorkerPool {
-  constructor(size, workerPath) {
+  constructor(size, workerPath, nlConfig = {}) {
     this._size       = size;
     this._workerPath = workerPath;
-    this._workers    = [];   // { worker, busy }
+    this._nlConfig   = nlConfig;
+    this._workers    = [];   // { worker, busy, _currentJobKey }
     this._queue      = [];   // { jobKey, msg, resolve, reject, onMessage }
     this._pending    = new Map(); // jobKey → { resolve, reject, onMessage }
     this._jobCounter = 0;
@@ -106,9 +107,14 @@ class PlayerWorkerPool {
 
   _spawn() {
     const worker = new Worker(this._workerPath, {
-      workerData: { poolMode: true }
+      workerData: {
+        poolMode: true,
+        // Pass NodeLink config so the module-level nlGet fallback
+        // has the correct host/port/password if _nlGet is ever null.
+        data: { nodelink: this._nlConfig ?? {} }
+      }
     });
-    const entry = { worker, busy: false };
+    const entry = { worker, busy: false, _currentJobKey: null };
 
     worker.on("message", (raw) => {
       try {
@@ -121,11 +127,13 @@ class PlayerWorkerPool {
         } else if (event === "finished") {
           this._pending.delete(jobKey);
           entry.busy = false;
+          entry._currentJobKey = null;
           cb.resolve(data);
           this._drain();
         } else if (event === "error") {
           this._pending.delete(jobKey);
           entry.busy = false;
+          entry._currentJobKey = null;
           cb.reject(new Error(String(data)));
           this._drain();
         }
@@ -133,15 +141,22 @@ class PlayerWorkerPool {
     });
 
     worker.on("error", (err) => {
-      // Release any job currently assigned to this worker
-      for (const [key, cb] of this._pending) {
-        cb.reject(err);
-        this._pending.delete(key);
+      // Release only the job currently assigned to THIS worker.
+      // Iterating all _pending would incorrectly reject in-flight jobs
+      // from other workers, leaving those workers stuck busy=true forever.
+      if (entry._currentJobKey != null) {
+        const cb = this._pending.get(entry._currentJobKey);
+        if (cb) {
+          this._pending.delete(entry._currentJobKey);
+          cb.reject(err);
+        }
+        entry._currentJobKey = null;
       }
       entry.busy = false;
       // Replace dead worker
       this._workers.splice(this._workers.indexOf(entry), 1);
       this._spawn();
+      this._drain();
     });
 
     worker.on("exit", (code) => {
@@ -162,6 +177,7 @@ class PlayerWorkerPool {
 
   _dispatch(entry, { jobKey, msg, resolve, reject, onMessage }) {
     entry.busy = true;
+    entry._currentJobKey = jobKey;
     this._pending.set(jobKey, { resolve, reject, onMessage });
     entry.worker.postMessage(JSON.stringify(msg));
   }
@@ -455,7 +471,7 @@ export default class Player extends EventEmitter {
       // Determine which channel to check the mode for
       const matchChannel = channels.includes(homeChannel) ? homeChannel
           : channels.includes(currentChannel) ? currentChannel
-          : null;
+              : null;
       if (!matchChannel) return "off";
 
       // Per-channel mode lookup: each channel can have its own on/auto/off
@@ -709,7 +725,7 @@ export default class Player extends EventEmitter {
         if (isTransient && attempt < MAX_PUBLISH_RETRIES) {
           const backoffMs = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
           logger.warn(
-            `[Player] publishToRoom failed (attempt ${attempt}/${MAX_PUBLISH_RETRIES}): ${msg} — retrying in ${backoffMs / 1000}s`
+              `[Player] publishToRoom failed (attempt ${attempt}/${MAX_PUBLISH_RETRIES}): ${msg} — retrying in ${backoffMs / 1000}s`
           );
           await new Promise(resolve => setTimeout(resolve, backoffMs));
 
@@ -1868,7 +1884,7 @@ export default class Player extends EventEmitter {
   _getWorkerPool() {
     if (!this._workerPool) {
       const workerPath = new URL("./worker.mjs", import.meta.url);
-      this._workerPool = new PlayerWorkerPool(2, workerPath);
+      this._workerPool = new PlayerWorkerPool(2, workerPath, this._nl);
     }
     return this._workerPool;
   }
