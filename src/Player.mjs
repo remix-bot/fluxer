@@ -709,7 +709,10 @@ export default class Player extends EventEmitter {
     for (let attempt = 1; attempt <= MAX_PUBLISH_RETRIES; attempt++) {
       try {
         this._mediaPlayer = new MediaPlayer();
-        this._mediaPlayer.setMaxListeners(0);
+        // Set a reasonable max listeners cap instead of 0 (unlimited).
+        // Unlimited masks real event emitter leaks; 20 is enough for
+        // the finish/error/playStream listeners plus dashboard forwarding.
+        this._mediaPlayer.setMaxListeners(20);
         await this._mediaPlayer.publishToRoom(room);
         logger.mediaplayer("[Player] MediaPlayer published successfully");
         return true;

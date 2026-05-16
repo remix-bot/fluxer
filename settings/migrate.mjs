@@ -10,13 +10,22 @@ const config = JSON.parse(fs.readFileSync(new URL("../config.json", import.meta.
 const sm = new RemoteSettingsManager(config.mysql, "./storage/defaults.json");
 const rsm = new RemoteSettingsManager(config.mysql, "./storage/defaults.json");
 
-// Capture entries after the source manager has loaded from DB.
-let servers = [];
-sm.on("ready", () => {
-  servers = sm.guilds.entries();
-});
+// Ensure source manager is fully loaded BEFORE starting migration.
+// Previously, rsm's "ready" could fire before sm finished loading,
+// resulting in an empty servers array and a silent no-op migration.
+let migrationStarted = false;
 
-rsm.on("ready", async () => {
+sm.on("ready", async () => {
+  if (migrationStarted) return;
+  migrationStarted = true;
+
+  const servers = [...sm.guilds.entries()];
+
+  // Wait for the destination manager to be ready too
+  if (!rsm.guilds.size) {
+    await new Promise(resolve => rsm.on("ready", resolve));
+  }
+
   for (const [id, s] of servers) {
     logger.settings("[migrate] Processing server:", id);
     if (rsm.hasServer(id)) {

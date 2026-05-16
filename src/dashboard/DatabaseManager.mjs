@@ -1,5 +1,6 @@
 import { compare, genSalt, hash } from "bcryptjs";
 import { createPool } from "mysql2/promise";
+import { logger } from "../constants/Logger.mjs";
 
 /**
  * DatabaseManager — MySQL pool for dashboard login codes and API tokens.
@@ -13,6 +14,11 @@ export class DatabaseManager {
     this.db = createPool({
       connectionLimit: 15,
       ...config,
+    });
+    // Without this listener, unhandled pool-level errors (connection drops,
+    // timeouts) fire an unhandled 'error' event which crashes the process.
+    this.db.on("error", (err) => {
+      logger.error("[DashboardDB] MySQL pool error:", err.code ?? err.message);
     });
   }
 

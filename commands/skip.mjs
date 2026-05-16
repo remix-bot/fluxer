@@ -17,7 +17,7 @@ export async function run(message) {
   const skippedLink  = current ? (current.spotifyUrl || current.url || "") : "";
 
   const err = p.skip();
-  if (err && err.includes("nothing playing")) {
+  if (err) {
     const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(err);
     return message.reply({ embeds: [embed] });
   }

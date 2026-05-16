@@ -32,56 +32,67 @@ import { joinVoiceChannel, getVoiceManager } from "@fluxerjs/voice";
 import { logger } from "./Logger.mjs";
 
 {
-  const _originalConsoleLog = console.log;
-  console.log = function (...args) {
-    // Fast path: if the first arg is a string that looks like a pino JSON log
-    if (args.length === 1 && typeof args[0] === "string" && args[0].startsWith("{")) {
-      try {
-        const parsed = JSON.parse(args[0]);
-        // Drop pino logs from LiveKit SDK ("lk-rtc" name)
-        if (parsed.name === "lk-rtc") return;
-      } catch (_) {
-        // Not valid JSON — pass through
-      }
-    }
-    // Suppress LiveKit SDK's human-readable log lines:
-    //   [voice LiveKitRtc] connected to room
-    //   [voice LiveKitRtc] Room disconnected
-    //   [voice LiveKitRtc] emitting disconnect
-    //   [voice LiveKitRtc] Room reconnecting...
-    //   [voice LiveKitRtc] Room reconnected
-    if (args.length >= 1 && typeof args[0] === "string" && args[0].includes("[voice LiveKitRtc]")) {
-      return; // silently drop
-    }
-    _originalConsoleLog.apply(console, args);
-  };
+  // ── LiveKit SDK log suppression ──────────────────────────────────────────
+  // The LiveKit Node.js SDK (via pino) emits verbose JSON and human-readable
+  // log lines that flood the console. We monkey-patch console.log and
+  // process.stdout.write to silently drop lines from the "lk-rtc" logger.
+  //
+  // Guard: only patch once even if the module is imported multiple times
+  // (e.g. during hot-reload). The global symbol ensures idempotency.
+  if (!globalThis.__fluxerLiveKitLogPatchApplied) {
+    globalThis.__fluxerLiveKitLogPatchApplied = true;
 
-  // ── Also monkey-patch process.stdout.write ──────────────────────────────
-  // Pino writes directly to process.stdout.write, bypassing console.log
-  // entirely. This is the primary path for the JSON log lines like:
-  //   {"level":20,"time":1778784504183,"pid":961949,"name":"lk-rtc",...}
-  // We intercept these and silently drop them.
-  const _originalStdoutWrite = process.stdout.write.bind(process.stdout);
-  process.stdout.write = function (chunk, encoding, callback) {
-    // Only intercept string chunks that look like pino JSON logs
-    if (typeof chunk === "string" && chunk.startsWith("{")) {
-      try {
-        // Fast check: does it contain lk-rtc before full parse?
-        if (chunk.includes('"lk-rtc"')) {
-          const parsed = JSON.parse(chunk);
-          if (parsed.name === "lk-rtc") {
-            // Silently drop — call callback to signal "written" so pino doesn't stall
-            if (typeof encoding === "function") { encoding(); }
-            else if (typeof callback === "function") { callback(); }
-            return true;
-          }
+    const _originalConsoleLog = console.log;
+    console.log = function (...args) {
+      // Fast path: if the first arg is a string that looks like a pino JSON log
+      if (args.length === 1 && typeof args[0] === "string" && args[0].startsWith("{")) {
+        try {
+          const parsed = JSON.parse(args[0]);
+          // Drop pino logs from LiveKit SDK ("lk-rtc" name)
+          if (parsed.name === "lk-rtc") return;
+        } catch (_) {
+          // Not valid JSON — pass through
         }
-      } catch (_) {
-        // Not valid JSON — pass through
       }
-    }
-    return _originalStdoutWrite(chunk, encoding, callback);
-  };
+      // Suppress LiveKit SDK's human-readable log lines:
+      //   [voice LiveKitRtc] connected to room
+      //   [voice LiveKitRtc] Room disconnected
+      //   [voice LiveKitRtc] emitting disconnect
+      //   [voice LiveKitRtc] Room reconnecting...
+      //   [voice LiveKitRtc] Room reconnected
+      if (args.length >= 1 && typeof args[0] === "string" && args[0].includes("[voice LiveKitRtc]")) {
+        return; // silently drop
+      }
+      _originalConsoleLog.apply(console, args);
+    };
+
+    // ── Also monkey-patch process.stdout.write ──────────────────────────────
+    // Pino writes directly to process.stdout.write, bypassing console.log
+    // entirely. This is the primary path for the JSON log lines like:
+    //   {"level":20,"time":1778784504183,"pid":961949,"name":"lk-rtc",...}
+    // We intercept these and silently drop them.
+    const _originalStdoutWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = function (chunk, encoding, callback) {
+      // Only intercept string chunks that look like pino JSON logs
+      if (typeof chunk === "string" && chunk.startsWith("{")) {
+        try {
+          // Fast check: does it contain lk-rtc before full parse?
+          if (chunk.includes('"lk-rtc"')) {
+            const parsed = JSON.parse(chunk);
+            if (parsed.name === "lk-rtc") {
+              // Silently drop — call callback to signal "written" so pino doesn't stall
+              if (typeof encoding === "function") { encoding(); }
+              else if (typeof callback === "function") { callback(); }
+              return true;
+            }
+          }
+        } catch (_) {
+          // Not valid JSON — pass through
+        }
+      }
+      return _originalStdoutWrite(chunk, encoding, callback);
+    };
+  }
 }
 
 // ConnectionState enum values for reference:

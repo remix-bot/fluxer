@@ -210,8 +210,8 @@ export class Utils {
    * @returns {string} Human readable size
    */
   static formatBytes(bytes, decimals = 2) {
-    if (!bytes || bytes === 0) return "0 Bytes";
-    if (bytes < 0) return "Unknown";
+    if (bytes === 0) return "0 Bytes";
+    if (!bytes || bytes < 0 || !isFinite(bytes)) return "Unknown";
 
     const k = 1024;
     const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB"];
@@ -453,7 +453,7 @@ export class Utils {
       progress = this.clamp(current, 0, 1);
     }
 
-    const position = Math.floor(progress * length);
+    const position = Math.min(Math.floor(progress * length), length - 1);
     let bar = "";
 
     for (let i = 0; i < length; i++) {

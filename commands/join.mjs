@@ -94,8 +94,7 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
       })();
       const embed = new EmbedBuilder().setColor(getGlobalColor())
           .setDescription(this.t(message, "responses.join.autoLeaveInactive247", { channel: activeChannelId, prefix }));
-      message.channel.send({ embeds: [embed] });
-
+      message.channel.send({ embeds: [embed] }).catch(() => {});
       setTimeout(async () => {
         try {
           if (typeof this._spawnPlayer === "function") {
@@ -110,9 +109,9 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
       const prefix = (() => {
         try { return this._commands?.getPrefix?.(guildId) ?? "%"; } catch (_) { return "%"; }
       })();
-      const embed = new EmbedBuilder().setColor(getGlobalColor())
+      const embed2 = new EmbedBuilder().setColor(getGlobalColor())
           .setDescription(this.t(message, "responses.join.autoLeaveInactive", { channel: activeChannelId }));
-      message.channel.send({ embeds: [embed] });
+      message.channel.send({ embeds: [embed2] }).catch(() => {});
     }
   });
 
@@ -162,7 +161,7 @@ export const command = new CommandBuilder()
             .setRequired(false)
     );
 
-export function run(message, data) {
+export async function run(message, data) {
   // Check if a channel argument was provided (mention like <#123456>, bare ID, or name)
   const rawArg = data?.get?.("channel")?.value?.trim?.() ?? null;
 

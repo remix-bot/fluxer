@@ -17,6 +17,31 @@ import { VoiceStateCache } from "./src/constants/VoiceStateCache.mjs";
 import { GatewayHandler } from "./src/GatewayHandler.mjs";
 import { LastFmManager } from "./src/LastFmManager.mjs";
 
+/**
+ * Create a backward-compatible "bot view" wrapper around VoiceStateCache.
+ *
+ * The old code used separate Maps for observedVoiceUsers and observedVoiceBots.
+ * VoiceStateCache merged both into one object, but the default iterator/size
+ * only exposes human users.  This wrapper provides the Map-like interface that
+ * iterates BOT entries instead, so code that does `for (const [k, v] of observedVoiceBots)`
+ * still gets bot data, not human data.
+ */
+function createBotView(voiceCache) {
+  return {
+    get size()            { return voiceCache.botLocations.size; },
+    get(key)              { return voiceCache.botLocations.get(key); },
+    set(key, val)         { voiceCache.setBotUser(key, val); },
+    has(key)              { return voiceCache.botLocations.has(key); },
+    delete(key)           { voiceCache.deleteBotUser(key); },
+    forEach(fn)           { for (const [k, v] of voiceCache.iterateBotUsers()) fn(v, k, this); },
+    *[Symbol.iterator]()  { yield* voiceCache.iterateBotUsers(); },
+    *entries()            { yield* voiceCache.iterateBotUsers(); },
+    *keys()               { for (const [k] of voiceCache.iterateBotUsers()) yield k; },
+    *values()             { for (const [, v] of voiceCache.iterateBotUsers()) yield v; },
+    get observedVoiceBotsSize() { return voiceCache.botLocations.size; },
+  };
+}
+
 export class Remix {
   constructor() {
     // ── Config ───────────────────────────────────────────────────────────────
@@ -166,10 +191,14 @@ export class Remix {
     this.voiceCache = new VoiceStateCache({ maxUsers: 50_000, maxBots: 10_000 });
 
     // ── Backward-compat aliases (deprecated — use voiceCache directly) ───
-    // These expose the same .size / .get / .set / .has / .delete / iteration
-    // interface so existing code (dashboard, commands) continues to work.
-    this.observedVoiceUsers = this.voiceCache;
-    this.observedVoiceBots  = this.voiceCache;
+    // observedVoiceUsers iterates HUMAN users only (backward compat).
+    // observedVoiceBots iterates BOT users only (backward compat).
+    // Previously both pointed to the same VoiceStateCache, which caused
+    // observedVoiceBots to return human users instead of bots.
+    // We create thin wrapper objects that delegate to the correct
+    // internal indexes while preserving the Map-like interface.
+    this.observedVoiceUsers = this.voiceCache; // default iterator = human users
+    this.observedVoiceBots  = createBotView(this.voiceCache);
 
     // ── Caches ───────────────────────────────────────────────────────────────
     // _announcementChannelCache: TTL-based (5 min), auto-evicts stale entries
@@ -324,13 +353,14 @@ export class Remix {
     const ALONE_CHECK_INTERVAL = this.T.aloneCheckInterval;
     setInterval(() => {
       for (const [mapKey, player] of this.players.playerMap) {
+        let channelId;
         try {
           const guildId = player._guildId;
           if (!guildId) continue;
 
           if (player._isJoining) continue;
 
-          const channelId   = player._channelId ?? mapKey;
+          channelId   = player._channelId ?? mapKey;
           const cleanChanId = String(channelId).replace(/\D/g, "");
           if (!cleanChanId) continue;
 
@@ -517,11 +547,22 @@ export class Remix {
       return null;
     };
 
+    // ── Git commit hash ───────────────────────────────────────────────────────
+    // Must be computed BEFORE comLink is built so the hash is available.
+    const __dirname = import.meta.dirname;
+    try {
+      this.comHash     = childProcess.execSync("git rev-parse --short HEAD", { cwd: __dirname, timeout: 3000 }).toString().trim();
+      this.comHashLong = childProcess.execSync("git rev-parse HEAD",         { cwd: __dirname, timeout: 3000 }).toString().trim();
+    } catch {
+      logger.warn("[Git] comhash error");
+      this.comHash     = "Newest";
+      this.comHashLong = null;
+    }
+
     this.comLink = "https://github.com/remix-bot/fluxer/commit/" + (this.comHashLong ?? "");
 
     // ── Commands ──────────────────────────────────────────────────────────────
     const loader    = new CommandLoader(commands, this);
-    const __dirname = import.meta.dirname;
     const dir       = path.join(__dirname, "commands");
     logger.commands("Started loading commands.");
     loader.loadFromDir(dir)
@@ -555,16 +596,6 @@ export class Remix {
           const failed = results.filter(r => r.status === "rejected").length;
           logger.commands(`Modules loaded (${succeeded} succeeded, ${failed} failed).`);
         });
-
-    // ── Git commit hash ───────────────────────────────────────────────────────
-    try {
-      this.comHash     = childProcess.execSync("git rev-parse --short HEAD", { cwd: __dirname, timeout: 3000 }).toString().trim();
-      this.comHashLong = childProcess.execSync("git rev-parse HEAD",         { cwd: __dirname, timeout: 3000 }).toString().trim();
-    } catch {
-      logger.warn("[Git] comhash error");
-      this.comHash     = "Newest";
-      this.comHashLong = null;
-    }
 
     // ── Login ─────────────────────────────────────────────────────────────────
     client.login(config.token);

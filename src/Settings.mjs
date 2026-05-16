@@ -55,7 +55,7 @@ export class RemoteSettingsManager extends EventEmitter {
       logger.error("[DB] MySQL pool error:", err.code ?? err.message);
     });
     if (defaultsPath) this.loadDefaultsSync(defaultsPath);
-    this.load();
+    this.load().catch(err => logger.error("[Settings] Initial load failed:", err?.message ?? err));
   }
 
   query(q) {
@@ -75,13 +75,17 @@ export class RemoteSettingsManager extends EventEmitter {
     }
     this._loadAttempts = 0;
     res.results.forEach((r) => {
-      const server = new ServerSettings(r.id, this);
-      // mysql2 may return JSON columns as already-parsed objects;
-      // only JSON.parse when the value is still a string.
-      const parsed = (typeof r.data === "string") ? JSON.parse(r.data) : r.data;
-      server.deserialize(parsed);
-      server.checkDefaults(this.defaults);
-      this.guilds.set(server.id, server);
+      try {
+        const server = new ServerSettings(r.id, this);
+        // mysql2 may return JSON columns as already-parsed objects;
+        // only JSON.parse when the value is still a string.
+        const parsed = (typeof r.data === "string") ? JSON.parse(r.data) : r.data;
+        server.deserialize(parsed);
+        server.checkDefaults(this.defaults);
+        this.guilds.set(server.id, server);
+      } catch (e) {
+        logger.error("[Settings] Failed to parse settings for server", r.id, ":", e.message);
+      }
     });
     this.emit("ready");
   }
@@ -113,10 +117,16 @@ export class RemoteSettingsManager extends EventEmitter {
   }
 
   loadDefaultsSync(filePath) {
-    const d = fs.readFileSync(filePath, "utf8");
-    const parsed = JSON.parse(d);
-    this.descriptions = parsed.descriptions;
-    this.defaults = parsed.values;
+    try {
+      const d = fs.readFileSync(filePath, "utf8");
+      const parsed = JSON.parse(d);
+      this.descriptions = parsed.descriptions;
+      this.defaults = parsed.values;
+    } catch (e) {
+      logger.error("[Settings] Failed to load defaults from", filePath, ":", e.message);
+      this.descriptions = {};
+      this.defaults = {};
+    }
   }
 
   async saveAsync() {

@@ -152,9 +152,10 @@ export async function run(msg, data) {
 
   // Batch keywords
   if (target === "commands") {
-    const results = await Promise.all(
-        this.handler.commands.map(c => reloadCommand(this, msg, c.name))
-    );
+    const results = [];
+    for (const c of [...this.handler.commands]) {
+      results.push(await reloadCommand(this, msg, c.name));
+    }
     return showResults(msg, results, "Commands");
   }
 
@@ -173,11 +174,16 @@ export async function run(msg, data) {
   }
 
   if (target === "all") {
-    const results = await Promise.all([
-      ...this.handler.commands.map(c => reloadCommand(this, msg, c.name)),
-      ...allModuleFiles("src").map(m => reloadModule(this, msg, m.file, m.label)),
-      ...allModuleFiles("audio").map(m => reloadModule(this, msg, m.file, m.label)),
-    ]);
+    const results = [];
+    for (const c of [...this.handler.commands]) {
+      results.push(await reloadCommand(this, msg, c.name));
+    }
+    for (const m of allModuleFiles("src")) {
+      results.push(await reloadModule(this, msg, m.file, m.label));
+    }
+    for (const m of allModuleFiles("audio")) {
+      results.push(await reloadModule(this, msg, m.file, m.label));
+    }
     return showResults(msg, results, "Everything");
   }
 

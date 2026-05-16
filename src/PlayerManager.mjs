@@ -810,9 +810,16 @@ export class PlayerManager {
     const pendingScrobble = this._pendingScrobbleTimers.get(activeChannelId);
     if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this._pendingScrobbleTimers.delete(activeChannelId); }
     if (activeChannelId !== cleanChannelId) this.playerMap.delete(cleanChannelId);
-    await msg.reply(mkEmbed(this._t(msg, "responses._common.successfullyLeft")));
-    await player.leave();
+    // Leave the voice channel BEFORE confirming to the user.
+    // Previously, the reply was sent first, which meant the user saw "successfully left"
+    // even if player.leave() subsequently threw an error.
+    try {
+      await player.leave();
+    } catch (e) {
+      logger.warn("[PlayerManager] leave() error (non-fatal):", e.message);
+    }
     player.destroy();
+    await msg.reply(mkEmbed(this._t(msg, "responses._common.successfullyLeft")));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

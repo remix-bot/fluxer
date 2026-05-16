@@ -17,7 +17,7 @@ export const command = function() {
   if (!this.config.radio?.length) return null;
   return new CommandBuilder()
       .setName("radio")
-      .setDescription("Play a radio station. Use `%radio list` to browse all stations.", "commands.radio")
+      .setDescription("Play a radio station. Use `${prefix}radio list` to browse all stations.", "commands.radio")
       .addAliases("r")
       .setCategory("music")
       .addTextOption(o =>
@@ -137,13 +137,14 @@ async function playStation(ctx, msg, radio, editTarget = null) {
   if (current?.type === "radio" || hasRadioQueued) await p.switchRadio(radio);
   else p.playRadio(radio);
 
+  const prefix = (() => { try { return ctx.handler?.getPrefix?.(msg?.channel?.channel?.guildId ?? msg?.message?.guildId) ?? "%"; } catch (_) { return "%"; } })();
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
     .setTitle(`📻 ${radio.detailedName}`)
     .setDescription(
       `**[${radio.detailedName}](${radio.author.url})**\n\n` +
       `${radio.description}\n\n` +
-      `_Use \`%skip\` to stop the radio, or \`%radio list\` to switch stations._`
+      `_Use \`${prefix}skip\` to stop the radio, or \`${prefix}radio list\` to switch stations._`
     )
     ;
 

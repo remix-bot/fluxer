@@ -48,7 +48,7 @@ export async function run(msg) {
   const player = await this.getPlayer(msg, false, false, false);
   if (!player) return;
 
-  const timeout = this.config?.timers?.playerSessionTimeout ?? this.config.playerAFKTimeout ?? 300000;
+  const timeout = Math.max(60_000, this.config?.timers?.playerSessionTimeout ?? this.config.playerAFKTimeout ?? 300000);
   const controlsLayout = [
     [CONTROLS.prev, CONTROLS.play, CONTROLS.pause, CONTROLS.stop, CONTROLS.next],
     [CONTROLS.loop, CONTROLS.shuffle, CONTROLS.volDown, CONTROLS.volUp, CONTROLS.lyrics],
@@ -91,7 +91,7 @@ export async function run(msg) {
       progressBar = PROGRESS.start + PROGRESS.empty.repeat(20) + PROGRESS.end;
     }
 
-    const volPercent = Math.round((player.preferredVolume || 1) * 100);
+    const volPercent = Math.round((player.preferredVolume ?? 1) * 100);
     const volBars = Math.ceil(volPercent / 10);
     const volumeBar = "█".repeat(volBars) + "░".repeat(10 - volBars);
 
@@ -349,13 +349,13 @@ export async function run(msg) {
           break;
 
         case "voldown": {
-          const newVolDown = Utils.clamp((player.preferredVolume || 1) - 0.1, 0, 1);
+          const newVolDown = Utils.clamp((player.preferredVolume ?? 1) - 0.1, 0, 1);
           reply = player.setVolume(newVolDown);
           break;
         }
 
         case "volup": {
-          const newVolUp = Utils.clamp((player.preferredVolume || 1) + 0.1, 0, 1);
+          const newVolUp = Utils.clamp((player.preferredVolume ?? 1) + 0.1, 0, 1);
           reply = player.setVolume(newVolUp);
           break;
         }

@@ -105,15 +105,29 @@ export class VoiceStateCache {
       // ── Update location map ────────────────────────────────────────────
       locations.set(uKey, { channelId: cleanChannel, guildId: cleanGuild, userId: cleanUser });
 
-      // ── LRU: move to front ─────────────────────────────────────────────
-      const idx = lruKeys.indexOf(uKey);
-      if (idx !== -1) lruKeys.splice(idx, 1);
-      lruKeys.unshift(uKey);
+      // ── LRU: move to most-recently-used position ──────────────────────
+      // JavaScript Maps maintain insertion order, so delete + re-insert
+      // is O(1) amortized instead of O(n) with indexOf + splice on an array.
+      // We keep the _lruUserKeys / _lruBotKeys arrays as fast eviction queues
+      // but use the Map's own key order for O(1) move-to-front.
+      if (locations.has(uKey)) {
+        // Re-insert to move to end (most recently used) — O(1)
+        locations.delete(uKey);
+        locations.set(uKey, { channelId: cleanChannel, guildId: cleanGuild, userId: cleanUser });
+      }
 
       // ── Evict if over cap ──────────────────────────────────────────────
-      while (lruKeys.length > maxEntries) {
-        const evictKey = lruKeys.pop();
-        if (evictKey === uKey) continue; // don't evict the entry we just added
+      // Use the Map's insertion order to find the oldest entry (first key).
+      // This is O(1) per eviction instead of popping from an array.
+      while (locations.size > maxEntries) {
+        const evictKey = locations.keys().next().value;
+        if (evictKey === uKey) {
+          // Don't evict the entry we just added — re-insert at end and move to next
+          const evictVal = locations.get(evictKey);
+          locations.delete(evictKey);
+          locations.set(evictKey, evictVal);
+          continue;
+        }
         const evicted = locations.get(evictKey);
         if (evicted) {
           const evictCKey = VoiceStateCache.channelKey(evicted.guildId, evicted.channelId);
@@ -124,6 +138,9 @@ export class VoiceStateCache {
           }
           locations.delete(evictKey);
         }
+        // Also remove from LRU key list if present
+        const lruIdx = lruKeys.indexOf(evictKey);
+        if (lruIdx !== -1) lruKeys.splice(lruIdx, 1);
       }
     } else {
       // ── User left voice — remove from location map ─────────────────────

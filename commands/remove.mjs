@@ -13,7 +13,7 @@ export async function run(message, data) {
   const p = await this.getPlayer(message, false, false, false);
   if (!p) return;
   const index = data.get("index")?.value;
-  if (index == null) return message.reply("Please provide a valid queue position.");
+  if (index == null || index < 1) return message.replyEmbed("Queue position must be 1 or greater.");
   const res = p.remove(index - 1);
   message.replyEmbed(res);
 }

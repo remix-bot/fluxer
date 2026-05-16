@@ -768,7 +768,25 @@ export class GatewayHandler {
         }
       }
       if (nextKey && this._prevVoiceState.size >= 10_000 && !this._prevVoiceState.has(nextKey)) {
-        this._prevVoiceState.delete(this._prevVoiceState.keys().next().value);
+        const evictKey = this._prevVoiceState.keys().next().value;
+        const evictEntry = this._prevVoiceState.get(evictKey);
+        this._prevVoiceState.delete(evictKey);
+        // When evicting a stale prevVoiceState entry, also clean up the
+        // corresponding VoiceStateCache entry so it doesn't hold a stale
+        // channel mapping that could cause incorrect "channel move" detection
+        // on the next voice state update for that user.
+        if (evictEntry) {
+          const evictGuildId = evictEntry.guildId;
+          const evictUserId = evictKey.split(":")[1];
+          if (evictGuildId && evictUserId) {
+            const currentLoc = remix.voiceCache.getUserLocation(evictGuildId, evictUserId);
+            // Only remove from voiceCache if the user is still in the evicted
+            // channel — if they've moved since, the cache is already correct.
+            if (currentLoc && currentLoc.channelId === evictEntry.channelId) {
+              remix.voiceCache.updateUser({ guildId: evictGuildId, userId: evictUserId, channelId: null, isBot: false });
+            }
+          }
+        }
       }
       if (nextKey) this._prevVoiceState.set(nextKey, { channelId, guildId: guildId ?? prev?.guildId });
     } else {

@@ -562,7 +562,7 @@ if (workerData?.poolMode) {
           result = await jobUtils.getResults(jData.query, jData.resultCount, jData.provider, jData.trackMeta);
           break;
         case "search":
-          result = await jobUtils.getVideoData(String(jData), "ytm");
+          result = await jobUtils.getVideoData(jData.query ?? String(jData), "ytm");
           result = result?.data ?? null;
           break;
         default:
@@ -628,7 +628,7 @@ utils.on("error", (m) => {
         break;
       }
       case "search": {
-        const result = await utils.getVideoData(String(data), "ytm");
+        const result = await utils.getVideoData(data.query ?? String(data), "ytm");
         post("finished", result?.data ?? null);
         break;
       }

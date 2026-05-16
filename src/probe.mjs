@@ -1,6 +1,8 @@
 import ffprobe from "ffprobe-static";
 import { spawn } from "node:child_process";
 
+const PROBE_TIMEOUT_MS = 15_000; // 15 seconds
+
 export default function probe(file) {
   return new Promise((res, rej) => {
     // Pass args as an array — splitting a string on " " breaks paths that contain spaces.
@@ -13,15 +15,32 @@ export default function probe(file) {
     const proc = spawn(ffprobe.path, args);
     const chunks = [];
     const errChunks = [];
+    let settled = false;
+
+    const cleanup = () => {
+      settled = true;
+      clearTimeout(timeoutHandle);
+      try { proc.kill(); } catch (_) {}
+    };
+
+    const timeoutHandle = setTimeout(() => {
+      if (settled) return;
+      cleanup();
+      rej(new Error("[probe] ffprobe timed out after " + (PROBE_TIMEOUT_MS / 1000) + "s"));
+    }, PROBE_TIMEOUT_MS);
 
     proc.stdout.on("data", (d) => { chunks.push(d); });
     proc.stderr.on("data", (d) => { errChunks.push(d); });
 
     proc.on("error", (err) => {
+      if (settled) return;
+      cleanup();
       rej(new Error("[probe] Failed to spawn ffprobe: " + err.message));
     });
 
     proc.on("close", (code) => {
+      if (settled) return;
+      cleanup();
       try {
         const raw = Buffer.concat(chunks).toString();
         if (!raw.trim()) {

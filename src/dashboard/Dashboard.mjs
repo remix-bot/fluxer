@@ -53,17 +53,19 @@ export class Dashboard {
             const member = await guild.members.fetch(data.accessor).catch(() => null);
             const channels = await guild.fetchChannels(); // execute before converting the guild, see caching
             const server = Dashboard.convertServer(guild);
-            if (member) {
-              server.channels = server.channels.filter(c => {
-                const ch = channels.find(cl => c.id === cl.id);
-                return ch ? ch.permissionsFor?.(member)?.has?.("ViewChannel") ?? true : true;
-              });
-              server.voiceChannels = server.voiceChannels.filter(c => {
-                if (c.type !== 2) return false;
-                const ch = channels.find(cl => c.id === cl.id);
-                return ch ? ch.permissionsFor?.(member)?.has?.("ViewChannel") ?? true : true;
-              });
+            if (!member) {
+              // Non-member should not see any channels — return error instead of leaking all
+              return { error: "You are not a member of this server" };
             }
+            server.channels = server.channels.filter(c => {
+              const ch = channels.find(cl => c.id === cl.id);
+              return ch ? ch.permissionsFor?.(member)?.has?.("ViewChannel") ?? true : true;
+            });
+            server.voiceChannels = server.voiceChannels.filter(c => {
+              if (c.type !== 2) return false;
+              const ch = channels.find(cl => c.id === cl.id);
+              return ch ? ch.permissionsFor?.(member)?.has?.("ViewChannel") ?? true : true;
+            });
             return server;
           } catch (e) {
             const id = Utils.uid();
@@ -236,7 +238,7 @@ export class Dashboard {
         if (authErr) return { error: authErr };
         const vol = Number(params.data.volume);
         if (isNaN(vol) || vol < 0 || vol > 150) return { error: "Volume must be between 0 and 150" };
-        const msg = player.setVolume(vol);
+        const msg = player.setVolume(vol / 100);
         return { message: msg };
       }
 
@@ -310,7 +312,10 @@ export class Dashboard {
       }
 
       case "leave": {
-        const player = this._getPlayerById(params.data.channel);
+        // Support both params.data.channel and params.data.player for
+        // backward compatibility with different backend versions.
+        const playerId = params.data.channel ?? params.data.player;
+        const player = this._getPlayerById(playerId);
         if (!player) return { error: "Player not found" };
         const authErr = await this._authorizeUserInGuild(user, player._guildId);
         if (authErr) return { error: authErr };
@@ -324,9 +329,9 @@ export class Dashboard {
         if (player._dashboardUsers && player._dashboardUsers.length > 0) {
           // Publish a leave event for this user on the player channel
           try {
-            const pubChannel = this.remix.redis?.publisher ?? this.remix.redis;
+            const pubChannel = this.remix.dashboard?.redis?.client ?? this.remix.redis?.client;
             if (pubChannel && typeof pubChannel.publish === "function") {
-              pubChannel.publish("fluxer:player_" + params.data.channel, JSON.stringify({
+              pubChannel.publish("fluxer:player_" + playerId, JSON.stringify({
                 type: "leave",
                 data: String(user.id)
               }));
