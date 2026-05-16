@@ -131,31 +131,75 @@ export class LastFmManager {
 
   /**
    * Auto-migrate: add bot_id column to lastfm_users and lastfm_stats if missing.
+   * Uses NOT NULL DEFAULT '' because MySQL primary key columns cannot be NULL.
+   * If the column exists but isn't in the PK (previous failed migration with
+   * DEFAULT NULL), fix the NULL values and retry the PK update.
    */
   async _ensureBotIdColumn() {
     if (this._hasBotIdColumn) return;
     const pool = await this._getPool();
 
-    // Check lastfm_users
+    // ── lastfm_users ──────────────────────────────────────────────────────
     const [cols] = await pool.execute(
-      `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lastfm_users' AND COLUMN_NAME = 'bot_id'`
+      `SELECT COLUMN_NAME, IS_NULLABLE, COLUMN_KEY FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lastfm_users' AND COLUMN_NAME = 'bot_id'`
     );
     if (cols.length === 0) {
       logger.settings("[LastFm] Auto-migrating: adding bot_id column to lastfm_users...");
-      await pool.execute("ALTER TABLE `lastfm_users` ADD COLUMN `bot_id` VARCHAR(32) DEFAULT NULL");
+      // NOT NULL DEFAULT '' — PK columns can't be NULL in MySQL
+      await pool.execute("ALTER TABLE `lastfm_users` ADD COLUMN `bot_id` VARCHAR(32) NOT NULL DEFAULT ''");
+      // Claim existing rows for the current bot
+      if (this.botId) {
+        await pool.execute("UPDATE `lastfm_users` SET `bot_id` = ? WHERE `bot_id` = ''", [String(this.botId)]);
+      }
       await pool.execute("ALTER TABLE `lastfm_users` DROP PRIMARY KEY, ADD PRIMARY KEY (user_id, bot_id)");
       logger.settings("[LastFm] Auto-migration complete: lastfm_users.bot_id added.");
+    } else {
+      // Column exists — check if it's part of the PK
+      const colInfo = cols[0];
+      const isNullable = colInfo.IS_NULLABLE === 'YES';
+      const isPK = colInfo.COLUMN_KEY === 'PRI';
+      if (!isPK) {
+        logger.settings("[LastFm] Fixing lastfm_users.bot_id: adding to primary key...");
+        if (isNullable) {
+          await pool.execute("UPDATE `lastfm_users` SET `bot_id` = '' WHERE `bot_id` IS NULL");
+          await pool.execute("ALTER TABLE `lastfm_users` MODIFY COLUMN `bot_id` VARCHAR(32) NOT NULL DEFAULT ''");
+        }
+        if (this.botId) {
+          await pool.execute("UPDATE `lastfm_users` SET `bot_id` = ? WHERE `bot_id` = ''", [String(this.botId)]);
+        }
+        await pool.execute("ALTER TABLE `lastfm_users` DROP PRIMARY KEY, ADD PRIMARY KEY (user_id, bot_id)");
+        logger.settings("[LastFm] Fix complete: lastfm_users.bot_id added to primary key.");
+      }
     }
 
-    // Check lastfm_stats
+    // ── lastfm_stats ──────────────────────────────────────────────────────
     const [statsCols] = await pool.execute(
-      `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lastfm_stats' AND COLUMN_NAME = 'bot_id'`
+      `SELECT COLUMN_NAME, IS_NULLABLE, COLUMN_KEY FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lastfm_stats' AND COLUMN_NAME = 'bot_id'`
     );
     if (statsCols.length === 0) {
       logger.settings("[LastFm] Auto-migrating: adding bot_id column to lastfm_stats...");
-      await pool.execute("ALTER TABLE `lastfm_stats` ADD COLUMN `bot_id` VARCHAR(32) DEFAULT NULL");
+      await pool.execute("ALTER TABLE `lastfm_stats` ADD COLUMN `bot_id` VARCHAR(32) NOT NULL DEFAULT ''");
+      if (this.botId) {
+        await pool.execute("UPDATE `lastfm_stats` SET `bot_id` = ? WHERE `bot_id` = ''", [String(this.botId)]);
+      }
       await pool.execute("ALTER TABLE `lastfm_stats` DROP PRIMARY KEY, ADD PRIMARY KEY (id, bot_id)");
       logger.settings("[LastFm] Auto-migration complete: lastfm_stats.bot_id added.");
+    } else {
+      const colInfo = statsCols[0];
+      const isNullable = colInfo.IS_NULLABLE === 'YES';
+      const isPK = colInfo.COLUMN_KEY === 'PRI';
+      if (!isPK) {
+        logger.settings("[LastFm] Fixing lastfm_stats.bot_id: adding to primary key...");
+        if (isNullable) {
+          await pool.execute("UPDATE `lastfm_stats` SET `bot_id` = '' WHERE `bot_id` IS NULL");
+          await pool.execute("ALTER TABLE `lastfm_stats` MODIFY COLUMN `bot_id` VARCHAR(32) NOT NULL DEFAULT ''");
+        }
+        if (this.botId) {
+          await pool.execute("UPDATE `lastfm_stats` SET `bot_id` = ? WHERE `bot_id` = ''", [String(this.botId)]);
+        }
+        await pool.execute("ALTER TABLE `lastfm_stats` DROP PRIMARY KEY, ADD PRIMARY KEY (id, bot_id)");
+        logger.settings("[LastFm] Fix complete: lastfm_stats.bot_id added to primary key.");
+      }
     }
 
     this._hasBotIdColumn = true;

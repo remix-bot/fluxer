@@ -67,14 +67,23 @@ export class MySqlSettingsManager extends SettingsManager {
   }
 
   /**
-   * Check whether the `bot_id` column exists in the settings table.
-   * If it doesn't, auto-migrate by adding the column and updating the primary key.
+   * Check whether the `bot_id` column exists in the settings table AND is
+   * part of the primary key.  If the column is missing, auto-migrate by
+   * adding it (NOT NULL DEFAULT '') and updating the primary key to (id, bot_id).
+   * If the column exists but isn't in the PK (previous failed migration),
+   * fix the NULL values and retry the PK update.
+   *
+   * Key detail: MySQL primary key columns CANNOT be NULL.  The previous version
+   * used DEFAULT NULL which caused ALTER TABLE ... ADD PRIMARY KEY to fail
+   * silently, leaving the PK as just (id) and producing ER_DUP_ENTRY errors
+   * when two bots tried to INSERT rows for the same guild.
    */
   async _ensureBotIdColumn() {
     if (this._hasBotIdColumn) return;
 
+    // Check if bot_id column exists and its properties
     const res = await this.query(
-      `SELECT COLUMN_NAME FROM information_schema.COLUMNS `
+      `SELECT COLUMN_NAME, IS_NULLABLE, COLUMN_KEY FROM information_schema.COLUMNS `
       + `WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'settings' AND COLUMN_NAME = 'bot_id'`
     );
 
@@ -83,36 +92,88 @@ export class MySqlSettingsManager extends SettingsManager {
       return;
     }
 
-    if (res.results.length > 0) {
+    if (res.results.length === 0) {
+      // ── Column doesn't exist: add it and update PK ─────────────────────
+      logger.settings("[Settings] Auto-migrating: adding bot_id column to settings table...");
+
+      // NOT NULL DEFAULT '' — primary key columns can't be NULL in MySQL.
+      // Existing rows get bot_id = '' which we'll claim for the current bot.
+      const alterRes = await this.query(
+        `ALTER TABLE settings ADD COLUMN bot_id VARCHAR(32) NOT NULL DEFAULT ''`
+      );
+      if (alterRes.error) {
+        logger.error("[Settings] Failed to add bot_id column:", alterRes.error);
+        return;
+      }
+
+      // Claim all existing rows for the current bot before updating PK.
+      // This preserves existing settings (prefix, volume, etc.) instead of
+      // leaving them orphaned with bot_id = ''.
+      if (this.botId) {
+        await this.query(
+          `UPDATE settings SET bot_id = ${mysql.escape(String(this.botId))} WHERE bot_id = ''`
+        );
+      }
+
+      // Update primary key from (id) to (id, bot_id)
+      const pkRes = await this.query(
+        `ALTER TABLE settings DROP PRIMARY KEY, ADD PRIMARY KEY (id, bot_id)`
+      );
+      if (pkRes.error) {
+        logger.error("[Settings] Failed to update primary key:", pkRes.error);
+        return; // Don't set flag — bot_id features can't work without composite PK
+      }
+
+      this._hasBotIdColumn = true;
+      logger.settings("[Settings] Auto-migration complete: bot_id column added.");
+      return;
+    }
+
+    // ── Column already exists: verify it's in the primary key ─────────────
+    const colInfo = res.results[0];
+    const isNullable = colInfo.IS_NULLABLE === 'YES';
+    const isPrimaryKey = colInfo.COLUMN_KEY === 'PRI';
+
+    if (isPrimaryKey) {
+      // Column exists and is part of composite PK — all good
       this._hasBotIdColumn = true;
       return;
     }
 
-    // Auto-migrate
-    logger.settings("[Settings] Auto-migrating: adding bot_id column to settings table...");
+    // Column exists but is NOT in PK — the ALTER TABLE PK update must have
+    // failed previously (likely because the column had NULL values).
+    logger.settings("[Settings] Fixing bot_id column: adding to primary key...");
 
-    const alterRes = await this.query(
-      `ALTER TABLE settings ADD COLUMN bot_id VARCHAR(32) DEFAULT NULL`
-    );
-    if (alterRes.error) {
-      logger.error("[Settings] Failed to add bot_id column:", alterRes.error);
-      return;
+    // Step 1: Replace NULLs with empty string (PK columns can't be Null)
+    if (isNullable) {
+      await this.query(`UPDATE settings SET bot_id = '' WHERE bot_id IS NULL`);
+      await this.query(`ALTER TABLE settings MODIFY COLUMN bot_id VARCHAR(32) NOT NULL DEFAULT ''`);
     }
 
+    // Step 2: Claim unclaimed rows (bot_id = '') for the current bot
+    if (this.botId) {
+      await this.query(
+        `UPDATE settings SET bot_id = ${mysql.escape(String(this.botId))} WHERE bot_id = ''`
+      );
+    }
+
+    // Step 3: Update primary key
     const pkRes = await this.query(
       `ALTER TABLE settings DROP PRIMARY KEY, ADD PRIMARY KEY (id, bot_id)`
     );
     if (pkRes.error) {
       logger.error("[Settings] Failed to update primary key:", pkRes.error);
+      return; // Don't set flag — can't use bot_id without composite PK
     }
 
     this._hasBotIdColumn = true;
-    logger.settings("[Settings] Auto-migration complete: bot_id column added.");
+    logger.settings("[Settings] Fix complete: bot_id column added to primary key.");
   }
 
   /**
    * Set or update the bot ID used for database row isolation.
-   * Ensures the bot_id column exists (auto-migrates if needed), then reloads.
+   * Ensures the bot_id column exists (auto-migrates if needed), claims any
+   * unclaimed legacy rows, then reloads guild data filtered by the bot's ID.
    * @param {string} id
    */
   async setBotId(id) {
@@ -121,6 +182,17 @@ export class MySqlSettingsManager extends SettingsManager {
     if (changed) {
       if (this._loadPromise) await this._loadPromise;
       await this._ensureBotIdColumn();
+
+      // Claim any unclaimed legacy rows (bot_id = '') for this bot.
+      if (this._hasBotIdColumn && this.botId) {
+        const claimRes = await this.query(
+          `UPDATE settings SET bot_id = ${mysql.escape(String(this.botId))} WHERE bot_id = ''`
+        );
+        if (claimRes.results?.affectedRows > 0) {
+          logger.settings(`[Settings] Claimed ${claimRes.results.affectedRows} legacy row(s) for bot ${this.botId}`);
+        }
+      }
+
       this.guilds.clear();
       this._loadPromise = this.load();
       await this._loadPromise;
@@ -222,8 +294,10 @@ export class MySqlSettingsManager extends SettingsManager {
     const escapedId   = mysql.escape(id);
     const escapedData = mysql.escape(JSON.stringify(server.data));
     const bi = this._botIdInsert();
+    // INSERT IGNORE: if the row already exists (race condition or failed
+    // migration), silently skip instead of crashing with ER_DUP_ENTRY.
     const r = await this.query(
-        `INSERT INTO settings (id, data${bi.col}) VALUES (${escapedId}, ${escapedData}${bi.val})`
+        `INSERT IGNORE INTO settings (id, data${bi.col}) VALUES (${escapedId}, ${escapedData}${bi.val})`
     );
     if (r.error) logger.error("[Settings] create error:", r.error);
   }
