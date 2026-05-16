@@ -162,8 +162,10 @@ export async function run(message) {
   const lastfm = this.lastfm;
   const lastfmEnabled = lastfm?.enabled ?? false;
 
+  const cachedGuildCount = this.client.guilds.size;
+
   const shared = {
-    guildCount:  this.client.guilds.size,
+    guildCount:  cachedGuildCount,
     playerCount: getLivePlayerCount(this.players.playerMap),
     scrobbleCount: 0,
     linkedUsers: 0,
@@ -189,13 +191,28 @@ export async function run(message) {
   });
   const ping = Date.now() - start;
 
-  const [users, scrobbleCount, linkedUsers] = await Promise.all([
+  // Fetch the authoritative guild count from the API (same method the
+  // Dashboard uses for its "allServers" endpoint).  This returns the
+  // actual number of servers the bot is in, regardless of cache state.
+  // Falls back to the cached count if the API call fails.
+  const guildCountPromise = (async () => {
+    try {
+      if (typeof this.client.user?.fetchGuilds === "function") {
+        const guilds = await this.client.user.fetchGuilds();
+        return Array.isArray(guilds) ? guilds.length : cachedGuildCount;
+      }
+    } catch (_) { /* API unavailable — use cache */ }
+    return cachedGuildCount;
+  })();
+
+  const [users, scrobbleCount, linkedUsers, guildCount] = await Promise.all([
     getUserCount(this.client),
     scrobblePromise,
     linkedPromise,
+    guildCountPromise,
   ]);
 
   await msg.edit({
-    embeds: [buildEmbed((...a) => this.t(...a), message, { ...shared, userCount: users, scrobbleCount, linkedUsers, ping, loading: false })]
+    embeds: [buildEmbed((...a) => this.t(...a), message, { ...shared, guildCount, userCount: users, scrobbleCount, linkedUsers, ping, loading: false })]
   }).catch((err) => console.error("[stats] editEmbed failed:", err));
 }

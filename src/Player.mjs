@@ -443,8 +443,8 @@ export default class Player extends EventEmitter {
    * Get the 24/7 mode for this player's channel.
    * Returns "auto", "on", or "off".
    *
-   *   %247 auto: bot stays in voice always (disconnect + reboot rejoin)
-   *   %247 on:   bot stays in voice only on reboot (not on disconnect)
+   *   %247 auto: bot stays in voice always (never leaves, auto-rejoins on disconnect + reboot)
+   *   %247 on:   bot stays in voice always (never leaves due to inactivity, rejoins on reboot)
    *   %247 off:  bot leaves when inactive
    */
   _get247Mode() {
@@ -612,10 +612,18 @@ export default class Player extends EventEmitter {
     logger.inactivity(`[Player] Checking 24/7 mode for guild ${this._guildId}: ${mode}`);
 
     // %247 auto: bot always stays in voice, never start inactivity timer
-    // %247 on: bot leaves when alone, but rejoins on reboot — timer is allowed
+    // %247 on:  bot stays in voice permanently — never start inactivity timer
     // %247 off: bot leaves when alone — timer is allowed
-    if (mode === "auto") {
-      logger.inactivity(`[Player] 24/7 auto mode active for guild ${this._guildId}, skipping inactivity timer`);
+    if (mode === "auto" || mode === "on") {
+      logger.inactivity(`[Player] 24/7 ${mode} mode active for guild ${this._guildId}, skipping inactivity timer`);
+      return;
+    }
+
+    // Don't start the inactivity timer if there is a song currently playing
+    // or songs waiting in the queue — the bot should stay as long as there's
+    // music to play, even if no humans are currently in the channel.
+    if (this.queue?.getCurrent() || !this.queue?.isEmpty()) {
+      logger.inactivity(`[Player] Queue has songs for guild ${this._guildId}, skipping inactivity timer`);
       return;
     }
 
@@ -626,8 +634,15 @@ export default class Player extends EventEmitter {
 
     logger.inactivity(`[Player] Starting inactivity timer for guild ${this._guildId} (${this._inactivityLimit / 1000}s)`);
     this._inactivityTimer = setTimeout(() => {
-      if (this._get247Mode() === "auto") {
-        logger.inactivity("[Player] 24/7 auto mode enabled during inactivity wait, aborting leave");
+      // Re-check all conditions before leaving — they may have changed while
+      // the timer was running (user joined, 24/7 enabled, song queued, etc.)
+      const currentMode = this._get247Mode();
+      if (currentMode === "auto" || currentMode === "on") {
+        logger.inactivity(`[Player] 24/7 ${currentMode} mode enabled during inactivity wait, aborting leave`);
+        return;
+      }
+      if (this.queue?.getCurrent() || !this.queue?.isEmpty()) {
+        logger.inactivity("[Player] Song in queue during inactivity wait, aborting leave");
         return;
       }
       if (this._hasHumansInChannel()) {
@@ -1231,10 +1246,19 @@ export default class Player extends EventEmitter {
           return;
         }
         logger.error("[Player] Voice error:", err?.message ?? err);
+        const mode = this._get247Mode();
         this._stopMediaPlayer()
             .catch(() => {})
             .finally(() => {
-              if (!this.leaving && !this._destroyed) this.emit("autoleave");
+              if (this.leaving || this._destroyed) return;
+              // %247 on/auto: don't autoleave on voice errors — stop the media
+              // player but stay in the channel.  The GatewayHandler will
+              // detect the state change and schedule a rejoin if needed.
+              if (mode === "auto" || mode === "on") {
+                logger.inactivity(`[Player] Voice error in 24/7 ${mode} mode — staying in channel, not autoleaving`);
+                return;
+              }
+              this.emit("autoleave");
             });
       });
 
@@ -1245,18 +1269,17 @@ export default class Player extends EventEmitter {
         }
         if (!this.leaving && !this._destroyed) {
           const mode = this._get247Mode();
-          if (mode === "auto") {
-            // %247 auto: Do NOT emit autoleave on unexpected disconnect.
+          if (mode === "auto" || mode === "on") {
+            // %247 auto/on: Do NOT emit autoleave on unexpected disconnect.
             // The GatewayHandler will detect the bot's voice state change
             // and schedule a rejoin. Emitting autoleave here would cause
             // the player to be destroyed before the rejoin can be scheduled,
             // and creates a race condition where both Player.mjs AND
             // GatewayHandler try to handle the disconnect simultaneously.
-            logger.mediaplayer("[Player] Unexpected disconnect detected (24/7 auto) — stopping media player, GatewayHandler will schedule rejoin");
+            logger.mediaplayer(`[Player] Unexpected disconnect detected (24/7 ${mode}) — stopping media player, GatewayHandler will schedule rejoin`);
             this._stopMediaPlayer().catch(() => {});
           } else {
-            // %247 on or off: emit autoleave as normal.
-            // %247 on does NOT rejoin on disconnect (only on reboot).
+            // %247 off: emit autoleave as normal.
             logger.mediaplayer("[Player] Unexpected disconnect detected");
             this._stopMediaPlayer()
                 .catch(() => {})
@@ -1269,6 +1292,13 @@ export default class Player extends EventEmitter {
 
       connection.on("autoleave", () => {
         if (this.connection !== connection) return;
+        // Check 24/7 mode before forwarding the autoleave — for 24/7 channels
+        // the bot should never leave due to an empty room.
+        const mode = this._get247Mode();
+        if (mode === "auto" || mode === "on") {
+          logger.mediaplayer(`[Player] Auto-leave suppressed for 24/7 ${mode} channel (room empty but staying)`);
+          return;
+        }
         logger.mediaplayer("[Player] Auto-leave triggered by FluxerVoiceConnection (room empty)");
         if (!this.leaving && !this._destroyed) {
           this.emit("autoleave");
@@ -2103,6 +2133,17 @@ export default class Player extends EventEmitter {
     const room = this.connection.room;
     if (!room || !room.isConnected) {
       const cs = room?.connectionState;
+      const mode = this._get247Mode();
+      // For 24/7 channels, don't autoleave on dead room — put the song back
+      // and wait for the GatewayHandler to schedule a rejoin.
+      if (mode === "auto" || mode === "on") {
+        logger.mediaplayer(`[Player] Room not connected (isConnected: ${room?.isConnected}, connectionState: ${cs}) in 24/7 ${mode} mode — deferring autoleave, waiting for rejoin.`);
+        if (songData) {
+          this.queue.data.unshift(songData);
+          this.queue.current = null;
+        }
+        return;
+      }
       logger.mediaplayer(`[Player] Room not connected (isConnected: ${room?.isConnected}, connectionState: ${cs}) — emitting autoleave.`);
       if (songData) {
         this.queue.data.unshift(songData);

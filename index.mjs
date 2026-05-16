@@ -745,9 +745,25 @@ export class Remix {
 
     // Handle autoleave — clean up the player map and destroy the player
     player.on("autoleave", () => {
+      // Safety guard: don't destroy 24/7 players or players with humans/queue
+      const mode = player._get247Mode();
+      if (mode === "auto" || mode === "on") {
+        logger.inactivity(`[_spawnPlayer] autoleave suppressed for 24/7 ${mode} channel ${cleanChannelId} (guild ${cleanGuildId})`);
+        return;
+      }
+      if (player._hasHumansInChannel()) {
+        logger.inactivity(`[_spawnPlayer] autoleave suppressed — humans in channel ${cleanChannelId}`);
+        return;
+      }
+      if (player.queue?.getCurrent() || !player.queue?.isEmpty()) {
+        logger.inactivity(`[_spawnPlayer] autoleave suppressed — queue has songs in channel ${cleanChannelId}`);
+        return;
+      }
+
       const activeChId = String(player._channelId ?? cleanChannelId).replace(/\D/g, "") || cleanChannelId;
       const homeChId   = String(player._home247Channel ?? activeChId).replace(/\D/g, "") || activeChId;
       this.players.playerMap.delete(activeChId);
+      this.players._unindexPlayer?.(cleanGuildId, activeChId);
       if (activeChId !== cleanChannelId) this.players.playerMap.delete(cleanChannelId);
       if (homeChId !== activeChId) this.players.playerMap.delete(homeChId);
       player.destroy();

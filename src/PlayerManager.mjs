@@ -907,6 +907,26 @@ export class PlayerManager {
           ? get247ChannelMode(this.settings.getServer(guildId), matchChannel)
           : "off";
 
+      // ── Safety guard: re-validate before destroying ────────────────────
+      // Even if autoleave was emitted, don't destroy the player if:
+      //   1. 24/7 mode is "on" or "auto" (bot should never leave)
+      //   2. Humans are still in the channel
+      //   3. There are songs in the queue or currently playing
+      // This catches cases where the autoleave event was emitted from a
+      // code path that didn't check these conditions (e.g. old timers).
+      if (mode247 === "auto" || mode247 === "on") {
+        logger.inactivity(`[PlayerManager] autoleave suppressed for 24/7 ${mode247} channel ${activeChannelId} (guild ${guildId})`);
+        return;
+      }
+      if (player._hasHumansInChannel()) {
+        logger.inactivity(`[PlayerManager] autoleave suppressed — humans still in channel ${activeChannelId} (guild ${guildId})`);
+        return;
+      }
+      if (player.queue?.getCurrent() || !player.queue?.isEmpty()) {
+        logger.inactivity(`[PlayerManager] autoleave suppressed — queue has songs in channel ${activeChannelId} (guild ${guildId})`);
+        return;
+      }
+
       // Remove player from map and destroy
       this.playerMap.delete(activeChannelId);
       this._unindexPlayer(player._guildId, activeChannelId);
