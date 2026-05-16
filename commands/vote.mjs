@@ -26,7 +26,7 @@ export const command = new CommandBuilder()
   )
   .addStringOption(o =>
     o.setName("id")
-      .setDescription("The server or bot slug (uses config default if not provided)")
+      .setDescription("The server or bot ID or slug (uses config default if not provided)")
       .setRequired(false)
   )
   .addNumberOption(o =>
@@ -49,7 +49,7 @@ function noResourceId(type, prefix) {
   return {
     embeds: [new EmbedBuilder()
       .setColor("#ff0000")
-      .setDescription(`No ${type} ID configured. Provide it with \`${prefix}vote check ${type} <slug>\` or set it in config.json.`)]
+      .setDescription(`No ${type} ID configured. Provide it with \`${prefix}vote check ${type} <id-or-slug>\` or set it in config.json.`)]
   };
 }
 
