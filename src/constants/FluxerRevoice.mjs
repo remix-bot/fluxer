@@ -163,7 +163,7 @@ export class FluxerVoiceConnection extends EventEmitter {
   async disconnect() {
     if (this._destroyed) return;
     // Mark this as an intentional disconnect so the RoomEvent.Disconnected
-    // handler knows not to trigger recovery
+    // handler can log it correctly
     if (this._voice && this.channelId) {
       this._voice.markIntentionalDisconnect(this.channelId);
       // Prefer a channel-scoped gateway leave before tearing down the room.
@@ -225,51 +225,20 @@ export class FluxerRevoice extends EventEmitter {
   connections  = new Map();
   users        = new Map();
 
-  // Guild-level join mutex: kept for per-guild cooldown tracking (401 cooldowns
-  // and minimum join intervals), but actual join serialization is handled by
-  // the global queue above. The per-guild queue was insufficient because the
-  // Fluxer gateway can't handle concurrent joins from DIFFERENT guilds either.
   /** @type {Map<string, Promise>} */
   _guildJoinQueue = new Map();
 
   // ── Global join queue ──────────────────────────────────────────────────────
-  // The per-guild queue serializes joins within the same guild, but the Fluxer
-  // gateway also struggles when many DIFFERENT guilds are joined simultaneously.
-  // During boot recovery, 10+ channels can be spawned within seconds, each
-  // triggering VOICE_STATE_UPDATE + VOICE_SERVER_UPDATE + LiveKit connect.
-  // The gateway's Erlang backend can't process this flood fast enough, causing
-  // 401 Unauthorized errors on guilds that were scheduled later.
-  //
-  // The global queue ensures that only ONE join is in-flight at a time across
-  // ALL guilds, with a delay between each to let the gateway catch up.
   /** @type {Promise} Global join serializer — only one join at a time across all guilds */
   _globalJoinQueue = Promise.resolve();
   /** @type {number} Minimum delay between ANY two joins (ms), even across guilds.
    *  This delay runs AFTER the previous join completes and BEFORE the next
    *  one starts, giving the Fluxer gateway time to clean up the previous
-   *  voice session. 500ms is sufficient; the per-guild _guildMinJoinInterval
-   *  provides additional safety for rapid same-guild rejoins. */
+   *  voice session. */
   _globalJoinDelay = 500;
 
   /** @type {Set<string>} Channel IDs where disconnect is expected (bot-initiated) */
   _intentionalDisconnects = new Set();
-
-  /** @type {Map<string, number>} Guild ID → timestamp of last successful join.
-   *  Used to add an extra safety delay when the previous join in this guild
-   *  was very recent (< 5 seconds), which is the window where 401 errors
-   *  are most likely due to the gateway not having fully processed the
-   *  previous session's voice state. */
-  _guildLastJoinTime = new Map();
-
-  /** @type {number} Minimum time between guild joins (ms) — enforced on top of
-   *  the per-join delay. If a new join is requested within this window, we
-   *  wait the remaining time before proceeding. 2s is enough with the global
-   *  join queue providing additional serialization. */
-  _guildMinJoinInterval = 2000;
-
-  /** @type {Map<string, number>} Guild IDs that recently had a 401 error.
-   *  Used to add an even longer backoff before retrying joins in that guild. */
-  _guild401Cooldown = new Map(); // guildId → timestamp when cooldown expires
 
   /** @type {FluxerRevoice|null} Singleton instance */
   static _instance = null;
@@ -304,7 +273,7 @@ export class FluxerRevoice extends EventEmitter {
 
   /**
    * Mark a channel as expecting an intentional disconnect so the
-   * RoomEvent.Disconnected handler does not trigger recovery.
+   * RoomEvent.Disconnected handler can log it correctly.
    * @param {string} channelId
    */
   markIntentionalDisconnect(channelId) {
@@ -414,7 +383,7 @@ export class FluxerRevoice extends EventEmitter {
   async _destroyStaleConnection(channelId, existing) {
     // 1. Remove from map immediately so no other code can get this dead ref
     this.connections.delete(channelId);
-    // Mark as intentional so the LiveKit disconnect handler doesn't trigger recovery
+    // Mark as intentional so the LiveKit disconnect handler logs correctly
     this.markIntentionalDisconnect(channelId);
     const staleGuildId = this._resolveGuildForChannel(channelId);
     this._leaveGateway(channelId, staleGuildId);
@@ -438,10 +407,6 @@ export class FluxerRevoice extends EventEmitter {
     existing._destroyed = true;
     existing._connected = false;
     try { existing.removeAllListeners(); } catch (_) {}
-
-    // 4. Brief delay to let the gateway process the leave before we rejoin.
-    //    250ms is enough since the join() operation itself adds _globalJoinDelay.
-    await new Promise(r => setTimeout(r, 250));
   }
 
   /**
@@ -456,29 +421,6 @@ export class FluxerRevoice extends EventEmitter {
    * @returns {Promise<FluxerVoiceConnection>}
    */
   async join(channelId, _leaveIfEmpty = false) {
-    // ── Global join queue (TRUE serialization) ───────────────────────────
-    // Serialize ALL joins so that only ONE join is in-flight at a time across
-    // the entire bot. The Fluxer gateway's Erlang backend cannot handle
-    // concurrent VOICE_STATE_UPDATE + VOICE_SERVER_UPDATE flows — it returns
-    // 401 Unauthorized when LiveKit tokens haven't propagated for the previous
-    // join yet.
-    //
-    // PREVIOUS APPROACH (broken): Add a 2s delay between starts, but don't
-    // wait for the previous join to complete. Multiple joins were in-flight
-    // simultaneously, causing 401 errors.
-    //
-    // NEW APPROACH: The global queue wraps the ENTIRE join() call. Each join
-    // must FULLY COMPLETE (including LiveKit room connection) before the next
-    // one starts, plus a 3-second gap between joins to give the gateway time
-    // to clean up the previous voice session.
-    //
-    // The promise chain works like this:
-    //   _globalJoinQueue = Promise.resolve()           // initial
-    //   _globalJoinQueue = prev.then(() => joinA())    // joinA runs after prev
-    //   _globalJoinQueue = prev.then(() => joinB())    // joinB runs after joinA completes
-    //
-    // Each caller awaits its own turn, which only resolves after the full
-    // join operation completes (or throws).
     const joinOperation = async () => {
       // Small gap between joins to let the gateway process the previous
       // session's cleanup. This runs BEFORE the actual join logic.
@@ -503,60 +445,12 @@ export class FluxerRevoice extends EventEmitter {
    * @returns {Promise<FluxerVoiceConnection>}
    */
   async _joinInternal(channelId, _leaveIfEmpty = false) {
-    // Resolve the guild ID for this channel so we can serialize joins per guild.
-    // This prevents the 401 Unauthorized race condition that occurs when
-    // multiple channels in the same guild are joined simultaneously.
+    // Resolve the guild ID for this channel
     let guildId = null;
     try {
       const ch = this.client.channels?.get?.(channelId);
       guildId = ch?.guildId ?? ch?.guild?.id ?? null;
     } catch (_) {}
-
-    // Per-guild cooldown checks (still useful for same-guild rapid rejoins
-    // from recovery or user commands, even though the global queue prevents
-    // concurrent joins)
-    if (guildId) {
-      // Additional safety: if this guild was joined very recently, wait
-      // until the minimum interval has elapsed. This prevents the rapid
-      // rejoin that causes 401 Unauthorized errors.
-      const lastJoin = this._guildLastJoinTime.get(guildId) ?? 0;
-      const elapsed = Date.now() - lastJoin;
-      if (elapsed < this._guildMinJoinInterval) {
-        const extraWait = this._guildMinJoinInterval - elapsed;
-        logger.player(
-          `[FluxerRevoice] Guild ${guildId} was joined ${elapsed}ms ago — ` +
-          `waiting additional ${extraWait}ms to avoid 401 race`
-        );
-        await new Promise(r => setTimeout(r, extraWait));
-      }
-
-      // If this guild recently had a 401 error, wait for the cooldown.
-      const cooldownExpiry = this._guild401Cooldown.get(guildId) ?? 0;
-      const cooldownRemaining = cooldownExpiry - Date.now();
-      if (cooldownRemaining > 0) {
-        if (cooldownRemaining > 30_000) {
-          throw new Error(
-            `Guild ${guildId} has active 401 cooldown (${Math.round(cooldownRemaining / 1000)}s remaining) — ` +
-            `aborting join for channel ${channelId} to avoid guaranteed failure. `
-          );
-        }
-        logger.player(
-          `[FluxerRevoice] Guild ${guildId} has 401 cooldown — ` +
-          `waiting ${Math.round(cooldownRemaining / 1000)}s before attempting join`
-        );
-        await new Promise(r => setTimeout(r, cooldownRemaining));
-      }
-
-      // Re-check cooldown after waiting
-      const recheckExpiry = this._guild401Cooldown.get(guildId) ?? 0;
-      const recheckRemaining = recheckExpiry - Date.now();
-      if (recheckRemaining > 30_000) {
-        throw new Error(
-          `Guild ${guildId} 401 cooldown re-activated during wait — ` +
-          `aborting join for channel ${channelId}.`
-        );
-      }
-    }
 
     if (this.connections.has(channelId)) {
       const existing = this.connections.get(channelId);
@@ -601,21 +495,11 @@ export class FluxerRevoice extends EventEmitter {
     try {
       nativeConnection = await joinVoiceChannel(this.client, channel);
     } catch (e) {
-      // If the error is 401 Unauthorized, set a cooldown for this guild
-      // so subsequent join attempts wait longer before retrying.
       if (e.message?.includes("401") || e.message?.includes("Unauthorized")) {
         const gId = channelGuildId ?? this._resolveGuildForChannel(channelId);
-        if (gId) {
-          // Reduced cooldown from 15s to 5s. 15s was too aggressive —
-          // it blocked all join attempts for the guild for too long, causing
-          // BootRecovery to fail entirely. 5s is enough for the gateway to
-          // clean up the stale voice session.
-          this._guild401Cooldown.set(gId, Date.now() + 5_000);
-          logger.warn(
-            `[FluxerRevoice] 401 error for channel ${channelId} — ` +
-            `setting 5s cooldown for guild ${gId}`
-          );
-        }
+        logger.warn(
+          `[FluxerRevoice] 401 error for channel ${channelId} in guild ${gId ?? "unknown"}`
+        );
       }
       throw new Error(`Fluxer voice join failed for ${channelId}: ${e.message}`);
     }
@@ -624,7 +508,7 @@ export class FluxerRevoice extends EventEmitter {
       throw new Error(`Fluxer voice join returned null for ${channelId}`);
     }
 
-    logger.player(`[FluxerRevoice] Gateway join successful, extracting LiveKit room...`);
+    logger.player(`[FluxerRevoice] Gateway join successful for ${channelId}`);
 
     // The @fluxerjs/voice connection wraps a LiveKit Room.
     // Extract it so we can use it with revoice.js's MediaPlayer.
@@ -700,18 +584,6 @@ export class FluxerRevoice extends EventEmitter {
 
     logger.player(`[FluxerRevoice] LiveKit room ready (isConnected: ${finalConnected}, connectionState: ${stateLabel(finalCS)})`);
 
-    // Record the successful join time for this guild so future joins
-    // can enforce the minimum interval and avoid 401 races.
-    // Clear any 401 cooldown for this guild since the join succeeded.
-    // Try both the resolved channelGuildId and the pre-resolved guildId
-    // to ensure the cooldown is properly cleared even if channelGuildId
-    // couldn't be resolved from the channel object.
-    const clearIds = new Set([channelGuildId, guildId].filter(Boolean));
-    for (const gId of clearIds) {
-      this._guildLastJoinTime.set(gId, Date.now());
-      this._guild401Cooldown.delete(gId);
-    }
-
     // Create our FluxerVoiceConnection wrapper
     const connection = new FluxerVoiceConnection(channelId, this, {
       room,
@@ -725,7 +597,7 @@ export class FluxerRevoice extends EventEmitter {
     room.on(RoomEvent.Disconnected, (reason) => {
       const isIntentional = this._intentionalDisconnects.has(String(channelId));
       const reasonLabel = isIntentional ? "intentional" : (reason ?? "unexpected");
-      logger.player(`[FluxerRevoice] Room disconnected: ${reasonLabel}${isIntentional ? " (bot-initiated, recovery suppressed)" : ""}`);
+      logger.player(`[FluxerRevoice] Room disconnected: ${reasonLabel}`);
       this._intentionalDisconnects.delete(String(channelId));
       connection._connected = false;
       connection._destroyed = true;
@@ -744,57 +616,14 @@ export class FluxerRevoice extends EventEmitter {
         if (nativeConnection && typeof nativeConnection.disconnect === "function") {
           try { nativeConnection.disconnect(); } catch (_) {}
         }
-
-        // Auto-rejoin on unexpected disconnect (serverLeave) ──
-        // Per the Fluxer.js Voice guide: "If using LiveKit, the server may
-        // emit serverLeave. Listen and reconnect if needed." When the LiveKit
-        // room disconnects unexpectedly (token expiry, server restart, network
-        // blip), we attempt to rejoin the same channel after a short delay.
-        // The rejoin triggers a fresh VOICE_STATE_UPDATE → VOICE_SERVER_UPDATE
-        // flow, giving us a new LiveKit token. The global join queue ensures
-        // we don't collide with other in-flight joins.
-        if (channelGuildId) {
-          const rejoinDelay = 3_000; // 3s delay to let the gateway settle
-          logger.player(
-            `[FluxerRevoice] Scheduling auto-rejoin for channel ${channelId} ` +
-            `in ${rejoinDelay}ms after unexpected disconnect`
-          );
-          setTimeout(async () => {
-            try {
-              // Check if the bot was intentionally disconnected in the meantime
-              if (this._intentionalDisconnects.has(String(channelId))) {
-                logger.player(`[FluxerRevoice] Skipping auto-rejoin — intentional disconnect detected for ${channelId}`);
-                return;
-              }
-              // Check if another connection already exists (e.g. user ran !join)
-              if (this.connections.has(channelId)) {
-                logger.player(`[FluxerRevoice] Skipping auto-rejoin — connection already exists for ${channelId}`);
-                return;
-              }
-              logger.player(`[FluxerRevoice] Auto-rejoining channel ${channelId}...`);
-              await this.join(channelId);
-              logger.player(`[FluxerRevoice] Auto-rejoin succeeded for channel ${channelId}`);
-            } catch (e) {
-              logger.warn(
-                `[FluxerRevoice] Auto-rejoin failed for channel ${channelId}: ${e?.message ?? e}. ` +
-                `BootRecovery will retry on next restart.`
-              );
-            }
-          }, rejoinDelay);
-        }
       }
 
       connection.emit("disconnect");
     });
 
-    room.on(RoomEvent.Reconnecting, () => {
-      logger.player("[FluxerRevoice] Room reconnecting...");
-    });
-
-    room.on(RoomEvent.Reconnected, () => {
-      logger.player("[FluxerRevoice] Room reconnected");
-      connection._connected = true;
-    });
+    // No automatic reconnection handling — if the LiveKit room disconnects
+    // unexpectedly, the connection is considered dead. The caller (Player.mjs)
+    // will emit "autoleave" and the user must manually rejoin if desired.
 
     room.on(RoomEvent.ParticipantConnected, (participant) => {
       const userId = participant?.identity ?? participant?.sid;

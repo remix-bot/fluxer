@@ -349,12 +349,8 @@ export default class Player extends EventEmitter {
   // Join mutex — prevents concurrent join() calls from racing each other
   _isJoining           = false;
 
-  // destroyed flag — prevents recovery/playback/worker spawn after destroy()
+  // destroyed flag — prevents playback/worker spawn after destroy()
   _destroyed           = false;
-
-  // publishToRoom self-healing — scheduled retry timer and consecutive fail count
-  _publishRetryTimer   = null;
-  _publishFailCount    = 0;
 
   // NodeLink config (kept for direct stream URL building; session managed by moonlink)
   _nl = {
@@ -395,7 +391,7 @@ export default class Player extends EventEmitter {
     // revoice.js shared instance — injected by PlayerManager
     this._revoice = opts.revoice ?? null;
 
-    // Robust session sync that handles reconnection and stale sessions
+    // Robust session sync that handles stale sessions
     if (this._moonlink) {
       this._onMoonlinkReady = (sessionId) => {
         const oldId = this._nl.sessionId;
@@ -417,13 +413,29 @@ export default class Player extends EventEmitter {
   // 24/7 Mode Check
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /**
+   * Check if 24/7 mode is enabled for this player's channel.
+   * Returns true for both "on" and "auto" modes.
+   */
   _is247Enabled() {
-    if (!this._guildId) return false;
+    return this._get247Mode() !== "off";
+  }
+
+  /**
+   * Get the 24/7 mode for this player's channel.
+   * Returns "auto", "on", or "off".
+   *
+   *   %247 auto: bot stays in voice always (disconnect + reboot rejoin)
+   *   %247 on:   bot stays in voice only on reboot (not on disconnect)
+   *   %247 off:  bot leaves when inactive
+   */
+  _get247Mode() {
+    if (!this._guildId) return "off";
 
     const checkSettings = (set) => {
-      if (!set?.get) return false;
+      if (!set?.get) return "off";
       const raw = set.get("stay_247");
-      if (!raw || raw === "none") return false;
+      if (!raw || raw === "none") return "off";
 
       const channels = Array.isArray(raw)
           ? raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
@@ -442,17 +454,16 @@ export default class Player extends EventEmitter {
       const matchChannel = channels.includes(homeChannel) ? homeChannel
           : channels.includes(currentChannel) ? currentChannel
           : null;
-      if (!matchChannel) return false;
+      if (!matchChannel) return "off";
 
       // Per-channel mode lookup: each channel can have its own on/auto/off
-      const mode = get247ChannelMode(set, matchChannel);
-      return mode === "on" || mode === "auto";
+      return get247ChannelMode(set, matchChannel);
     };
 
     if (this.settingsMgr?.getServer) return checkSettings(this.settingsMgr.getServer(this._guildId));
     if (this.settings?.get)          return checkSettings(this.settings);
     if (this.client?.settings?.getServer) return checkSettings(this.client.settings.getServer(this._guildId));
-    return false;
+    return "off";
   }
 
   /**
@@ -478,6 +489,7 @@ export default class Player extends EventEmitter {
     return null;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
   // ═══════════════════════════════════════════════════════════════════════════
   // Volume Restore
   // ═══════════════════════════════════════════════════════════════════════════
@@ -578,11 +590,14 @@ export default class Player extends EventEmitter {
     this._stopInactivityTimer();
     if (this._inactivityLimit <= 0) return;
 
-    const is247 = this._is247Enabled();
-    logger.inactivity(`[Player] Checking 24/7 mode for guild ${this._guildId}: ${is247}`);
+    const mode = this._get247Mode();
+    logger.inactivity(`[Player] Checking 24/7 mode for guild ${this._guildId}: ${mode}`);
 
-    if (is247) {
-      logger.inactivity(`[Player] 24/7 mode active for guild ${this._guildId}, skipping inactivity timer`);
+    // %247 auto: bot always stays in voice, never start inactivity timer
+    // %247 on: bot leaves when alone, but rejoins on reboot — timer is allowed
+    // %247 off: bot leaves when alone — timer is allowed
+    if (mode === "auto") {
+      logger.inactivity(`[Player] 24/7 auto mode active for guild ${this._guildId}, skipping inactivity timer`);
       return;
     }
 
@@ -593,8 +608,8 @@ export default class Player extends EventEmitter {
 
     logger.inactivity(`[Player] Starting inactivity timer for guild ${this._guildId} (${this._inactivityLimit / 1000}s)`);
     this._inactivityTimer = setTimeout(() => {
-      if (this._is247Enabled()) {
-        logger.inactivity("[Player] 24/7 mode enabled during inactivity wait, aborting leave");
+      if (this._get247Mode() === "auto") {
+        logger.inactivity("[Player] 24/7 auto mode enabled during inactivity wait, aborting leave");
         return;
       }
       if (this._hasHumansInChannel()) {
@@ -608,9 +623,6 @@ export default class Player extends EventEmitter {
 
   _stopInactivityTimer() {
     // Also cancel any pending inactivity check that Player.join() scheduled.
-    // This is important after recovery: reseedVoiceStatesForChannel() calls
-    // _stopInactivityTimer() when it finds humans in the channel, but
-    // Player.join() may have already scheduled a 3-second delayed check.
     // Clearing the flag prevents that delayed check from restarting the timer.
     this._pendingInactivityCheck = false;
     if (this._inactivityTimer) {
@@ -670,123 +682,47 @@ export default class Player extends EventEmitter {
     // re-check after async stop — player may have been destroyed
     if (this._destroyed) return false;
 
-    // publishToRoom with timeout and retry ──
-    // publishToRoom has no internal timeout and can hang indefinitely if the
-    // LiveKit server is slow or the network is congested. We wrap it in a
-    // Promise.race with a timeout, and retry up to 3 times with exponential
-    // backoff. On final failure, we DON'T leave the channel — the player
-    // stays connected and can retry later (critical for 24/7 channels).
-    const PUBLISH_TIMEOUT_MS = 8_000;  // 8s timeout per attempt (was 15s)
-    const MAX_RETRIES = 3;
-    const BASE_BACKOFF_MS = 2_000;
+    // Retry logic for transient failures like track publication timeouts.
+    // LiveKit can timeout when the server is overloaded (e.g. during boot
+    // recovery with many channels). Retry with exponential backoff.
+    const MAX_PUBLISH_RETRIES = 3;
+    const BASE_RETRY_DELAY_MS = 3_000;
 
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      // Re-check room state before each attempt
-      if (!room.isConnected || this._destroyed) {
-        logger.mediaplayer(`[Player] Room disconnected or player destroyed before attempt ${attempt} — aborting`);
-        return false;
-      }
-
+    for (let attempt = 1; attempt <= MAX_PUBLISH_RETRIES; attempt++) {
       try {
         this._mediaPlayer = new MediaPlayer();
         this._mediaPlayer.setMaxListeners(0);
-
-        // Race publishToRoom against a timeout
-        await Promise.race([
-          this._mediaPlayer.publishToRoom(room),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`publishToRoom timed out after ${PUBLISH_TIMEOUT_MS}ms`)), PUBLISH_TIMEOUT_MS)
-          ),
-        ]);
-
-        logger.mediaplayer(`[Player] MediaPlayer published successfully on attempt ${attempt}`);
-        this._publishFailCount = 0;
-        if (this._publishRetryTimer) {
-          clearTimeout(this._publishRetryTimer);
-          this._publishRetryTimer = null;
-        }
+        await this._mediaPlayer.publishToRoom(room);
+        logger.mediaplayer("[Player] MediaPlayer published successfully");
         return true;
       } catch (e) {
         const msg = e?.message ?? String(e);
-        const isTransient = msg.includes("engine is closed") ||
-            msg.includes("engine: connection error");
-        const isTimeout = msg.includes("timed out");
+        const isTransient = msg.includes("track publication timed out")
+            || msg.includes("publishToRoom failed")
+            || msg.includes("internal error");
 
-        if (isTransient) {
-          logger.mediaplayer(`[Player] publishToRoom transient fail on attempt ${attempt} (room mid-teardown): ${msg}`);
-        } else if (isTimeout) {
-          logger.warn(`[Player] publishToRoom timed out on attempt ${attempt}/${MAX_RETRIES}: ${msg}`);
-        } else {
-          logger.error(`[Player] publishToRoom failed on attempt ${attempt}/${MAX_RETRIES}: ${msg}`);
-        }
-
-        // Clean up the failed MediaPlayer
         try { this._mediaPlayer?.stop?.(); } catch (_) {}
         this._mediaPlayer = null;
 
-        // If the room disconnected mid-attempt, don't retry
-        if (!room.isConnected || this._destroyed) {
-          logger.mediaplayer(`[Player] Room disconnected during publish attempt — aborting retries`);
-          return false;
-        }
-
-        // If we have more retries left, wait with backoff before retrying
-        if (attempt < MAX_RETRIES) {
-          const backoff = Math.min(BASE_BACKOFF_MS * Math.pow(2, attempt - 1), 10_000);
-          logger.mediaplayer(`[Player] Retrying publishToRoom in ${backoff}ms...`);
-          await new Promise(r => setTimeout(r, backoff));
-        } else {
-          // On final failure, DON'T leave the channel. The voice
-          // connection is still alive — just the audio publishing failed.
-          // Schedule a self-healing retry so 24/7 channels recover automatically
-          // instead of staying silent forever.
-          this._publishFailCount = (this._publishFailCount ?? 0) + 1;
-          const SELF_HEAL_DELAY_MS = Math.min(30_000 * this._publishFailCount, 120_000);
-
-          logger.error(
-            `[Player] All ${MAX_RETRIES} publishToRoom attempts failed (fail #${this._publishFailCount}) — ` +
-            `scheduling self-heal retry in ${SELF_HEAL_DELAY_MS / 1000}s.`
+        if (isTransient && attempt < MAX_PUBLISH_RETRIES) {
+          const backoffMs = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+          logger.warn(
+            `[Player] publishToRoom failed (attempt ${attempt}/${MAX_PUBLISH_RETRIES}): ${msg} — retrying in ${backoffMs / 1000}s`
           );
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
 
-          // Clear any existing retry timer before scheduling a new one
-          if (this._publishRetryTimer) {
-            clearTimeout(this._publishRetryTimer);
-            this._publishRetryTimer = null;
+          // Re-check room state before retrying
+          if (this._destroyed || !room.isConnected) {
+            logger.mediaplayer("[Player] Room disconnected during publish retry — aborting");
+            return false;
           }
-
-          this._publishRetryTimer = setTimeout(async () => {
-            this._publishRetryTimer = null;
-            if (this._destroyed || this.leaving) return;
-            const roomStillAlive = this.connection?.room?.isConnected ?? false;
-            if (!roomStillAlive) {
-              // Room died — emit autoleave so the 24/7 handler can respawn
-              logger.warn("[Player] Self-heal: room no longer connected — emitting autoleave.");
-              this.emit("autoleave");
-              return;
-            }
-            logger.player(`[Player] Self-heal: retrying publishToRoom for channel ${this._channelId ?? "?"}`);
-            const ok = await this._ensureMediaPlayer().catch(() => false);
-            if (ok) {
-              this._publishFailCount = 0;
-              logger.player("[Player] Self-heal: publishToRoom succeeded — resuming playback.");
-              if (!this.queue.isEmpty() && !this.queue.getCurrent()) {
-                this.playNext();
-              }
-            } else {
-              logger.warn("[Player] Self-heal: publishToRoom still failing — will try full reconnect.");
-              // Final resort: destroy this player and let GatewayHandler's
-              // 24/7 protection respawn it via _spawnPlayer.
-              if (!this._destroyed && !this.leaving) {
-                this.emit("autoleave");
-              }
-            }
-          }, SELF_HEAL_DELAY_MS);
-
-          return false;
+          continue;
         }
+
+        logger.error(`[Player] publishToRoom failed: ${msg}`);
+        return false;
       }
     }
-
     return false;
   }
 
@@ -1063,21 +999,7 @@ export default class Player extends EventEmitter {
       logger.player(`[Player] NodeLink loadStream PCM active`);
       // Raw PCM from NodeLink — tell FFmpeg the input format
       const pcmInputOpts = ["-f", "s16le", "-ar", "48000", "-ac", "2"];
-      try {
-        return await this._streamViaRevoice(url, pcmInputOpts);
-      } catch (err) {
-        const msg = err?.message ?? String(err ?? "");
-        if (msg.includes("HTTP ")) {
-          logger.warn(`[Player] NodeLink loadStream failed (${msg}), falling back to trackstream URL mode`);
-          const parsed = new URL(url);
-          const encodedTrack = parsed.searchParams.get("encodedTrack");
-          if (!encodedTrack) throw err;
-          const nlBase = `http://${this._nl.host}:${this._nl.port}`;
-          const fallbackUrl = `${nlBase}/v4/trackstream?encodedTrack=${encodeURIComponent(encodedTrack)}`;
-          return this._streamUrl(fallbackUrl);
-        }
-        throw err;
-      }
+      return await this._streamViaRevoice(url, pcmInputOpts);
     }
 
     try {
@@ -1113,34 +1035,21 @@ export default class Player extends EventEmitter {
         logger.player(`[Player] Already in channel: ${channelId}`);
         return;
       }
-      logger.mediaplayer(`[Player] Connection not connected, reconnecting...`);
+      // Connection is dead — clean up. No auto-reconnect; the caller
+      // must explicitly re-join if they want to reconnect.
+      logger.player(`[Player] Dead connection detected for ${channelId}, cleaning up`);
       try { this.connection.removeAllListeners(); } catch (_) {}
-      try { await this.connection.disconnect(); } catch (_) {}
 
-      // Send guild-scoped gateway leave signal so the gateway knows we left.
-      // Without this, joinVoiceChannel() may not get VOICE_SERVER_UPDATE.
-      // IMPORTANT: Never use unscoped updateVoiceState(null, opts) — it
-      // disconnects ALL guilds' voice connections.
-      try {
-        const vm = getVoiceManager(this.client);
-        if (vm && typeof vm.updateVoiceState === "function") {
-          const guildIdForLeave = this._guildId ?? this._resolveGuildId();
-          if (guildIdForLeave) {
-            try {
-              vm.updateVoiceState(guildIdForLeave, null, { self_deaf: false, self_mute: false });
-            } catch (_) {
-              try { vm.updateVoiceState(guildIdForLeave, null); } catch (_2) {}
-            }
-          }
-        }
-      } catch (_) {}
-
-      // Remove stale connection from FluxerRevoice's map
+      // Use FluxerRevoice's channel-specific leave instead of raw
+      // vm.updateVoiceState(guildId, null) which nukes ALL guild channels.
       if (this._revoice && this._channelId) {
+        try { this._revoice.markIntentionalDisconnect(this._channelId); } catch (_) {}
+        try { this._revoice._leaveGateway(this._channelId, this._guildId ?? this._resolveGuildId()); } catch (_) {}
         try { this._revoice.deleteConnection(this._channelId); } catch (_) {}
       }
 
-      this.connection = null;
+      try { await this.connection.disconnect(); } catch (_) {}
+      this.connection   = null;
       this._mediaPlayer = null;
     }
 
@@ -1152,38 +1061,23 @@ export default class Player extends EventEmitter {
       if (this.connection) {
         logger.mediaplayer("[Player] Cleaning up existing connection before join");
         try { this.connection.removeAllListeners(); } catch (_) {}
+
+        // Use FluxerRevoice's channel-specific leave instead of raw
+        // vm.updateVoiceState(guildId, null) which nukes ALL guild channels.
+        if (this._revoice && this._channelId) {
+          try { this._revoice.markIntentionalDisconnect(this._channelId); } catch (_) {}
+          try { this._revoice._leaveGateway(this._channelId, this._guildId ?? this._resolveGuildId()); } catch (_) {}
+          try { this._revoice.deleteConnection(this._channelId); } catch (_) {}
+        }
+
         try {
           await this.connection.disconnect();
         } catch (_) {}
 
-        // Send guild-scoped gateway leave signal for the old channel so the
-        // gateway processes the leave before we join a new/different channel.
-        // IMPORTANT: Never use unscoped updateVoiceState(null, opts) — it
-        // disconnects ALL guilds' voice connections.
-        try {
-          const vm = getVoiceManager(this.client);
-          if (vm && typeof vm.updateVoiceState === "function") {
-            const guildIdForLeave = this._guildId ?? this._resolveGuildId();
-            if (guildIdForLeave) {
-              try {
-                vm.updateVoiceState(guildIdForLeave, null, { self_deaf: false, self_mute: false });
-              } catch (_) {
-                try { vm.updateVoiceState(guildIdForLeave, null); } catch (_2) {}
-              }
-            }
-          }
-        } catch (_) {}
-
-        // Remove from FluxerRevoice's map if the channel differs
-        if (this._revoice && this._channelId) {
-          try { this._revoice.deleteConnection(this._channelId); } catch (_) {}
-        }
-
-        // Wait to give the Fluxer gateway time to process the voice state
-        // leave before we join a new channel. FluxerRevoice adds its own
-        // _globalJoinDelay before the actual join, so 500ms here is enough.
+        // Brief wait so the gateway processes the leave before we join a
+        // new channel. FluxerRevoice adds its own _globalJoinDelay too.
         await Utils.sleep(500);
-        this.connection  = null;
+        this.connection   = null;
         this._mediaPlayer = null;
       }
 
@@ -1329,10 +1223,24 @@ export default class Player extends EventEmitter {
           return;
         }
         if (!this.leaving && !this._destroyed) {
-          logger.mediaplayer("[Player] Unexpected disconnect detected");
-          this._stopMediaPlayer()
-              .catch(() => {})
-              .finally(() => this.emit("autoleave"));
+          const mode = this._get247Mode();
+          if (mode === "auto") {
+            // %247 auto: Do NOT emit autoleave on unexpected disconnect.
+            // The GatewayHandler will detect the bot's voice state change
+            // and schedule a rejoin. Emitting autoleave here would cause
+            // the player to be destroyed before the rejoin can be scheduled,
+            // and creates a race condition where both Player.mjs AND
+            // GatewayHandler try to handle the disconnect simultaneously.
+            logger.mediaplayer("[Player] Unexpected disconnect detected (24/7 auto) — stopping media player, GatewayHandler will schedule rejoin");
+            this._stopMediaPlayer().catch(() => {});
+          } else {
+            // %247 on or off: emit autoleave as normal.
+            // %247 on does NOT rejoin on disconnect (only on reboot).
+            logger.mediaplayer("[Player] Unexpected disconnect detected");
+            this._stopMediaPlayer()
+                .catch(() => {})
+                .finally(() => this.emit("autoleave"));
+          }
         } else {
           try { connection.removeAllListeners(); } catch (_) {}
         }
@@ -1354,28 +1262,8 @@ export default class Player extends EventEmitter {
         logger.warn("[Player] Self-deafen failed:", e.message);
       }
 
-      // ── MediaPlayer creation with progressive retries ───────────────────
-      // LiveKit's publishToRoom can time out on slow servers ("track publication
-      // timed out, no response received from the server"). The room itself is
-      // connected fine — only the audio track publishing fails.  Progressive
-      // retries with increasing delays give the LiveKit server time to recover.
-      const MP_RETRIES = [
-        { delay: 2000,  label: "1st retry (2s)"  },
-        { delay: 4000,  label: "2nd retry (4s)"  },
-        { delay: 8000,  label: "3rd retry (8s)"  },
-      ];
-      let playerReady = await this._ensureMediaPlayer();
-      for (const { delay, label } of MP_RETRIES) {
-        if (playerReady) break;
-        if (this._destroyed || this.leaving) throw new Error("Player destroyed during MediaPlayer retry");
-        const roomAlive = this.connection?.room?.isConnected ?? false;
-        if (!roomAlive) throw new Error("Room disconnected during MediaPlayer retry");
-        logger.mediaplayer(`[Player] MediaPlayer attempt failed — ${label}...`);
-        await Utils.sleep(delay);
-        if (this._destroyed || this.leaving) throw new Error("Player destroyed during MediaPlayer retry");
-        playerReady = await this._ensureMediaPlayer();
-      }
-      if (!playerReady) throw new Error("Failed to create MediaPlayer after all retries");
+      const playerReady = await this._ensureMediaPlayer();
+      if (!playerReady) throw new Error("Failed to create MediaPlayer");
 
       this._restoreVolume();
       this.emit("roomfetched");
@@ -1465,19 +1353,6 @@ export default class Player extends EventEmitter {
       this.leaving          = true;
       this._streamingStopped = true;
       this._stopInactivityTimer();
-      if (this._recoveryTimer) {
-        clearTimeout(this._recoveryTimer);
-        this._recoveryTimer = null;
-      }
-      if (this._publishRetryTimer) {
-        clearTimeout(this._publishRetryTimer);
-        this._publishRetryTimer = null;
-      }
-      this._publishFailCount = 0;
-      this._recoveryPending = false;
-      this._isRecovering = false;
-      this._recoveryAttempts = 0;
-      this._lastDisconnectReason = null;
       this.searches.clear();
 
       if (this._workerPool) {
@@ -1602,7 +1477,7 @@ export default class Player extends EventEmitter {
   // Audio Filter Control
   // ═══════════════════════════════════════════════════════════════════════════
 
-  async applyFilter(filterPayload, meta = null, _retryCount = 0) {
+  async applyFilter(filterPayload, meta = null) {
     const guildId = this._guildId;
     if (!guildId) {
       return { ok: false, reason: "Player not bound to a guild." };
@@ -1663,14 +1538,6 @@ export default class Player extends EventEmitter {
       return { ok: true };
     } catch (e) {
       const errMsg = e.message ?? "";
-      if (_retryCount === 0 && (errMsg.includes("404") || errMsg.includes("not found") || errMsg.includes("Session-ID") || errMsg.includes("does not exist"))) {
-        logger.warn("[Player] Filter apply failed with stale session, forcing re-sync...");
-        const freshSession = this._moonlink?.getLiveSessionId?.() ?? this._moonlink?.sessionId;
-        if (freshSession && freshSession !== liveSessionId) {
-          this._nl.sessionId = freshSession;
-          return this.applyFilter(filterPayload, meta, 1);
-        }
-      }
       return { ok: false, reason: sanitizeError(errMsg, this._nl) };
     }
   }
@@ -2197,12 +2064,12 @@ export default class Player extends EventEmitter {
     const room = this.connection.room;
     if (!room || !room.isConnected) {
       const cs = room?.connectionState;
-      logger.mediaplayer(`[Player] Room not connected (isConnected: ${room?.isConnected}, connectionState: ${cs}), recovering connection before playing.`);
+      logger.mediaplayer(`[Player] Room not connected (isConnected: ${room?.isConnected}, connectionState: ${cs}) — emitting autoleave.`);
       if (songData) {
         this.queue.data.unshift(songData);
         this.queue.current = null;
       }
-      this._recoverConnection();
+      this.emit("autoleave");
       return;
     }
 
@@ -2268,8 +2135,12 @@ export default class Player extends EventEmitter {
     if (!streamUrl || !Utils.isValidUrl(streamUrl)) {
       logger.error("[Player] No valid stream URL for:", songData.title);
       this.emit("message", mkEmbed(this._t("responses._common.couldNotGetStream", { title: songData.title })));
-      this._streamingStopped = false;
-      return this._doPlayNext();
+      this._streamingStopped = true;
+      this.emit("stopplay");
+      if (!this._is247Enabled()) {
+        this._startInactivityTimer();
+      }
+      return;
     }
 
     logger.player(`[Player:${this._guildId}] Streaming: ${songData.title}`);
@@ -2299,11 +2170,16 @@ export default class Player extends EventEmitter {
 
     if (!this.leaving && !this._skipping) {
       if (songData.type === "radio") {
-        this.queue.data.unshift(songData);
+        // Radio track ended — do NOT auto-retry/re-queue.
+        // The user must manually restart if they want to continue.
+        logger.player(`[Player] Radio stream ended: ${songData.title}`);
         this.queue.current = null;
-        this._streamingStopped = false;
-        await Utils.sleep(500);
-        if (!this.leaving && !this._skipping) return this._doPlayNext();
+        this._streamingStopped = true;
+        this.emit("stopplay");
+        if (!this._is247Enabled()) {
+          this._startInactivityTimer();
+        }
+        return;
       } else {
         if (!this._paused) {
           if (!this.queue.songLoop) this.queue.current = null;

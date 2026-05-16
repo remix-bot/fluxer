@@ -1102,7 +1102,10 @@ export class GatewayHandler {
       }
     }
 
-    // Bot disconnected unexpectedly — check 24/7 before destroying player
+    // Bot disconnected unexpectedly — handle based on 24/7 mode:
+    //   %247 auto → clean up old player and schedule rejoin (always stays in voice)
+    //   %247 on   → emit autoleave (only rejoins on reboot, not on disconnect)
+    //   off       → emit autoleave
     if (!channelId && oldChannelId && guildId) {
       try {
         const cleanOld = String(oldChannelId).replace(/\D/g, "");
@@ -1110,35 +1113,48 @@ export class GatewayHandler {
         if (remix.intentionalLeaves.has(cleanOld)) {
           logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — intentional leave.`);
         } else {
-          const player = remix.players.playerMap.get(cleanOld);
-          if (player && !player.leaving && !player._destroyed) {
-            // ── 24/7 channel protection ────────────────────────────────────
-            // If this channel has 24/7 enabled (mode "on" or "auto"), the
-            // gateway may have sent a spurious VOICE_STATE_UPDATE with
-            // channel_id=null when the bot joined a channel in another guild.
-            // Instead of destroying the player, schedule a rejoin so the bot
-            // stays in the 24/7 channel.
-            const is247 = player._is247Enabled?.();
-            if (is247) {
-              logger.voice247(
-                `[VoiceState] Bot unexpectedly disconnected from 24/7 channel ${cleanOld} ` +
-                `(guild ${cleanGuild}) — scheduling rejoin instead of autoleave.`
-              );
-              // Clean up the dead player/connection first
+          // Check 24/7 mode for this channel
+          const set = remix.settingsMgr.getServer(guildId);
+          const mode = set ? get247ChannelMode(set, cleanOld) : "off";
+
+          if (mode === "auto") {
+            logger.voice247(
+              `[VoiceState] Bot unexpectedly disconnected from ${cleanOld} (24/7 auto) — cleaning up and scheduling rejoin.`
+            );
+            const player = remix.players.playerMap.get(cleanOld);
+            if (player && !player._destroyed) {
+              // Remove from player map first to prevent stale lookups
               remix.players.playerMap.delete(cleanOld);
+              // Also clean up any alternate keys
+              const homeChannel = String(player._home247Channel ?? "").replace(/\D/g, "");
+              if (homeChannel && homeChannel !== cleanOld) {
+                remix.players.playerMap.delete(homeChannel);
+              }
+              // Destroy the player (stops media, disconnects room)
               try { player.destroy(); } catch (_) {}
-              // Schedule a rejoin after a short delay
-              const rejoinDelay = this.T.rejoin247Delay ?? 3_000;
-              setTimeout(() => {
-                if (remix._spawnPlayer) {
-                  logger.voice247(`[VoiceState] Rejoining 24/7 channel ${cleanOld} after unexpected disconnect`);
-                  remix._spawnPlayer(cleanGuild, cleanOld).catch(e =>
-                    logger.warn(`[VoiceState] 24/7 rejoin failed for ${cleanOld}:`, e.message)
-                  );
-                }
-              }, rejoinDelay);
-            } else {
-              logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — emitting autoleave.`);
+              // Clean up pending scrobble timer if any
+              const pendingScrobble = remix.players._pendingScrobbleTimers?.get(cleanOld);
+              if (pendingScrobble) {
+                clearTimeout(pendingScrobble.timer);
+                remix.players._pendingScrobbleTimers.delete(cleanOld);
+              }
+            }
+            // Schedule rejoin with delay to avoid overwhelming LiveKit.
+            // The delay also gives the Fluxer gateway time to process the
+            // leave signal before we attempt a new VOICE_STATE_UPDATE.
+            const rejoinDelay = this.T.rejoin247Delay ?? 3_000;
+            setTimeout(() => {
+              this._rejoinChannel(cleanGuild, cleanOld).catch(err => {
+                logger.warn(`[VoiceState] Failed to rejoin ${cleanOld} after disconnect:`, err.message);
+              });
+            }, rejoinDelay);
+          } else {
+            // %247 on or off: just emit autoleave (no reconnect on disconnect)
+            const player = remix.players.playerMap.get(cleanOld);
+            if (player && !player.leaving && !player._destroyed) {
+              logger.voiceState(
+                `[VoiceState] Bot disconnected from ${cleanOld} (24/7 mode: ${mode}) — emitting autoleave.`
+              );
               player.emit("autoleave");
             }
           }
@@ -1149,11 +1165,126 @@ export class GatewayHandler {
     }
   }
 
+  // ── Rejoin a single channel after disconnect (for %247 auto) ──────────────
+
+  /** @type {Set<string>} Channel IDs currently being rejoined (dedup guard) */
+  _rejoinInProgress = new Set();
+
+  /** @type {Map<string, number>} Channel IDs with retry attempt counts */
+  _rejoinAttempts = new Map();
+
+  /** @type {number} Maximum number of rejoin retry attempts */
+  static MAX_REJOIN_RETRIES = 3;
+
+  /**
+   * Rejoin a voice channel after an unexpected disconnect.
+   * Used by the %247 auto mode to automatically reconnect.
+   *
+   * Includes deduplication (prevents concurrent rejoin for the same channel)
+   * and retry with exponential backoff for transient failures like track
+   * publication timeouts.
+   *
+   * @param {string} guildId
+   * @param {string} channelId
+   * @param {number} [attempt=1] Current attempt number (for retry logic)
+   */
+  async _rejoinChannel(guildId, channelId, attempt = 1) {
+    const { remix } = this;
+    const cleanGuildId   = String(guildId).replace(/\D/g, "");
+    const cleanChannelId = String(channelId).replace(/\D/g, "");
+
+    // ── Deduplication: prevent concurrent rejoin for the same channel ──────
+    if (this._rejoinInProgress.has(cleanChannelId)) {
+      logger.voice247(`[Rejoin] Channel ${cleanChannelId} rejoin already in progress — skipping.`);
+      return;
+    }
+
+    // Don't rejoin if there's already a player for this channel
+    const existing = remix.players.playerMap.get(cleanChannelId);
+    if (existing && !existing._destroyed) {
+      logger.voice247(`[Rejoin] Channel ${cleanChannelId} already has a player — skipping.`);
+      this._rejoinAttempts.delete(cleanChannelId);
+      return;
+    }
+
+    // Don't rejoin if a join is already pending
+    if (remix.players._pendingJoins?.has?.(cleanChannelId)) {
+      logger.voice247(`[Rejoin] Channel ${cleanChannelId} already has a pending join — skipping.`);
+      return;
+    }
+
+    // Don't rejoin if the bot was intentionally disconnected
+    if (remix.intentionalLeaves.has(cleanChannelId)) {
+      logger.voice247(`[Rejoin] Channel ${cleanChannelId} was intentionally left — skipping.`);
+      this._rejoinAttempts.delete(cleanChannelId);
+      return;
+    }
+
+    // Verify the channel still exists
+    const channel = remix.client?.channels?.get?.(cleanChannelId);
+    if (!channel) {
+      logger.voice247(`[Rejoin] Channel ${cleanChannelId} no longer exists — skipping.`);
+      this._rejoinAttempts.delete(cleanChannelId);
+      return;
+    }
+
+    // Mark as in-progress to prevent concurrent attempts
+    this._rejoinInProgress.add(cleanChannelId);
+
+    const maxRetries = GatewayHandler.MAX_REJOIN_RETRIES;
+    logger.voice247(
+      `[Rejoin] Attempting to rejoin channel ${cleanChannelId} in guild ${cleanGuildId} (attempt ${attempt}/${maxRetries})...`
+    );
+
+    try {
+      const player = await remix._spawnPlayer(cleanGuildId, cleanChannelId);
+      logger.voice247(`[Rejoin] Successfully rejoined channel ${cleanChannelId}`);
+      this._rejoinAttempts.delete(cleanChannelId);
+
+      // Reseed voice states so we know about humans in the channel
+      this.reseedVoiceStatesForChannel(cleanGuildId, cleanChannelId);
+
+      return player;
+    } catch (err) {
+      const errMsg = err?.message ?? String(err);
+      const isTrackTimeout = errMsg.includes("track publication timed out")
+          || errMsg.includes("publishToRoom failed")
+          || errMsg.includes("Failed to create MediaPlayer");
+
+      if (isTrackTimeout && attempt < maxRetries) {
+        // Track publication timeout — likely transient (LiveKit overloaded).
+        // Retry with exponential backoff: 5s, 10s, 20s
+        const backoffMs = 5_000 * Math.pow(2, attempt - 1);
+        logger.voice247(
+          `[Rejoin] Track publication failed for channel ${cleanChannelId} (attempt ${attempt}/${maxRetries}) — ` +
+          `retrying in ${backoffMs / 1000}s: ${errMsg}`
+        );
+        this._rejoinInProgress.delete(cleanChannelId);
+
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+
+        return this._rejoinChannel(cleanGuildId, cleanChannelId, attempt + 1);
+      }
+
+      logger.warn(
+        `[Rejoin] Failed to rejoin channel ${cleanChannelId} (attempt ${attempt}/${maxRetries}): ${errMsg}`
+      );
+      this._rejoinAttempts.delete(cleanChannelId);
+
+      // If all retries exhausted, the channel will be picked up on next
+      // bot reboot via BootRecovery (for both %247 auto and %247 on).
+    } finally {
+      this._rejoinInProgress.delete(cleanChannelId);
+    }
+  }
+
   // ── Called from Events.Ready ─────────────────────────────────────────────────
 
   /**
    * Invoke after the bot has connected and Moonlink has been initialised.
-   * Seeds voice states, attaches raw WS listener, and kicks off presence rotation.
+   * Seeds voice states, attaches raw WS listener, kicks off presence rotation,
+   * and rejoins 24/7 channels with staggered delays to avoid overwhelming
+   * the LiveKit server.
    */
   onReady() {
     this.seedVoiceStatesFromGuilds();
@@ -1183,82 +1314,127 @@ export class GatewayHandler {
       }
     }, this._startupDeleteGraceMs);
 
-    // ── Boot 24/7 auto-rejoin ────────────────────────────────────────────────
-    // After a reboot/crash, automatically rejoin all voice channels that have
-    // 24/7 mode enabled (stay_247 setting with mode "on" or "auto").
-    // Delayed slightly to let the gateway settle and Moonlink initialise.
-    setTimeout(() => this.rejoin247Channels(), 5_000);
+    // ── Boot 24/7 auto-rejoin ──────────────────────────────────────────────
+    this.rejoin247Channels();
   }
 
   /**
-   * Rejoin all 24/7 voice channels after a bot reboot/crash.
-   * Reads stay_247 settings from all guilds and spawns players for channels
-   * that aren't already active.
+   * Rejoin all 24/7 channels after boot with staggered delays.
+   *
+   * Both %247 auto and %247 on channels are rejoined because:
+   *   %247 auto: always stays in voice (disconnect + reboot)
+   *   %247 on:   only on reboot, not on disconnect
+   *
+   * Channels are rejoined one at a time with a delay between each to
+   * avoid overwhelming the LiveKit server with concurrent track publications.
    */
   async rejoin247Channels() {
     const { remix } = this;
-    const settings = remix.settingsMgr;
-    if (!settings?.guilds) return;
+    const channelsToRejoin = [];
 
-    const rejoinDelay = this.T.rejoin247Delay ?? 3_000;
-    const channels = [];
-
-    // Collect all 24/7 channels with mode "on" or "auto"
-    for (const [guildId, serverSettings] of settings.guilds) {
+    // Collect all 24/7 channels from settings (both "auto" and "on" modes)
+    for (const [guildId, serverSettings] of remix.settingsMgr.guilds) {
       const raw = serverSettings.get("stay_247");
       if (!raw || raw === "none") continue;
 
       const rawArr = Array.isArray(raw) ? raw : [raw];
-      const cleaned = rawArr
+      const channels = rawArr
           .map(id => String(id).replace(/\D/g, ""))
-          .filter(id => id.length >= 15);
+          .filter(id => id.length >= 15 && id.length <= 22);
 
-      const modes = serverSettings.get("stay_247_modes");
-
-      for (const channelId of cleaned) {
-        const mode = (modes && typeof modes === "object" && !Array.isArray(modes))
-            ? modes[channelId] ?? "off"
-            : serverSettings.get("stay_247_mode") ?? "off";
-
-        if (mode !== "on" && mode !== "auto") continue;
-
-        // Skip if we already have an active player for this channel
-        const existing = remix.players.playerMap.get(channelId)
-            ?? [...remix.players.playerMap.values()].find(p =>
-              String(p?._channelId ?? "").replace(/\D/g, "") === channelId
-            );
-        if (existing && !existing._destroyed) continue;
-
-        channels.push({ guildId, channelId, mode });
+      for (const channelId of channels) {
+        const mode = get247ChannelMode(serverSettings, channelId);
+        // Rejoin both "auto" and "on" channels on boot
+        if (mode === "auto" || mode === "on") {
+          channelsToRejoin.push({ guildId, channelId, mode });
+        }
       }
     }
 
-    if (channels.length === 0) return;
+    if (channelsToRejoin.length === 0) {
+      logger.voice247("[BootRecovery] No 24/7 channels to rejoin.");
+      return;
+    }
 
-    logger.voice247(`[BootRecovery] Found ${channels.length} 24/7 channel(s) to rejoin`);
+    logger.voice247(
+      `[BootRecovery] Found ${channelsToRejoin.length} 24/7 channel(s) to rejoin: ` +
+      channelsToRejoin.map(c => `${c.channelId}(${c.mode})`).join(", ")
+    );
 
-    // Stagger the joins to avoid overloading the gateway
-    for (let i = 0; i < channels.length; i++) {
-      const { guildId, channelId, mode } = channels[i];
-      const delay = i * rejoinDelay;
+    const baseStagger = remix.config?.timers?.bootRejoinStagger ?? 5_000;
 
-      setTimeout(async () => {
+    for (let i = 0; i < channelsToRejoin.length; i++) {
+      const { guildId, channelId, mode } = channelsToRejoin[i];
+
+      if (i > 0) {
+        let staggerDelay = baseStagger;
+        if (i >= 8) staggerDelay = baseStagger * 2;
+        else if (i >= 4) staggerDelay = Math.round(baseStagger * 1.5);
+        logger.voice247(`[BootRecovery] Waiting ${staggerDelay / 1000}s before rejoining next channel...`);
+        await new Promise(resolve => setTimeout(resolve, staggerDelay));
+      }
+
+      // Don't rejoin if already has a player or pending join
+      const existing = remix.players.playerMap.get(channelId);
+      if (existing && !existing._destroyed) {
+        logger.voice247(`[BootRecovery] Channel ${channelId} already has a player — skipping.`);
+        continue;
+      }
+      if (remix.players._pendingJoins?.has?.(channelId)) {
+        logger.voice247(`[BootRecovery] Channel ${channelId} already has a pending join — skipping.`);
+        continue;
+      }
+
+      logger.voice247(
+        `[BootRecovery] Rejoining channel ${channelId} in guild ${guildId} (mode: ${mode}) [${i + 1}/${channelsToRejoin.length}]`
+      );
+
+      const BOOT_MAX_RETRIES = 3;
+      const BOOT_BASE_RETRY_MS = 5_000;
+      let bootRetries = 0;
+
+      while (bootRetries < BOOT_MAX_RETRIES) {
         try {
-          // Verify the channel still exists
-          const ch = remix.client?.channels?.get?.(channelId);
-          if (!ch) {
-            logger.voice247(`[BootRecovery] Channel ${channelId} no longer exists — skipping`);
-            return;
+          const player = await remix._spawnPlayer(guildId, channelId);
+
+          // Reseed voice states so we know about humans in the channel
+          this.reseedVoiceStatesForChannel(guildId, channelId);
+
+          logger.voice247(
+            `[BootRecovery] Successfully rejoined channel ${channelId} (mode: ${mode}) [${i + 1}/${channelsToRejoin.length}]` +
+            (bootRetries > 0 ? ` (after ${bootRetries} retry/retries)` : '')
+          );
+          break; // success — move to next channel
+        } catch (err) {
+          bootRetries++;
+          const errMsg = err?.message ?? String(err);
+          const isTrackTimeout = errMsg.includes("track publication timed out")
+              || errMsg.includes("publishToRoom failed")
+              || errMsg.includes("Failed to create MediaPlayer")
+              || errMsg.includes("internal error");
+
+          if (isTrackTimeout && bootRetries < BOOT_MAX_RETRIES) {
+            const backoffMs = BOOT_BASE_RETRY_MS * Math.pow(2, bootRetries - 1);
+            logger.warn(
+              `[BootRecovery] Track publication failed for channel ${channelId} (attempt ${bootRetries}/${BOOT_MAX_RETRIES}) — ` +
+              `retrying in ${backoffMs / 1000}s: ${errMsg}`
+            );
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+            continue;
           }
 
-          logger.voice247(`[BootRecovery] Rejoining 24/7 channel ${channelId} (guild ${guildId}, mode ${mode})`);
-          await remix._spawnPlayer(guildId, channelId);
-          logger.voice247(`[BootRecovery] Successfully rejoined 24/7 channel ${channelId}`);
-        } catch (e) {
-          logger.warn(`[BootRecovery] Failed to rejoin 24/7 channel ${channelId}: ${e.message}`);
+          logger.warn(
+            `[BootRecovery] Failed to rejoin channel ${channelId} (mode: ${mode}): ${errMsg}` +
+            (bootRetries > 1 ? ` (after ${bootRetries} attempts)` : '')
+          );
+          break; // non-retryable error or max retries exhausted
         }
-      }, delay);
+      }
     }
+
+    logger.voice247(
+      `[BootRecovery] Boot recovery complete. ${channelsToRejoin.length} channel(s) processed.`
+    );
   }
 
   // ── GuildDelete cleanup (extracted for deferred processing) ────────────────

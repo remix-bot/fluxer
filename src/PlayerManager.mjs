@@ -815,31 +815,26 @@ export class PlayerManager {
       if (homeChannelId !== activeChannelId) this.playerMap.delete(homeChannelId);
       player.destroy();
 
-      if (isIn247List && (mode247 === "on" || mode247 === "auto")) {
-        // 24/7 mode active — auto-rejoin the channel after a delay
-        const rejoinDelay = this.timers?.rejoin247Delay ?? 3_000;
-        logger.voice247(`[AutoLeave] 24/7 channel ${homeChannelId} (mode ${mode247}) auto-left — scheduling rejoin in ${rejoinDelay}ms`);
-        setTimeout(async () => {
-          try {
-            if (typeof this.commands?.context?._spawnPlayer === "function") {
-              await this.commands.context._spawnPlayer(guildId, homeChannelId);
-              logger.voice247(`[AutoLeave] 24/7 auto-rejoin succeeded for channel ${homeChannelId}`);
-            } else {
-              logger.warn(`[AutoLeave] 24/7 auto-rejoin failed: _spawnPlayer not available`);
-            }
-          } catch (e) {
-            logger.warn(`[AutoLeave] 24/7 auto-rejoin failed for channel ${homeChannelId}: ${e.message}`);
-          }
-        }, rejoinDelay);
+      // Notify the channel that the bot left.
+      // For %247 on: bot will rejoin on reboot (but not on disconnect)
+      // For %247 auto: bot will rejoin automatically after disconnect
+      // For non-247: user must manually re-invoke the join command
+      const prefix = (() => {
+        try { return this.settings.getServer(guildId)?.get("prefix") ?? "%"; } catch (_) { return "%"; }
+      })();
+
+      let desc;
+      if (mode247 === "on") {
+        desc = this.locale?.translate(guildId, "responses.join.autoLeave247On", { channel: `<#${activeChannelId}>` })
+          ?? `Left channel <#${activeChannelId}> because of inactivity.\nI'll rejoin automatically when the bot restarts (%247 on mode).`;
+      } else if (mode247 === "auto") {
+        desc = this.locale?.translate(guildId, "responses.join.autoLeave247Auto", { channel: `<#${activeChannelId}>` })
+          ?? `Left channel <#${activeChannelId}> — reconnecting automatically (%247 auto mode)...`;
       } else {
-        // Not 24/7 — send inactivity message
-        const prefix = (() => {
-          try { return this.settings.getServer(guildId)?.get("prefix") ?? "%"; } catch (_) { return "%"; }
-        })();
-        const desc = this.locale?.translate(guildId, "responses.join.autoLeaveInactive247", { channel: `<#${activeChannelId}>`, prefix })
+        desc = this.locale?.translate(guildId, "responses.join.autoLeaveInactive247", { channel: `<#${activeChannelId}>`, prefix })
           ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
-        if (typeof ch?.send === "function") ch.send(mkEmbed(desc));
       }
+      if (typeof ch?.send === "function") ch.send(mkEmbed(desc));
     });
 
     player.on("leave", () => {});
