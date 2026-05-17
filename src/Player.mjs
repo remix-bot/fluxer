@@ -1537,7 +1537,6 @@ export default class Player extends EventEmitter {
       }
     }).catch(e => logger.error("[Player] skipTo stop error:", e.message))
         .finally(() => {
-          // Always reset _skipping — even if _stopMediaPlayer() threw.
           this._skipping = false;
         });
     return `:track_next: Skipped to position ${position}`;
