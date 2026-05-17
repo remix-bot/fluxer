@@ -1494,13 +1494,13 @@ export default class Player extends EventEmitter {
                   ?? "%";
             } catch (_) { return "%"; }
           })();
-          this.emit("message", mkEmbed(this._t("responses._common.queueEnded", { prefix })));
+          this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
         }
       }
     }).catch(e => logger.error("[Player] skip stop error:", e.message))
-        .finally(() => {
-          this._skipping = false;
-        });
+      .finally(() => {
+        this._skipping = false;
+      });
     return ":track_next: Skipped";
   }
 
@@ -1532,13 +1532,13 @@ export default class Player extends EventEmitter {
                   ?? "%";
             } catch (_) { return "%"; }
           })();
-          this.emit("message", mkEmbed(this._t("responses._common.queueEnded", { prefix })));
+          this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
         }
       }
     }).catch(e => logger.error("[Player] skipTo stop error:", e.message))
-        .finally(() => {
-          this._skipping = false;
-        });
+      .finally(() => {
+        this._skipping = false;
+      });
     return `:track_next: Skipped to position ${position}`;
   }
 
@@ -2144,7 +2144,7 @@ export default class Player extends EventEmitter {
                 ?? "%";
           } catch (_) { return "%"; }
         })();
-        this.emit("message", mkEmbed(this._t("responses._common.queueEnded", { prefix })));
+        this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
       }
       this._wasRadio = false;
       return;
