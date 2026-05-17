@@ -1197,6 +1197,27 @@ export class GatewayHandler {
       try {
         const cleanOld = String(oldChannelId).replace(/\D/g, "");
         const cleanGuild = String(guildId).replace(/\D/g, "");
+
+        // During boot recovery, stale voice state events may arrive from
+        // deferred GuildDelete processing. If the bot just joined this channel
+        // as part of 24/7 boot recovery, the player is still good — skip
+        // the autoleave/rejoin logic to avoid disrupting a healthy connection.
+        if (this._inStartupGrace) {
+          const bootPlayer = remix.players.playerMap.get(cleanOld);
+          if (bootPlayer && !bootPlayer._destroyed) {
+            logger.voiceState(
+                `[VoiceState] Bot disconnected from ${cleanOld} during startup grace — ` +
+                `player still active, ignoring stale disconnect.`
+            );
+          } else {
+            logger.voiceState(
+                `[VoiceState] Bot disconnected from ${cleanOld} during startup grace — ` +
+                `deferring until grace period ends.`
+            );
+          }
+          return;
+        }
+
         if (remix.intentionalLeaves.has(cleanOld)) {
           logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — intentional leave.`);
         } else if (remix.revoice?._intentionalDisconnects?.has?.(cleanOld)) {
@@ -1406,8 +1427,46 @@ export class GatewayHandler {
           if (!id) continue;
           // Only add if not already cached by Fluxer
           if (!client.guilds.has(id)) {
-            // Insert a minimal stub so .size and .get(id) work correctly
-            client.guilds.set(id, { id, name: g.name ?? "unknown", _stub: true });
+            // Insert a proper Guild instance (not a plain object) so that
+            // gateway handlers like MESSAGE_CREATE can safely access
+            // guild.members.set(), guild.channels, etc. without crashing.
+            // A plain { id, name, _stub: true } stub caused:
+            //   TypeError: Cannot read properties of undefined (reading 'set')
+            // because guild.members was undefined.
+            try {
+              const Guild = this._getGuildClass();
+              if (Guild) {
+                const stub = new Guild(client, { id, name: g.name ?? "unknown" });
+                stub._stub = true;
+                client.guilds.set(id, stub);
+              } else {
+                // Fallback: create a safe stub with empty collections
+                // so that gateway handlers don't crash on .set() calls
+                client.guilds.set(id, {
+                  id,
+                  name: g.name ?? "unknown",
+                  _stub: true,
+                  members: { set: () => {}, get: () => undefined, has: () => false, me: null },
+                  channels: { set: () => {}, get: () => undefined, has: () => false },
+                  roles: { set: () => {}, get: () => undefined, has: () => false },
+                  emojis: { set: () => {}, get: () => undefined, has: () => false },
+                  stickers: { set: () => {}, get: () => undefined, has: () => false },
+                });
+              }
+            } catch (stubErr) {
+              // If Guild constructor fails (e.g. missing data), use safe stub
+              logger.guild(`[GuildSeed] Guild constructor failed for ${id}, using safe stub: ${stubErr?.message}`);
+              client.guilds.set(id, {
+                id,
+                name: g.name ?? "unknown",
+                _stub: true,
+                members: { set: () => {}, get: () => undefined, has: () => false, me: null },
+                channels: { set: () => {}, get: () => undefined, has: () => false },
+                roles: { set: () => {}, get: () => undefined, has: () => false },
+                emojis: { set: () => {}, get: () => undefined, has: () => false },
+                stickers: { set: () => {}, get: () => undefined, has: () => false },
+              });
+            }
             added++;
           }
         }
@@ -1424,6 +1483,29 @@ export class GatewayHandler {
     } catch (err) {
       logger.warn("[GuildSeed] REST guild seeding failed:", err?.message ?? err);
     }
+  }
+
+  /**
+   * Try to get the Guild class from @fluxerjs/core so we can create proper
+   * Guild instances for stubs instead of plain objects.
+   * Returns null if the class can't be resolved.
+   */
+  _getGuildClass() {
+    if (this._GuildClass) return this._GuildClass;
+    try {
+      // The Guild class is exported from @fluxerjs/core but not as a named
+      // export we can easily import.  Instead, look at an existing guild
+      // in the cache and use its constructor.
+      const { client } = this.remix;
+      for (const guild of client.guilds.values()) {
+        if (guild && !guild._stub && typeof guild.constructor === 'function' && guild.constructor.name === 'Guild') {
+          this._GuildClass = guild.constructor;
+          return this._GuildClass;
+        }
+      }
+    } catch (_) {}
+    this._GuildClass = null;
+    return null;
   }
 
   onReady() {
@@ -1524,6 +1606,52 @@ export class GatewayHandler {
       if (remix.players._pendingJoins?.has?.(channelId)) {
         logger.voice247(`[BootRecovery] Channel ${channelId} already has a pending join — skipping.`);
         continue;
+      }
+
+      // Pre-validate: check if the channel still exists and is a voice channel.
+      // On Fluxer, if a channel was deleted while the bot was offline, the 24/7
+      // setting still references it but the channel is gone.  Without this check,
+      // _spawnPlayer throws "Channel not found" every boot.
+      const channelObj = remix.client?.channels?.get?.(channelId);
+      if (!channelObj) {
+        logger.warn(
+            `[BootRecovery] Channel ${channelId} in guild ${guildId} no longer exists — ` +
+            `removing from 24/7 settings to prevent repeated failures.`
+        );
+        try {
+          const set = remix.settingsMgr.getServer(guildId);
+          if (set) {
+            remove247ChannelMode(set, channelId);
+            const raw = set.get("stay_247");
+            const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
+            const filtered = arr.filter(id => id && id !== "none" && String(id).replace(/\D/g, "") !== channelId);
+            set.set("stay_247", filtered.length > 0 ? filtered : "none");
+          }
+        } catch (cleanupErr) {
+          logger.warn(`[BootRecovery] Failed to auto-remove missing channel ${channelId} from 24/7:`, cleanupErr?.message);
+        }
+        continue;
+      }
+      if (channelObj.type !== 2) {
+        logger.warn(
+            `[BootRecovery] Channel ${channelId} in guild ${guildId} is not a voice channel (type: ${channelObj.type}) — skipping.`
+        );
+        continue;
+      }
+
+      // If this guild already has an active 24/7 player from a previous
+      // iteration, joining another channel in the same guild may cause the
+      // Fluxer gateway to "move" the bot (disconnect from the first channel).
+      // Add extra delay to let the previous connection stabilize.
+      const guildHasActivePlayer = [...remix.players.playerMap.values()]
+          .some(p => !p._destroyed && String(p._guildId ?? "").replace(/\D/g, "") === guildId);
+      if (guildHasActivePlayer && i > 0) {
+        const extraDelay = 3_000;
+        logger.voice247(
+            `[BootRecovery] Guild ${guildId} already has an active player — ` +
+            `waiting extra ${extraDelay / 1000}s to avoid move-disconnect.`
+        );
+        await new Promise(resolve => setTimeout(resolve, extraDelay));
       }
 
       logger.voice247(
