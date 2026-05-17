@@ -772,8 +772,6 @@ export default class Player extends EventEmitter {
 
     if (this._mediaPlayer) {
       try {
-        this._mediaPlayer.removeAllListeners("finish");
-        this._mediaPlayer.removeAllListeners("error");
         await this._mediaPlayer.stop();
       } catch (e) {
         logger.error("[Player] Error stopping media player:", e.message);
@@ -1499,9 +1497,9 @@ export default class Player extends EventEmitter {
         }
       }
     }).catch(e => logger.error("[Player] skip stop error:", e.message))
-      .finally(() => {
-        this._skipping = false;
-      });
+        .finally(() => {
+          this._skipping = false;
+        });
     return ":track_next: Skipped";
   }
 
@@ -1539,9 +1537,10 @@ export default class Player extends EventEmitter {
         }
       }
     }).catch(e => logger.error("[Player] skipTo stop error:", e.message))
-      .finally(() => {
-        this._skipping = false;
-      });
+        .finally(() => {
+          // Always reset _skipping — even if _stopMediaPlayer() threw.
+          this._skipping = false;
+        });
     return `:track_next: Skipped to position ${position}`;
   }
 
