@@ -971,12 +971,10 @@ export class PlayerManager {
       let ch       = player.textChannel;
       const guildId = cleanId(player._guildId ?? ch?.guildId ?? ch?.guild?.id ?? getMessageGuildId({ channel: ch }));
 
-      if (!m?.system) {
-        const raw      = this.settings.getServer(guildId)?.get("songAnnouncements");
-        const disabled = raw === false || raw === 0 ||
-            ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
-        if (disabled) return;
-      }
+      const raw      = this.settings.getServer(guildId)?.get("songAnnouncements");
+      const disabled = raw === false || raw === 0 ||
+          ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
+      if (disabled) return;
 
       // If textChannel is not set (e.g. after reboot recovery via _spawnPlayer),
       // resolve it from the saved announcementChannelId or guild channels

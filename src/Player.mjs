@@ -1475,6 +1475,19 @@ export default class Player extends EventEmitter {
     this._skipping       = true;
     this._radioAnnounced = false;
     this.queue.current   = null;
+
+    if (this.queue.isEmpty() && !this._wasRadio && !this._queueEndedSent) {
+      this._queueEndedSent = true;
+      const prefix = (() => {
+        try {
+          return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
+              ?? this.settings?.get?.("prefix")
+              ?? "%";
+        } catch (_) { return "%"; }
+      })();
+      this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
+    }
+
     this._stopMediaPlayer().then(() => {
       this._playingNext = false;
       if (!this.queue.isEmpty() && !this.leaving) {
@@ -1483,18 +1496,6 @@ export default class Player extends EventEmitter {
         this.emit("stopplay");
         if (!this._is247Enabled()) {
           this._startInactivityTimer();
-        }
-        // Send queue-end message when skipping the last track
-        if (!this._wasRadio && !this._queueEndedSent) {
-          this._queueEndedSent = true;
-          const prefix = (() => {
-            try {
-              return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
-                  ?? this.settings?.get?.("prefix")
-                  ?? "%";
-            } catch (_) { return "%"; }
-          })();
-          this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
         }
       }
     }).catch(e => logger.error("[Player] skip stop error:", e.message))
@@ -1513,6 +1514,20 @@ export default class Player extends EventEmitter {
     this.queue.data.splice(0, idx);
     this.queue.current = null;
     this._skipping     = true;
+
+    // If the queue is now empty after splicing, send queue-end immediately.
+    if (this.queue.isEmpty() && !this._wasRadio && !this._queueEndedSent) {
+      this._queueEndedSent = true;
+      const prefix = (() => {
+        try {
+          return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
+              ?? this.settings?.get?.("prefix")
+              ?? "%";
+        } catch (_) { return "%"; }
+      })();
+      this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
+    }
+
     this._stopMediaPlayer().then(() => {
       this._playingNext = false;
       if (!this.queue.isEmpty() && !this.leaving) {
@@ -1521,18 +1536,6 @@ export default class Player extends EventEmitter {
         this.emit("stopplay");
         if (!this._is247Enabled()) {
           this._startInactivityTimer();
-        }
-        // Send queue-end message when skipping to a position beyond remaining tracks
-        if (!this._wasRadio && !this._queueEndedSent) {
-          this._queueEndedSent = true;
-          const prefix = (() => {
-            try {
-              return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
-                  ?? this.settings?.get?.("prefix")
-                  ?? "%";
-            } catch (_) { return "%"; }
-          })();
-          this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
         }
       }
     }).catch(e => logger.error("[Player] skipTo stop error:", e.message))
