@@ -670,24 +670,12 @@ export default class Player extends EventEmitter {
   // ═══════════════════════════════════════════════════════════════════════════
 
   async _ensureMediaPlayer() {
-    // never create a MediaPlayer on a destroyed player
     if (this._destroyed) return false;
-
-    if (!this.connection) {
-      logger.mediaplayer("[Player] No connection available");
-      return false;
-    }
+    if (!this.connection) return false;
 
     const room = this.connection.room;
-    if (!room) {
-      logger.mediaplayer("[Player] No room available");
-      return false;
-    }
+    if (!room) return false;
 
-    // Use the correct @livekit/rtc-node Node.js SDK API:
-    //   room.isConnected      — boolean getter (true when connected)
-    //   room.connectionState  — ConnectionState enum (CONN_DISCONNECTED=0, CONN_CONNECTED=1, CONN_RECONNECTING=2)
-    //   room.state            — does NOT exist (that's the browser SDK API)
     const roomAlive = room.isConnected;
     const cs = room.connectionState;
 
@@ -695,40 +683,52 @@ export default class Player extends EventEmitter {
 
     if (this._mediaPlayer) {
       const mpAlive = !this._mediaPlayer.destroyed && typeof this._mediaPlayer.playStream === "function";
-
       if (roomAlive && mpAlive) {
         logger.mediaplayer("[Player] Reusing healthy MediaPlayer");
         return true;
       }
-
       logger.mediaplayer("[Player] Existing MediaPlayer unhealthy, cleaning up...");
       try { await this._mediaPlayer.stop(); } catch (_) {}
       this._mediaPlayer = null;
     }
 
-    // Room is dead — don't even attempt publishToRoom
     if (!roomAlive) {
-      logger.mediaplayer(`[Player] Room is in dead state (isConnected: ${room.isConnected}, connectionState: ${cs}), skipping MediaPlayer creation`);
+      logger.mediaplayer(`[Player] Room dead, skipping MediaPlayer creation`);
       return false;
     }
 
-    // re-check after async stop — player may have been destroyed
     if (this._destroyed) return false;
 
-    // Retry logic for transient failures like track publication timeouts.
-    // LiveKit can timeout when the server is overloaded (e.g. during boot
-    // recovery with many channels). Retry with exponential backoff.
     const MAX_PUBLISH_RETRIES = 3;
     const BASE_RETRY_DELAY_MS = 3_000;
 
     for (let attempt = 1; attempt <= MAX_PUBLISH_RETRIES; attempt++) {
       try {
-        this._mediaPlayer = new MediaPlayer();
-        // Set a reasonable max listeners cap instead of 0 (unlimited).
-        // Unlimited masks real event emitter leaks; 20 is enough for
-        // the finish/error/playStream listeners plus dashboard forwarding.
-        this._mediaPlayer.setMaxListeners(20);
-        await this._mediaPlayer.publishToRoom(room);
+        const mp = new MediaPlayer();
+        mp.setMaxListeners(20);
+
+        if (mp.source && typeof mp.source.captureFrame === "function") {
+          const _orig = mp.source.captureFrame.bind(mp.source);
+          mp.source.captureFrame = async (frame) => {
+            if (this._streamingStopped || this._skipping || this.leaving || this._destroyed) {
+              return;
+            }
+            try {
+              return await _orig(frame);
+            } catch (e) {
+              if (
+                  e?.message?.includes("InvalidState") ||
+                  e?.message?.includes("failed to capture frame")
+              ) {
+                return; // race condition on skip/leave — safe to swallow
+              }
+              throw e;
+            }
+          };
+        }
+
+        await mp.publishToRoom(room);
+        this._mediaPlayer = mp;
         logger.mediaplayer("[Player] MediaPlayer published successfully");
         return true;
       } catch (e) {
@@ -742,16 +742,9 @@ export default class Player extends EventEmitter {
 
         if (isTransient && attempt < MAX_PUBLISH_RETRIES) {
           const backoffMs = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
-          logger.warn(
-              `[Player] publishToRoom failed (attempt ${attempt}/${MAX_PUBLISH_RETRIES}): ${msg} — retrying in ${backoffMs / 1000}s`
-          );
+          logger.warn(`[Player] publishToRoom failed (attempt ${attempt}/${MAX_PUBLISH_RETRIES}): ${msg} — retrying in ${backoffMs / 1000}s`);
           await new Promise(resolve => setTimeout(resolve, backoffMs));
-
-          // Re-check room state before retrying
-          if (this._destroyed || !room.isConnected) {
-            logger.mediaplayer("[Player] Room disconnected during publish retry — aborting");
-            return false;
-          }
+          if (this._destroyed || !room.isConnected) return false;
           continue;
         }
 
