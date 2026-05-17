@@ -772,6 +772,9 @@ export default class Player extends EventEmitter {
 
     if (this._mediaPlayer) {
       try {
+        if (this._mediaPlayer.fProc && !this._mediaPlayer.ffmpegFinished) {
+          try { this._mediaPlayer.fProc.kill("SIGKILL"); } catch (_) {}
+        }
         await this._mediaPlayer.stop();
       } catch (e) {
         logger.error("[Player] Error stopping media player:", e.message);
