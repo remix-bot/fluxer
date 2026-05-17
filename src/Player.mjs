@@ -353,6 +353,7 @@ export default class Player extends EventEmitter {
   _currentPassthrough  = null;
   _wasRadio            = false;
   _radioAnnounced      = false;
+  _queueEndedSent      = false;
 
   // Active audio filter — { key, label, payload } or null
   activeFilter         = null;
@@ -2104,7 +2105,8 @@ export default class Player extends EventEmitter {
         logger.voice247("[Player] 24/7 enabled, staying in channel");
       }
 
-      if (!this._wasRadio) {
+      if (!this._wasRadio && !this._queueEndedSent) {
+        this._queueEndedSent = true;
         const prefix = (() => {
           try {
             return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
@@ -2219,9 +2221,10 @@ export default class Player extends EventEmitter {
     logger.player(`[Player:${this._guildId}] Streaming: ${songData.title}`);
 
     // Reset all timing flags
-    this.startedPlaying = Date.now();
-    this._paused        = false;
-    this._pausedAt      = null;
+    this.startedPlaying   = Date.now();
+    this._paused          = false;
+    this._pausedAt        = null;
+    this._queueEndedSent  = false;
 
     if (songData.type !== "radio" || !this._radioAnnounced) {
       this.announceSong(songData);
