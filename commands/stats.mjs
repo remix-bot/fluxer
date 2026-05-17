@@ -11,9 +11,9 @@ export const command = new CommandBuilder()
 
 // ── User count cache ──────────────────────────────────────────────────────────
 
-const CACHE_TTL_MS = 5 * 60 * 1000; // refresh every 5 minutes
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
-let cachedUserCount = null; // null = never fetched, 0 = real zero
+let cachedUserCount = null;
 let cacheExpiresAt  = 0;
 let inflightPromise = null;
 
@@ -33,12 +33,8 @@ async function fetchGuildMemberCount(guild) {
   try {
     let after = undefined;
     let total = 0;
-    // Guard against runaway pagination: Fluxer may have far fewer than 1000 members
-    // but return a Collection (Map-like) instead of an array, causing batch.length
-    // to be undefined and the loop to run forever. Normalise to an array first.
     for (let page = 0; page < 1000; page++) {
       const raw   = await guild.members.fetch({ limit: 1000, after });
-      // Normalise: Collection (Map), array, or plain object → array
       const batch = Array.isArray(raw)
           ? raw
           : typeof raw?.values === "function"
@@ -77,43 +73,70 @@ function getLivePlayerCount(playerMap) {
   const seenGuilds = new Set();
 
   for (const [mapKey, player] of playerMap ?? []) {
-    // Skip null / destroyed / leaving entries
     if (!player || player._destroyed || player.leaving) continue;
-
-    // Skip players still in the join() phase — they don't have a voice
-    // connection yet and may fail to connect.
     if (player._isJoining) continue;
 
-    // A player is only "live" if it has an actual voice connection.
-    // Stale entries (gateway disconnect, LiveKit drop) that haven't been
-    // cleaned up yet will have connection = null or a dead room state.
     const conn = player.connection;
     if (conn) {
       const room = conn.room;
       if (room) {
-        // Use @livekit/rtc-node Node.js SDK API:
-        // room.isConnected — boolean getter (true when connected)
-        // room.connectionState — ConnectionState enum (0=disconnected, 1=connected, 2=reconnecting)
-        // room.state does NOT exist in the Node.js SDK (browser-only API)
-        const isConnected = room.isConnected;
+        const isConnected     = room.isConnected;
         const connectionState = room.connectionState;
-        // Explicitly dead states → skip
         if (!isConnected && (connectionState === 0 || connectionState === "disconnected")) continue;
       }
-      // conn exists but no room → still a valid LiveKit connection reference
     } else {
-      // No connection at all → not live
       continue;
     }
 
     live++;
 
-    // Also track unique guilds so we can report server count
     const guildId = String(player._guildId ?? "").replace(/\D/g, "");
     if (guildId) seenGuilds.add(guildId);
   }
 
   return live;
+}
+
+// ── Guild count helper (paginated REST) ───────────────────────────────────────
+// client.guilds.size only reflects guilds Fluxer has cached — which is
+// but caps at 200 per page, so we paginate until we get them all.
+
+let cachedGuildCount    = null;
+let guildCacheExpiresAt = 0;
+
+async function getGuildCount(client) {
+  // Return cached value if still fresh
+  if (cachedGuildCount !== null && Date.now() < guildCacheExpiresAt) {
+    return cachedGuildCount;
+  }
+
+  // Paginate through /users/@me/guilds
+  try {
+    let total = 0;
+    let after = null;
+
+    while (true) {
+      const url   = "/users/@me/guilds?limit=200" + (after ? "&after=" + after : "");
+      const chunk = await client.rest.get(url);
+
+      // chunk should be an array; guard against null/non-array responses
+      if (!Array.isArray(chunk) || chunk.length === 0) break;
+
+      total += chunk.length;
+
+      if (chunk.length < 200) break; // last page
+
+      after = chunk[chunk.length - 1].id;
+    }
+
+    cachedGuildCount    = total;
+    guildCacheExpiresAt = Date.now() + CACHE_TTL_MS;
+    return total;
+  } catch {
+    // REST failed — fall back to local cache
+    if (typeof client.guilds?.size === "number") return client.guilds.size;
+    return Object.keys(client.guilds ?? {}).length;
+  }
 }
 
 // ── Embed builder ─────────────────────────────────────────────────────────────
@@ -128,7 +151,6 @@ function buildEmbed(t, msg, { guildCount, userCount, playerCount, scrobbleCount,
     `${t(msg, "responses.stats.players")} — \`${num(playerCount)}\``,
   ];
 
-  // Add Last.fm stats if the integration is enabled
   if (lastfmEnabled) {
     description.push(`${t(msg, "responses.stats.scrobbles")} — \`${ld(num(scrobbleCount))}\``);
     description.push(`${t(msg, "responses.stats.linkedUsers")} — \`${ld(num(linkedUsers))}\``);
@@ -159,57 +181,39 @@ function buildEmbed(t, msg, { guildCount, userCount, playerCount, scrobbleCount,
 // ── Runner ────────────────────────────────────────────────────────────────────
 
 export async function run(message) {
-  const lastfm = this.lastfm;
+  const lastfm        = this.lastfm;
   const lastfmEnabled = lastfm?.enabled ?? false;
 
-  const cachedGuildCount = this.client.guilds.size;
-
   const shared = {
-    guildCount:  cachedGuildCount,
-    playerCount: getLivePlayerCount(this.players.playerMap),
+    guildCount:    cachedGuildCount ?? this.client.guilds.size, // use cache or local fallback for instant reply
+    playerCount:   getLivePlayerCount(this.players.playerMap),
     scrobbleCount: 0,
-    linkedUsers: 0,
+    linkedUsers:   0,
     lastfmEnabled,
-    uptime:      Utils.prettifyMS(Math.round(process.uptime()) * 1000),
-    comHash:     this.comHash,
-    comLink:     this.comLink,
-    reason:      this.config.restart ?? null,
-    footer:      this.config.customStatsFooter || null,
+    uptime:        Utils.prettifyMS(Math.round(process.uptime()) * 1000),
+    comHash:       this.comHash,
+    comLink:       this.comLink,
+    reason:        this.config.restart ?? null,
+    footer:        this.config.customStatsFooter || null,
   };
 
-  // Fetch Last.fm stats in the background (non-blocking for initial reply)
-  // getTotalScrobbles() syncs all linked users' lifetime scrobble counts from Last.fm
-  const scrobblePromise = lastfmEnabled ? lastfm.getTotalScrobbles() : Promise.resolve(0);
-  const linkedPromise   = lastfmEnabled ? lastfm.getLinkedUsersCount()  : Promise.resolve(0);
+  const scrobblePromise = lastfmEnabled ? lastfm.getTotalScrobbles()   : Promise.resolve(0);
+  const linkedPromise   = lastfmEnabled ? lastfm.getLinkedUsersCount() : Promise.resolve(0);
 
   const hasCached = cachedUserCount !== null;
 
-  // Measure real round-trip latency
   const start = Date.now();
   const msg = await message.reply({
-    embeds: [buildEmbed((...a) => this.t(...a), message, { ...shared, userCount: hasCached ? cachedUserCount : 0, ping: 0, loading: !hasCached })]
+    embeds: [buildEmbed((...a) => this.t(...a), message, { ...shared, userCount: hasCached ? cachedUserCount : 0, ping: 0, loading: true })]
   });
   const ping = Date.now() - start;
 
-  // Fetch the authoritative guild count from the API (same method the
-  // Dashboard uses for its "allServers" endpoint).  This returns the
-  // actual number of servers the bot is in, regardless of cache state.
-  // Falls back to the cached count if the API call fails.
-  const guildCountPromise = (async () => {
-    try {
-      if (typeof this.client.user?.fetchGuilds === "function") {
-        const guilds = await this.client.user.fetchGuilds();
-        return Array.isArray(guilds) ? guilds.length : cachedGuildCount;
-      }
-    } catch (_) { /* API unavailable — use cache */ }
-    return cachedGuildCount;
-  })();
-
+  // Fetch everything in parallel including the real paginated guild count
   const [users, scrobbleCount, linkedUsers, guildCount] = await Promise.all([
     getUserCount(this.client),
     scrobblePromise,
     linkedPromise,
-    guildCountPromise,
+    getGuildCount(this.client),
   ]);
 
   await msg.edit({
