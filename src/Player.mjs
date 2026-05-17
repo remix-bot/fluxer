@@ -1477,15 +1477,30 @@ export default class Player extends EventEmitter {
     this.queue.current   = null;
     this._stopMediaPlayer().then(() => {
       this._playingNext = false;
-      this._skipping    = false;
-      if (!this.queue.isEmpty() && !this.leaving) this.playNext();
-      else {
+      if (!this.queue.isEmpty() && !this.leaving) {
+        this.playNext();
+      } else {
         this.emit("stopplay");
         if (!this._is247Enabled()) {
           this._startInactivityTimer();
         }
+        // Send queue-end message when skipping the last track
+        if (!this._wasRadio && !this._queueEndedSent) {
+          this._queueEndedSent = true;
+          const prefix = (() => {
+            try {
+              return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
+                  ?? this.settings?.get?.("prefix")
+                  ?? "%";
+            } catch (_) { return "%"; }
+          })();
+          this.emit("message", mkEmbed(this._t("responses._common.queueEnded", { prefix })));
+        }
       }
-    }).catch(e => logger.error("[Player] skip stop error:", e.message));
+    }).catch(e => logger.error("[Player] skip stop error:", e.message))
+        .finally(() => {
+          this._skipping = false;
+        });
     return ":track_next: Skipped";
   }
 
@@ -1500,15 +1515,31 @@ export default class Player extends EventEmitter {
     this._skipping     = true;
     this._stopMediaPlayer().then(() => {
       this._playingNext = false;
-      this._skipping    = false;
-      if (!this.queue.isEmpty() && !this.leaving) this.playNext();
-      else {
+      if (!this.queue.isEmpty() && !this.leaving) {
+        this.playNext();
+      } else {
         this.emit("stopplay");
         if (!this._is247Enabled()) {
           this._startInactivityTimer();
         }
+        // Send queue-end message when skipping to a position beyond remaining tracks
+        if (!this._wasRadio && !this._queueEndedSent) {
+          this._queueEndedSent = true;
+          const prefix = (() => {
+            try {
+              return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
+                  ?? this.settings?.get?.("prefix")
+                  ?? "%";
+            } catch (_) { return "%"; }
+          })();
+          this.emit("message", mkEmbed(this._t("responses._common.queueEnded", { prefix })));
+        }
       }
-    }).catch(e => logger.error("[Player] skipTo stop error:", e.message));
+    }).catch(e => logger.error("[Player] skipTo stop error:", e.message))
+        .finally(() => {
+          // Always reset _skipping — even if _stopMediaPlayer() threw.
+          this._skipping = false;
+        });
     return `:track_next: Skipped to position ${position}`;
   }
 
