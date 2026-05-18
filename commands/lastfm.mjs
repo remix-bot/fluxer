@@ -2,6 +2,7 @@ import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { Utils } from "../src/Utils.mjs";
+import { PROVIDER_CHOICES } from "../src/constants/providers.mjs";
 
 const EMOJI_REMOVE_TIMEOUT = 60_000;
 
@@ -52,10 +53,10 @@ function buildLastFmTrackMeta(track) {
   };
 }
 
-async function resolveLastFmTrack(player, track) {
+async function resolveLastFmTrack(player, track, resolveProvider = "yt") {
   const data = await player.workerJob("generalQuery", {
     query: track.query,
-    provider: "yt",
+    provider: resolveProvider,
     trackMeta: buildLastFmTrackMeta(track),
   });
 
@@ -74,14 +75,16 @@ async function resolveLastFmTrack(player, track) {
  * @param {string} userId  - Discord user ID
  * @param {string} category - "loved", "top", "recent", or "playlist"
  * @param {object} [options]
- * @param {string} [options.period]      - Period for top tracks
- * @param {number} [options.limit]       - Max tracks
+ * @param {string} [options.period]           - Period for top tracks
+ * @param {number} [options.limit]            - Max tracks
  * @param {string|number} [options.playlistId] - Playlist number or URL (for category="playlist")
+ * @param {string} [options.resolveProvider]  - Provider to search on when resolving tracks (e.g. "td" for Tidal, "sp" for Spotify). Default: "yt"
  * @returns {Promise<void>}
  */
 export async function playLastFmCategory(ctx, msg, userId, category, options = {}) {
   const lastfm = ctx.lastfm;
   const prefix = ctx.handler?.getPrefix?.(msg.message?.guildId) ?? "%";
+  const resolveProvider = options.resolveProvider || "yt";
 
   if (!lastfm || !lastfm.enabled) return msg.reply(notConfigured(msg));
 
@@ -116,11 +119,14 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   const categoryEmoji = { loved: "❤️", top: "📊", recent: "🕐", playlist: "📋", albums: "💿" }[category];
   const categoryLabel = { loved: "Loved", top: "Top", recent: "Recent", playlist: "Playlist", albums: "Top Albums" }[category];
 
+  // Show which provider is being used for resolving tracks (if not the default YouTube)
+  const resolveLabel = resolveProvider !== "yt" ? ` via ${resolveProvider.toUpperCase()}` : "";
+
   let statusMsg;
   try {
     statusMsg = await msg.reply({
       embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
-        `${categoryEmoji} Fetching your ${categoryLabel} tracks from Last.fm...`
+        `${categoryEmoji} Fetching your ${categoryLabel} tracks from Last.fm${resolveLabel}...`
       )]
     });
   } catch { statusMsg = null; }
@@ -153,14 +159,14 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   if (statusMsg) {
     statusMsg.edit({
       embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
-        `${categoryEmoji} Loading **${result.tracks.length}** ${categoryLabel.toLowerCase()} tracks from **${result.username}**...`
+        `${categoryEmoji} Loading **${result.tracks.length}** ${categoryLabel.toLowerCase()} tracks from **${result.username}**${resolveLabel}...`
       )]
     }).catch(() => {});
   }
 
   for (const track of result.tracks) {
     try {
-      const resolvedTracks = await resolveLastFmTrack(p, track);
+      const resolvedTracks = await resolveLastFmTrack(p, track, resolveProvider);
       if (!resolvedTracks?.length) {
         failed++;
         continue;
@@ -209,6 +215,55 @@ function parsePlayArgs(msg, data) {
   if (!raw) return { category: "" };
 
   const lower = raw.toLowerCase().trim();
+
+  // Sub-provider syntax: "td:top", "sp", "lf:loved"
+  // Non-lastfm providers only allow "top" (or bare provider defaults to "top")
+  // Last.fm as resolve provider allows all categories: loved, top, recent, albums, playlist
+  const subMatch = lower.match(/^([a-z]+):\s*(.*)$/);
+  if (subMatch) {
+    const maybeProvider = subMatch[1];
+    const rest = subMatch[2].trim();
+    if (PROVIDER_CHOICES.includes(maybeProvider)) {
+      const isLastFmProvider = maybeProvider === "lf" || maybeProvider === "lastfm";
+
+      if (!rest) {
+        // No category specified — default based on provider
+        if (isLastFmProvider) {
+          return { category: "", resolveProvider: maybeProvider, showAllCategories: true };
+        }
+        // All other providers default to "top"
+        return { category: "top", resolveProvider: maybeProvider };
+      }
+
+      if (isLastFmProvider) {
+        // Last.fm as resolve provider: all categories allowed
+        const playlistMatch = rest.match(/^playlist\s+(\d+)$/);
+        if (playlistMatch) {
+          return { category: "playlist", playlistId: playlistMatch[1], resolveProvider: maybeProvider };
+        }
+        if (SIMPLE_CATEGORIES.includes(rest)) {
+          return { category: rest, resolveProvider: maybeProvider };
+        }
+      } else {
+        // Non-lastfm providers: only "top" allowed
+        if (rest === "top") {
+          return { category: "top", resolveProvider: maybeProvider };
+        }
+        // Any other category with a non-lastfm provider is invalid
+        return { category: "", resolveProvider: maybeProvider, invalidCategory: rest };
+      }
+    }
+  }
+
+  // Bare provider without colon: "td", "sp", "yt" → defaults to "top"
+  // (lf/lastfm as bare provider shows all categories instead)
+  if (PROVIDER_CHOICES.includes(lower)) {
+    const isLastFmProvider = lower === "lf" || lower === "lastfm";
+    if (isLastFmProvider) {
+      return { category: "", resolveProvider: lower, showAllCategories: true };
+    }
+    return { category: "top", resolveProvider: lower };
+  }
 
   // "playlist 3" or "playlist 1"
   const playlistMatch = lower.match(/^playlist\s+(\d+)$/);
@@ -463,7 +518,19 @@ export async function run(msg, data) {
     case "play": {
       const parsed = parsePlayArgs(msg, data);
 
+      // Invalid category used with a non-lastfm provider (e.g. "sp:loved", "td:recent")
+      if (parsed.invalidCategory) {
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+            `❌ \`${parsed.resolveProvider}:${parsed.invalidCategory}\` is not valid. Non-Last.fm providers only support \`top\`.\nUse \`${prefix}lastfm play ${parsed.resolveProvider}\` or \`${prefix}lastfm play ${parsed.resolveProvider}:top\` instead.\nFor other categories, use Last.fm as the resolve provider: \`${prefix}lastfm play lf:${parsed.invalidCategory}\``
+          )]
+        });
+      }
+
       if (!parsed.category) {
+        const lfProviderNote = parsed.showAllCategories && parsed.resolveProvider
+          ? `\n\n💡 \`${prefix}lastfm play ${parsed.resolveProvider}:<category>\` — Specify a category after the provider:`
+          : "";
         return msg.reply({
           embeds: [new EmbedBuilder().setColor("#ff0000").setDescription([
             `❌ Usage: \`${prefix}lastfm play <category>\``,
@@ -475,15 +542,32 @@ export async function run(msg, data) {
             `\`albums\` — Play your top albums`,
             `\`playlist <number>\` — Play a playlist (use \`${prefix}lastfm playlists\` to list)`,
             ``,
+            `**With a search provider (defaults to \`top\`):**`,
+            `\`${prefix}lastfm play td\` or \`${prefix}lastfm play td:top\` — Play top tracks, search on Tidal`,
+            `\`${prefix}lastfm play sp\` or \`${prefix}lastfm play sp:top\` — Play top tracks, search on Spotify`,
+            `\`${prefix}lastfm play dz\` or \`${prefix}lastfm play dz:top\` — Play top tracks, search on Deezer`,
+            `\`${prefix}lastfm play yt\` or \`${prefix}lastfm play yt:top\` — Play top tracks, search on YouTube`,
+            ``,
+            `**Last.fm as resolve provider (all categories):**`,
+            `\`${prefix}lastfm play lf:loved\` — Play loved tracks, search on Last.fm`,
+            `\`${prefix}lastfm play lf:top\` — Play top tracks, search on Last.fm`,
+            `\`${prefix}lastfm play lf:recent\` — Play recent tracks, search on Last.fm`,
+            `\`${prefix}lastfm play lf:albums\` — Play top albums, search on Last.fm`,
+            ``,
             `**Examples:**`,
             `\`${prefix}lastfm play loved\``,
+            `\`${prefix}lastfm play td\``,
+            `\`${prefix}lastfm play sp:top\``,
+            `\`${prefix}lastfm play lf:loved\``,
             `\`${prefix}lastfm play playlist 1\``,
+            lfProviderNote,
           ].join("\n"))]
         });
       }
 
       return playLastFmCategory(this, msg, userId, parsed.category, {
         playlistId: parsed.playlistId,
+        resolveProvider: parsed.resolveProvider,
       });
     }
 
@@ -679,7 +763,19 @@ export async function run(msg, data) {
             `\`${prefix}lastfm play albums\` — Play your top albums`,
             `\`${prefix}lastfm play playlist 1\` — Play a playlist`,
             ``,
-            `💡 Or use inline: \`${prefix}play lastfm:loved\``,
+            `🎧 **Play with a specific provider (defaults to \`top\`):**`,
+            `\`${prefix}lastfm play sp\` or \`${prefix}lastfm play sp:top\` — Play top tracks, search on Spotify`,
+            `\`${prefix}lastfm play td\` or \`${prefix}lastfm play td:top\` — Play top tracks, search on Tidal`,
+            `\`${prefix}lastfm play dz\` or \`${prefix}lastfm play dz:top\` — Play top tracks, search on Deezer`,
+            `\`${prefix}lastfm play yt\` or \`${prefix}lastfm play yt:top\` — Play top tracks, search on YouTube`,
+            ``,
+            `🎧 **Last.fm as resolve provider (all categories):**`,
+            `\`${prefix}lastfm play lf:loved\` — Play loved tracks, search on Last.fm`,
+            `\`${prefix}lastfm play lf:top\` — Play top tracks, search on Last.fm`,
+            `\`${prefix}lastfm play lf:recent\` — Play recent tracks, search on Last.fm`,
+            `\`${prefix}lastfm play lf:albums\` — Play top albums, search on Last.fm`,
+            ``,
+            `💡 Or use inline: \`${prefix}play lastfm:loved\` or \`${prefix}play lastfm:sp\` or \`${prefix}play lastfm:td:top\``,
           ].join("\n"))]
       });
   }
