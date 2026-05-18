@@ -339,7 +339,7 @@ export class PlayerManager {
     });
 
     player.on("volume", (volume) => {
-      emit("volume", volume);
+      emit("volume", volume * 100);
       this.dashboard.playerUpdate({ type: "volume" }, player);
     });
 

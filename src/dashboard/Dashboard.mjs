@@ -281,7 +281,7 @@ export class Dashboard {
         const authErr = this._authorizePlayerControl(user, player);
         if (authErr) return { error: authErr };
         const vol = Number(params.data.volume);
-        if (isNaN(vol) || vol < 0 || vol > 150) return { error: "Volume must be between 0 and 150" };
+        if (isNaN(vol) || vol < 0 || vol > 200) return { error: "Volume must be between 0 and 200" };
         const msg = player.setVolume(vol / 100);
         return { message: msg };
       }
