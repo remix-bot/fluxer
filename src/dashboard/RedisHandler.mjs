@@ -97,6 +97,9 @@ export class RedisHandler {
           logger.warn("[Redis/Subscriber] Info handler error:", e.message);
         }
       });
+      setInterval(() => {
+        this.send(this.platform + ":ping", "" + Date.now());
+      }, 10000);
     } catch (e) {
       logger.error("[Redis/Subscriber] Initial connection failed:", e.message);
     }
