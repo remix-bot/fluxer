@@ -173,9 +173,11 @@ export class PlayerManager {
     const result = [];
     for (const channelId of set) {
       const player = this.playerMap.get(channelId);
-      if (player && !player._destroyed) {
-        result.push([channelId, player]);
+      if (!player || player._destroyed) {
+        set.delete(channelId); // prune stale entry
+        continue;
       }
+      result.push([channelId, player]);
     }
     return result;
   }
@@ -601,7 +603,6 @@ export class PlayerManager {
       if (player) {
         player.textChannel = message.channel;
         try {
-          const guildId = getMessageGuildId(message);
           const textChannelId = message?.channel?.id ?? message?.channel?.channel?.id ?? null;
           if (guildId && textChannelId) {
             this.settings.getServer(guildId)?.set("announcementChannelId", textChannelId);
@@ -859,6 +860,7 @@ export class PlayerManager {
     if (this._pendingJoins.has(cleanChannelId)) {
       return message.reply(mkEmbed(this._t(message, "responses.join.joining")));
     }
+    this._pendingJoins.add(cleanChannelId);
 
     const player = new Player(this.config.token, {
       ...this.playerConfig,
@@ -1020,10 +1022,7 @@ export class PlayerManager {
       });
     });
 
-    // Mark as "pending join" so concurrent getPlayer() / checkVoiceChannels()
-    // calls can see a player is being created for this channel, but stats
-    // won't count it until the join actually succeeds.
-    this._pendingJoins.add(cleanChannelId);
+    // _pendingJoins was already added earlier (right after duplicate check)
 
     (async () => {
       const statusMsg = await message.reply(mkEmbed(this._t(message, "responses.join.joining")));
@@ -1066,6 +1065,7 @@ export class PlayerManager {
         this.playerMap.delete(cleanChannelId);
         this._unindexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
         player.destroy();
+        cb(null);
       }
     })();
   }

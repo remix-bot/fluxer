@@ -33,7 +33,10 @@ export class Dashboard {
     this.redis.setRequestHandler(async (data) => {
       switch (data.type) {
         case "fetchPlayers":
-          return [...this.remix.players.playerMap.values()].map(p => Dashboard.convertPlayer(p));
+          return [...this.remix.players.playerMap.values()]
+              .filter(p => !p._destroyed)
+              .map(p => { try { return Dashboard.convertPlayer(p); } catch(_) { return null; } })
+              .filter(Boolean);
 
         case "user": {
           const user = await this.remix.client.users.fetch(data.key).catch(() => null);
@@ -76,17 +79,43 @@ export class Dashboard {
         }
 
         case "allServers": {
-          const guilds = await this.remix.client.user.fetchGuilds();
-          return guilds.map(g => Dashboard.convertServer(g));
+          // Auth check: owners see all servers, non-owners see only shared servers
+          //if (data.accessor && this.remix.handler?.owners?.includes?.(data.accessor)) {
+          try {
+            const guilds = await this.remix.client.user.fetchGuilds();
+            return guilds.map(g => Dashboard.convertServer(g));
+          } catch (e) {
+            const id = Utils.uid();
+            logger.dashboard("[Dashboard] allServers error:", id, e);
+            return [];
+          }
+          //}
+          if (data.accessor) {
+            try {
+              const accessorUser = await this.remix.client.users.fetch(data.accessor).catch(() => null);
+              if (accessorUser) return await this.remix.getSharedServers(accessorUser);
+            } catch (_) {}
+          }
+          // Always return an array — backend does .findIndex() on result
+          return [];
         }
 
-        case "commands":
-          return this.remix.handler.commands.map(c =>
-              Dashboard.convertCommand(c, this.remix.handler)
-          );
+        case "commands": {
+          try {
+            return this.remix.handler.commands.map(c =>
+                Dashboard.convertCommand(c, this.remix.handler)
+            );
+          } catch (e) {
+            logger.dashboard("[Dashboard] commands error:", e.message);
+            return [];
+          }
+        }
 
         case "function":
           return await this.runFunction(data.params);
+
+        default:
+          return { error: "Unknown request type: " + (data.type ?? "(none)") };
       }
     });
   }
@@ -146,7 +175,7 @@ export class Dashboard {
           // Validate textChannel: if it's a voice channel (type === 2) or missing,
           // find a suitable text channel from the guild instead
           const isText = (ch) => ch && (ch.type === 0 || ch.type === 5 || ch.type === 13 ||
-            (typeof ch.isText === "function" && ch.isText()));
+              (typeof ch.isText === "function" && ch.isText()));
 
           if (!isText(textChannel)) {
             // Auto-pick a text channel from the guild
@@ -327,6 +356,7 @@ export class Dashboard {
       }
 
       case "leave": {
+        if (!user) return { error: "Invalid user" };
         // Support both params.data.channel and params.data.player for
         // backward compatibility with different backend versions.
         const playerId = params.data.channel ?? params.data.player;
@@ -501,8 +531,8 @@ export class Dashboard {
     // 5=announcement, 13=stage, 15=form, 16=forum, 17=media
     const isCategory = type === 4;
     const isText = !isVoice && !isCategory && (
-      type === 0 || type === 5 || type === 13 ||
-      (typeof channel.isText === "function" && channel.isText())
+        type === 0 || type === 5 || type === 13 ||
+        (typeof channel.isText === "function" && channel.isText())
     );
     let voiceParticipants = [];
     if (isVoice) {
@@ -550,8 +580,8 @@ export class Dashboard {
         ? [...channelStore.values()]
         : [];
     const allChannels = channelValues
-      .map(Dashboard.convertChannel)
-      .filter(c => !c.isCategory); // exclude categories — they are not joinable
+        .map(Dashboard.convertChannel)
+        .filter(c => !c.isCategory); // exclude categories — they are not joinable
 
     // Build icon URL using fluxerusercontent.com CDN pattern
     // guild.icon is the icon hash string; guild.id is the server ID
@@ -606,13 +636,16 @@ export class Dashboard {
     const cleanChannelId = channelId ? String(channelId).replace(/\D/g, "") : "";
     const cleanGuildId = player._guildId ? String(player._guildId).replace(/\D/g, "") : "";
 
+    // Null-guard: player.queue can be null during teardown
+    const queue = player.queue ?? { loop: false, songLoop: false, current: null, data: [] };
+
     return {
-      loop: (player.queue.loop ? 1 : 0) + (player.queue.songLoop ? 2 : 0),
-      paused: player._paused,
-      volume: (player.preferredVolume ?? 1) * 100,
+      loop: (queue.loop ? 1 : 0) + (queue.songLoop ? 2 : 0),
+      paused: !!player._paused,
+      volume: Number.isFinite(player.preferredVolume) ? player.preferredVolume * 100 : 100,
       queue: {
-        current: Dashboard.convertVideo(player.queue.current),
-        data: (player.queue.data ?? []).map(v => Dashboard.convertVideo(v)),
+        current: Dashboard.convertVideo(queue.current),
+        data: Array.isArray(queue.data) ? queue.data.slice(0, 500).map(v => Dashboard.convertVideo(v)) : [],
       },
       users: (() => {
         if (!channel) return player._dashboardUsers ?? [];
@@ -667,7 +700,7 @@ export class Dashboard {
         // Merge dashboard users (connected via web UI but not necessarily in Discord voice)
         if (player._dashboardUsers) {
           for (const du of player._dashboardUsers) {
-            if (!ids.includes(du)) ids.push(du);
+            if (!seen.has(du)) { ids.push(du); seen.add(du); }
           }
         }
         return ids;
@@ -783,6 +816,7 @@ export class Dashboard {
     }
     this._playerUpdateTimers.set(key, setTimeout(() => {
       this._playerUpdateTimers.delete(key);
+      if (player._destroyed) return; // skip destroyed players
       try {
         const serialised = Dashboard.convertPlayer(player);
         this.redis.send(this.redis.platform + ":players", JSON.stringify({
@@ -861,7 +895,7 @@ export class Dashboard {
 
     let res;
     try {
-      res = await this.db.execute("SELECT * FROM login_codes WHERE user=?", [user]);
+      res = await this.db.execute("SELECT * FROM login_codes WHERE user=? AND (verified IS NULL OR verified != true)", [user]);
     } catch (e) {
       const id = Utils.uid();
       logger.dashboard("[Dashboard] MySQL error, id:", id, e);
@@ -871,6 +905,7 @@ export class Dashboard {
     if (res.length === 0) return "If this is a valid code, it was not created for your account.";
 
     for (let i = 0; i < res.length; i++) {
+      if (res[i].verified) continue; // skip already-verified codes (double guard)
       if (await this.db.compareHash(code, res[i].token)) {
         if (Date.now() - this.expiryTime > (new Date(res[i].createdAt)).getTime()) {
           return "Login token expired";

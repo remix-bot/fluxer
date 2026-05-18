@@ -224,6 +224,12 @@ export class Remix {
     // _announcementChannelCache: TTL-based (5 min), auto-evicts stale entries
     this._announcementChannelCache = new Map();
     this._announcementChannelTTL  = 5 * 60 * 1000; // 5 min
+    setInterval(() => {
+      const now = Date.now();
+      for (const [k, v] of this._announcementChannelCache) {
+        if (v.timestamp && now - v.timestamp > this._announcementChannelTTL) this._announcementChannelCache.delete(k);
+      }
+    }, 60_000);
     this.intentionalLeaves = new Map();
 
     // ── Gateway Handler ─────────────────────────────────────────────────────
@@ -294,6 +300,7 @@ export class Remix {
 
     // ── Bot ready ─────────────────────────────────────────────────────────────
     client.on(Events.Ready, async () => {
+      try {
       logger.player("Logged in as " + (client.user?.username ?? "bot"));
 
       // ── Attach proactive error handlers on WS shards ───────────────────
@@ -348,6 +355,9 @@ export class Remix {
       // Delegate remaining Ready work to the gateway handler (voice-state
       // seeding, raw WS listener, presence rotation, tryAutoJoin).
       this.gatewayHandler.onReady();
+      } catch (e) {
+        logger.error("[Ready] Fatal error in Ready handler:", e);
+      }
     });
 
     // ── FluxerRevoice Instance (shared across all players) ─────────────────
@@ -629,7 +639,10 @@ export class Remix {
         });
 
     // ── Login ─────────────────────────────────────────────────────────────────
-    client.login(config.token);
+    client.login(config.token).catch(e => {
+      logger.error("[Startup] Login failed:", e.message);
+      process.exit(1);
+    });
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -795,6 +808,9 @@ export class Remix {
       const homeChId   = String(player._home247Channel ?? activeChId).replace(/\D/g, "") || activeChId;
       this.players.playerMap.delete(activeChId);
       this.players._unindexPlayer?.(cleanGuildId, activeChId);
+      // Clean up pending scrobble timer
+      const pendingScrobble = this.players._pendingScrobbleTimers?.get(cleanChannelId);
+      if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this.players._pendingScrobbleTimers.delete(cleanChannelId); }
       if (activeChId !== cleanChannelId) this.players.playerMap.delete(cleanChannelId);
       if (homeChId !== activeChId) this.players.playerMap.delete(homeChId);
       player.destroy();
@@ -930,6 +946,10 @@ export class Remix {
     const player = this.players.playerMap.get(cleanId);
     if (player) {
       this.players.playerMap.delete(cleanId);
+      this.players._unindexPlayer(player._guildId, cleanId);
+      // Clean up pending scrobble timer
+      const pendingScrobble = this.players._pendingScrobbleTimers?.get(cleanId);
+      if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this.players._pendingScrobbleTimers.delete(cleanId); }
       await player.leave().catch(() => {});
       player.destroy();
     }
@@ -992,11 +1012,8 @@ export class Remix {
       // 2. Fallback — check voiceCache for this guild (O(1) per guild)
       if (!isMember) {
         const cleanGuildId = String(guild.id).replace(/\D/g, "");
-        // Check if any human users are tracked in this guild
-        const hasVoiceUsers = [...this.voiceCache.userLocations.values()].some(
-          loc => loc.guildId === cleanGuildId
-        );
-        if (hasVoiceUsers) isMember = true;
+        const userLoc = this.voiceCache.getUserLocation(cleanGuildId, user.id);
+        if (userLoc) isMember = true;
       }
 
       // 3. Slow path — REST fetch for large guilds with incomplete caches
@@ -1009,6 +1026,13 @@ export class Remix {
 
       if (!isMember) continue;
 
+      const allChannels = guild.channels?.cache
+        ? [...guild.channels.cache.values()].map(c => Dashboard.convertChannel(c)).filter(c => !c.isCategory)
+        : [];
+      const channelIds = guild.channels?.cache
+        ? [...guild.channels.cache.keys()]
+        : [];
+
       shared.push({
         name:   guild.name,
         id:     guild.id,
@@ -1017,37 +1041,9 @@ export class Remix {
             : null,
         description: guild.description ?? null,
         ownerId: guild.ownerId ?? null,
-        voiceChannels: guild.channels
-            .filter(c => c.isVoiceBased?.() ?? false)
-            .map(c => {
-              // Build voice participants list for this channel
-              const voiceParticipants = [];
-              if (guild.voice_states) {
-                const vs = Array.isArray(guild.voice_states) ? guild.voice_states :
-                    typeof guild.voice_states.values === "function" ? [...guild.voice_states.values()] : Object.values(guild.voice_states);
-                for (const state of vs) {
-                  const scId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
-                  const chId = String(c.id ?? "").replace(/\D/g, "");
-                  if (scId === chId) {
-                    const member = guild.members?.get?.(state?.userId ?? state?.user_id);
-                    if (member?.user && !member.user.bot) {
-                      voiceParticipants.push(Dashboard.convertUser(member.user));
-                    }
-                  }
-                }
-              }
-              return {
-                name: c.name,
-                displayName: c.name,
-                id: c.id,
-                icon: null,
-                description: c.topic ?? null,
-                isVoice: true,
-                mature: c.nsfw ?? false,
-                serverId: guild.id,
-                voiceParticipants,
-              };
-            }),
+        channels: allChannels,
+        channelIds: channelIds,
+        voiceChannels: allChannels.filter(c => c.isVoice),
       });
     }
 

@@ -154,13 +154,15 @@ class PlayerWorkerPool {
       }
       entry.busy = false;
       // Replace dead worker
-      this._workers.splice(this._workers.indexOf(entry), 1);
+      const errIdx = this._workers.indexOf(entry);
+      if (errIdx !== -1) this._workers.splice(errIdx, 1);
       this._spawn();
       this._drain();
     });
 
     worker.on("exit", (code) => {
-      this._workers.splice(this._workers.indexOf(entry), 1);
+      const exitIdx = this._workers.indexOf(entry);
+      if (exitIdx !== -1) this._workers.splice(exitIdx, 1);
       if (this._workers.length < this._size) this._spawn();
     });
 
@@ -266,13 +268,15 @@ export class Queue extends EventEmitter {
 
   addMany(tracks, top = false) {
     if (!tracks?.length) return 0;
+    if (!Array.isArray(tracks)) tracks = [];
+    const count = Math.min(tracks.length, 1000);
     if (top) {
-      for (let i = tracks.length - 1; i >= 0; i--) this.data.unshift(tracks[i]);
+      for (let i = count - 1; i >= 0; i--) this.data.unshift(tracks[i]);
     } else {
-      this.data.push(...tracks);
+      for (let i = 0; i < count; i++) this.data.push(tracks[i]);
     }
-    this.emit("queue", { type: "addMany", data: { append: !top, tracks } });
-    return tracks.length;
+    this.emit("queue", { type: "addMany", data: { append: !top, tracks: tracks.slice(0, count) } });
+    return count;
   }
 
   clear()  { this.data.length = 0; }
@@ -401,7 +405,10 @@ export default class Player extends EventEmitter {
     // Set inactivity limit
     const inactivityMs = this.config?.timers?.inactivityTimeout ?? this.config?.inactivityTimeout;
     if (inactivityMs !== undefined) {
-      this._inactivityLimit = inactivityMs;
+      const parsed = Number(inactivityMs);
+      if (!Number.isNaN(parsed) && parsed >= 0) {
+        this._inactivityLimit = parsed;
+      }
     }
 
     // moonlink.js manager reference — injected by PlayerManager
@@ -530,8 +537,11 @@ export default class Player extends EventEmitter {
     }
 
     if (savedVol !== undefined && savedVol !== null) {
-      this.preferredVolume = Utils.clamp(savedVol / 100, 0, 2);
-      logger.player(`[Player] Restored volume ${savedVol}% for guild ${this._guildId}`);
+      const parsed = Number(savedVol);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        this.preferredVolume = Utils.clamp(parsed / 100, 0, 2);
+        logger.player(`[Player] Restored volume ${savedVol}% for guild ${this._guildId}`);
+      }
     }
   }
 
@@ -791,7 +801,7 @@ export default class Player extends EventEmitter {
 
   async _request(url, options = {}, returnStream = false) {
     return new Promise((resolve, reject) => {
-      const fetchUrl = (target) => {
+      const fetchUrl = (target, _redirects = 0) => {
         const urlObj = new URL(target);
         const client = urlObj.protocol === "https:" ? https : http;
 
@@ -814,7 +824,13 @@ export default class Player extends EventEmitter {
             let loc = res.headers.location;
             if (!loc) return reject(new Error("Redirect without location"));
             if (loc.startsWith("/")) loc = `${urlObj.protocol}//${urlObj.host}${loc}`;
-            return fetchUrl(loc);
+            if (_redirects >= 5) return reject(new Error("Too many redirects"));
+            // Strip auth header on cross-origin redirects
+            const redirectUrl = new URL(loc);
+            if (redirectUrl.host !== urlObj.host) {
+              delete options.headers?.Authorization;
+            }
+            return fetchUrl(loc, _redirects + 1);
           }
           if (![200, 204, 206].includes(res.statusCode)) {
             res.resume();
@@ -976,7 +992,7 @@ export default class Player extends EventEmitter {
 
         // Dynamic safety timeout based on track duration.
         const trackDuration = this._getTrackDurationMs(currentTrack);
-        const safetyMs = (trackDuration > 0 && currentTrack.type !== "radio")
+        const safetyMs = (trackDuration > 0 && currentTrack?.type !== "radio")
             ? trackDuration + 15_000
             : 20 * 60 * 1000; // default 20 min for radio/unknown
 
@@ -1316,7 +1332,7 @@ export default class Player extends EventEmitter {
       logger.player(`[Player] Voice connected to ${channel.name || channelId} via FluxerRevoice`);
 
       if (!this.queue.isEmpty() && !this.queue.getCurrent()) {
-        this.playNext();
+        this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
       } else if (this.queue.isEmpty()) {
         this._pendingInactivityCheck = true;
         setTimeout(() => {
@@ -1492,7 +1508,7 @@ export default class Player extends EventEmitter {
     this._stopMediaPlayer().then(() => {
       this._playingNext = false;
       if (!this.queue.isEmpty() && !this.leaving) {
-        this.playNext();
+        this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
       } else {
         this.emit("stopplay");
         if (!this._is247Enabled()) {
@@ -1532,7 +1548,7 @@ export default class Player extends EventEmitter {
     this._stopMediaPlayer().then(() => {
       this._playingNext = false;
       if (!this.queue.isEmpty() && !this.leaving) {
-        this.playNext();
+        this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
       } else {
         this.emit("stopplay");
         if (!this._is247Enabled()) {
@@ -1696,6 +1712,7 @@ export default class Player extends EventEmitter {
   }
 
   addManyToQueue(t, top = false) {
+    if (!Array.isArray(t)) return 0;
     // Enforce queue size cap
     const overflow = (this.queue.data.length + t.length) - this._maxQueueSize;
     if (overflow > 0) {
@@ -1975,8 +1992,9 @@ export default class Player extends EventEmitter {
   async fetchResults(query, id, provider = "ytm") {
     try {
       const data = await this.workerJob("searchResults", { query, provider, resultCount: this.resultLimit });
+      const results = Array.isArray(data?.data) ? data.data : [];
       let list = `Search results using **${PROVIDER_NAMES[provider] || "YouTube Music"}**:\n\n`;
-      data.data.forEach((v, i) => {
+      results.forEach((v, i) => {
         const url   = v.url || "";
         const title = v.title || Utils.formatTrackInfo(v, false);
         const dur   = v.duration ? this.getDuration(v.duration) : "?:??";
@@ -1988,9 +2006,9 @@ export default class Player extends EventEmitter {
         const oldestKey = this.searches.keys().next().value;
         if (oldestKey !== undefined) this.searches.delete(oldestKey);
       }
-      this.searches.set(id, data.data);
+      this.searches.set(id, results);
 
-      return { m: list, count: data.data.length };
+      return { m: list, count: results.length };
     } catch (err) {
       return { m: `Error searching: ${err.message}`, count: 0 };
     }
@@ -2007,7 +2025,7 @@ export default class Player extends EventEmitter {
     this.searches.delete(id);
 
     if (!this.queue.getCurrent()) {
-      this.playNext();
+      this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
     }
     return res;
   }
@@ -2044,7 +2062,7 @@ export default class Player extends EventEmitter {
           }
 
           if (!this.queue.getCurrent()) {
-            this.playNext();
+            this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
           }
           events.removeAllListeners();
         })
@@ -2077,7 +2095,7 @@ export default class Player extends EventEmitter {
   playRadio(radio, top = false) {
     if (!radio?.url) { logger.error("[Player] Invalid radio data"); return; }
     this.addToQueue(this._buildRadioTrack(radio), top);
-    if (!this.queue.getCurrent()) this.playNext();
+    if (!this.queue.getCurrent()) this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
   }
 
   async switchRadio(radio) {
@@ -2088,7 +2106,7 @@ export default class Player extends EventEmitter {
 
     if (!this.queue.getCurrent()) {
       this.queue.add(newTrack);
-      this.playNext();
+      this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
       return;
     }
 
@@ -2099,7 +2117,7 @@ export default class Player extends EventEmitter {
     await this._stopMediaPlayer();
     this._playingNext = false;
     this._skipping    = false;
-    if (!this.leaving) this.playNext();
+    if (!this.leaving) this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
