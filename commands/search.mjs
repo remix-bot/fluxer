@@ -33,7 +33,7 @@ export const command = new CommandBuilder()
             o.setName("provider")
                 .setDescription("The search provider. Default: YouTube Music.", "options.search.provider")
                 .addChoices(...PROVIDER_CHOICES)
-                .setDefault("yt")
+                .setDefault("ytm")
                 .addFlagAliases("p", "u", "use")
         , true)
     .addTextOption(o =>

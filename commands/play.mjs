@@ -4,6 +4,65 @@ import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { PROVIDER_CHOICES } from "../src/constants/providers.mjs";
 import { playLastFmCategory } from "./lastfm.mjs";
 
+/**
+ * Parse a Last.fm music URL and extract artist and track info.
+ * Supports:
+ *   https://www.last.fm/music/Drake/ICEMAN/Make+Them+Cry
+ *   https://www.last.fm/music/SAJA+BOYS/_/Soda+Pop
+ *   https://www.last.fm/music/Drake/_/Make+Them+Cry  ("_" = album placeholder)
+ *   https://www.last.fm/music/Drake                  (artist only)
+ *
+ * @param {string} url
+ * @returns {{ artist: string, track: string|null, album: string|null, url: string } | null}
+ */
+function parseLastFmUrl(url) {
+  try {
+    const u = new URL(url);
+    if (!/^(?:www\.)?last\.fm$/i.test(u.hostname)) return null;
+
+    // Path format: /music/Artist[/Album][/Track]
+    // Or: /music/Artist/_/Track  (underscore = album placeholder)
+    const match = u.pathname.match(/^\/music\/([^/]+)(?:\/([^/]+))?(?:\/([^/]+))?/);
+    if (!match) return null;
+
+    const artist = decodeURIComponent(match[1].replace(/\+/g, " "));
+    const segment2 = match[2] ? decodeURIComponent(match[2].replace(/\+/g, " ")) : null;
+    const segment3 = match[3] ? decodeURIComponent(match[3].replace(/\+/g, " ")) : null;
+
+    let track = null;
+    let album = null;
+
+    if (segment3) {
+      // /music/Artist/Album/Track or /music/Artist/_/Track
+      album = segment2 === "_" ? null : segment2;
+      track = segment3;
+    } else if (segment2 && segment2 !== "_") {
+      // /music/Artist/Track (no album segment)
+      // Could be an album page or track page — treat as track if short enough
+      track = segment2;
+    }
+
+    return { artist, track, album, url };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if a string is a Last.fm music URL.
+ * @param {string} str
+ * @returns {boolean}
+ */
+function isLastFmUrl(str) {
+  if (!str || typeof str !== "string") return false;
+  try {
+    const u = new URL(str);
+    return /^(?:www\.)?last\.fm$/i.test(u.hostname) && /^\/music\//.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
 // Last.fm provider keywords that trigger special play logic
 const LASTFM_PLAY_CATEGORIES = ["loved", "top", "recent", "albums"];
 
@@ -109,7 +168,9 @@ export const command = new CommandBuilder()
         "$prefixplay dz: get lucky",
         "$prefixplay -p yt take over league of legends",
         "$prefixplay https://open.spotify.com/track/...",
+        "$prefixplay https://www.last.fm/music/Drake/_/Make+Them+Cry",
         "$prefixplay lastfm:loved",
+        "$prefixplay lastfm:soda pop",
         "$prefixplay lastfm:td:top",
         "$prefixplay lastfm:sp",
         "$prefixplay lastfm:lf:loved",
@@ -125,7 +186,7 @@ export const command = new CommandBuilder()
                 .setDescription("The search provider. Default: YouTube Music. Or use inline prefix: sp:, dz:, am:, yt:, sc: etc.", "options.play.provider")
                 .addFlagAliases("p", "u", "use")
                 .addChoices(...PROVIDER_CHOICES)
-                .setDefault("yt")
+                .setDefault("ytm")
         , true)
     .addAlias("p");
 
@@ -134,6 +195,68 @@ export async function run(message, data) {
   const flagProvider = data.get("provider")?.value;
   const { provider: inlineProvider, query } = parseInlineProvider(rawQuery);
   const provider = inlineProvider ?? flagProvider ?? "ytm";
+
+  // ── Last.fm URL detection ────────────────────────────────────────────────
+  // If the raw query (or extracted query) is a Last.fm URL, parse it to get
+  // the artist and track name, then play it through the normal search pipeline
+  // with Last.fm metadata attached for accurate scrobbling.
+  //
+  // Examples:
+  //   %play https://www.last.fm/music/Drake/ICEMAN/Make+Them+Cry
+  //   %play https://www.last.fm/music/SAJA+BOYS/_/Soda+Pop
+  if (isLastFmUrl(rawQuery) || isLastFmUrl(query)) {
+    const lfUrl = isLastFmUrl(rawQuery) ? rawQuery : query;
+    const parsed = parseLastFmUrl(lfUrl);
+
+    if (parsed && parsed.track) {
+      // We have artist + track — search using the combined query with Last.fm metadata
+      const lastfmTrackMeta = {
+        artist: parsed.artist,
+        name: parsed.track,
+        source: "lastfm",
+        url: parsed.url,
+      };
+
+      const p = await this.getPlayer(message, true, true, true);
+      if (!p) return;
+
+      const searchEmbed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setDescription(this.t(message, "responses.play.searching"));
+      let statusMsg = null;
+      try { statusMsg = await message.reply({ embeds: [searchEmbed] }); } catch {}
+
+      const playQuery = `${parsed.track} ${parsed.artist}`.trim();
+      const messages = p.play(playQuery, false, provider === "lastfm" || provider === "lf" ? "yt" : provider, lastfmTrackMeta);
+      messages.on("message", d => {
+        const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
+        if (statusMsg) { statusMsg.edit({ embeds: [embed] }).catch(() => {}); }
+        else { message.reply({ embeds: [embed] }).catch(() => {}); }
+      });
+      return;
+    }
+
+    if (parsed && !parsed.track) {
+      // Artist-only URL (e.g. /music/Drake) — search for the artist
+      const p = await this.getPlayer(message, true, true, true);
+      if (!p) return;
+
+      const searchEmbed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setDescription(this.t(message, "responses.play.searching"));
+      let statusMsg = null;
+      try { statusMsg = await message.reply({ embeds: [searchEmbed] }); } catch {}
+
+      const playQuery = parsed.artist;
+      const messages = p.play(playQuery, false, provider === "lastfm" || provider === "lf" ? "yt" : provider);
+      messages.on("message", d => {
+        const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
+        if (statusMsg) { statusMsg.edit({ embeds: [embed] }).catch(() => {}); }
+        else { message.reply({ embeds: [embed] }).catch(() => {}); }
+      });
+      return;
+    }
+  }
 
   // ── Last.fm special provider: %play lastfm:loved / lastfm:top / lastfm:recent / lastfm:playlist 1 ──
   //   Also supports sub-provider syntax: %play lastfm:td:top (play Last.fm top tracks, search on Tidal)
@@ -182,6 +305,71 @@ export async function run(message, data) {
         playlistId: playlistMatch[1],
         resolveProvider,
       });
+    }
+
+    // ── Freeform Last.fm search: %play lastfm:soda pop or %play lastfm:drake make them cry ──
+    // If the query after lastfm: is NOT a recognized category, treat it as a
+    // freeform track search on Last.fm. This uses Last.fm's track.search API
+    // to find the best match, then resolves it for playback.
+    if (lowerQuery && !LASTFM_PLAY_CATEGORIES.includes(lowerQuery) && !lowerQuery.startsWith("playlist")) {
+      const lastfm = this.lastfm;
+      if (lastfm && lastfm.enabled) {
+        // Try to parse as "track by artist" or "artist - track" first
+        const trackMeta = parseLastFmTrackQuery(query);
+        let searchResult;
+
+        if (trackMeta) {
+          // Direct artist+track from the query — use it directly
+          searchResult = { artist: trackMeta.artist, name: trackMeta.name, url: "" };
+        } else {
+          // Freeform query — search Last.fm for the best match
+          let statusMsg = null;
+          try {
+            statusMsg = await message.reply({
+              embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
+                `🔍 Searching Last.fm for **${query}**...`
+              )]
+            });
+          } catch {}
+
+          try {
+            searchResult = await lastfm.searchTrack(query);
+          } catch {}
+
+          if (!searchResult) {
+            const noResult = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+              `❌ No results found on Last.fm for **${query}**.`
+            )] };
+            if (statusMsg) statusMsg.edit(noResult).catch(() => message.reply(noResult));
+            else message.reply(noResult);
+            return;
+          }
+        }
+
+        // We have a Last.fm result — play it using the combined query with metadata
+        const lastfmTrackMeta = {
+          artist: searchResult.artist,
+          name: searchResult.name,
+          source: "lastfm",
+          url: searchResult.url ?? "",
+        };
+
+        const playProvider = resolveProvider && resolveProvider !== "lf" && resolveProvider !== "lastfm"
+          ? resolveProvider
+          : "yt";
+
+        const p = await this.getPlayer(message, true, true, true);
+        if (!p) return;
+
+        const playQuery = `${searchResult.name} ${searchResult.artist}`.trim();
+        const messages = p.play(playQuery, false, playProvider, lastfmTrackMeta);
+        messages.on("message", d => {
+          const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
+          if (statusMsg) { statusMsg.edit({ embeds: [embed] }).catch(() => {}); }
+          else { message.reply({ embeds: [embed] }).catch(() => {}); }
+        });
+        return;
+      }
     }
   }
 

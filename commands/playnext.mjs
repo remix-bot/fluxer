@@ -33,7 +33,7 @@ export const command = new CommandBuilder()
                 .setDescription("The search provider. Default: YouTube Music.", "options.playnext.provider")
                 .addFlagAliases("p", "u", "use")
                 .addChoices(...PROVIDER_CHOICES)
-                .setDefault("yt")
+                .setDefault("ytm")
         , true)
     .addAlias("pn");
 

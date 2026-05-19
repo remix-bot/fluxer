@@ -590,6 +590,8 @@ export class LastFmManager {
       const combined = `${artistNorm} ${nameNorm}`.trim();
 
       let score = 0;
+
+      // ── Positive matching ────────────────────────────────────────────────
       if (combined === normalizedQuery) score += 50;
       if (combined.includes(normalizedQuery) && normalizedQuery) score += 25;
       if (normalizedQuery.includes(nameNorm) && nameNorm) score += 15;
@@ -597,6 +599,79 @@ export class LastFmManager {
 
       const overlap = queryTokens.filter(token => combined.includes(token)).length;
       score += overlap * 4;
+
+      // ── Penalize non-song results ────────────────────────────────────────
+      // Track names that contain these phrases are usually lyric videos,
+      // official videos, or other non-song entries that shouldn't be the
+      // top result when a user is searching for the actual song.
+      const nameLower = name.toLowerCase();
+      const artistLower = artist.toLowerCase();
+      const urlLower = String(track.url ?? "").toLowerCase();
+      const fullText = `${nameLower} ${artistLower} ${urlLower}`;
+
+      const negativePatterns = [
+        /\bofficial (?:lyric|lyrics)\s*video\b/,
+        /\bofficial video\b/,
+        /\bofficial music video\b/,
+        /\blyric video\b/,
+        /\blyrics video\b/,
+        /\bmusic video\b/,
+        /\bofficial audio\b/,      // some entries are titled "Official Audio" on last.fm
+        /\bvisuali[sz]er\b/,
+        /\bkaraoke\b/,
+        /\bcover\b/,
+        /\bremix\b/,
+        /\bacoustic\b/,
+        /\blive\b/,
+        /\bsped up\b/,
+        /\bslowed\b/,
+        /\breverb\b/,
+        /\bnightcore\b/,
+        /\b8d\b/,
+        /\bclip officiel\b/,       // French official video
+        /\bvideo oficial\b/,       // Spanish/Portuguese official video
+        /\bperformance\b/,
+      ];
+
+      for (const re of negativePatterns) {
+        if (re.test(fullText)) {
+          score -= 30;
+          break; // only penalize once per track
+        }
+      }
+
+      // Penalize results where the artist is a label/production company
+      // instead of the actual artist (e.g. "Sony Pictures Animation")
+      const labelKeywords = [
+        /\bpictures\b/i,
+        /\banimation\b/i,
+        /\brecords?\b/i,
+        /\bstudios?\b/i,
+        /\bentertainment\b/i,
+        /\bproductions?\b/i,
+        /\bmusic\s+(group|corp|inc|llc)\b/i,
+        /\brecordings?\b/i,
+        /\blabel\b/i,
+      ];
+      for (const re of labelKeywords) {
+        if (re.test(artist)) {
+          score -= 20;
+          break;
+        }
+      }
+
+      // Penalize results where the track name is wrapped in quotes
+      // (e.g. '"Soda Pop" Official Lyric Video' — the quotes indicate
+      // it's a video title, not the actual track name)
+      if (/^["""].*["""]$/.test(name) || /["""]/.test(name)) {
+        score -= 15;
+      }
+
+      // Prefer results that have a clean /music/Artist/_/Track URL format
+      // (actual tracks) over /music/Artist/Track+Extra+Stuff (video entries)
+      if (urlLower.includes("/_/")) {
+        score += 5;  // Clean track URL format
+      }
 
       return {
         index,
@@ -611,6 +686,64 @@ export class LastFmManager {
 
     scored.sort((a, b) => b.score - a.score || a.index - b.index);
     return scored[0]?.track ?? null;
+  }
+
+  /**
+   * Parse a Last.fm music URL and extract artist and track info.
+   * Supports:
+   *   https://www.last.fm/music/Drake/ICEMAN/Make+Them+Cry
+   *   https://www.last.fm/music/SAJA+BOYS/_/Soda+Pop
+   *   https://www.last.fm/music/Drake/_/Make+Them+Cry  ("_" = album placeholder)
+   *   https://www.last.fm/music/Drake                  (artist only)
+   *
+   * @param {string} url
+   * @returns {{ artist: string, track: string|null, album: string|null, url: string } | null}
+   */
+  parseLastFmUrl(url) {
+    try {
+      const u = new URL(url);
+      if (!/^(?:www\.)?last\.fm$/i.test(u.hostname)) return null;
+
+      // Path format: /music/Artist[/Album][/Track]
+      // Or: /music/Artist/_/Track  (underscore = album placeholder)
+      const match = u.pathname.match(/^\/music\/([^/]+)(?:\/([^/]+))?(?:\/([^/]+))?/);
+      if (!match) return null;
+
+      const artist = decodeURIComponent(match[1].replace(/\+/g, " "));
+      const segment2 = match[2] ? decodeURIComponent(match[2].replace(/\+/g, " ")) : null;
+      const segment3 = match[3] ? decodeURIComponent(match[3].replace(/\+/g, " ")) : null;
+
+      let track = null;
+      let album = null;
+
+      if (segment3) {
+        // /music/Artist/Album/Track or /music/Artist/_/Track
+        album = segment2 === "_" ? null : segment2;
+        track = segment3;
+      } else if (segment2 && segment2 !== "_") {
+        // /music/Artist/Track (no album segment)
+        track = segment2;
+      }
+
+      return { artist, track, album, url };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Check if a string is a Last.fm music URL.
+   * @param {string} str
+   * @returns {boolean}
+   */
+  isLastFmUrl(str) {
+    if (!str || typeof str !== "string") return false;
+    try {
+      const u = new URL(str);
+      return /^(?:www\.)?last\.fm$/i.test(u.hostname) && /^\/music\//.test(u.pathname);
+    } catch {
+      return false;
+    }
   }
 
   /**

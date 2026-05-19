@@ -2030,11 +2030,11 @@ export default class Player extends EventEmitter {
     return res;
   }
 
-  playFirst(query, provider) { return this.play(query, true, provider); }
+  playFirst(query, provider, trackMeta) { return this.play(query, true, provider, trackMeta); }
 
-  play(query, top = false, provider) {
+  play(query, top = false, provider, trackMeta = null) {
     const events = new EventEmitter();
-    this.workerJob("generalQuery", { query, provider }, (msg) => events.emit("message", msg))
+    this.workerJob("generalQuery", { query, provider, trackMeta }, (msg) => events.emit("message", msg))
         .then((data) => {
           if (!data) {
             logger.worker("[Player] Worker returned empty result");
