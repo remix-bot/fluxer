@@ -8,7 +8,6 @@ export const command = new CommandBuilder()
     .setDescription("Create an interactive player control panel with live progress", "commands.player")
     .setCategory("music");
 
-// Visual states
 const STATES = {
   playing: "🎵",
   paused: "⏸️",
@@ -16,7 +15,6 @@ const STATES = {
   loading: "⏳"
 };
 
-// Control layout
 const CONTROLS = {
   prev: { emoji: "⏮️", action: "previous", desc: "Previous" },
   play: { emoji: "▶️", action: "resume", desc: "Play" },
@@ -32,7 +30,6 @@ const CONTROLS = {
   close: { emoji: "❌", action: "close", desc: "Close" }
 };
 
-// Progress bar characters
 const PROGRESS = {
   filled: "▰",
   empty: "▱",
@@ -41,7 +38,6 @@ const PROGRESS = {
   end: "▕"
 };
 
-// Auto-remove timer: 1 minute
 const EMOJI_REMOVE_TIMEOUT = 60000;
 
 export async function run(msg) {
@@ -98,7 +94,6 @@ export async function run(msg) {
     const queueSize = player.queue.size();
     const loopStatus = player.queue.songLoop ? "🔂 Song" : player.queue.loop ? "🔁 Queue" : "❌ Off";
 
-    // FIXED: Show stacked filters if multiple are active
     let filterStatus = "🔇 Off";
     if (player.activeFilter) {
       if (player.activeFilter.label.includes("+")) {

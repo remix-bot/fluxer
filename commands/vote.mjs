@@ -4,7 +4,6 @@ import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { Utils } from "../src/Utils.mjs";
 import { FLUXERLIST, buildVoteLink } from "../src/constants/API.mjs";
 
-// Auto-remove timer for reaction navigation: 60 seconds
 const EMOJI_REMOVE_TIMEOUT = 60_000;
 
 export const command = new CommandBuilder()
@@ -35,7 +34,6 @@ export const command = new CommandBuilder()
       .setRequired(false)
   );
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function notConfigured(prefix) {
   return {
@@ -97,7 +95,6 @@ function buildVotersEmbed(voters, total, page, limit, type, resourceId, expired 
   return { embeds: [embed] };
 }
 
-// ── Run ────────────────────────────────────────────────────────────────────────
 
 export async function run(msg, data) {
   const fluxerlist = this.fluxerlist;
@@ -108,7 +105,6 @@ export async function run(msg, data) {
   const page = data.get("page")?.value ?? 1;
 
   switch (action) {
-    // ── Info — Show vote link & FluxerList info ────────────────────────────────
     case "info": {
       const resolvedType = type || "bot";
       const id = resourceId || (resolvedType === "server" ? fluxerlist?.serverId : fluxerlist?.botId);
@@ -132,7 +128,6 @@ export async function run(msg, data) {
         });
       }
 
-      // Use slug for website links (slugs work on the website; numeric IDs don't)
       const slug = resourceId || (resolvedType === "server" ? fluxerlist?.serverSlug : fluxerlist?.botSlug);
       const voteUrl = slug ? buildVoteLink(resolvedType, slug) : null;
       const label = resolvedType === "server" ? "Server" : "Bot";
@@ -158,7 +153,6 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [embed] });
     }
 
-    // ── Check / Voters — Show voter list ───────────────────────────────────────
     case "check":
     case "voters": {
       if (!fluxerlist || !fluxerlist.enabled) return msg.reply(notConfigured(prefix));
@@ -168,7 +162,6 @@ export async function run(msg, data) {
 
       if (!id) return msg.reply(noResourceId(resolvedType, prefix));
 
-      // Fetch the first page
       let voterData;
       try {
         voterData = await fluxerlist.getVoters(resolvedType, id, { page, limit: 20 });
@@ -180,7 +173,6 @@ export async function run(msg, data) {
         });
       }
 
-      // No voters at all
       if (voterData.total === 0) {
         return msg.reply({
           embeds: [new EmbedBuilder()
@@ -191,13 +183,11 @@ export async function run(msg, data) {
 
       const totalPages = Math.max(1, Math.ceil(voterData.total / 20));
 
-      // Single page — no navigation needed
       if (totalPages <= 1) {
         const embed = buildVotersEmbed(voterData.voters, voterData.total, voterData.page, 20, resolvedType, id);
         return msg.reply(embed);
       }
 
-      // Multi-page — add emoji navigation
       let currentPage = voterData.page;
 
       const buildPage = (pageIdx, expired = false) => {
@@ -248,7 +238,6 @@ export async function run(msg, data) {
           currentPage = currentPage < totalPages ? currentPage + 1 : 1;
         }
 
-        // Fetch the new page data
         try {
           voterData = await fluxerlist.getVoters(resolvedType, id, { page: currentPage, limit: 20 });
         } catch {

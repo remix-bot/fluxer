@@ -24,7 +24,6 @@ export async function run(message) {
     return message.reply({ embeds: [embed] });
   }
 
-  // Animated loading spinner
   let frame = 0;
   const loadingMsg = await message.reply({ embeds: [
     new EmbedBuilder().setColor(getGlobalColor())
@@ -67,25 +66,21 @@ export async function run(message) {
     const MAX_DESC       = 4096;
     let totalPages       = Math.ceil(totalLines / LINES_PER_PAGE);
 
-    // Build page payloads — each is the raw lyric lines for that page
     const pages = [];
     for (let i = 0; i < totalLines; i += LINES_PER_PAGE) {
       pages.push(lines.slice(i, i + LINES_PER_PAGE).join("\n"));
     }
 
-    // ── Re-check: if a page's content + header + code block exceeds 4096, re-split
-    //    into smaller chunks so setDescription never throws RangeError. ──────────
-    const CODE_WRAP = 13; // "```\n" (4) + "\n```" (5) + header-ish overhead
+    const CODE_WRAP = 13;
     {
       const reshaped = [];
       for (const pageText of pages) {
         const headerLine = `by *${artist}*${syncIndicator}`;
-        const overhead   = headerLine.length + 1 + 1 + CODE_WRAP; // header + blank + ``` + ```
+        const overhead   = headerLine.length + 1 + 1 + CODE_WRAP;
         const budget     = MAX_DESC - overhead;
         if (pageText.length <= budget) {
           reshaped.push(pageText);
         } else {
-          // Split this page's text into chunks that fit
           const pageLines = pageText.split("\n");
           let chunk = "";
           for (const ln of pageLines) {
@@ -104,7 +99,6 @@ export async function run(message) {
       totalPages = pages.length;
     }
 
-    // ── Single page — no pagination needed ────────────────────────────────────
     if (totalPages === 1) {
       const headerLine = `by *${artist}*${syncIndicator}`;
       const descBody   = pages[0];
@@ -119,7 +113,6 @@ export async function run(message) {
       return message.reply({ embeds: [singleEmbed] });
     }
 
-    // ── Multi-page ────────────────────────────────────────────────────────────
     let currentPage      = 0;
     let emojiRemoveTimeout;
 
@@ -177,7 +170,6 @@ export async function run(message) {
 
     resetEmojiTimer();
 
-    // Full session close after SESSION_MS
     setTimeout(() => {
       clearTimeout(emojiRemoveTimeout);
       unobserve();

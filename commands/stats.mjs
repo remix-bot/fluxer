@@ -9,7 +9,6 @@ export const command = new CommandBuilder()
     .addAliases("info")
     .setCategory("util");
 
-// ── User count cache ──────────────────────────────────────────────────────────
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -97,20 +96,15 @@ function getLivePlayerCount(playerMap) {
   return live;
 }
 
-// ── Guild count helper (paginated REST) ───────────────────────────────────────
-// client.guilds.size only reflects guilds Fluxer has cached — which is
-// but caps at 200 per page, so we paginate until we get them all.
 
 let cachedGuildCount    = null;
 let guildCacheExpiresAt = 0;
 
 async function getGuildCount(client) {
-  // Return cached value if still fresh
   if (cachedGuildCount !== null && Date.now() < guildCacheExpiresAt) {
     return cachedGuildCount;
   }
 
-  // Paginate through /users/@me/guilds
   try {
     let total = 0;
     let after = null;
@@ -119,12 +113,11 @@ async function getGuildCount(client) {
       const url   = "/users/@me/guilds?limit=200" + (after ? "&after=" + after : "");
       const chunk = await client.rest.get(url);
 
-      // chunk should be an array; guard against null/non-array responses
       if (!Array.isArray(chunk) || chunk.length === 0) break;
 
       total += chunk.length;
 
-      if (chunk.length < 200) break; // last page
+      if (chunk.length < 200) break;
 
       after = chunk[chunk.length - 1].id;
     }
@@ -133,13 +126,11 @@ async function getGuildCount(client) {
     guildCacheExpiresAt = Date.now() + CACHE_TTL_MS;
     return total;
   } catch {
-    // REST failed — fall back to local cache
     if (typeof client.guilds?.size === "number") return client.guilds.size;
     return Object.keys(client.guilds ?? {}).length;
   }
 }
 
-// ── Embed builder ─────────────────────────────────────────────────────────────
 
 function buildEmbed(t, msg, { guildCount, userCount, playerCount, scrobbleCount, linkedUsers, ping, uptime, comHash, comLink, reason, footer, loading, lastfmEnabled }) {
   const num = (v) => Utils.formatNumber(v);
@@ -178,14 +169,13 @@ function buildEmbed(t, msg, { guildCount, userCount, playerCount, scrobbleCount,
   return builder;
 }
 
-// ── Runner ────────────────────────────────────────────────────────────────────
 
 export async function run(message) {
   const lastfm        = this.lastfm;
   const lastfmEnabled = lastfm?.enabled ?? false;
 
   const shared = {
-    guildCount:    cachedGuildCount ?? this.client.guilds.size, // use cache or local fallback for instant reply
+    guildCount:    cachedGuildCount ?? this.client.guilds.size,
     playerCount:   getLivePlayerCount(this.players.playerMap),
     scrobbleCount: 0,
     linkedUsers:   0,
@@ -208,7 +198,6 @@ export async function run(message) {
   });
   const ping = Date.now() - start;
 
-  // Fetch everything in parallel including the real paginated guild count
   const [users, scrobbleCount, linkedUsers, guildCount] = await Promise.all([
     getUserCount(this.client),
     scrobblePromise,

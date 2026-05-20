@@ -7,10 +7,10 @@ import { playLastFmCategory } from "./lastfm.mjs";
 /**
  * Parse a Last.fm music URL and extract artist and track info.
  * Supports:
- *   https://www.last.fm/music/Drake/ICEMAN/Make+Them+Cry
- *   https://www.last.fm/music/SAJA+BOYS/_/Soda+Pop
- *   https://www.last.fm/music/Drake/_/Make+Them+Cry  ("_" = album placeholder)
- *   https://www.last.fm/music/Drake                  (artist only)
+ *   https:
+ *   https:
+ *   https:
+ *   https:
  *
  * @param {string} url
  * @returns {{ artist: string, track: string|null, album: string|null, url: string } | null}
@@ -20,8 +20,6 @@ function parseLastFmUrl(url) {
     const u = new URL(url);
     if (!/^(?:www\.)?last\.fm$/i.test(u.hostname)) return null;
 
-    // Path format: /music/Artist[/Album][/Track]
-    // Or: /music/Artist/_/Track  (underscore = album placeholder)
     const match = u.pathname.match(/^\/music\/([^/]+)(?:\/([^/]+))?(?:\/([^/]+))?/);
     if (!match) return null;
 
@@ -33,12 +31,9 @@ function parseLastFmUrl(url) {
     let album = null;
 
     if (segment3) {
-      // /music/Artist/Album/Track or /music/Artist/_/Track
       album = segment2 === "_" ? null : segment2;
       track = segment3;
     } else if (segment2 && segment2 !== "_") {
-      // /music/Artist/Track (no album segment)
-      // Could be an album page or track page — treat as track if short enough
       track = segment2;
     }
 
@@ -63,7 +58,6 @@ function isLastFmUrl(str) {
   }
 }
 
-// Last.fm provider keywords that trigger special play logic
 const LASTFM_PLAY_CATEGORIES = ["loved", "top", "recent", "albums"];
 
 /**
@@ -73,8 +67,6 @@ const LASTFM_PLAY_CATEGORIES = ["loved", "top", "recent", "albums"];
  */
 function parseLastFmSubProvider(query) {
   const value = query.trim();
-  // Non-lastfm providers only allow "top" (or bare provider defaults to "top")
-  // Last.fm as resolve provider allows all categories: loved, top, recent, albums, playlist
   const subMatch = value.match(/^([a-z]+):\s*(.*)$/i);
   if (subMatch) {
     const maybeProvider = subMatch[1].toLowerCase();
@@ -90,12 +82,10 @@ function parseLastFmSubProvider(query) {
       }
 
       if (isLastFmProvider) {
-        // Last.fm as resolve provider: all categories allowed
         if (LASTFM_PLAY_CATEGORIES.includes(rest) || rest.startsWith("playlist")) {
           return { category: rest, resolveProvider: maybeProvider };
         }
       } else {
-        // Non-lastfm providers: only "top" allowed
         if (rest === "top") {
           return { category: "top", resolveProvider: maybeProvider };
         }
@@ -104,7 +94,6 @@ function parseLastFmSubProvider(query) {
     }
   }
 
-  // Bare provider without colon: "td", "sp", "yt" → defaults to "top"
   const lower = value.toLowerCase();
   if (PROVIDER_CHOICES.includes(lower)) {
     const isLastFmProvider = lower === "lf" || lower === "lastfm";
@@ -196,20 +185,11 @@ export async function run(message, data) {
   const { provider: inlineProvider, query } = parseInlineProvider(rawQuery);
   const provider = inlineProvider ?? flagProvider ?? "ytm";
 
-  // ── Last.fm URL detection ────────────────────────────────────────────────
-  // If the raw query (or extracted query) is a Last.fm URL, parse it to get
-  // the artist and track name, then play it through the normal search pipeline
-  // with Last.fm metadata attached for accurate scrobbling.
-  //
-  // Examples:
-  //   %play https://www.last.fm/music/Drake/ICEMAN/Make+Them+Cry
-  //   %play https://www.last.fm/music/SAJA+BOYS/_/Soda+Pop
   if (isLastFmUrl(rawQuery) || isLastFmUrl(query)) {
     const lfUrl = isLastFmUrl(rawQuery) ? rawQuery : query;
     const parsed = parseLastFmUrl(lfUrl);
 
     if (parsed && parsed.track) {
-      // We have artist + track — search using the combined query with Last.fm metadata
       const lastfmTrackMeta = {
         artist: parsed.artist,
         name: parsed.track,
@@ -237,7 +217,6 @@ export async function run(message, data) {
     }
 
     if (parsed && !parsed.track) {
-      // Artist-only URL (e.g. /music/Drake) — search for the artist
       const p = await this.getPlayer(message, true, true, true);
       if (!p) return;
 
@@ -258,15 +237,11 @@ export async function run(message, data) {
     }
   }
 
-  // ── Last.fm special provider: %play lastfm:loved / lastfm:top / lastfm:recent / lastfm:playlist 1 ──
-  //   Also supports sub-provider syntax: %play lastfm:td:top (play Last.fm top tracks, search on Tidal)
-  //   Bare provider defaults: %play lastfm:sp → top tracks on Spotify, %play lastfm:td → top tracks on Tidal
   if (provider === "lastfm" || provider === "lf") {
     const parsed = parseLastFmSubProvider(query);
     const lowerQuery = parsed.category;
     const resolveProvider = parsed.resolveProvider;
 
-    // Invalid category used with a non-lastfm provider (e.g. "sp:loved", "td:recent")
     if (parsed.invalidCategory) {
       return message.reply({
         embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
@@ -275,7 +250,6 @@ export async function run(message, data) {
       });
     }
 
-    // If lf/lastfm used as resolve provider without a category, show help
     if (!lowerQuery && resolveProvider && (resolveProvider === "lf" || resolveProvider === "lastfm")) {
       return message.reply({
         embeds: [new EmbedBuilder().setColor("#ff0000").setDescription([
@@ -291,13 +265,11 @@ export async function run(message, data) {
       });
     }
 
-    // Simple categories: lastfm:loved, lastfm:top, lastfm:recent
     if (LASTFM_PLAY_CATEGORIES.includes(lowerQuery)) {
       const userId = message.message?.author?.id ?? message.author?.id;
       return playLastFmCategory(this, message, userId, lowerQuery, { resolveProvider });
     }
 
-    // Playlist: lastfm:playlist 1 or lastfm:playlist 3
     const playlistMatch = lowerQuery.match(/^playlist\s+(\d+)$/);
     if (playlistMatch) {
       const userId = message.message?.author?.id ?? message.author?.id;
@@ -307,22 +279,15 @@ export async function run(message, data) {
       });
     }
 
-    // ── Freeform Last.fm search: %play lastfm:soda pop or %play lastfm:drake make them cry ──
-    // If the query after lastfm: is NOT a recognized category, treat it as a
-    // freeform track search on Last.fm. This uses Last.fm's track.search API
-    // to find the best match, then resolves it for playback.
     if (lowerQuery && !LASTFM_PLAY_CATEGORIES.includes(lowerQuery) && !lowerQuery.startsWith("playlist")) {
       const lastfm = this.lastfm;
       if (lastfm && lastfm.enabled) {
-        // Try to parse as "track by artist" or "artist - track" first
         const trackMeta = parseLastFmTrackQuery(query);
         let searchResult;
 
         if (trackMeta) {
-          // Direct artist+track from the query — use it directly
           searchResult = { artist: trackMeta.artist, name: trackMeta.name, url: "" };
         } else {
-          // Freeform query — search Last.fm for the best match
           let statusMsg = null;
           try {
             statusMsg = await message.reply({
@@ -346,7 +311,6 @@ export async function run(message, data) {
           }
         }
 
-        // We have a Last.fm result — play it using the combined query with metadata
         const lastfmTrackMeta = {
           artist: searchResult.artist,
           name: searchResult.name,
@@ -394,7 +358,6 @@ export async function run(message, data) {
   try {
     statusMsg = await message.reply({ embeds: [searchEmbed] });
   } catch (err) {
-    // Fluxer API timed out sending the status message — continue without it
   }
 
   const playQuery = lastfmTrackMeta
@@ -407,7 +370,6 @@ export async function run(message, data) {
     if (statusMsg) {
       statusMsg.edit({ embeds: [embed] }).catch(() => {});
     } else {
-      // statusMsg failed to send earlier, fall back to a fresh reply
       message.reply({ embeds: [embed] }).catch(() => {});
     }
   });

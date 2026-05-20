@@ -28,19 +28,16 @@ export class VoiceStateCache {
    * @param {number} [opts.maxBots=10000]   Max bot entries before LRU eviction
    */
   constructor(opts = {}) {
-    // ── Human users ──────────────────────────────────────────────────────
     /** @type {Map<string, {channelId, guildId, userId}>} keyed "guildId:userId" */
     this.userLocations = new Map();
     /** @type {Map<string, Set<string>>} keyed "guildId:channelId", values are userIds */
     this.channelMembers = new Map();
 
-    // ── Bot users ────────────────────────────────────────────────────────
     /** @type {Map<string, {channelId, guildId, userId}>} keyed "guildId:userId" */
     this.botLocations = new Map();
     /** @type {Map<string, Set<string>>} keyed "guildId:channelId", values are userIds */
     this.botChannelMembers = new Map();
 
-    // ── LRU tracking ─────────────────────────────────────────────────────
     this._maxUsers = opts.maxUsers ?? 50_000;
     this._maxBots  = opts.maxBots  ?? 10_000;
     /** @type {string[]} MRU-first list of user location keys */
@@ -49,7 +46,6 @@ export class VoiceStateCache {
     this._lruBotKeys = [];
   }
 
-  // ── Key helpers ──────────────────────────────────────────────────────────
 
   /** Build composite key "guildId:userId" (both cleaned to digits only) */
   static userKey(guildId, userId) {
@@ -61,7 +57,6 @@ export class VoiceStateCache {
     return `${String(guildId ?? "").replace(/\D/g, "")}:${String(channelId ?? "").replace(/\D/g, "")}`;
   }
 
-  // ── Core update (unified — called by both raw WS and high-level handler) ─
 
   /**
    * Update voice state for a user.
@@ -84,7 +79,6 @@ export class VoiceStateCache {
     const lruKeys     = isBot ? this._lruBotKeys     : this._lruUserKeys;
     const uKey        = VoiceStateCache.userKey(cleanGuild, cleanUser);
 
-    // ── Remove from previous channel index ───────────────────────────────
     const prev = locations.get(uKey);
     if (prev) {
       const prevCKey = VoiceStateCache.channelKey(prev.guildId, prev.channelId);
@@ -96,33 +90,21 @@ export class VoiceStateCache {
     }
 
     if (cleanChannel) {
-      // ── Add to new channel index ───────────────────────────────────────
       const cKey = VoiceStateCache.channelKey(cleanGuild, cleanChannel);
       let set = channelIdx.get(cKey);
       if (!set) { set = new Set(); channelIdx.set(cKey, set); }
       set.add(cleanUser);
 
-      // ── Update location map ────────────────────────────────────────────
       locations.set(uKey, { channelId: cleanChannel, guildId: cleanGuild, userId: cleanUser });
 
-      // ── LRU: move to most-recently-used position ──────────────────────
-      // JavaScript Maps maintain insertion order, so delete + re-insert
-      // is O(1) amortized instead of O(n) with indexOf + splice on an array.
-      // We keep the _lruUserKeys / _lruBotKeys arrays as fast eviction queues
-      // but use the Map's own key order for O(1) move-to-front.
       if (locations.has(uKey)) {
-        // Re-insert to move to end (most recently used) — O(1)
         locations.delete(uKey);
         locations.set(uKey, { channelId: cleanChannel, guildId: cleanGuild, userId: cleanUser });
       }
 
-      // ── Evict if over cap ──────────────────────────────────────────────
-      // Use the Map's insertion order to find the oldest entry (first key).
-      // This is O(1) per eviction instead of popping from an array.
       while (locations.size > maxEntries) {
         const evictKey = locations.keys().next().value;
         if (evictKey === uKey) {
-          // Don't evict the entry we just added — re-insert at end and move to next
           const evictVal = locations.get(evictKey);
           locations.delete(evictKey);
           locations.set(evictKey, evictVal);
@@ -138,20 +120,16 @@ export class VoiceStateCache {
           }
           locations.delete(evictKey);
         }
-        // Also remove from LRU key list if present
         const lruIdx = lruKeys.indexOf(evictKey);
         if (lruIdx !== -1) lruKeys.splice(lruIdx, 1);
       }
     } else {
-      // ── User left voice — remove from location map ─────────────────────
       locations.delete(uKey);
-      // Remove from LRU list
       const idx = lruKeys.indexOf(uKey);
       if (idx !== -1) lruKeys.splice(idx, 1);
     }
   }
 
-  // ── Query methods ────────────────────────────────────────────────────────
 
   /**
    * Check if there are any human users in a specific channel.
@@ -242,11 +220,10 @@ export class VoiceStateCache {
   seedUser(guildId, userId, channelId, isBot = false) {
     const uKey = VoiceStateCache.userKey(guildId, userId);
     const locations = isBot ? this.botLocations : this.userLocations;
-    if (locations.has(uKey)) return; // already tracked — don't overwrite
+    if (locations.has(uKey)) return;
     this.updateUser({ guildId, userId, channelId, isBot });
   }
 
-  // ── Bulk operations ──────────────────────────────────────────────────────
 
   /**
    * Remove all entries for a specific guild (used on GuildDelete).
@@ -257,7 +234,6 @@ export class VoiceStateCache {
     const cleanGuild = String(guildId).replace(/\D/g, "");
     const prefix = cleanGuild + ":";
 
-    // Humans
     for (const [uKey, loc] of this.userLocations) {
       if (uKey.startsWith(prefix)) {
         const cKey = VoiceStateCache.channelKey(loc.guildId, loc.channelId);
@@ -266,14 +242,11 @@ export class VoiceStateCache {
         this.userLocations.delete(uKey);
       }
     }
-    // Clean up channel member sets for this guild
     for (const [cKey, set] of this.channelMembers) {
       if (cKey.startsWith(prefix)) this.channelMembers.delete(cKey);
     }
-    // Clean LRU
     this._lruUserKeys = this._lruUserKeys.filter(k => !k.startsWith(prefix));
 
-    // Bots
     for (const [uKey, loc] of this.botLocations) {
       if (uKey.startsWith(prefix)) {
         const cKey = VoiceStateCache.channelKey(loc.guildId, loc.channelId);
@@ -297,13 +270,11 @@ export class VoiceStateCache {
   removeChannel(guildId, channelId) {
     const cKey = VoiceStateCache.channelKey(guildId, channelId);
 
-    // Humans
     const humanSet = this.channelMembers.get(cKey);
     if (humanSet) {
       for (const userId of humanSet) {
         const uKey = VoiceStateCache.userKey(guildId, userId);
         const loc  = this.userLocations.get(uKey);
-        // Only delete if the user is still in THIS channel (not moved)
         if (loc && loc.channelId === String(channelId).replace(/\D/g, "")) {
           this.userLocations.delete(uKey);
         }
@@ -311,7 +282,6 @@ export class VoiceStateCache {
       this.channelMembers.delete(cKey);
     }
 
-    // Bots
     const botSet = this.botChannelMembers.get(cKey);
     if (botSet) {
       for (const userId of botSet) {
@@ -337,7 +307,6 @@ export class VoiceStateCache {
     const cleanGuild = String(guildId).replace(/\D/g, "");
 
     if (!botsOnly) {
-      // Purge human entries
       for (const userId of userIds) {
         const uKey = VoiceStateCache.userKey(cleanGuild, userId);
         const loc  = this.userLocations.get(uKey);
@@ -350,7 +319,6 @@ export class VoiceStateCache {
       }
     }
 
-    // Purge bot entries
     for (const userId of userIds) {
       const uKey = VoiceStateCache.userKey(cleanGuild, userId);
       const loc  = this.botLocations.get(uKey);
@@ -363,9 +331,6 @@ export class VoiceStateCache {
     }
   }
 
-  // ── Backward-compatible accessors ────────────────────────────────────────
-  // These provide the same interface as the old raw Maps so that existing
-  // code (dashboard, commands) doesn't need to be rewritten immediately.
 
   /**
    * Get the "observedVoiceUsers" size (human count).
@@ -386,7 +351,6 @@ export class VoiceStateCache {
    */
   *iterateHumanUsers() {
     for (const [uKey, loc] of this.userLocations) {
-      // Yield the userId (not composite key) as first element for compat
       yield [loc.userId, { channelId: loc.channelId, guildId: loc.guildId }];
     }
   }
@@ -415,7 +379,6 @@ export class VoiceStateCache {
     if (guildId) {
       return this.userLocations.get(VoiceStateCache.userKey(guildId, userId));
     }
-    // Legacy fallback: scan for first match
     const cleanUser = String(userId).replace(/\D/g, "");
     for (const [uKey, loc] of this.userLocations) {
       if (loc.userId === cleanUser) return { channelId: loc.channelId, guildId: loc.guildId };
@@ -446,7 +409,6 @@ export class VoiceStateCache {
   setBotUser(compositeKey, info) {
     const guildId = info.guildId;
     const channelId = info.channelId;
-    // Extract userId from composite key (format: "guildId:userId")
     const userId = compositeKey.split(":").pop();
     if (guildId && channelId && userId) {
       this.updateUser({ guildId, userId, channelId, isBot: true });
@@ -464,7 +426,6 @@ export class VoiceStateCache {
     if (guildId) {
       this.updateUser({ guildId, userId, channelId: null, isBot: false });
     } else {
-      // Legacy: remove from ALL guilds
       const cleanUser = String(userId).replace(/\D/g, "");
       for (const [uKey, loc] of this.userLocations) {
         if (loc.userId === cleanUser) {
@@ -501,7 +462,6 @@ export class VoiceStateCache {
     if (guildId) {
       return this.userLocations.has(VoiceStateCache.userKey(guildId, userId));
     }
-    // Legacy: scan
     const cleanUser = String(userId).replace(/\D/g, "");
     for (const [uKey, loc] of this.userLocations) {
       if (loc.userId === cleanUser) return true;
@@ -520,10 +480,6 @@ export class VoiceStateCache {
     return this.botLocations.has(compositeKey);
   }
 
-  // ── Map-compatible iteration ─────────────────────────────────────────────
-  // Allows `for (const [uid, info] of voiceCache)` to work the same as
-  // `for (const [uid, info] of observedVoiceUsers)` on a raw Map.
-  // Delegates to iterateHumanUsers() so the yielded shape matches.
 
   /**
    * Default iterator — iterates human users.
@@ -553,7 +509,6 @@ export class VoiceStateCache {
     if (guildId !== undefined) {
       return this.userLocations.has(VoiceStateCache.userKey(guildId, userId));
     }
-    // Legacy: scan for first match by userId only
     const cleanUser = String(userId).replace(/\D/g, "");
     for (const [, loc] of this.userLocations) {
       if (loc.userId === cleanUser) return true;
@@ -575,7 +530,6 @@ export class VoiceStateCache {
       const loc = this.userLocations.get(VoiceStateCache.userKey(guildId, userId));
       return loc ? { channelId: loc.channelId, guildId: loc.guildId } : undefined;
     }
-    // Legacy: scan for first match by userId only
     const cleanUser = String(userId).replace(/\D/g, "");
     for (const [, loc] of this.userLocations) {
       if (loc.userId === cleanUser) return { channelId: loc.channelId, guildId: loc.guildId };
@@ -607,7 +561,6 @@ export class VoiceStateCache {
     if (guildId !== undefined) {
       this.updateUser({ guildId, userId, channelId: null, isBot: false });
     } else {
-      // Legacy: remove from ALL guilds
       const cleanUser = String(userId).replace(/\D/g, "");
       const toRemove = [];
       for (const [uKey, loc] of this.userLocations) {
@@ -655,7 +608,6 @@ export class VoiceStateCache {
     }
   }
 
-  // ── Debug / stats ────────────────────────────────────────────────────────
 
   get stats() {
     return {

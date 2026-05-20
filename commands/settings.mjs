@@ -11,7 +11,6 @@ function embed(desc, opts = {}) {
 }
 
 /** Build a rich embed with fields for the 24/7 status panel.
- *  Fluxer EmbedBuilder does not have addField() (that's discord.js).
  *  Instead, we build the base embed with EmbedBuilder, call .toJSON()
  *  to get the raw object, then attach a `fields` array directly.
  */
@@ -21,7 +20,6 @@ function richEmbed(fields, opts = {}) {
   if (opts.description) b.setDescription(opts.description);
   if (opts.footer) b.setFooter({ text: opts.footer });
   if (opts.iconURL) b.setAuthor({ name: opts.title || "\u200b", iconURL: opts.iconURL });
-  // EmbedBuilder doesn't have addField — use .toJSON() + raw fields
   const raw = b.toJSON();
   raw.fields = fields.map(f => ({
     name: f.name,
@@ -31,7 +29,6 @@ function richEmbed(fields, opts = {}) {
   return { embeds: [raw] };
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
 
 const SHORTCUTS = {
   prefix: "prefix",
@@ -54,7 +51,6 @@ const VOLUME_MIN = 1;
 const VOLUME_MAX = 200;
 const MAX_247_CHANNELS = 10;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Extract clean numeric channel ID from any format */
 function cleanId(raw) {
@@ -103,7 +99,6 @@ function getGuildName(message) {
   return message.message?.guild?.name ?? message.channel?.guild?.name ?? "this server";
 }
 
-// ── 24/7 helpers ──────────────────────────────────────────────────────────────
 
 /**
  * Get the 24/7 mode for a specific channel.
@@ -120,7 +115,6 @@ function get247ChannelMode(set, channelId) {
     const perChannel = modes[channelId];
     if (perChannel === "on" || perChannel === "auto" || perChannel === "off") return perChannel;
   }
-  // Fallback: guild-wide mode (legacy)
   const guildMode = set.get("stay_247_mode") ?? "off";
   return guildMode;
 }
@@ -137,7 +131,6 @@ function set247ChannelMode(set, channelId, mode) {
   if (!modes || typeof modes !== "object" || Array.isArray(modes)) modes = {};
   modes[channelId] = mode;
   set.set("stay_247_modes", modes);
-  // Also update guild-wide mode for backward compat with older code
   set.set("stay_247_mode", mode);
 }
 
@@ -154,7 +147,6 @@ function remove247ChannelMode(set, channelId, currentChannels) {
   if (!modes || typeof modes !== "object" || Array.isArray(modes)) return;
   delete modes[channelId];
   set.set("stay_247_modes", modes);
-  // Update guild-wide mode to match the first remaining channel, or "off"
   if (currentChannels.size === 0) {
     set.set("stay_247_mode", "off");
   } else {
@@ -177,8 +169,6 @@ function get247Channels(set) {
 }
 
 function save247Channels(set, channels) {
-  // Only keep valid Fluxer IDs — strip anything that isn't
-  // a proper channel ID (e.g. garbage from DB corruption).
   const arr = [...channels].filter(id => id && isValidFluxerId(id));
   set.set("stay_247", arr.length > 0 ? arr : "none");
 }
@@ -239,7 +229,6 @@ function build247StatusPanel(set, ctx, message, t, guildId) {
     });
   }
 
-  // Simple per-channel list: emoji + channel mention + mode
   const lines = channels.map(chId => {
     const mode = get247ChannelMode(set, chId);
     const chName = resolveChannelName(ctx.client, chId);
@@ -288,7 +277,6 @@ function build247EnabledPanel(set, channelId, mode, joined, ctx, guildId, t) {
   const chName = resolveChannelName(ctx.client, channelId);
   const label = chName ? `**${chName}** <#${channelId}>` : `<#${channelId}>`;
 
-  // Build simple list of all saved channels
   const lines = channels.map(id => {
     const m = get247ChannelMode(set, id);
     const n = resolveChannelName(ctx.client, id);
@@ -420,7 +408,6 @@ async function handle247(ctx, message, value) {
   const guildId = getGuildId(message);
   const mode    = value.toLowerCase().trim();
 
-  // Normalise legacy true/false
   const resolved = mode === "true" ? "auto" : mode === "false" ? "off" : mode;
 
   if (!["off", "on", "auto"].includes(resolved)) {
@@ -429,7 +416,6 @@ async function handle247(ctx, message, value) {
     ));
   }
 
-  // ── OFF ───────────────────────────────────────────────────────────────────
   if (resolved === "off") {
     if (!guildId) return message.reply(embed(ctx.t(message, "responses.settings.noServer")));
 
@@ -458,7 +444,6 @@ async function handle247(ctx, message, value) {
     return message.reply(build247DisabledPanel(set, id, guildId, t247));
     }
 
-    // Not in a channel — disable all for this guild
     save247Channels(set, new Set());
     set.set("stay_247_mode", "off");
     set.set("stay_247_modes", {});
@@ -488,7 +473,6 @@ async function handle247(ctx, message, value) {
     }));
   }
 
-  // ── ON / AUTO ─────────────────────────────────────────────────────────────
   if (!guildId) return message.reply(embed(ctx.t(message, "responses.settings.noServer")));
 
   const userChannelId = ctx.players.checkVoiceChannels(message);
@@ -498,9 +482,6 @@ async function handle247(ctx, message, value) {
     ));
   }
 
-  // Save only the channel the user explicitly toggled.
-  // Multi-voice 24/7 should be opt-in per voice channel, not "whatever
-  // channels the bot currently happens to be in".
   const id       = cleanId(userChannelId);
   const channels = get247Channels(set);
   if (!channels.has(id) && channels.size >= MAX_247_CHANNELS) {
@@ -540,7 +521,6 @@ async function handle247(ctx, message, value) {
   }
 }
 
-// ── Per-setting validation & apply ───────────────────────────────────────────
 
 /**
  * Validate and save a setting value.
@@ -548,7 +528,6 @@ async function handle247(ctx, message, value) {
  *   For stay_247, replies directly and always returns null.
  */
 async function applySet(ctx, message, set, key, rawValue) {
-  // Boolean settings
   if (BOOL_SETTINGS.has(key)) {
     const bool = parseBool(rawValue);
     if (bool === null) {
@@ -558,13 +537,11 @@ async function applySet(ctx, message, set, key, rawValue) {
     return null;
   }
 
-  // 24/7 mode — replies on its own
   if (key === "stay_247") {
     await handle247(ctx, message, rawValue);
     return null;
   }
 
-  // Volume
   if (key === "volume") {
     const num = parseInt(rawValue, 10);
     if (isNaN(num) || num < VOLUME_MIN || num > VOLUME_MAX) {
@@ -574,7 +551,6 @@ async function applySet(ctx, message, set, key, rawValue) {
     return null;
   }
 
-  // Locale
   if (key === "locale") {
     if (!VALID_LOCALES.has(rawValue)) {
       return ctx.t(message, "responses.settings.invalidLocale", {
@@ -583,14 +559,11 @@ async function applySet(ctx, message, set, key, rawValue) {
       });
     }
     set.set(key, rawValue);
-    // Invalidate locale cache so the new locale takes effect immediately
-    // without requiring a bot reboot.
     const guildId = getGuildId(message);
     if (guildId) ctx.locale.invalidateCache(guildId);
     return null;
   }
 
-  // Prefix
   if (key === "prefix") {
     if (!rawValue || rawValue.length > 5) {
       return ctx.t(message, "responses.settings.prefixLength");
@@ -600,7 +573,6 @@ async function applySet(ctx, message, set, key, rawValue) {
     }
   }
 
-  // General: run the runnable hook if present
   if (runnables[key]) {
     const err = runnables[key].call(ctx, rawValue, { msg: message });
     if (err) return `❌ ${err}`;
@@ -610,12 +582,10 @@ async function applySet(ctx, message, set, key, rawValue) {
   return null;
 }
 
-// ── Shortcut handler (%prefix, %pfx, %247) ───────────────────────────────────
 
 async function handleShortcut(ctx, message, settingKey, valueTokens) {
   const set = ctx.getSettings(message);
 
-  // GET (no value provided) — show rich 24/7 panel
   if (valueTokens.length === 0) {
     if (settingKey === "stay_247") {
       const t247 = ctx.locale?.translate?.bind(ctx.locale);
@@ -625,23 +595,18 @@ async function handleShortcut(ctx, message, settingKey, valueTokens) {
     return message.reply(embed(`\`${settingKey}\` → ${displayValue(settingKey, val)}`));
   }
 
-  // SET
   const rawValue = valueTokens.join(" ");
   const err = await applySet(ctx, message, set, settingKey, rawValue);
   if (err) return message.reply(embed(err));
 
-  // handle247 replies on its own
   if (settingKey !== "stay_247") {
     const val = set.get(settingKey);
     return message.reply(embed(ctx.t(message, "responses.settings.setSuccess", { label: settingKey, value: displayValue(settingKey, val) })));
   }
 }
 
-// ── Command definition ────────────────────────────────────────────────────────
 
 export const command = function() {
-  // Populate valid locales from the Locale instance so the list stays
-  // in sync when new locale files are added to storage/locales/bot/.
   if (this.locale) {
     VALID_LOCALES = this.locale.availableLocales();
   }
@@ -737,13 +702,11 @@ export const command = function() {
       );
 };
 
-// ── Command runner ────────────────────────────────────────────────────────────
 
 export async function run(message, data) {
   const set = this.getSettings(message);
   const cmd = data.commandId || "getSettings";
 
-  // ── Shortcut commands (%prefix, %pfx, %247) ───────────────────────────────
   if (cmd?.startsWith("shortcut_")) {
     const alias      = cmd.replace("shortcut_", "");
     const settingKey = SHORTCUTS[alias];
@@ -754,7 +717,6 @@ export async function run(message, data) {
     return handleShortcut(this, message, settingKey, tokens);
   }
 
-  // ── Inline shortcut: %settings <alias> [value] ────────────────────────────
   const raw    = (message.content ?? message.message?.content ?? "").trim();
   const prefix = set.get("prefix") ?? "%";
   const body   = raw.startsWith(prefix) ? raw.slice(prefix.length).trim() : raw;
@@ -766,7 +728,6 @@ export async function run(message, data) {
 
   const settingKey = data.get("setting")?.value;
 
-  // ── set ───────────────────────────────────────────────────────────────────
   if (cmd === "setSettings") {
     const rawValue = data.get("value")?.value;
 
@@ -780,13 +741,12 @@ export async function run(message, data) {
     const err = await applySet(this, message, set, settingKey, rawValue);
     if (err) return message.reply(embed(err));
 
-    if (settingKey === "stay_247") return; // handle247 replied already
+    if (settingKey === "stay_247") return;
 
     const newVal = set.get(settingKey);
     return message.reply(embed(this.t(message, "responses.settings.setSuccess", { label: prettifySettingLabel(settingKey), value: displayValue(settingKey, newVal) })));
   }
 
-  // ── get ───────────────────────────────────────────────────────────────────
   if (cmd === "getSettings") {
     if (settingKey) {
       if (settingKey === "stay_247") {
@@ -800,18 +760,15 @@ export async function run(message, data) {
       return message.reply(embed(reply));
     }
 
-    // List all settings
     const d         = set.getAll();
     const guildName = getGuildName(message);
-    // Use the Fluxer CDN raw property pattern (guild.icon is a hash string, not a URL).
-    // guild.iconURL() is a method that does not exist on @fluxerjs/core Guild objects.
     const rawGuild  = message.message?.guild;
     const iconUrl   = rawGuild?.icon
         ? `https://cdn.fluxer.app/icons/${rawGuild.id}/${rawGuild.icon}.webp`
         : null;
 
     const lines = Object.entries(d)
-        .filter(([k]) => k !== "stay_247_mode") // surfaced inline with stay_247
+        .filter(([k]) => k !== "stay_247_mode")
         .map(([k]) => {
           if (k === "stay_247") {
             return `• **24/7 mode** — ${format247Status(set, this.locale?.translate?.bind(this.locale), getGuildId(message))}`;
@@ -826,13 +783,11 @@ export async function run(message, data) {
     ));
   }
 
-  // ── reset ─────────────────────────────────────────────────────────────────
   if (cmd === "resetSettings") {
     if (!this.settingsMgr.isOption(settingKey)) {
       return message.reply(embed(this.t(message, "responses.settings.unknownSetting", { setting: settingKey })));
     }
     set.reset(settingKey);
-    // Invalidate locale cache if the locale setting was reset
     if (settingKey === "locale") {
       const guildId = getGuildId(message);
       if (guildId) this.locale.invalidateCache(guildId);
@@ -843,7 +798,6 @@ export async function run(message, data) {
     ));
   }
 
-  // ── help ──────────────────────────────────────────────────────────────────
   if (cmd === "helpSettings") {
     const pfx = set.get("prefix") ?? "%";
 

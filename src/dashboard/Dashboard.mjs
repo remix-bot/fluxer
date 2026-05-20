@@ -8,7 +8,7 @@ import { logger } from "../constants/Logger.mjs";
 
 export class Dashboard {
   enabled = false;
-  expiryTime = 1000 * 60 * 60 * 6; // 6 hours — login code expiry
+  expiryTime = 1000 * 60 * 60 * 6;
 
   /**
    * @param {Remix} remix
@@ -23,8 +23,6 @@ export class Dashboard {
 
     if (!this.enabled) return this;
 
-    // DatabaseManager for login code verification (optional — only needed if
-    // the backend uses the bot-based login flow instead of Fluxer OAuth2)
     if (opts.mysql) {
       this.db = new DatabaseManager(opts.mysql);
     }
@@ -55,10 +53,9 @@ export class Dashboard {
             const guild = await this.remix.client.guilds.fetch(data.key);
             if (!guild) return { error: "Server not found" };
             const member = await guild.members.fetch(data.accessor).catch(() => null);
-            const channels = await guild.fetchChannels(); // execute before converting the guild, see caching
+            const channels = await guild.fetchChannels();
             const server = Dashboard.convertServer(guild);
             if (!member) {
-              // Non-member should not see any channels — return error instead of leaking all
               return { error: "You are not a member of this server" };
             }
             server.channels = server.channels.filter(c => {
@@ -79,8 +76,6 @@ export class Dashboard {
         }
 
         case "allServers": {
-          // Auth check: owners see all servers, non-owners see only shared servers
-          //if (data.accessor && this.remix.handler?.owners?.includes?.(data.accessor)) {
           try {
             const guilds = await this.remix.client.user.fetchGuilds();
             return guilds.map(g => Dashboard.convertServer(g));
@@ -89,14 +84,12 @@ export class Dashboard {
             logger.dashboard("[Dashboard] allServers error:", id, e);
             return [];
           }
-          //}
           if (data.accessor) {
             try {
               const accessorUser = await this.remix.client.users.fetch(data.accessor).catch(() => null);
               if (accessorUser) return await this.remix.getSharedServers(accessorUser);
             } catch (_) {}
           }
-          // Always return an array — backend does .findIndex() on result
           return [];
         }
 
@@ -120,23 +113,16 @@ export class Dashboard {
     });
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ── Bot ID isolation ──────────────────────────────────────────────────────
 
   /**
    * Set the bot ID for multi-bot Redis namespace isolation.
    * Updates the Redis platform string so each bot uses its own channel namespace.
-   * @param {string} botId - The bot's Discord user ID
    */
   setBotId(botId) {
     if (!this.enabled || !this.redis) return;
-    // Use "fluxer_<botId>" as the platform so each bot's Redis messages
-    // are isolated. The dashboard backend must also be configured to match.
     this.redis.platform = `fluxer`;
   }
 
-  // Dashboard Function Dispatch
-  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
    * @param {Object} params
@@ -159,9 +145,6 @@ export class Dashboard {
         if (!user) return { error: "Invalid user" };
         let voiceChannel, textChannel;
         try {
-          // Fluxer.js uses channels.get() for cached lookup and channels.fetch()
-          // for REST fetch. Try fetch first (more reliable for uncached channels),
-          // fall back to get (cache-only).
           const chMgr = this.remix.client.channels;
           if (typeof chMgr.fetch === "function") {
             voiceChannel = await chMgr.fetch(params.data.channel);
@@ -172,19 +155,15 @@ export class Dashboard {
           }
           if (!voiceChannel) return { error: "Voice channel not found" };
 
-          // Validate textChannel: if it's a voice channel (type === 2) or missing,
-          // find a suitable text channel from the guild instead
           const isText = (ch) => ch && (ch.type === 0 || ch.type === 5 || ch.type === 13 ||
               (typeof ch.isText === "function" && ch.isText()));
 
           if (!isText(textChannel)) {
-            // Auto-pick a text channel from the guild
             const guild = this.remix.client.guilds.get(voiceChannel.guildId);
             if (guild?.channels) {
               const channelValues = typeof guild.channels.values === "function"
                   ? [...guild.channels.values()]
                   : Array.isArray(guild.channels) ? guild.channels : Object.values(guild.channels);
-              // Prefer system channel, then first text channel
               const sysCh = guild.systemChannelId
                   ? channelValues.find(c => (c.id ?? c._id) === guild.systemChannelId && isText(c))
                   : null;
@@ -192,29 +171,22 @@ export class Dashboard {
             }
             if (!textChannel) {
               logger.dashboard("[Dashboard] No text channel found for guild", voiceChannel.guildId, "— voice channel will be used as fallback");
-              textChannel = voiceChannel; // last resort — _sendToTextChannel will handle it
+              textChannel = voiceChannel;
             }
           }
         } catch (e) {
           logger.dashboard("[Dashboard] Error:", e);
           return { error: "Invalid Channel" };
         }
-        // Verify the user has permission to join the voice channel
         const authErr = await this._authorizeUserInGuild(user, voiceChannel.guildId);
         if (authErr) return { error: authErr };
         if (this.remix.players.playerMap.has(voiceChannel.id)) {
-          // Bot is already in this channel — just add the user to the player's
-          // user list so the backend PlayerManager and SocketHandler can track
-          // them for real-time updates and multi-user dashboard support.
           const existingPlayer = this.remix.players.playerMap.get(voiceChannel.id);
           if (existingPlayer && user && !existingPlayer._dashboardUsers) {
             existingPlayer._dashboardUsers = [];
           }
           if (existingPlayer && user && !existingPlayer._dashboardUsers.includes(String(user.id))) {
             existingPlayer._dashboardUsers.push(String(user.id));
-            // Publish a "join" event on the player's per-channel Redis topic
-            // so the backend PlayerManager adds this user to the player's users
-            // list and the SocketHandler subscribes them.
             try {
               const pubChannel = this.remix.redis?.publisher ?? this.remix.redis;
               if (pubChannel && typeof pubChannel.publish === "function") {
@@ -227,17 +199,12 @@ export class Dashboard {
           }
           return { message: "Already Connected" };
         }
-        // Build a minimal fake message that satisfies PlayerManager.initPlayer().
-        // player.textChannel is set to message.channel, so it MUST be the real
-        // textChannel object (which has .send()) — not a wrapper.  Without this,
-        // ch?.send throws "not a function" when announceSong fires.
         const fakeMsg = {
           channel: textChannel,
           message: { guildId: voiceChannel.guildId },
           reply: async () => ({ edit: async () => {}, catch: () => {} }),
         };
         this.remix.players.initPlayer(fakeMsg, voiceChannel.id);
-        // Track this dashboard user on the player for multi-user support
         const newPlayer = this.remix.players.playerMap.get(voiceChannel.id);
         if (newPlayer && user) {
           if (!newPlayer._dashboardUsers) newPlayer._dashboardUsers = [];
@@ -303,7 +270,6 @@ export class Dashboard {
           player.playRadio(radio);
           return { message: "Adding radio station" };
         }
-        // Sanitize: reject obviously malicious patterns
         if (/^(javascript|data|vbscript):/i.test(query.trim())) {
           return { error: "Invalid query protocol" };
         }
@@ -316,11 +282,8 @@ export class Dashboard {
       }
 
       case "voiceState": {
-        // Return the user's current voice channel (if any)
         if (!user) return { channel: null };
         const userId = String(user.id).replace(/\D/g, "");
-        // Check VoiceStateCache first (most reliable for Fluxer)
-        // Uses O(1) lookup via iterateHumanUsers() / [Symbol.iterator]
         if (this.remix.voiceCache) {
           for (const [mapUserId, info] of this.remix.voiceCache) {
             if (String(mapUserId).replace(/\D/g, "") === userId && info.channelId) {
@@ -333,7 +296,6 @@ export class Dashboard {
             }
           }
         }
-        // Fallback: check all guilds for the user's voice state
         const guilds = this.remix.client.guilds;
         const guildValues = guilds && typeof guilds.values === "function"
             ? [...guilds.values()] : guilds ? Object.values(guilds) : [];
@@ -358,22 +320,16 @@ export class Dashboard {
 
       case "leave": {
         if (!user) return { error: "Invalid user" };
-        // Support both params.data.channel and params.data.player for
-        // backward compatibility with different backend versions.
         const playerId = params.data.channel ?? params.data.player;
         const player = this._getPlayerById(playerId);
         if (!player) return { error: "Player not found" };
         const authErr = await this._authorizeUserInGuild(user, player._guildId);
         if (authErr) return { error: authErr };
-        // Remove this user from the dashboard users list
         if (player._dashboardUsers && user) {
           const idx = player._dashboardUsers.indexOf(String(user.id));
           if (idx !== -1) player._dashboardUsers.splice(idx, 1);
         }
-        // If there are still dashboard users connected, don't destroy the player
-        // — just remove this user. The player stays active for other users.
         if (player._dashboardUsers && player._dashboardUsers.length > 0) {
-          // Publish a leave event for this user on the player channel
           try {
             const pubChannel = this.remix.dashboard?.redis?.client ?? this.remix.redis?.client;
             if (pubChannel && typeof pubChannel.publish === "function") {
@@ -398,7 +354,6 @@ export class Dashboard {
     }
   }
 
-  // ── Authorization helpers ──────────────────────────────────────────────
 
   /**
    * Check if a user is a bot owner, or is in the same voice channel as the player.
@@ -416,14 +371,12 @@ export class Dashboard {
 
     const observed = this.remix.voiceCache;
     if (observed) {
-      // O(1) lookup: check if user is in the same channel as the player
       const guildId = String(player._guildId ?? "").replace(/\D/g, "");
       const userLoc = observed.get(cleanUserId, guildId || undefined);
       if (userLoc) {
         const infoChannelId = String(userLoc.channelId ?? "").replace(/\D/g, "");
         if (infoChannelId === cleanChanId) return null;
       }
-      // Legacy scan fallback (user might not have guildId)
       for (const [mapUserId, info] of observed) {
         if (String(mapUserId).replace(/\D/g, "") === cleanUserId) {
           const infoChannelId = String(info.channelId ?? "").replace(/\D/g, "");
@@ -468,14 +421,11 @@ export class Dashboard {
         ?? null;
   }
 
-  // ── Static converters ─────────────────────────────────────────────────────
 
   /**
    * @param {import("@fluxerjs/core").User} user
    */
   static convertUser(user) {
-    // Build avatar URL using fluxerusercontent.com CDN pattern
-    // user.avatar is the avatar hash string; user.id is the user ID
     let avatarUrl = "";
     if (user.avatar) {
       avatarUrl = `https://fluxerusercontent.com/avatars/${user.id}/${user.avatar}.webp`;
@@ -484,7 +434,6 @@ export class Dashboard {
     } else if (typeof user.avatarURL === "function") {
       try { avatarUrl = user.avatarURL() ?? ""; } catch (_) {}
     }
-    // Fallback to default avatar if no custom avatar
     if (!avatarUrl && user.discriminator) {
       avatarUrl = `https://fluxerusercontent.com/embed/avatars/${parseInt(user.discriminator || "0") % 5}.png`;
     }
@@ -528,8 +477,6 @@ export class Dashboard {
   static convertChannel(channel) {
     const type = channel.type ?? 0;
     const isVoice = channel.isVoice?.() ?? (type === 2) ?? false;
-    // Discord channel types: 0=text, 1=DM, 2=voice, 3=group DM, 4=category,
-    // 5=announcement, 13=stage, 15=form, 16=forum, 17=media
     const isCategory = type === 4;
     const isText = !isVoice && !isCategory && (
         type === 0 || type === 5 || type === 13 ||
@@ -582,10 +529,8 @@ export class Dashboard {
         : [];
     const allChannels = channelValues
         .map(Dashboard.convertChannel)
-        .filter(c => !c.isCategory); // exclude categories — they are not joinable
+        .filter(c => !c.isCategory);
 
-    // Build icon URL using fluxerusercontent.com CDN pattern
-    // guild.icon is the icon hash string; guild.id is the server ID
     let iconUrl = null;
     if (guild.icon) {
       iconUrl = `https://fluxerusercontent.com/icons/${guild.id}/${guild.icon}.webp`;
@@ -601,7 +546,6 @@ export class Dashboard {
       description: guild.description ?? null,
       ownerId: guild.ownerId,
       channels: allChannels,
-      // Frontend expects voiceChannels array for server list display
       voiceChannels: allChannels.filter(c => c.isVoice),
     };
   }
@@ -611,7 +555,6 @@ export class Dashboard {
    * @param {import("@fluxerjs/core").Guild} guild
    */
   static convertServerSummary(guild) {
-    // Build icon URL using fluxerusercontent.com CDN pattern
     let iconUrl = null;
     if (guild.icon) {
       iconUrl = `https://fluxerusercontent.com/icons/${guild.id}/${guild.icon}.webp`;
@@ -637,7 +580,6 @@ export class Dashboard {
     const cleanChannelId = channelId ? String(channelId).replace(/\D/g, "") : "";
     const cleanGuildId = player._guildId ? String(player._guildId).replace(/\D/g, "") : "";
 
-    // Null-guard: player.queue can be null during teardown
     const queue = player.queue ?? { loop: false, songLoop: false, current: null, data: [] };
 
     return {
@@ -665,14 +607,8 @@ export class Dashboard {
             }
           }
         }
-        // Fallback: VoiceStateCache (seeded from READY/GUILD_CREATE).
-        // After a bot reload, guild.voice_states may only contain the bot's
-        // own voice state, while VoiceStateCache has ALL humans who were
-        // already in voice when the bot reconnected.
-        // Try O(1) channel lookup first, then fall back to iteration.
         const vc = player._voiceCache ?? player._observedVoiceUsers;
         if (vc && cleanChannelId && cleanGuildId) {
-          // O(1) lookup via getHumansInChannel
           if (typeof vc.getHumansInChannel === "function") {
             const channelHumans = vc.getHumansInChannel(cleanGuildId, cleanChannelId);
             for (const hid of channelHumans) {
@@ -683,13 +619,11 @@ export class Dashboard {
               seen.add(hid);
             }
           } else {
-            // Legacy iteration fallback
             for (const [mapUserId, info] of vc) {
               if (seen.has(mapUserId)) continue;
               const infoCh = String(info.channelId ?? "").replace(/\D/g, "");
               const infoG  = String(info.guildId   ?? "").replace(/\D/g, "");
               if (infoCh === cleanChannelId && infoG === cleanGuildId) {
-                // Skip the bot itself
                 const botId = player.client?.user?.id;
                 if (botId && String(mapUserId) === String(botId)) continue;
                 ids.push(String(mapUserId));
@@ -698,7 +632,6 @@ export class Dashboard {
             }
           }
         }
-        // Merge dashboard users (connected via web UI but not necessarily in Discord voice)
         if (player._dashboardUsers) {
           for (const du of player._dashboardUsers) {
             if (!seen.has(du)) { ids.push(du); seen.add(du); }
@@ -707,9 +640,6 @@ export class Dashboard {
         return ids;
       })(),
       channel: channel ? Dashboard.convertChannel(channel) : null,
-      // Use lightweight server summary to avoid serializing hundreds of channels
-      // per player update. The frontend should fetch full server details via
-      // the "server" request type when needed.
       server: guild ? Dashboard.convertServerSummary(guild) : null,
     };
   }
@@ -750,30 +680,7 @@ export class Dashboard {
     };
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Pub/Sub broadcast helpers
-  //
-  // CRITICAL: The backend (backend-master) expects standard message
-  // formats on both the global :players channel and the per-player
-  // :player_{channelId} channel.  The formats are:
-  //
-  //   Global (:players):
-  //     { type: "init", player: serialisedPlayer }   — when bot joins a VC
-  //     { type: "close", player: serialisedPlayer }  — when bot leaves a VC
-  //
-  //   Per-player (:player_{channelId}):
-  //     { type: "startplay",  data: serialisedVideo }
-  //     { type: "streamStartPlay", data: timestamp }
-  //     { type: "stopplay",   data: null }
-  //     { type: "pause",      data: { elapsedTime: ms } }
-  //     { type: "resume",     data: { elapsedTime: ms } }
-  //     { type: "volume",     data: number }
-  //     { type: "queue",      data: serialisedQueueEvent }
-  //     { type: "join",       data: userId }
-  //     { type: "leave",      data: userId }
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  // Debounce map for playerUpdate — prevents flooding Redis with rapid updates.
   _playerUpdateTimers = new Map();
 
   /**
@@ -796,8 +703,6 @@ export class Dashboard {
     if (!this.enabled) return;
     const key = player._channelId ?? player._guildId ?? "unknown";
 
-    // For "init" and "close" events, send immediately (no debounce) — the
-    // backend relies on these for player lifecycle management.
     if (details.type === "init" || details.type === "close") {
       try {
         const serialised = Dashboard.convertPlayer(player);
@@ -811,13 +716,12 @@ export class Dashboard {
       return;
     }
 
-    // All other events are debounced to avoid flooding Redis.
     if (this._playerUpdateTimers.has(key)) {
       clearTimeout(this._playerUpdateTimers.get(key));
     }
     this._playerUpdateTimers.set(key, setTimeout(() => {
       this._playerUpdateTimers.delete(key);
-      if (player._destroyed) return; // skip destroyed players
+      if (player._destroyed) return;
       try {
         const serialised = Dashboard.convertPlayer(player);
         this.redis.send(this.redis.platform + ":players", JSON.stringify({
@@ -877,9 +781,6 @@ export class Dashboard {
     this.redis.send(channel, JSON.stringify(details));
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Login Confirmation (for backend-based DM code verification flow)
-  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
    * Verify a login code submitted by a user via DM.
@@ -906,13 +807,13 @@ export class Dashboard {
     if (res.length === 0) return "If this is a valid code, it was not created for your account.";
 
     for (let i = 0; i < res.length; i++) {
-      if (res[i].verified) continue; // skip already-verified codes (double guard)
+      if (res[i].verified) continue;
       if (await this.db.compareHash(code, res[i].token)) {
         if (Date.now() - this.expiryTime > (new Date(res[i].createdAt)).getTime()) {
           return "Login token expired";
         }
         await this.db.execute("UPDATE login_codes SET verified=true WHERE id=?", [res[i].id]);
-        return null; // success
+        return null;
       }
     }
 

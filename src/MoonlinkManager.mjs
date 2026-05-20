@@ -9,9 +9,6 @@ import { logger } from "./constants/Logger.mjs";
 import { EventEmitter } from "node:events";
 import { Events } from "@fluxerjs/core";
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// MoonlinkManager ──────────────────────────────────────────────────────────────
-// ═══════════════════════════════════════════════════════════════════════════════
 
 export class MoonlinkManager extends EventEmitter {
   /** @type {Manager} */

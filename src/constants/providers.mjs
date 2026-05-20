@@ -9,7 +9,6 @@
  */
 
 export const PROVIDERS = {
-  // ── Standard search ──────────────────────────────────────────────────────
   yt:        { prefix: "ytsearch",    label: "YouTube" },
   ytm:       { prefix: "ytmsearch",   label: "YouTube Music" },
   scld:      { prefix: "scsearch",    label: "SoundCloud" },
@@ -56,14 +55,12 @@ export const PROVIDERS = {
   anghami:   { prefix: "agsearch",    label: "Anghami" },
   bk:        { prefix: "bksearch",    label: "Bluesky" },
   bluesky:   { prefix: "bksearch",    label: "Bluesky" },
-  // ── Recommendations ──────────────────────────────────────────────────────
   ytrec:     { prefix: "ytrec",       label: "YouTube (recommended)" },
   sprec:     { prefix: "sprec",       label: "Spotify (recommended)" },
   dzrec:     { prefix: "dzrec",       label: "Deezer (recommended)" },
   tdrec:     { prefix: "tdrec",       label: "Tidal (recommended)" },
   jsrec:     { prefix: "jsrec",       label: "JioSaavn (recommended)" },
   vkrec:     { prefix: "vkrec",       label: "VK Music (recommended)" },
-  // ── TTS ──────────────────────────────────────────────────────────────────
   gtts:      { prefix: "gtts",        label: "Google TTS" },
   tts:       { prefix: "gtts",        label: "Google TTS" },
   ftts:      { prefix: "ftts",        label: "Flowery TTS" },

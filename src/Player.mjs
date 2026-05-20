@@ -36,8 +36,6 @@ function mkEmbed(desc) {
 /** NodeLink default password — centralised so it doesn't need to be hardcoded in two places. */
 const NL_DEFAULT_PASSWORD = "youshallnotpass";
 
-// Cache compiled sanitize regexes keyed by "host:port:password" to avoid
-// rebuilding identical RegExp objects on every error path.
 const _sanitizeCache = new Map();
 
 /**
@@ -69,14 +67,13 @@ function sanitizeError(msg, nl = {}) {
       const ep = password.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       regexes.push(new RegExp(ep, "g"));
     }
-    // Cap cache size — in practice there's only one NodeLink config, but guard anyway
     if (_sanitizeCache.size >= 20) _sanitizeCache.clear();
     _sanitizeCache.set(cacheKey, regexes);
   }
 
   let s = String(msg);
   for (const re of regexes) {
-    re.lastIndex = 0; // reset stateful global regexes between calls
+    re.lastIndex = 0;
     s = s.replace(re, re.source.includes("redacted") ? "[redacted]" : "[internal]");
   }
   return s;
@@ -87,19 +84,15 @@ function isIgnorableMediaStateError(err) {
   return msg.includes("InvalidState") || msg.includes("failed to capture frame") || msg.includes("capture frame");
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// PlayerWorkerPool — persistent worker pool to avoid spawning a new Node.js
-// isolate (~40 MB V8 heap) for every search/play command.
-// ═══════════════════════════════════════════════════════════════════════════════
 
 class PlayerWorkerPool {
   constructor(size, workerPath, nlConfig = {}) {
     this._size       = size;
     this._workerPath = workerPath;
     this._nlConfig   = nlConfig;
-    this._workers    = [];   // { worker, busy, _currentJobKey }
-    this._queue      = [];   // { jobKey, msg, resolve, reject, onMessage }
-    this._pending    = new Map(); // jobKey → { resolve, reject, onMessage }
+    this._workers    = [];
+    this._queue      = [];
+    this._pending    = new Map();
     this._jobCounter = 0;
 
     for (let i = 0; i < size; i++) this._spawn();
@@ -109,8 +102,6 @@ class PlayerWorkerPool {
     const worker = new Worker(this._workerPath, {
       workerData: {
         poolMode: true,
-        // Pass NodeLink config so the module-level nlGet fallback
-        // has the correct host/port/password if _nlGet is ever null.
         data: { nodelink: this._nlConfig ?? {} }
       }
     });
@@ -141,9 +132,6 @@ class PlayerWorkerPool {
     });
 
     worker.on("error", (err) => {
-      // Release only the job currently assigned to THIS worker.
-      // Iterating all _pending would incorrectly reject in-flight jobs
-      // from other workers, leaving those workers stuck busy=true forever.
       if (entry._currentJobKey != null) {
         const cb = this._pending.get(entry._currentJobKey);
         if (cb) {
@@ -153,7 +141,6 @@ class PlayerWorkerPool {
         entry._currentJobKey = null;
       }
       entry.busy = false;
-      // Replace dead worker
       const errIdx = this._workers.indexOf(entry);
       if (errIdx !== -1) this._workers.splice(errIdx, 1);
       this._spawn();
@@ -207,9 +194,6 @@ class PlayerWorkerPool {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Queue Class
-// ═══════════════════════════════════════════════════════════════════════════════
 
 export class Queue extends EventEmitter {
   data = [];
@@ -308,50 +292,37 @@ export class Queue extends EventEmitter {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Player Class
-// ═══════════════════════════════════════════════════════════════════════════════
 
 export default class Player extends EventEmitter {
   /** @type {import("revoice.js").VoiceConnection|null} */
   connection        = null;
   _guildId          = null;
   _channelId        = null;
-  // The channel this player was originally spawned/assigned to for 247 mode.
-  // Set externally by spawnPlayer after joining. Used by _is247Enabled() so
-  // that even if the bot is temporarily in a transit channel (e.g. "move"),
-  // the player knows its intended home channel and can check 247 correctly.
   _home247Channel   = null;
 
-  // Components
   queue        = null;
   client       = null;
   settings     = null;
   config       = {};
-  // revoice.js instances
   /** @type {import("revoice.js").MediaPlayer|null} */
   _mediaPlayer = null;
   /** @type {import("./constants/FluxerRevoice.mjs").FluxerRevoice|null} Shared FluxerRevoice instance (injected from Remix) */
   _revoice     = null;
 
-  // moonlink.js manager reference (set by PlayerManager)
   /** @type {import("./MoonlinkManager.mjs").MoonlinkManager|null} */
   _moonlink    = null;
 
-  // Playback state
   leaving           = false;
   _paused           = false;
-  _pausedAt         = null; // track exact moment of pause for clock sync
+  _pausedAt         = null;
   _playingNext      = false;
   startedPlaying    = null;
-  // searches Map with max-size eviction to prevent memory leak on busy servers.
   searches          = new Map();
   _searchMaxSize    = 50;
-  _maxQueueSize     = 10_000; // Max tracks in queue to prevent unbounded memory growth
+  _maxQueueSize     = 10_000;
   resultLimit       = 5;
   preferredVolume   = 1;
 
-  // Streaming state
   _streamingStopped    = false;
   _skipping            = false;
   _currentPassthrough  = null;
@@ -359,22 +330,17 @@ export default class Player extends EventEmitter {
   _radioAnnounced      = false;
   _queueEndedSent      = false;
 
-  // Active audio filter — { key, label, payload } or null
   activeFilter         = null;
   activeFilterPayload  = null;
 
-  // Inactivity timeout
   _inactivityTimer     = null;
-  _inactivityLimit = 3 * 60 * 1000; // 3 min default
-  _pendingInactivityCheck = false; // Guard to prevent race between join() timer and reseed
+  _inactivityLimit = 3 * 60 * 1000;
+  _pendingInactivityCheck = false;
 
-  // Join mutex — prevents concurrent join() calls from racing each other
   _isJoining           = false;
 
-  // destroyed flag — prevents playback/worker spawn after destroy()
   _destroyed           = false;
 
-  // NodeLink config (kept for direct stream URL building; session managed by moonlink)
   _nl = {
     host:           "localhost",
     port:           3000,
@@ -395,14 +361,12 @@ export default class Player extends EventEmitter {
     this._voiceCache          = opts.voiceCache ?? null;
     this.locale       = opts.locale ?? null;
 
-    // Merge NodeLink config (for stream URL building)
     this._nl = {
       ...this._nl,
       ...(this.config?.nodelink ?? {}),
       ...(opts.nodelink ?? {}),
     };
 
-    // Set inactivity limit
     const inactivityMs = this.config?.timers?.inactivityTimeout ?? this.config?.inactivityTimeout;
     if (inactivityMs !== undefined) {
       const parsed = Number(inactivityMs);
@@ -411,13 +375,10 @@ export default class Player extends EventEmitter {
       }
     }
 
-    // moonlink.js manager reference — injected by PlayerManager
     this._moonlink = opts.moonlink ?? null;
 
-    // revoice.js shared instance — injected by PlayerManager
     this._revoice = opts.revoice ?? null;
 
-    // Robust session sync that handles stale sessions
     if (this._moonlink) {
       this._onMoonlinkReady = (sessionId) => {
         const oldId = this._nl.sessionId;
@@ -427,7 +388,6 @@ export default class Player extends EventEmitter {
         }
       };
       this._moonlink.on("ready", this._onMoonlinkReady);
-      // Immediate sync if moonlink is already ready
       const existingSession = this._moonlink.getLiveSessionId?.() ?? this._moonlink.sessionId;
       if (existingSession) {
         this._nl.sessionId = existingSession;
@@ -435,9 +395,6 @@ export default class Player extends EventEmitter {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 24/7 Mode Check
-  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
    * Check if 24/7 mode is enabled for this player's channel.
@@ -467,22 +424,16 @@ export default class Player extends EventEmitter {
           ? raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
           : [String(raw).replace(/\D/g, "")];
 
-      // Use the home channel this player was assigned to for 247 — this is
-      // set by spawnPlayer and doesn't change when the bot is temporarily
-      // moved to a transit channel. This gives a per-player 247 check that
-      // works correctly with multi-voice-per-guild setups.
       const homeChannel    = this._home247Channel
           ? String(this._home247Channel).replace(/\D/g, "")
           : null;
       const currentChannel = String(this._channelId ?? "").replace(/\D/g, "");
 
-      // Determine which channel to check the mode for
       const matchChannel = channels.includes(homeChannel) ? homeChannel
           : channels.includes(currentChannel) ? currentChannel
               : null;
       if (!matchChannel) return "off";
 
-      // Per-channel mode lookup: each channel can have its own on/auto/off
       return get247ChannelMode(set, matchChannel);
     };
 
@@ -502,7 +453,6 @@ export default class Player extends EventEmitter {
     const cleanGuild = String(this._guildId ?? "").replace(/\D/g, "");
     if (cleanGuild) return cleanGuild;
 
-    // Fallback: resolve from the channel object
     try {
       const channelId = this._channelId ?? this._home247Channel;
       if (channelId) {
@@ -515,10 +465,6 @@ export default class Player extends EventEmitter {
     return null;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Volume Restore
-  // ═══════════════════════════════════════════════════════════════════════════
 
   _restoreVolume() {
     if (!this._guildId) return;
@@ -545,21 +491,16 @@ export default class Player extends EventEmitter {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Inactivity Timer
-  // ═══════════════════════════════════════════════════════════════════════════
 
   _hasHumansInChannel() {
     if (!this._channelId || !this._guildId) return false;
     const cleanChan  = String(this._channelId).replace(/\D/g, "");
     const cleanGuild = String(this._guildId).replace(/\D/g, "");
 
-    // O(1) lookup via VoiceStateCache channelMembers index
     if (this._voiceCache && this._voiceCache.hasHumansInChannel(cleanGuild, cleanChan)) {
       return true;
     }
 
-    // Legacy fallback: iterate observedVoiceUsers (O(n))
     try {
       const voiceUsers = this._observedVoiceUsers;
       if (voiceUsers && typeof voiceUsers.iterateHumanUsers === "function") {
@@ -570,7 +511,6 @@ export default class Player extends EventEmitter {
           ) return true;
         }
       } else if (voiceUsers) {
-        // Raw Map fallback (shouldn't happen with new code)
         for (const [, info] of voiceUsers) {
           if (
               String(info.guildId   ?? "").replace(/\D/g, "") === cleanGuild &&
@@ -600,7 +540,6 @@ export default class Player extends EventEmitter {
       }
     } catch (_) {}
 
-    // LiveKit participant fallback
     try {
       const room = this.connection?.room;
       if (room?.isConnected && room.remoteParticipants) {
@@ -622,17 +561,11 @@ export default class Player extends EventEmitter {
     const mode = this._get247Mode();
     logger.inactivity(`[Player] Checking 24/7 mode for guild ${this._guildId}: ${mode}`);
 
-    // %247 auto: bot always stays in voice, never start inactivity timer
-    // %247 on:  bot stays in voice permanently — never start inactivity timer
-    // %247 off: bot leaves when alone — timer is allowed
     if (mode === "auto" || mode === "on") {
       logger.inactivity(`[Player] 24/7 ${mode} mode active for guild ${this._guildId}, skipping inactivity timer`);
       return;
     }
 
-    // Don't start the inactivity timer if there is a song currently playing
-    // or songs waiting in the queue — the bot should stay as long as there's
-    // music to play, even if no humans are currently in the channel.
     if (this.queue?.getCurrent() || !this.queue?.isEmpty()) {
       logger.inactivity(`[Player] Queue has songs for guild ${this._guildId}, skipping inactivity timer`);
       return;
@@ -645,8 +578,6 @@ export default class Player extends EventEmitter {
 
     logger.inactivity(`[Player] Starting inactivity timer for guild ${this._guildId} (${this._inactivityLimit / 1000}s)`);
     this._inactivityTimer = setTimeout(() => {
-      // Re-check all conditions before leaving — they may have changed while
-      // the timer was running (user joined, 24/7 enabled, song queued, etc.)
       const currentMode = this._get247Mode();
       if (currentMode === "auto" || currentMode === "on") {
         logger.inactivity(`[Player] 24/7 ${currentMode} mode enabled during inactivity wait, aborting leave`);
@@ -666,8 +597,6 @@ export default class Player extends EventEmitter {
   }
 
   _stopInactivityTimer() {
-    // Also cancel any pending inactivity check that Player.join() scheduled.
-    // Clearing the flag prevents that delayed check from restarting the timer.
     this._pendingInactivityCheck = false;
     if (this._inactivityTimer) {
       logger.inactivity(`[Player] Stopping inactivity timer for guild ${this._guildId}`);
@@ -676,9 +605,6 @@ export default class Player extends EventEmitter {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // MediaPlayer Management
-  // ═══════════════════════════════════════════════════════════════════════════
 
   async _ensureMediaPlayer() {
     if (this._destroyed) return false;
@@ -731,7 +657,7 @@ export default class Player extends EventEmitter {
                   e?.message?.includes("InvalidState") ||
                   e?.message?.includes("failed to capture frame")
               ) {
-                return; // race condition on skip/leave — safe to swallow
+                return;
               }
               throw e;
             }
@@ -790,14 +716,10 @@ export default class Player extends EventEmitter {
         logger.error("[Player] Error stopping media player:", e.message);
       }
 
-      // Null the reference so the native revoice.js/LiveKit object can be GC'd.
       this._mediaPlayer = null;
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // HTTP/Stream Helpers
-  // ═══════════════════════════════════════════════════════════════════════════
 
   async _request(url, options = {}, returnStream = false) {
     return new Promise((resolve, reject) => {
@@ -825,7 +747,6 @@ export default class Player extends EventEmitter {
             if (!loc) return reject(new Error("Redirect without location"));
             if (loc.startsWith("/")) loc = `${urlObj.protocol}//${urlObj.host}${loc}`;
             if (_redirects >= 5) return reject(new Error("Too many redirects"));
-            // Strip auth header on cross-origin redirects
             const redirectUrl = new URL(loc);
             if (redirectUrl.host !== urlObj.host) {
               delete options.headers?.Authorization;
@@ -893,9 +814,6 @@ export default class Player extends EventEmitter {
     return elapsedMs / totalMs >= 0.85 || remainingMs <= 15_000;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Audio Streaming (revoice.js)
-  // ═══════════════════════════════════════════════════════════════════════════
 
   async _streamViaRevoice(url, inputOptions = []) {
     if (this._streamingStopped) return;
@@ -938,7 +856,6 @@ export default class Player extends EventEmitter {
         const onFfmpegError = (err) => {
           const ffMsg = err?.message ?? String(err);
 
-          // treat SIGKILL as graceful — _stopMediaPlayer() always kills FFmpeg with SIGKILL.
           const isGracefulKill =
               ffMsg.includes("aborted") ||
               ffMsg.includes("Input stream error") ||
@@ -952,12 +869,10 @@ export default class Player extends EventEmitter {
               return resolve();
             }
             cleanup();
-            // If we deliberately stopped (skip/leave), resolve silently
             if (this._streamingStopped || this._skipping) return resolve();
             return reject(new Error(`FFmpeg stream ended early: ${ffMsg}`));
           }
 
-          // Genuine unexpected FFmpeg error
           logger.error("[Player] FFmpeg error:", ffMsg);
           cleanup();
           if (this._streamingStopped || this._skipping) return resolve();
@@ -990,11 +905,10 @@ export default class Player extends EventEmitter {
           return reject(e);
         }
 
-        // Dynamic safety timeout based on track duration.
         const trackDuration = this._getTrackDurationMs(currentTrack);
         const safetyMs = (trackDuration > 0 && currentTrack?.type !== "radio")
             ? trackDuration + 15_000
-            : 20 * 60 * 1000; // default 20 min for radio/unknown
+            : 20 * 60 * 1000;
 
         const safetyTimer = setTimeout(() => {
           logger.warn(`[Player] Stream safety timeout hit (${Math.round(safetyMs/1000)}s) — advancing queue`);
@@ -1044,7 +958,6 @@ export default class Player extends EventEmitter {
 
     if (url.includes("/v4/loadstream")) {
       logger.player(`[Player] NodeLink loadStream PCM active`);
-      // Raw PCM from NodeLink — tell FFmpeg the input format
       const pcmInputOpts = ["-f", "s16le", "-ar", "48000", "-ac", "2"];
       return await this._streamViaRevoice(url, pcmInputOpts);
     }
@@ -1065,9 +978,6 @@ export default class Player extends EventEmitter {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Voice Connection (revoice.js)
-  // ═══════════════════════════════════════════════════════════════════════════
 
   async join(channelId) {
     if (this._destroyed) return;
@@ -1082,13 +992,9 @@ export default class Player extends EventEmitter {
         logger.player(`[Player] Already in channel: ${channelId}`);
         return;
       }
-      // Connection is dead — clean up. No auto-reconnect; the caller
-      // must explicitly re-join if they want to reconnect.
       logger.player(`[Player] Dead connection detected for ${channelId}, cleaning up`);
       try { this.connection.removeAllListeners(); } catch (_) {}
 
-      // Use FluxerRevoice's channel-specific leave instead of raw
-      // vm.updateVoiceState(guildId, null) which nukes ALL guild channels.
       if (this._revoice && this._channelId) {
         try { this._revoice.markIntentionalDisconnect(this._channelId); } catch (_) {}
         try { this._revoice._leaveGateway(this._channelId, this._guildId ?? this._resolveGuildId()); } catch (_) {}
@@ -1109,8 +1015,6 @@ export default class Player extends EventEmitter {
         logger.mediaplayer("[Player] Cleaning up existing connection before join");
         try { this.connection.removeAllListeners(); } catch (_) {}
 
-        // Use FluxerRevoice's channel-specific leave instead of raw
-        // vm.updateVoiceState(guildId, null) which nukes ALL guild channels.
         if (this._revoice && this._channelId) {
           try { this._revoice.markIntentionalDisconnect(this._channelId); } catch (_) {}
           try { this._revoice._leaveGateway(this._channelId, this._guildId ?? this._resolveGuildId()); } catch (_) {}
@@ -1121,20 +1025,11 @@ export default class Player extends EventEmitter {
           await this.connection.disconnect();
         } catch (_) {}
 
-        // Brief wait so the gateway processes the leave before we join a
-        // new channel. FluxerRevoice adds its own _globalJoinDelay too.
         await Utils.sleep(500);
         this.connection   = null;
         this._mediaPlayer = null;
       }
 
-      // ── FluxerRevoice join ─────────────────────────────────────────────
-      // Use the FluxerRevoice instance to join the voice channel via the
-      // Fluxer gateway. FluxerRevoice sends a VOICE_STATE_UPDATE through
-      // the gateway, receives VOICE_SERVER_UPDATE with LiveKit credentials,
-      // then creates a FluxerVoiceConnection wrapping a LiveKit Room.
-      // The FluxerVoiceConnection is API-compatible with revoice.js's
-      // VoiceConnection (has .room, .disconnect(), .leave(), events).
       if (!this._revoice) {
         throw new Error("FluxerRevoice instance not available — cannot join voice channel");
       }
@@ -1154,19 +1049,10 @@ export default class Player extends EventEmitter {
 
       logger.mediaplayer(`[Player] FluxerVoiceConnection obtained (isConnected: ${room.isConnected}, connectionState: ${room.connectionState})`);
 
-      // ── Wait for the room to be connected ──────────────────────────────
-      // FluxerRevoice already waits for the LiveKit room to be ready before
-      // resolving the join() promise, but we add a safety net for slow
-      // LiveKit servers.
-      // Uses the correct @livekit/rtc-node API:
-      //   room.isConnected      — boolean getter
-      //   room.connectionState  — ConnectionState enum
-      //   RoomEvent.ConnectionStateChanged — fires with ConnectionState value
       let connected = false;
       let settled   = false;
 
       try {
-        // If already connected (FluxerRevoice.wait usually resolves this), skip
         if (room.isConnected) {
           connected = true;
           settled   = true;
@@ -1182,7 +1068,6 @@ export default class Player extends EventEmitter {
             const timeout = setTimeout(() => {
               if (settled) return;
               cleanup();
-              // Use room.isConnected as the source of truth
               if (room.isConnected) {
                 connected = true;
                 settled   = true;
@@ -1190,7 +1075,6 @@ export default class Player extends EventEmitter {
               } else if (!room.isConnected && (room.connectionState === ConnectionState.CONN_DISCONNECTED || room.connectionState === 0)) {
                 reject(new Error(`LiveKit disconnected (connectionState: ${room.connectionState})`));
               } else {
-                // Still connecting or indeterminate — optimistically proceed
                 connected = true;
                 settled   = true;
                 resolve();
@@ -1226,7 +1110,6 @@ export default class Player extends EventEmitter {
               }
             }, 500);
 
-            // Immediate check using correct API
             if (room.isConnected) {
               connected = true;
               settled   = true;
@@ -1248,9 +1131,6 @@ export default class Player extends EventEmitter {
         logger.mediaplayer("[Player] Room ready via FluxerRevoice, proceeding to MediaPlayer");
       }
 
-      // ── VoiceConnection event handlers ──────────────────────────────────
-      // FluxerVoiceConnection emits "disconnect" on unexpected
-      // disconnection and "autoleave" when the room empties.
       connection.on("error", (err) => {
         if (this.connection !== connection) {
           try { connection.removeAllListeners(); } catch (_) {}
@@ -1262,9 +1142,6 @@ export default class Player extends EventEmitter {
             .catch(() => {})
             .finally(() => {
               if (this.leaving || this._destroyed) return;
-              // %247 on/auto: don't autoleave on voice errors — stop the media
-              // player but stay in the channel.  The GatewayHandler will
-              // detect the state change and schedule a rejoin if needed.
               if (mode === "auto" || mode === "on") {
                 logger.inactivity(`[Player] Voice error in 24/7 ${mode} mode — staying in channel, not autoleaving`);
                 return;
@@ -1281,16 +1158,9 @@ export default class Player extends EventEmitter {
         if (!this.leaving && !this._destroyed) {
           const mode = this._get247Mode();
           if (mode === "auto" || mode === "on") {
-            // %247 auto/on: Do NOT emit autoleave on unexpected disconnect.
-            // The GatewayHandler will detect the bot's voice state change
-            // and schedule a rejoin. Emitting autoleave here would cause
-            // the player to be destroyed before the rejoin can be scheduled,
-            // and creates a race condition where both Player.mjs AND
-            // GatewayHandler try to handle the disconnect simultaneously.
             logger.mediaplayer(`[Player] Unexpected disconnect detected (24/7 ${mode}) — stopping media player, GatewayHandler will schedule rejoin`);
             this._stopMediaPlayer().catch(() => {});
           } else {
-            // %247 off: emit autoleave as normal.
             logger.mediaplayer("[Player] Unexpected disconnect detected");
             this._stopMediaPlayer()
                 .catch(() => {})
@@ -1303,8 +1173,6 @@ export default class Player extends EventEmitter {
 
       connection.on("autoleave", () => {
         if (this.connection !== connection) return;
-        // Check 24/7 mode before forwarding the autoleave — for 24/7 channels
-        // the bot should never leave due to an empty room.
         const mode = this._get247Mode();
         if (mode === "auto" || mode === "on") {
           logger.mediaplayer(`[Player] Auto-leave suppressed for 24/7 ${mode} channel (room empty but staying)`);
@@ -1316,7 +1184,6 @@ export default class Player extends EventEmitter {
         }
       });
 
-      // Send self-deaf voice state update via @fluxerjs/voice if available
       try {
         const vm = getVoiceManager(this.client);
         vm.updateVoiceState(channelId, { self_deaf: true, self_mute: false });
@@ -1349,7 +1216,6 @@ export default class Player extends EventEmitter {
       logger.error("[Player] Join failed:", e.message, causeStr);
 
       if (e.message?.includes("401") || e.message?.includes("Unauthorized")) {
-        // Track 401 errors for logging purposes
         logger.warn(`[Player] Join failed with 401 Unauthorized for guild ${this._guildId}`);
       }
 
@@ -1375,7 +1241,6 @@ export default class Player extends EventEmitter {
         this._mediaPlayer = null;
       }
 
-      // Clean up from FluxerRevoice connections map before disconnecting
       const channelId = this._channelId;
       if (this._revoice && channelId) {
         try {
@@ -1425,10 +1290,6 @@ export default class Player extends EventEmitter {
       const connToDestroy = this.connection;
       this.connection   = null;
       this._mediaPlayer = null;
-      // Mark the disconnect as intentional BEFORE disconnecting so that
-      // the RoomEvent.Disconnected handler in FluxerRevoice (and the
-      // VoiceState bot-disconnect handler in GatewayHandler) do NOT treat
-      // this as an unexpected drop and schedule a spurious rejoin.
       if (this._revoice && this._channelId) {
         try { this._revoice.markIntentionalDisconnect(this._channelId); } catch (_) {}
       }
@@ -1448,9 +1309,6 @@ export default class Player extends EventEmitter {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Playback Controls
-  // ═══════════════════════════════════════════════════════════════════════════
 
   get paused() { return this._paused; }
 
@@ -1460,7 +1318,7 @@ export default class Player extends EventEmitter {
     if (this._paused)
       return ":negative_squared_cross_mark: Already paused!";
     this._paused = true;
-    this._pausedAt = Date.now(); // Capture freeze moment
+    this._pausedAt = Date.now();
     this._mediaPlayer?.pause();
     this.emit("playback", false);
     this._stopInactivityTimer();
@@ -1473,7 +1331,6 @@ export default class Player extends EventEmitter {
     if (!this._paused)
       return ":negative_squared_cross_mark: Not paused!";
 
-    // Adjust start time by the duration of the pause
     if (this._pausedAt) {
       this.startedPlaying += (Date.now() - this._pausedAt);
     }
@@ -1532,7 +1389,6 @@ export default class Player extends EventEmitter {
     this.queue.current = null;
     this._skipping     = true;
 
-    // If the queue is now empty after splicing, send queue-end immediately.
     if (this.queue.isEmpty() && !this._wasRadio && !this._queueEndedSent) {
       this._queueEndedSent = true;
       const prefix = (() => {
@@ -1557,15 +1413,11 @@ export default class Player extends EventEmitter {
       }
     }).catch(e => logger.error("[Player] skipTo stop error:", e.message))
         .finally(() => {
-          // Always reset _skipping — even if _stopMediaPlayer() threw.
           this._skipping = false;
         });
     return `:track_next: Skipped to position ${position}`;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Volume Control
-  // ═══════════════════════════════════════════════════════════════════════════
 
   setVolume(v) {
     this.preferredVolume = Utils.clamp(v, 0, 2);
@@ -1576,9 +1428,6 @@ export default class Player extends EventEmitter {
     return `Volume changed to \`${Math.round(this.preferredVolume * 100)}%\`.`;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Audio Filter Control
-  // ═══════════════════════════════════════════════════════════════════════════
 
   async applyFilter(filterPayload, meta = null) {
     const guildId = this._guildId;
@@ -1620,15 +1469,6 @@ export default class Player extends EventEmitter {
       this.activeFilterPayload = meta ? filterPayload : null;
       this.emit("filter", this.activeFilter);
 
-      // Restart the current stream so the loadstream URL picks up the new filters.
-      // The PATCH only updates NodeLink's player state — it does NOT modify the
-      // currently-streaming PCM pipe. Without restarting, the audio won't change.
-      //
-      // Guard: only restart if we're mid-playback (startedPlaying is set) AND
-      // _doPlayNext is NOT in progress.  When _doPlayNext calls applyFilter()
-      // before starting a new track, startedPlaying hasn't been set yet and
-      // _doPlayNext itself handles the stream — firing _replayWithFilters here
-      // would cause the same song to play twice simultaneously.
       if (current?.encoded && this.connection && !this.leaving && !this._streamingStopped && this.startedPlaying && !this._playingNext) {
         const elapsed = this.startedPlaying ? (Date.now() - this.startedPlaying) : 0;
         const positionMs = Math.max(0, elapsed);
@@ -1653,28 +1493,23 @@ export default class Player extends EventEmitter {
     const current = this.queue.getCurrent();
     if (!current?.encoded || !this.connection || this.leaving) return;
 
-    // Stop the current stream (kills FFmpeg + passthrough)
     this._streamingStopped = true;
     await this._stopMediaPlayer().catch(() => {});
     this._streamingStopped = false;
 
-    // _stopMediaPlayer sets _mediaPlayer to null — must recreate before streaming
     const hasPlayer = await this._ensureMediaPlayer();
     if (!hasPlayer) {
       logger.warn("[Player] _replayWithFilters: could not recreate MediaPlayer");
       return;
     }
 
-    // Restore volume on the fresh player
     if (this.preferredVolume !== 1) {
       this._mediaPlayer.setVolume(this.preferredVolume);
     }
 
-    // Build a fresh loadstream URL — include filters so NodeLink applies them server-side
     const nlBase = `http://${this._nl.host}:${this._nl.port}`;
     let streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(current.encoded)}&position=${positionMs}&volume=100`;
 
-    // Append active filter payload to the URL so NodeLink processes them
     if (this.activeFilterPayload) {
       streamUrl += `&filters=${encodeURIComponent(JSON.stringify(this.activeFilterPayload))}`;
     }
@@ -1686,14 +1521,10 @@ export default class Player extends EventEmitter {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Queue Management
-  // ═══════════════════════════════════════════════════════════════════════════
 
   isEmpty()           { return this.queue.isEmpty(); }
 
   addToQueue(d, t)    {
-    // Enforce queue size cap to prevent unbounded memory growth
     if (this.queue.data.length >= this._maxQueueSize) {
       logger.warn(`[Player] Queue size cap reached (${this._maxQueueSize}) — dropping oldest track`);
       this.queue.data.shift();
@@ -1713,7 +1544,6 @@ export default class Player extends EventEmitter {
 
   addManyToQueue(t, top = false) {
     if (!Array.isArray(t)) return 0;
-    // Enforce queue size cap
     const overflow = (this.queue.data.length + t.length) - this._maxQueueSize;
     if (overflow > 0) {
       logger.warn(`[Player] Queue size cap (${this._maxQueueSize}) — dropping ${overflow} oldest tracks`);
@@ -1759,22 +1589,17 @@ export default class Player extends EventEmitter {
     return msg;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Display Helpers
-  // ═══════════════════════════════════════════════════════════════════════════
 
   _createProgressBar(length = 15) {
     const current = this.queue.getCurrent();
     if (!current?.duration || !this.startedPlaying) return Utils.progressBar(0, 1, length);
 
-    // Common elapsed calculation
     const totalMs = this._getTrackDurationMs(current);
     let elapsed = Date.now() - this.startedPlaying;
     if (this._paused && this._pausedAt) {
       elapsed = this._pausedAt - this.startedPlaying;
     }
 
-    // Clamp to ensure 1:58/1:30 doesn't happen
     if (totalMs > 0 && elapsed > totalMs) elapsed = totalMs;
     elapsed = Math.max(0, elapsed);
 
@@ -1837,7 +1662,6 @@ export default class Player extends EventEmitter {
       elapsed = this._pausedAt - this.startedPlaying;
     }
 
-    // Clamp UI to total duration
     if (totalMs > 0 && elapsed > totalMs) elapsed = totalMs;
     return Utils.prettifyMS(Math.max(0, elapsed));
   }
@@ -1954,9 +1778,6 @@ export default class Player extends EventEmitter {
     })));
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Worker Management
-  // ═══════════════════════════════════════════════════════════════════════════
 
   _workerPool = null;
 
@@ -1985,9 +1806,6 @@ export default class Player extends EventEmitter {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Public Play Methods
-  // ═══════════════════════════════════════════════════════════════════════════
 
   async fetchResults(query, id, provider = "ytm") {
     try {
@@ -2074,9 +1892,6 @@ export default class Player extends EventEmitter {
     return events;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Radio track builder
-  // ═══════════════════════════════════════════════════════════════════════════
 
   _buildRadioTrack(radio) {
     return {
@@ -2120,9 +1935,6 @@ export default class Player extends EventEmitter {
     if (!this.leaving) this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Core Playback
-  // ═══════════════════════════════════════════════════════════════════════════
 
   async playNext() {
     if (this._playingNext) return;
@@ -2182,8 +1994,6 @@ export default class Player extends EventEmitter {
     if (!room || !room.isConnected) {
       const cs = room?.connectionState;
       const mode = this._get247Mode();
-      // For 24/7 channels, don't autoleave on dead room — put the song back
-      // and wait for the GatewayHandler to schedule a rejoin.
       if (mode === "auto" || mode === "on") {
         logger.mediaplayer(`[Player] Room not connected (isConnected: ${room?.isConnected}, connectionState: ${cs}) in 24/7 ${mode} mode — deferring autoleave, waiting for rejoin.`);
         if (songData) {
@@ -2236,7 +2046,6 @@ export default class Player extends EventEmitter {
       const positionMs = 0;
       streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(songData.encoded)}&position=${positionMs}&volume=100`;
 
-      // Append active filters so NodeLink applies them server-side
       if (this.activeFilterPayload) {
         streamUrl += `&filters=${encodeURIComponent(JSON.stringify(this.activeFilterPayload))}`;
       }
@@ -2273,7 +2082,6 @@ export default class Player extends EventEmitter {
 
     logger.player(`[Player:${this._guildId}] Streaming: ${songData.title}`);
 
-    // Reset all timing flags
     this.startedPlaying   = Date.now();
     this._paused          = false;
     this._pausedAt        = null;
@@ -2299,8 +2107,6 @@ export default class Player extends EventEmitter {
 
     if (!this.leaving && !this._skipping) {
       if (songData.type === "radio") {
-        // Radio track ended — do NOT auto-retry/re-queue.
-        // The user must manually restart if they want to continue.
         logger.player(`[Player] Radio stream ended: ${songData.title}`);
         this.queue.current = null;
         this._streamingStopped = true;
@@ -2320,9 +2126,6 @@ export default class Player extends EventEmitter {
     this._skipping = false;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Lyrics
-  // ═══════════════════════════════════════════════════════════════════════════
 
   async lyrics() {
     const current = this.queue.getCurrent();

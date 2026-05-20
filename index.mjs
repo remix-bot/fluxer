@@ -50,7 +50,6 @@ function mkEmbed(desc) {
 
 export class Remix {
   constructor() {
-    // ── Config ───────────────────────────────────────────────────────────────
     let config;
     try {
       config = JSON.parse(fs.readFileSync("config.json", "utf8"));
@@ -70,10 +69,8 @@ export class Remix {
     }
     this.config = config;
 
-    // Apply embed color from config globally
     setGlobalColor(config.embedColor);
 
-    // ── Locale (i18n) ────────────────────────────────────────────────────────
     this.locale = new Locale();
     this.locale.load();
 
@@ -86,7 +83,6 @@ export class Remix {
     const presenceContents = config.presenceContents ?? [];
     const presenceInterval = config.presenceInterval ?? 30_000;
 
-    // ── Timers config ─────────────────────────────────────────────────────────
     const timers = config.timers ?? {};
     this.T = {
       aloneCheckInterval:  timers.aloneCheckInterval  ?? 30_000,
@@ -96,11 +92,6 @@ export class Remix {
       intentionalLeaveTTL: timers.intentionalLeaveTTL  ?? 10_000,
     };
 
-    // ── Fluxer Client ────────────────────────────────────────────────────────
-    // Fluxer does NOT support intents — the value is always sent as 0 in the
-    // gateway IDENTIFY payload regardless of what you set here. Setting a
-    // non-zero value only produces a warning unless suppressIntentWarning
-    // is true. Always use intents: 0 for Fluxer bots.
     const client = new Client({
       intents: 0,
       suppressIntentWarning: true,
@@ -142,7 +133,6 @@ export class Remix {
     client.setMaxListeners(50);
     this.client = client;
 
-    // ── VoiceManager initialization (MUST be before login) ─────────────────
     try {
       getVoiceManager(client);
       logger.player("[Startup] VoiceManager initialized before login.");
@@ -150,17 +140,12 @@ export class Remix {
       logger.warn("[Startup] VoiceManager pre-login init failed:", e.message);
     }
 
-    // ── Message & Settings handlers ──────────────────────────────────────────
     const messages = new MessageHandler(this.client);
     this.messages  = messages;
 
     const settings    = new RemoteSettingsManager(config.mysql, "./storage/defaults.json");
     this.settingsMgr  = settings;
 
-    // Override the default prefix with config.json value if set.
-    // This ensures that when the bot joins a NEW server (no DB row yet), it uses
-    // the config prefix instead of the hardcoded "%" from defaults.json.
-    // Existing servers keep whatever prefix they already have in the DB.
     const configPrefix = config.prefix ?? null;
     if (configPrefix && settings.defaults) {
       settings.defaults.prefix = configPrefix;
@@ -168,11 +153,6 @@ export class Remix {
 
     this.locale.bind(this.settingsMgr);
 
-    // ── Command handler ──────────────────────────────────────────────────────
-    // config.prefix from config.json overrides the defaults.json prefix.
-    // This way, if you run multiple bots in the same server (e.g. Remix + test bot),
-    // each can have its own default prefix (Remix=%, test bot=!) without needing
-    // a separate database or manual %prefix per server.
     const commands = new CommandHandler(messages, configPrefix);
     this.handler   = commands;
 
@@ -181,7 +161,6 @@ export class Remix {
     commands.setLocale(this.locale);
     messages.setLocale(this.locale);
 
-    // ── Help command ──────────────────────────────────────────────────────────
     new HelpCommand(commands, messages, (msg) => this.getSettings(msg)).register();
 
     commands.onPing = (msg) => {
@@ -201,29 +180,16 @@ export class Remix {
     };
     commands.owners = config.owners ?? [];
 
-    // ── MoonlinkManager (placeholder) ───────────────────────────────────────
     this.moonlink = null;
     let moonlinkInitialised = false;
 
-    // ── Voice state tracking — indexed cache with LRU eviction ──────────
-    // Replaces raw observedVoiceUsers/observedVoiceBots Maps with O(1)
-    // channel-member lookups, composite keys, and bounded memory.
     this.voiceCache = new VoiceStateCache({ maxUsers: 50_000, maxBots: 10_000 });
 
-    // ── Backward-compat aliases (deprecated — use voiceCache directly) ───
-    // observedVoiceUsers iterates HUMAN users only (backward compat).
-    // observedVoiceBots iterates BOT users only (backward compat).
-    // Previously both pointed to the same VoiceStateCache, which caused
-    // observedVoiceBots to return human users instead of bots.
-    // We create thin wrapper objects that delegate to the correct
-    // internal indexes while preserving the Map-like interface.
-    this.observedVoiceUsers = this.voiceCache; // default iterator = human users
+    this.observedVoiceUsers = this.voiceCache;
     this.observedVoiceBots  = createBotView(this.voiceCache);
 
-    // ── Caches ───────────────────────────────────────────────────────────────
-    // _announcementChannelCache: TTL-based (5 min), auto-evicts stale entries
     this._announcementChannelCache = new Map();
-    this._announcementChannelTTL  = 5 * 60 * 1000; // 5 min
+    this._announcementChannelTTL  = 5 * 60 * 1000;
     setInterval(() => {
       const now = Date.now();
       for (const [k, v] of this._announcementChannelCache) {
@@ -232,34 +198,20 @@ export class Remix {
     }, 60_000);
     this.intentionalLeaves = new Map();
 
-    // ── Gateway Handler ─────────────────────────────────────────────────────
-    // Handles raw WS gateway events, voice-state tracking, presence rotation,
-    // and high-level Fluxer event handlers (GuildCreate, GuildDelete,
-    // VoiceStateUpdate).
     this.gatewayHandler = new GatewayHandler(this);
 
-    // Register GuildCreate, GuildDelete, VoiceStateUpdate handlers now so they
-    // are active before the first Ready event fires.
     this.gatewayHandler.setupEventHandlers();
 
-    // ── Last.fm Manager ─────────────────────────────────────────────────────
-    // Handles Last.fm API auth, scrobbling, and user data.
     this.lastfm = new LastFmManager(config.lastfm, config.mysql);
 
-    // ── FluxerList Manager ──────────────────────────────────────────────────
-    // Handles FluxerList API voter data queries.
     this.fluxerlist = new FluxerListManager(config.fluxerlist);
 
-    // ── Settings ready callback ──────────────────────────────────────────────
     settings.on("ready", () => {
       initLogger(config);
       logger.settings("[settings] Loaded from DB.");
       for (const [guildId, serverSettings] of settings.guilds) {
         const val = serverSettings.get("stay_247");
         if (!val || val === "none") continue;
-        // ── Sanitise stay_247 values ────────────────────────────────────────
-        // Strip any value that isn't a valid Fluxer ID (>= 15 digits).
-        // This catches corruption from old JSON_SET paths or bad data.
         const rawArr = Array.isArray(val) ? val : [val];
         const cleaned = rawArr
             .map(id => String(id).replace(/\D/g, ""))
@@ -276,10 +228,6 @@ export class Remix {
           );
         }
 
-        // ── Migrate guild-wide stay_247_mode → per-channel stay_247_modes ──
-        // If stay_247_modes doesn't exist yet but stay_247_mode does, create
-        // the per-channel map from the guild-wide mode so all channels inherit
-        // the same mode (backward compatible).
         const modesMap = serverSettings.get("stay_247_modes");
         if (!modesMap || typeof modesMap !== "object") {
           const guildMode = serverSettings.get("stay_247_mode") ?? "off";
@@ -298,34 +246,19 @@ export class Remix {
 
     });
 
-    // ── Bot ready ─────────────────────────────────────────────────────────────
     client.on(Events.Ready, async () => {
       try {
       logger.player("Logged in as " + (client.user?.username ?? "bot"));
 
-      // ── Attach proactive error handlers on WS shards ───────────────────
-      // @fluxerjs/ws throws "WebSocket error" on socket close/reconnect.
-      // Without an error handler on the WS object, this escalates to
-      // uncaughtException and produces noisy stack traces. By attaching
-      // .on("error") handlers on every shard's WebSocket, we catch the
-      // error at the source and log it cleanly instead.
       this._attachWsErrorHandlers();
 
-      // VoiceManager was already initialized before login (required for
-      // VOICE_STATES_SYNC event registration). No need to re-initialize here.
 
       const botId = client.user?.id ?? "0";
 
-      // Set the bot ID on all managers that use the shared MySQL database.
-      // This isolates each bot's data (settings, Last.fm users, Redis channels)
-      // so multiple bots can share the same database without conflicts.
       await this.settingsMgr.setBotId(botId);
       await this.lastfm.setBotId(botId);
       this.dashboard.setBotId(botId);
 
-      // MoonlinkManager initialisation — stays here because it's audio
-      // infrastructure, not gateway handling.  The guard prevents stacking
-      // listeners on reconnect.
       if (!moonlinkInitialised) {
         moonlinkInitialised = true;
         this.moonlink = new MoonlinkManager(config.nodelink ?? {}, client);
@@ -352,24 +285,14 @@ export class Remix {
         }
       }
 
-      // Delegate remaining Ready work to the gateway handler (voice-state
-      // seeding, raw WS listener, presence rotation, tryAutoJoin).
       this.gatewayHandler.onReady();
       } catch (e) {
         logger.error("[Ready] Fatal error in Ready handler:", e);
       }
     });
 
-    // ── FluxerRevoice Instance (shared across all players) ─────────────────
-    // Uses the Fluxer gateway (via @fluxerjs/voice) to join voice channels
-    // instead of a third-party REST API. This avoids the 401 error that occurs
-    // when a Fluxer bot token is sent to an incompatible API endpoint.
-    // The FluxerRevoice class provides the same .join() interface as
-    // revoice.js's Revoice class, returning FluxerVoiceConnection objects
-    // that wrap LiveKit Rooms compatible with revoice.js's MediaPlayer.
     this.revoice = FluxerRevoice.getInstance(client);
 
-    // ── Player Manager ───────────────────────────────────────────────────────
     this.playerContext = {
       client:   this.client,
       config,
@@ -388,9 +311,6 @@ export class Remix {
     this.players.voiceCache = this.voiceCache;
     this.players._lastfm = this.lastfm;
 
-    // ── Periodic alone-check ───────────────────────────────────────────────────
-    // Uses VoiceStateCache.channelMembers index for O(1) per-player lookup
-    // instead of iterating ALL observedVoiceUsers (which was O(N×M)).
     const ALONE_CHECK_INTERVAL = this.T.aloneCheckInterval;
     setInterval(() => {
       for (const [mapKey, player] of this.players.playerMap) {
@@ -418,11 +338,8 @@ export class Remix {
 
           if (player._is247Enabled()) continue;
 
-          // O(1) lookup via VoiceStateCache channelMembers index
           let hasHuman = this.voiceCache.hasHumansInChannel(cleanGuildId, cleanChanId);
 
-          // Fallback: check guild voice_states cache if voiceCache
-          // didn't find anyone (can happen after bot restart before reseed).
           if (!hasHuman) {
             try {
               const guild = this.client?.guilds?.get?.(cleanGuildId);
@@ -441,7 +358,6 @@ export class Remix {
                     const isBot = member?.user?.bot ?? state?.member?.user?.bot ?? false;
                     if (!isBot) {
                       hasHuman = true;
-                      // Also update voiceCache so future checks are O(1)
                       if (stateUserId) {
                         this.voiceCache.updateUser({ guildId: cleanGuildId, userId: stateUserId, channelId: cleanChanId, isBot: false });
                       }
@@ -453,7 +369,6 @@ export class Remix {
             } catch (_) {}
           }
 
-          // Fallback: check LiveKit remote participants if guild cache is empty.
           if (!hasHuman) {
             try {
               const room = player.connection?.room;
@@ -484,7 +399,6 @@ export class Remix {
       }
     }, ALONE_CHECK_INTERVAL);
 
-    // ── Voice channel detection ──────────────────────────────────────────────
     const self = this;
     this.players.checkVoiceChannels = function (message) {
       const userId  = message?.author?.id   ?? message?.message?.author?.id;
@@ -577,7 +491,7 @@ export class Remix {
       } catch (e) { logger.voice(`[checkVC] guild error: ${e.message}`); }
 
       try {
-        const loc = self.voiceCache.getHumanUser(userId);  // scan all guilds
+        const loc = self.voiceCache.getHumanUser(userId);
         if (loc && String(loc.guildId ?? "").replace(/\D/g, "") === cleanGuild) {
           logger.voice(`[checkVC] HIT voiceCache scan → ${loc.channelId}`);
           return loc.channelId;
@@ -588,8 +502,6 @@ export class Remix {
       return null;
     };
 
-    // ── Git commit hash ───────────────────────────────────────────────────────
-    // Must be computed BEFORE comLink is built so the hash is available.
     const __dirname = import.meta.dirname;
     try {
       this.comHash     = childProcess.execSync("git rev-parse --short HEAD", { cwd: __dirname, timeout: 3000 }).toString().trim();
@@ -602,7 +514,6 @@ export class Remix {
 
     this.comLink = "https://github.com/remix-bot/fluxer/commit/" + (this.comHashLong ?? "");
 
-    // ── Commands ──────────────────────────────────────────────────────────────
     const loader    = new CommandLoader(commands, this);
     const dir       = path.join(__dirname, "commands");
     logger.commands("Started loading commands.");
@@ -610,7 +521,6 @@ export class Remix {
         .then(() => logger.commands("Commands loaded."))
         .catch(e => logger.error("Failed to load commands:", e));
 
-    // ── Modules ───────────────────────────────────────────────────────────────
     logger.commands("Loading Modules.");
     this.loadedModules = new Map();
     try {
@@ -638,14 +548,12 @@ export class Remix {
           logger.commands(`Modules loaded (${succeeded} succeeded, ${failed} failed).`);
         });
 
-    // ── Login ─────────────────────────────────────────────────────────────────
     client.login(config.token).catch(e => {
       logger.error("[Startup] Login failed:", e.message);
       process.exit(1);
     });
   }
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────
 
   /**
    * Attach error handlers on all @fluxerjs/ws shard WebSockets.
@@ -666,11 +574,8 @@ export class Remix {
       const wsManager = this.client?.ws;
       if (!wsManager) return;
 
-      // @fluxerjs/ws may use a single connection or a ShardManager.
-      // Handle both patterns:
       const attachToSocket = (wsObj, label) => {
         if (!wsObj) return;
-        // Avoid attaching duplicate handlers on reconnect
         if (wsObj._fluxerErrorHandled) return;
         wsObj._fluxerErrorHandled = true;
 
@@ -687,24 +592,20 @@ export class Remix {
         }
       };
 
-      // Pattern 1: ws.shards is a Map (multi-shard)
       if (wsManager.shards && typeof wsManager.shards.forEach === "function") {
         wsManager.shards.forEach((shard, id) => {
           attachToSocket(shard?.ws, `Shard ${id}`);
         });
       }
 
-      // Pattern 2: ws itself has a .ws property (single-shard)
       if (wsManager.ws) {
         attachToSocket(wsManager.ws, "Gateway");
       }
 
-      // Pattern 3: ws is itself a WebSocket-like object
       if (typeof wsManager.on === "function" && !wsManager._fluxerErrorHandled) {
         attachToSocket(wsManager, "WSManager");
       }
 
-      // Also listen for new shards being created (future-proofing)
       if (typeof wsManager.on === "function" && !wsManager._shardCreateHandled) {
         wsManager._shardCreateHandled = true;
         wsManager.on("shardCreate", (shard) => {
@@ -745,21 +646,16 @@ export class Remix {
 
     if (!cleanChannelId) throw new Error("_spawnPlayer: invalid channelId");
 
-    // Already have a player for this channel?
-    // Use guild→player reverse index for O(1) lookup, fallback to playerMap.get()
     const existing = this.players.playerMap.get(cleanChannelId)
         ?? this.players.getPlayerByGuildAndChannel(cleanGuildId, cleanChannelId);
     if (existing) return existing;
 
-    // Guard: moonlink must be ready
     if (!this.moonlink) throw new Error("Audio node not ready yet — try again in a moment");
 
-    // Guard: channel must exist and be a voice channel
     const channel = this.client?.channels?.get?.(cleanChannelId);
     if (!channel) throw new Error("Channel not found");
     if (channel.type !== 2) throw new Error("Not a voice channel");
 
-    // Guard: no duplicate pending join
     if (this.players._pendingJoins?.has?.(cleanChannelId)) {
       throw new Error("Join already in progress for this channel");
     }
@@ -778,18 +674,14 @@ export class Remix {
       locale:             this.locale ?? null,
     });
 
-    // Set 24/7 home channel so _is247Enabled() works correctly
     player._home247Channel = cleanChannelId;
 
-    // Set up dashboard and lifecycle events (same as normal joins)
     this.players.setupEvents(player, {
       channelId: cleanChannelId,
       guildId:   cleanGuildId,
     });
 
-    // Handle autoleave — clean up the player map and destroy the player
     player.on("autoleave", () => {
-      // Safety guard: don't destroy 24/7 players or players with humans/queue
       const mode = player._get247Mode();
       if (mode === "auto" || mode === "on") {
         logger.inactivity(`[_spawnPlayer] autoleave suppressed for 24/7 ${mode} channel ${cleanChannelId} (guild ${cleanGuildId})`);
@@ -808,7 +700,6 @@ export class Remix {
       const homeChId   = String(player._home247Channel ?? activeChId).replace(/\D/g, "") || activeChId;
       this.players.playerMap.delete(activeChId);
       this.players._unindexPlayer?.(cleanGuildId, activeChId);
-      // Clean up pending scrobble timer
       const pendingScrobble = this.players._pendingScrobbleTimers?.get(cleanChannelId);
       if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this.players._pendingScrobbleTimers.delete(cleanChannelId); }
       if (activeChId !== cleanChannelId) this.players.playerMap.delete(cleanChannelId);
@@ -816,21 +707,14 @@ export class Remix {
       player.destroy();
     });
 
-    // Handle player messages (song announcements etc.)
-    // On reboot, there's no textChannel from a user command, so we resolve
-    // one from the saved announcementChannelId setting or fall back to the
-    // guild's system channel / first visible text channel.
     player.on("message", async (m) => {
       try {
-        // Check if song announcements are disabled for this guild
         const serverSettings = this.settingsMgr?.getServer?.(cleanGuildId);
         const raw = serverSettings?.get?.("songAnnouncements");
         const disabled = raw === false || raw === 0 ||
             ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
         if (disabled) return;
 
-        // Resolve the text channel: prefer player.textChannel, then saved
-        // announcementChannelId, then guild system channel, then first text channel
         let ch = player.textChannel;
         if (!ch || typeof ch.send !== "function") {
           const savedAnnChId = serverSettings?.get?.("announcementChannelId");
@@ -857,7 +741,6 @@ export class Remix {
         }
         if (!ch || typeof ch.send !== "function") return;
 
-        // Cache the resolved channel so future announcements don't need to re-resolve
         if (!player.textChannel) player.textChannel = ch;
 
         ch.send(typeof m === "object" && Array.isArray(m.embeds) ? m : mkEmbed(m)).catch(err => {
@@ -868,7 +751,6 @@ export class Remix {
       } catch (_) {}
     });
 
-    // Mark as pending join
     if (this.players._pendingJoins) {
       this.players._pendingJoins.add(cleanChannelId);
     }
@@ -876,14 +758,12 @@ export class Remix {
     try {
       await player.join(cleanChannelId);
 
-      // Add to playerMap only after join succeeds
       this.players.playerMap.set(cleanChannelId, player);
       this.players._indexPlayer(cleanGuildId, cleanChannelId);
       if (this.players._pendingJoins) {
         this.players._pendingJoins.delete(cleanChannelId);
       }
 
-      // Restore saved volume for this guild
       const savedVol = this.settingsMgr?.getServer?.(cleanGuildId)?.get?.("volume");
       if (savedVol !== undefined && savedVol !== null) {
         const vol = Number(savedVol);
@@ -915,7 +795,6 @@ export class Remix {
             ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean))
             : new Set([String(raw).replace(/\D/g, "")]);
 
-    // Use per-channel mode (not the guild-wide legacy mode)
     const channelMode = channels.has(cleanId) ? get247ChannelMode(set, cleanId) : "off";
 
     if (channels.has(cleanId) && !force) {
@@ -937,7 +816,6 @@ export class Remix {
     if (channels.has(cleanId)) {
       channels.delete(cleanId);
       set.set("stay_247", channels.size > 0 ? [...channels] : "none");
-      // Also clean up the per-channel mode entry (prevents orphaned mode data)
       remove247ChannelMode(set, cleanId, channels);
     }
 
@@ -947,7 +825,6 @@ export class Remix {
     if (player) {
       this.players.playerMap.delete(cleanId);
       this.players._unindexPlayer(player._guildId, cleanId);
-      // Clean up pending scrobble timer
       const pendingScrobble = this.players._pendingScrobbleTimers?.get(cleanId);
       if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this.players._pendingScrobbleTimers.delete(cleanId); }
       await player.leave().catch(() => {});
@@ -1004,19 +881,16 @@ export class Remix {
     for (const guild of this.client.guilds.values()) {
       let isMember = false;
 
-      // 1. Fast path — check cached members
       if (guild.members?.has?.(user.id)) {
         isMember = true;
       }
 
-      // 2. Fallback — check voiceCache for this guild (O(1) per guild)
       if (!isMember) {
         const cleanGuildId = String(guild.id).replace(/\D/g, "");
         const userLoc = this.voiceCache.getUserLocation(cleanGuildId, user.id);
         if (userLoc) isMember = true;
       }
 
-      // 3. Slow path — REST fetch for large guilds with incomplete caches
       if (!isMember) {
         try {
           const member = await guild.members.fetch(user.id).catch(() => null);
@@ -1060,20 +934,13 @@ export class Remix {
 
 }
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
 
 const remix = new Remix();
 
-// ── Error handling ────────────────────────────────────────────────────────────
 
 const isIgnorableWsCrash = (err) => {
   const message = String(err?.message ?? err ?? "");
   const stack = String(err?.stack ?? "");
-  // WebSocket transport errors from @fluxerjs/ws — these are recoverable
-  // because the gateway client automatically reconnects. They should be
-  // caught by the proactive .on("error") handlers in _attachWsErrorHandlers(),
-  // but this acts as a safety net in case a new shard is created after the
-  // initial handler attachment or the error slips through via a different path.
   return message === "WebSocket error" &&
       (
         stack.includes("@fluxerjs/ws/dist/index.mjs") ||
@@ -1101,7 +968,6 @@ process.on("uncaughtExceptionMonitor", (err, origin) => {
   logger.error("Error:", err, origin);
 });
 
-// ── Shutdown Hooks ──────────────────────────────────────────────────────────
 const saveAndExit = async () => {
   logger.recovery("\n[Shutdown] Cleaning up before exit...");
   try {
@@ -1125,9 +991,4 @@ process.once("SIGINT",  saveAndExit);
 process.once("SIGTERM", saveAndExit);
 process.once("SIGUSR2", saveAndExit);
 
-// ── SIGPIPE handler ──────────────────────────────────────────────────────────
-// On some systems, writing to a broken pipe (e.g. Redis connection) raises
-// SIGPIPE which defaults to terminating the process. Ignoring it lets the
-// error surface through the normal exception/rejection handlers above so
-// recovery state is saved before exit.
 process.on("SIGPIPE", () => {});

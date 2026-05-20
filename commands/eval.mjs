@@ -3,11 +3,9 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { inspect } from "node:util";
 
-// Auto-remove timer: 1 minute
 const EMOJI_REMOVE_TIMEOUT = 60000;
 
 /**
- * List of keys that should be redacted from objects before displaying in Discord.
  * Matches any key that *contains* one of these strings (case-insensitive).
  */
 const RESTRICTED = [
@@ -27,12 +25,8 @@ const RESTRICTED = [
   "webhook",
 ];
 
-// Maximum depth for sensitive-key scanning and redaction.
-// 6 covers deeply nested config objects (e.g. config.nodelink.password nested
-// inside player config) without risking stack overflow on circular references.
 const SCAN_DEPTH = 6;
 
-// Track visited objects to handle circular references
 function hasSensitive(obj, level = 0, visited = new WeakSet()) {
   if (level >= SCAN_DEPTH || typeof obj !== "object" || obj === null) return false;
   if (visited.has(obj)) return false;
@@ -88,31 +82,24 @@ async function clean(value) {
 
   return output
       .replace(/`/g, "`\u200b")
-      .replace(/@/g, "@\u200b") || "undefined"; // Fallback if output is empty
+      .replace(/@/g, "@\u200b") || "undefined";
 }
 
 function isSingleExpression(code) {
   const trimmed = code.trim();
 
-  // Empty code
   if (!trimmed) return false;
 
-  // Block statements — user is writing a full function body
   if (/^(if|for|while|do|switch|try|catch|finally|with)\s*[\({]/.test(trimmed)) return false;
 
-  // Declarations — always multi-statement style
   if (/^\s*(const|let|var|function\s|class\s)/.test(trimmed)) return false;
 
-  // Contains semicolons that look like statement separators (but not inside strings)
-  // Strip string literals to avoid false positives from semicolons inside strings
   const stripped = trimmed
-      .replace(/'(?:[^'\\]|\\.)*'/g, '""')   // single-quoted strings
-      .replace(/"(?:[^"\\]|\\.)*"/g, '""')    // double-quoted strings
-      .replace(/`(?:[^`\\]|\\.)*`/g, '""');   // template literals (simplified)
+      .replace(/'(?:[^'\\]|\\.)*'/g, '""')
+      .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+      .replace(/`(?:[^`\\]|\\.)*`/g, '""');
   if (stripped.includes(";")) return false;
 
-  // Contains newlines that suggest multiple statements
-  // (but allow multi-line method chains like `.foo()\n.bar()`)
   const withoutChains = trimmed.replace(/\.\s*\n/g, ".");
   if (withoutChains.includes("\n")) return false;
 
@@ -128,12 +115,10 @@ async function runEval(expression, context) {
   let result, isError = false, type = "undefined";
 
   try {
-    // Auto-return single expressions so users don't need to write `return`
     const code = isSingleExpression(expression)
         ? `return (${expression});`
         : expression;
 
-    // Use eval() — runs in module scope so `this` is the context passed via .call()
     result = await eval(`(async function() { ${code} })`).call(context);
     type = result === null ? "null" : typeof result;
   } catch (e) {
@@ -162,21 +147,9 @@ export const command = new CommandBuilder()
 export async function run(msg, data) {
   const expression = data.get("expression").value;
 
-  // Build a rich context with shorthand variables so eval can access
-  // everything easily via `this`. `this` = Remix instance merged with
-  // the extra shortcuts below.
-  //   this.client   → Fluxer Client
-  //   this.guilds   → this.client.guilds
-  //   this.channels → this.client.channels
-  //   this.users    → this.client.users
-  //   this.players  → PlayerManager
-  //   this.settings → SettingsManager
-  //   this.msg      → the Message wrapper
-  //   this.message  → the raw fluxer message object
   const context = Object.assign({
     message: msg?.message,
     msg,
-    // Shorthand aliases for convenience
     guilds:   this.client?.guilds,
     channels: this.client?.channels,
     users:    this.client?.users,
@@ -184,11 +157,8 @@ export async function run(msg, data) {
     settings: this.settingsMgr,
   }, this);
 
-  // 1. Run the evaluation
   const { output, isError, type, elapsed } = await runEval(expression, context);
 
-  // 2. Chunk the output to bypass Discord limits (Max embed description is 4096 chars)
-  // We use 3800 to leave room for the header and markdown formatting
   const chunkSize = 3800;
   const chunks = [];
   for (let i = 0; i < output.length; i += chunkSize) {
@@ -198,25 +168,22 @@ export async function run(msg, data) {
   const totalPages = chunks.length;
   let currentPage = 0;
 
-  // Helper to build the specific embed page
   const buildPageContent = (pageIdx, expired = false) => {
     const title = isError
         ? this.t(msg, "responses.eval.resultTitleError")
         : this.t(msg, "responses.eval.resultTitleSuccess");
 
-    // Embed description includes the metadata and the codeblock
     const typeLabel = this.t(msg, "responses.eval.typeLabel");
     const timeLabel = this.t(msg, "responses.eval.timeLabel");
     const desc = `**${typeLabel}** \`${type}\` • **${timeLabel}** \`${elapsed}ms\`\n\`\`\`js\n${chunks[pageIdx]}\n\`\`\``.slice(0, 4096);
 
-    // Customize footer based on state
     let footerText = this.t(msg, "responses.eval.pageLabel", { page: pageIdx + 1, total: totalPages });
     if (expired) footerText = this.t(msg, "responses.eval.controlsExpired");
     else if (totalPages > 1) footerText += " " + this.t(msg, "responses.eval.navigateHint");
     else footerText += " " + this.t(msg, "responses.eval.deleteHint");
 
     const embed = new EmbedBuilder()
-        .setColor(isError ? "#ff0000" : getGlobalColor()) // Red if error, default otherwise
+        .setColor(isError ? "#ff0000" : getGlobalColor())
         .setTitle(title)
         .setDescription(desc)
         .setFooter({ text: footerText })
@@ -225,12 +192,9 @@ export async function run(msg, data) {
     return { embeds: [embed] };
   };
 
-  // 3. Send the initial message using the wrapper
   const replyMsg = await msg.reply(buildPageContent(0));
   if (!replyMsg?.message) return;
 
-  // 4. Setup React UI
-  // If it's only 1 page, we just show the Delete button. Otherwise, add arrows.
   const navEmojis = totalPages > 1 ? ["⬅️", "➡️", "❌"] : ["❌"];
   let unobserve = null;
   let emojiTimeout = null;
@@ -239,7 +203,6 @@ export async function run(msg, data) {
     await replyMsg.message.react(emoji).catch(() => {});
   }
 
-  // Helper: Clear reactions when time runs out
   const clearReactions = async () => {
     try {
       await replyMsg.message.removeAllReactions();
@@ -252,7 +215,6 @@ export async function run(msg, data) {
     }
   };
 
-  // Helper: Reset inactivity timer
   const resetTimer = () => {
     clearTimeout(emojiTimeout);
     emojiTimeout = setTimeout(async () => {
@@ -262,15 +224,12 @@ export async function run(msg, data) {
     }, EMOJI_REMOVE_TIMEOUT);
   };
 
-  // 5. Start listening for reactions
   unobserve = replyMsg.onReaction(navEmojis, async (e) => {
-    // Handle specific actions
     if (e.emoji_id === "❌") {
-      // Clean up and delete the message
       clearTimeout(emojiTimeout);
       if (unobserve) unobserve();
       await replyMsg.message.delete().catch(() => {});
-      return; // Exit completely
+      return;
     }
 
     resetTimer();
@@ -281,7 +240,6 @@ export async function run(msg, data) {
       currentPage = currentPage < totalPages - 1 ? currentPage + 1 : 0;
     }
 
-    // Update Embed
     await replyMsg.edit(buildPageContent(currentPage)).catch(() => {});
   });
 

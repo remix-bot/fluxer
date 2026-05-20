@@ -27,7 +27,6 @@ export function get247ChannelMode(set, channelId) {
     const perChannel = modes[channelId];
     if (perChannel === "on" || perChannel === "auto" || perChannel === "off") return perChannel;
   }
-  // Fallback: guild-wide mode (legacy)
   const guildMode = set.get("stay_247_mode") ?? "off";
   return guildMode;
 }
@@ -44,7 +43,6 @@ export function set247ChannelMode(set, channelId, mode) {
   if (!modes || typeof modes !== "object" || Array.isArray(modes)) modes = {};
   modes[channelId] = mode;
   set.set("stay_247_modes", modes);
-  // Also update guild-wide mode for backward compat
   set.set("stay_247_mode", mode);
 }
 

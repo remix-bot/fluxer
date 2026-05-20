@@ -35,7 +35,6 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
     return message.reply({ embeds: [embed] });
   }
 
-  // Guard: moonlink must be ready before we can play anything
   if (!this.moonlink) {
     const embed = new EmbedBuilder().setColor(getGlobalColor())
         .setDescription(this.t(message, "responses.join.audioNodeConnecting"));
@@ -59,7 +58,6 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
     const homeChannelId = String(p._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
     const guildId = getGuildId(message);
 
-    // Check 24/7 mode for this channel
     const is247 = (() => {
       try {
         const raw = this.settingsMgr?.getServer?.(guildId)?.get?.("stay_247");
@@ -67,7 +65,6 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
       } catch (_) { return false; }
     })();
 
-    // Determine per-channel mode
     const mode247 = (() => {
       if (!is247) return "off";
       try {
@@ -87,7 +84,6 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
     p.destroy();
 
     if (is247 && (mode247 === "on" || mode247 === "auto")) {
-      // 24/7 mode — auto-rejoin after a delay
       const rejoinDelay = this.config?.timers?.rejoin247Delay ?? 3_000;
       const prefix = (() => {
         try { return this._commands?.getPrefix?.(guildId) ?? "%"; } catch (_) { return "%"; }
@@ -105,7 +101,6 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
         }
       }, rejoinDelay);
     } else {
-      // Not 24/7 — send inactivity message
       const prefix = (() => {
         try { return this._commands?.getPrefix?.(guildId) ?? "%"; } catch (_) { return "%"; }
       })();
@@ -125,16 +120,12 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
     message.channel.send({ embeds: [embed] });
   });
 
-  // Mark as pending so concurrent commands see the channel is taken,
-  // but don't add to playerMap until join() succeeds to avoid phantom
-  // entries inflating the player count.
   this.players._pendingJoins.add(cleanChannelId);
 
   const joiningEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.join.joining"));
   const statusMsg = await message.reply({ embeds: [joiningEmbed] });
   try {
     await p.join(cleanChannelId);
-    // Only add to playerMap after join succeeds
     this.players.playerMap.set(cleanChannelId, p);
     this.players._pendingJoins.delete(cleanChannelId);
     const okEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.join.joined", { channel: cid }));
@@ -162,11 +153,9 @@ export const command = new CommandBuilder()
     );
 
 export async function run(message, data) {
-  // Check if a channel argument was provided (mention like <#123456>, bare ID, or name)
   const rawArg = data?.get?.("channel")?.value?.trim?.() ?? null;
 
   if (rawArg) {
-    // Parse channel mention <#ID>, bare numeric ID, or channel name
     const mentionMatch = rawArg.match(/^<#(\d+)>$/);
     const idMatch      = rawArg.match(/^(\d{15,})$/);
     let resolvedId     = null;
@@ -176,14 +165,12 @@ export async function run(message, data) {
     } else if (idMatch) {
       resolvedId = idMatch[1];
     } else {
-      // Try to look up by name
       const guildId = cleanId(getGuildId(message));
       const allChannels = [
         ...(this.client?.channels?.values?.() ?? [])
       ];
       const match = allChannels.find(c => {
         const cServerId = cleanId(c.guildId ?? c.guild?.id ?? c.server_id ?? c.serverId);
-        // Fluxer uses numeric channel types: 0=text, 2=voice, 4=category, 5=link
         const isVoice = c.type === 2;
         return isVoice && cServerId === guildId &&
             (c.name?.toLowerCase() === rawArg.toLowerCase());
@@ -200,7 +187,6 @@ export async function run(message, data) {
     return this.players.initPlayer(message, resolvedId);
   }
 
-  // No argument — auto-detect the user's current voice channel
   const cid = this.players.checkVoiceChannels(message);
 
   if (!cid) {

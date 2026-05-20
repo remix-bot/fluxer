@@ -8,7 +8,6 @@ import { logger } from "../constants/Logger.mjs";
  */
 const DEFAULT_RETRY_STRATEGY = (options) => {
   if (options.totalRetryTime > 60_000) {
-    // Stop retrying after 60s total — something is fundamentally wrong
     return new Error("Redis reconnection exhausted after 60s");
   }
   return Math.min(options.attempt * 500, 5_000);

@@ -50,15 +50,12 @@ export class MySqlSettingsManager extends SettingsManager {
   _hasBotIdColumn = false;
   /** @type {Promise|null} Tracks the in-flight load() so setBotId() can wait for it */
   _loadPromise = null;
-  // Per-server debounce timers — collapses rapid set() calls into one remoteSave()
   _debounceTimers = new Map();
 
   constructor(config, defaultsPath, botId = null) {
     super();
     this.botId = botId;
     this.db = mysql.createPool({ connectionLimit: 15, ...config });
-    // Without this listener, any pool-level error (connection drop, timeout, protocol error)
-    // fires an unhandled 'error' event which crashes the entire process with no log output.
     this.db.on("error", (err) => {
       logger.error("[DB] MySQL pool error:", err.code ?? err.message);
     });
@@ -81,7 +78,6 @@ export class MySqlSettingsManager extends SettingsManager {
   async _ensureBotIdColumn() {
     if (this._hasBotIdColumn) return;
 
-    // Check if bot_id column exists and its properties
     const res = await this.query(
       `SELECT COLUMN_NAME, IS_NULLABLE, COLUMN_KEY FROM information_schema.COLUMNS `
       + `WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'settings' AND COLUMN_NAME = 'bot_id'`
@@ -93,11 +89,8 @@ export class MySqlSettingsManager extends SettingsManager {
     }
 
     if (res.results.length === 0) {
-      // ── Column doesn't exist: add it and update PK ─────────────────────
       logger.settings("[Settings] Auto-migrating: adding bot_id column to settings table...");
 
-      // NOT NULL DEFAULT '' — primary key columns can't be NULL in MySQL.
-      // Existing rows get bot_id = '' which we'll claim for the current bot.
       const alterRes = await this.query(
         `ALTER TABLE settings ADD COLUMN bot_id VARCHAR(32) NOT NULL DEFAULT ''`
       );
@@ -106,22 +99,18 @@ export class MySqlSettingsManager extends SettingsManager {
         return;
       }
 
-      // Claim all existing rows for the current bot before updating PK.
-      // This preserves existing settings (prefix, volume, etc.) instead of
-      // leaving them orphaned with bot_id = ''.
       if (this.botId) {
         await this.query(
           `UPDATE settings SET bot_id = ${mysql.escape(String(this.botId))} WHERE bot_id = ''`
         );
       }
 
-      // Update primary key from (id) to (id, bot_id)
       const pkRes = await this.query(
         `ALTER TABLE settings DROP PRIMARY KEY, ADD PRIMARY KEY (id, bot_id)`
       );
       if (pkRes.error) {
         logger.error("[Settings] Failed to update primary key:", pkRes.error);
-        return; // Don't set flag — bot_id features can't work without composite PK
+        return;
       }
 
       this._hasBotIdColumn = true;
@@ -129,41 +118,34 @@ export class MySqlSettingsManager extends SettingsManager {
       return;
     }
 
-    // ── Column already exists: verify it's in the primary key ─────────────
     const colInfo = res.results[0];
     const isNullable = colInfo.IS_NULLABLE === 'YES';
     const isPrimaryKey = colInfo.COLUMN_KEY === 'PRI';
 
     if (isPrimaryKey) {
-      // Column exists and is part of composite PK — all good
       this._hasBotIdColumn = true;
       return;
     }
 
-    // Column exists but is NOT in PK — the ALTER TABLE PK update must have
-    // failed previously (likely because the column had NULL values).
     logger.settings("[Settings] Fixing bot_id column: adding to primary key...");
 
-    // Step 1: Replace NULLs with empty string (PK columns can't be Null)
     if (isNullable) {
       await this.query(`UPDATE settings SET bot_id = '' WHERE bot_id IS NULL`);
       await this.query(`ALTER TABLE settings MODIFY COLUMN bot_id VARCHAR(32) NOT NULL DEFAULT ''`);
     }
 
-    // Step 2: Claim unclaimed rows (bot_id = '') for the current bot
     if (this.botId) {
       await this.query(
         `UPDATE settings SET bot_id = ${mysql.escape(String(this.botId))} WHERE bot_id = ''`
       );
     }
 
-    // Step 3: Update primary key
     const pkRes = await this.query(
       `ALTER TABLE settings DROP PRIMARY KEY, ADD PRIMARY KEY (id, bot_id)`
     );
     if (pkRes.error) {
       logger.error("[Settings] Failed to update primary key:", pkRes.error);
-      return; // Don't set flag — can't use bot_id without composite PK
+      return;
     }
 
     this._hasBotIdColumn = true;
@@ -183,7 +165,6 @@ export class MySqlSettingsManager extends SettingsManager {
       if (this._loadPromise) await this._loadPromise;
       await this._ensureBotIdColumn();
 
-      // Claim any unclaimed legacy rows (bot_id = '') for this bot.
       if (this._hasBotIdColumn && this.botId) {
         const claimRes = await this.query(
           `UPDATE settings SET bot_id = ${mysql.escape(String(this.botId))} WHERE bot_id = ''`
@@ -235,8 +216,6 @@ export class MySqlSettingsManager extends SettingsManager {
     res.results.forEach((r) => {
       try {
         const server = new ServerSettings(r.id, this);
-        // mysql2 may return JSON columns as already-parsed objects;
-        // only JSON.parse when the value is still a string.
         const parsed = (typeof r.data === "string") ? JSON.parse(r.data) : r.data;
         server.deserialize(parsed);
         server.checkDefaults(this.defaults);
@@ -249,15 +228,10 @@ export class MySqlSettingsManager extends SettingsManager {
   }
   async remoteUpdate(server, key) {
     const val = server.data[key];
-    // Arrays/objects must go through remoteSave — JSON_SET with scalar
-    // interpolation corrupts arrays by merging IDs into one number on read-back.
     if (Array.isArray(val) || (typeof val === "object" && val !== null)) {
       return this.remoteSave(server);
     }
     const escapedKey  = mysql.escape(`$.${key}`);
-    // Preserve native boolean/number types so MySQL stores them as JSON
-    // booleans/numbers, not as strings. String(true) would store "true"
-    // which then reads back as a string — breaking strict equality checks.
     const escapedVal  = (typeof val === "boolean" || typeof val === "number")
         ? mysql.escape(val)
         : mysql.escape(String(val));
@@ -294,8 +268,6 @@ export class MySqlSettingsManager extends SettingsManager {
     const escapedId   = mysql.escape(id);
     const escapedData = mysql.escape(JSON.stringify(server.data));
     const bi = this._botIdInsert();
-    // INSERT IGNORE: if the row already exists (race condition or failed
-    // migration), silently skip instead of crashing with ER_DUP_ENTRY.
     const r = await this.query(
         `INSERT IGNORE INTO settings (id, data${bi.col}) VALUES (${escapedId}, ${escapedData}${bi.val})`
     );
@@ -305,7 +277,6 @@ export class MySqlSettingsManager extends SettingsManager {
     if (!this.guilds.has(server.id)) { this.guilds.set(server.id, server); this.create(server.id, server); }
     const s = this.guilds.get(server.id);
     s.data[key] = server.data[key];
-    // Debounce: batch rapid consecutive set() calls into a single remoteSave() 80ms later
     const existing = this._debounceTimers.get(server.id);
     if (existing) clearTimeout(existing);
     this._debounceTimers.set(server.id, setTimeout(() => {

@@ -15,8 +15,6 @@ export class DatabaseManager {
       connectionLimit: 15,
       ...config,
     });
-    // Without this listener, unhandled pool-level errors (connection drops,
-    // timeouts) fire an unhandled 'error' event which crashes the process.
     this.db.on("error", (err) => {
       logger.error("[DashboardDB] MySQL pool error:", err.code ?? err.message);
     });

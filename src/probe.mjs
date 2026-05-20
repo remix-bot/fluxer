@@ -1,11 +1,10 @@
 import ffprobe from "ffprobe-static";
 import { spawn } from "node:child_process";
 
-const PROBE_TIMEOUT_MS = 15_000; // 15 seconds
+const PROBE_TIMEOUT_MS = 15_000;
 
 export default function probe(file) {
   return new Promise((res, rej) => {
-    // Pass args as an array — splitting a string on " " breaks paths that contain spaces.
     const args = [
       "-hide_banner",
       "-show_entries", "format_tags:format=duration",

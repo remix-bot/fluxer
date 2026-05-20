@@ -8,7 +8,7 @@
  *   - Fetch loved / top / recent tracks for %play lastfm loved/top/recent
  *   - Per-user session key storage in MySQL table `lastfm_users`
  *
- * Last.fm API docs: https://www.last.fm/api
+ * Last.fm API docs: https:
  */
 
 import crypto from "node:crypto";
@@ -25,18 +25,14 @@ function normalizeTrackText(value) {
     .toLowerCase();
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
 
 /**
  * Build the API signature required by Last.fm for authenticated calls.
- * See: https://www.last.fm/api/authspec#_8-signing-calls
+ * See: https:
  */
 function buildSignature(params, apiSecret) {
-  // 1. Sort all parameter keys alphabetically
   const sorted = Object.keys(params).sort();
-  // 2. Concatenate key+value pairs
   const str = sorted.map(k => k + params[k]).join("");
-  // 3. Append secret
   return crypto.createHash("md5").update(str + apiSecret).digest("hex");
 }
 
@@ -48,11 +44,9 @@ function buildSignature(params, apiSecret) {
  * @returns {Promise<object>} Parsed JSON response
  */
 async function apiCall(params, apiSecret, post = false) {
-  // Per Last.fm spec: format must NOT be included in the signature.
-  // See: https://www.last.fm/api/authspec#_8-signing-calls
   const allParams = { ...params };
   allParams.api_sig = buildSignature(allParams, apiSecret);
-  allParams.format  = "json";   // add AFTER signature
+  allParams.format  = "json";
 
   const url = post ? BASE_URL : `${BASE_URL}?${new URLSearchParams(allParams)}`;
 
@@ -77,7 +71,6 @@ async function apiCall(params, apiSecret, post = false) {
   return data;
 }
 
-// ── LastFmManager ──────────────────────────────────────────────────────────────
 
 export class LastFmManager {
   /**
@@ -88,10 +81,9 @@ export class LastFmManager {
     this.apiKey    = config?.apiKey ?? "";
     this.apiSecret = config?.apiSecret ?? "";
     this.enabled   = !!(this.apiKey && this.apiSecret);
-    this.scrobbleThreshold = config?.scrobbleThreshold ?? 0.5;  // fraction of track duration
-    this.scrobbleMinMs     = config?.scrobbleMinMs ?? 240_000;  // 4 min fallback
+    this.scrobbleThreshold = config?.scrobbleThreshold ?? 0.5;
+    this.scrobbleMinMs     = config?.scrobbleMinMs ?? 240_000;
 
-    // MySQL pool (lazy-created on first query)
     this._mysqlConfig = mysqlConfig;
     this._pool = null;
 
@@ -100,10 +92,8 @@ export class LastFmManager {
     /** @type {boolean} Whether the bot_id column exists in the lastfm tables */
     this._hasBotIdColumn = false;
 
-    // In-memory user cache: Map<userId, { sessionKey, username, scrobbleEnabled }>
     this._userCache = new Map();
 
-    // Cache for total synced scrobbles (sum of all users' lifetime scrobble counts)
     this._totalScrobblesCache = null;
     this._totalScrobblesCacheExpiry = 0;
     this._totalScrobblesInflight = null;
@@ -113,12 +103,10 @@ export class LastFmManager {
     }
   }
 
-  // ── Bot ID isolation ─────────────────────────────────────────────────────
 
   /**
    * Set the bot ID for multi-bot database isolation.
    * Ensures bot_id column exists in lastfm tables, then clears caches.
-   * @param {string} id - The bot's Discord user ID
    */
   async setBotId(id) {
     const changed = this.botId !== id;
@@ -139,22 +127,18 @@ export class LastFmManager {
     if (this._hasBotIdColumn) return;
     const pool = await this._getPool();
 
-    // ── lastfm_users ──────────────────────────────────────────────────────
     const [cols] = await pool.execute(
       `SELECT COLUMN_NAME, IS_NULLABLE, COLUMN_KEY FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lastfm_users' AND COLUMN_NAME = 'bot_id'`
     );
     if (cols.length === 0) {
       logger.settings("[LastFm] Auto-migrating: adding bot_id column to lastfm_users...");
-      // NOT NULL DEFAULT '' — PK columns can't be NULL in MySQL
       await pool.execute("ALTER TABLE `lastfm_users` ADD COLUMN `bot_id` VARCHAR(32) NOT NULL DEFAULT ''");
-      // Claim existing rows for the current bot
       if (this.botId) {
         await pool.execute("UPDATE `lastfm_users` SET `bot_id` = ? WHERE `bot_id` = ''", [String(this.botId)]);
       }
       await pool.execute("ALTER TABLE `lastfm_users` DROP PRIMARY KEY, ADD PRIMARY KEY (user_id, bot_id)");
       logger.settings("[LastFm] Auto-migration complete: lastfm_users.bot_id added.");
     } else {
-      // Column exists — check if it's part of the PK
       const colInfo = cols[0];
       const isNullable = colInfo.IS_NULLABLE === 'YES';
       const isPK = colInfo.COLUMN_KEY === 'PRI';
@@ -172,7 +156,6 @@ export class LastFmManager {
       }
     }
 
-    // ── lastfm_stats ──────────────────────────────────────────────────────
     const [statsCols] = await pool.execute(
       `SELECT COLUMN_NAME, IS_NULLABLE, COLUMN_KEY FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lastfm_stats' AND COLUMN_NAME = 'bot_id'`
     );
@@ -215,11 +198,9 @@ export class LastFmManager {
     return { where: " AND bot_id = ?", params: [String(this.botId)] };
   }
 
-  // ── MySQL ──────────────────────────────────────────────────────────────────
 
   async _getPool() {
     if (this._pool) return this._pool;
-    // Dynamic import so we don't crash if mysql2 isn't needed
     const mysql = await import("mysql2/promise");
     this._pool = mysql.createPool({
       host:     this._mysqlConfig.host,
@@ -245,14 +226,11 @@ export class LastFmManager {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
-    // Auto-migrate: add scrobble_count column if it doesn't exist (existing tables)
     try {
       await pool.execute("ALTER TABLE \`lastfm_users\` ADD COLUMN \`scrobble_count\` BIGINT NOT NULL DEFAULT 0 AFTER \`scrobble\`");
     } catch {
-      // Column already exists — ignore
     }
 
-    // Stats table — single row tracking global scrobble counts
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS \`lastfm_stats\` (
         \`id\`              TINYINT(1)  NOT NULL PRIMARY KEY DEFAULT 1,
@@ -260,13 +238,11 @@ export class LastFmManager {
         \`linked_users\`    INT         NOT NULL DEFAULT 0
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
-    // Ensure the single row exists
     await pool.execute(`
       INSERT IGNORE INTO \`lastfm_stats\` (id, stored_scrobbles, linked_users) VALUES (1, 0, 0)
     `);
   }
 
-  // ── User persistence ───────────────────────────────────────────────────────
 
   async getUser(userId) {
     const cached = this._userCache.get(userId);
@@ -303,14 +279,12 @@ export class LastFmManager {
     const data = { sessionKey, username: username ?? "", scrobbleEnabled: true };
     this._userCache.set(userId, data);
 
-    // Increment linked_users counter (only on new links, not re-links)
     try {
       await pool.execute(
         `UPDATE lastfm_stats SET linked_users = linked_users + 1 WHERE id = 1${f.where} AND NOT EXISTS (SELECT 1 FROM (SELECT 1 FROM lastfm_users WHERE user_id = ?${f.where} AND linked_at < NOW()) AS tmp)`,
         [...f.params, String(userId), ...f.params]
       );
     } catch {
-      // Non-critical — don't fail the save
     }
 
     return data;
@@ -334,7 +308,6 @@ export class LastFmManager {
     if (cached) cached.scrobbleEnabled = enabled;
   }
 
-  // ── Auth flow ──────────────────────────────────────────────────────────────
 
   /**
    * Step 1: Get an auth token. The user must visit the Last.fm auth URL to approve it.
@@ -366,10 +339,9 @@ export class LastFmManager {
       { method: "auth.getsession", api_key: this.apiKey, token },
       this.apiSecret
     );
-    return data.session; // { key, name }
+    return data.session;
   }
 
-  // ── Scrobbling ─────────────────────────────────────────────────────────────
 
   /**
    * Send a "now playing" notification to Last.fm (does NOT count as a scrobble).
@@ -393,7 +365,7 @@ export class LastFmManager {
           trackNumber:      track.trackNumber ?? "",
         },
         this.apiSecret,
-        true // POST
+        true
       );
     } catch (err) {
       logger.warn(`[LastFm] updateNowPlaying failed for ${userId}: ${err.message}`);
@@ -422,22 +394,19 @@ export class LastFmManager {
           "duration[0]":    this._extractDurationSec(track),
         },
         this.apiSecret,
-        true // POST
+        true
       );
       logger.settings(`[LastFm] Scrobbled "${track.title}" for ${userId}`);
 
-      // Increment stored scrobbles counter (non-blocking)
       this._incrementScrobbleCount(userId);
     } catch (err) {
       logger.warn(`[LastFm] Scrobble failed for ${userId}: ${err.message}`);
     }
   }
 
-  // ── User data (for play command) ──────────────────────────────────────────
 
   /**
    * Get the user's loved tracks.
-   * @param {string} userId - Discord/Fluxer user ID
    * @param {number} [limit=20] - Max tracks to return
    * @returns {Promise<Array<{ artist, name, url, image }>>}
    */
@@ -534,7 +503,6 @@ export class LastFmManager {
       track,
     };
 
-    // If user is linked, include their username for personal playcount
     if (userId) {
       const user = await this.getUser(userId);
       if (user) params.username = user.username;
@@ -591,7 +559,6 @@ export class LastFmManager {
 
       let score = 0;
 
-      // ── Positive matching ────────────────────────────────────────────────
       if (combined === normalizedQuery) score += 50;
       if (combined.includes(normalizedQuery) && normalizedQuery) score += 25;
       if (normalizedQuery.includes(nameNorm) && nameNorm) score += 15;
@@ -600,10 +567,6 @@ export class LastFmManager {
       const overlap = queryTokens.filter(token => combined.includes(token)).length;
       score += overlap * 4;
 
-      // ── Penalize non-song results ────────────────────────────────────────
-      // Track names that contain these phrases are usually lyric videos,
-      // official videos, or other non-song entries that shouldn't be the
-      // top result when a user is searching for the actual song.
       const nameLower = name.toLowerCase();
       const artistLower = artist.toLowerCase();
       const urlLower = String(track.url ?? "").toLowerCase();
@@ -616,7 +579,7 @@ export class LastFmManager {
         /\blyric video\b/,
         /\blyrics video\b/,
         /\bmusic video\b/,
-        /\bofficial audio\b/,      // some entries are titled "Official Audio" on last.fm
+        /\bofficial audio\b/,
         /\bvisuali[sz]er\b/,
         /\bkaraoke\b/,
         /\bcover\b/,
@@ -628,20 +591,18 @@ export class LastFmManager {
         /\breverb\b/,
         /\bnightcore\b/,
         /\b8d\b/,
-        /\bclip officiel\b/,       // French official video
-        /\bvideo oficial\b/,       // Spanish/Portuguese official video
+        /\bclip officiel\b/,
+        /\bvideo oficial\b/,
         /\bperformance\b/,
       ];
 
       for (const re of negativePatterns) {
         if (re.test(fullText)) {
           score -= 30;
-          break; // only penalize once per track
+          break;
         }
       }
 
-      // Penalize results where the artist is a label/production company
-      // instead of the actual artist (e.g. "Sony Pictures Animation")
       const labelKeywords = [
         /\bpictures\b/i,
         /\banimation\b/i,
@@ -660,17 +621,12 @@ export class LastFmManager {
         }
       }
 
-      // Penalize results where the track name is wrapped in quotes
-      // (e.g. '"Soda Pop" Official Lyric Video' — the quotes indicate
-      // it's a video title, not the actual track name)
       if (/^["""].*["""]$/.test(name) || /["""]/.test(name)) {
         score -= 15;
       }
 
-      // Prefer results that have a clean /music/Artist/_/Track URL format
-      // (actual tracks) over /music/Artist/Track+Extra+Stuff (video entries)
       if (urlLower.includes("/_/")) {
-        score += 5;  // Clean track URL format
+        score += 5;
       }
 
       return {
@@ -691,10 +647,10 @@ export class LastFmManager {
   /**
    * Parse a Last.fm music URL and extract artist and track info.
    * Supports:
-   *   https://www.last.fm/music/Drake/ICEMAN/Make+Them+Cry
-   *   https://www.last.fm/music/SAJA+BOYS/_/Soda+Pop
-   *   https://www.last.fm/music/Drake/_/Make+Them+Cry  ("_" = album placeholder)
-   *   https://www.last.fm/music/Drake                  (artist only)
+   *   https:
+   *   https:
+   *   https:
+   *   https:
    *
    * @param {string} url
    * @returns {{ artist: string, track: string|null, album: string|null, url: string } | null}
@@ -704,8 +660,6 @@ export class LastFmManager {
       const u = new URL(url);
       if (!/^(?:www\.)?last\.fm$/i.test(u.hostname)) return null;
 
-      // Path format: /music/Artist[/Album][/Track]
-      // Or: /music/Artist/_/Track  (underscore = album placeholder)
       const match = u.pathname.match(/^\/music\/([^/]+)(?:\/([^/]+))?(?:\/([^/]+))?/);
       if (!match) return null;
 
@@ -717,11 +671,9 @@ export class LastFmManager {
       let album = null;
 
       if (segment3) {
-        // /music/Artist/Album/Track or /music/Artist/_/Track
         album = segment2 === "_" ? null : segment2;
         track = segment3;
       } else if (segment2 && segment2 !== "_") {
-        // /music/Artist/Track (no album segment)
         track = segment2;
       }
 
@@ -765,7 +717,6 @@ export class LastFmManager {
     return data.user;
   }
 
-  // ── Playlists & Albums ────────────────────────────────────────────────────────
 
   /**
    * Get a list of the user's Last.fm playlists by scraping their profile page.
@@ -790,9 +741,6 @@ export class LastFmManager {
     const html = await res.text();
     const playlists = [];
 
-    // Parse playlist links from the HTML
-    // Last.fm playlist links look like: /user/USERNAME/playlists/123456
-    // Each playlist item has a .playlist-item or similar container
     const playlistRegex = /href="\/user\/[^/]+\/playlists\/(\d+)"[^>]*>([^<]+)<\/a>/gi;
     let match;
     while ((match = playlistRegex.exec(html)) !== null) {
@@ -807,14 +755,12 @@ export class LastFmManager {
       }
     }
 
-    // Try to extract track counts (e.g. "12 tracks" or "1 track")
     const countRegex = /(\d+)\s+track/gi;
     const counts = [];
     let cMatch;
     while ((cMatch = countRegex.exec(html)) !== null) {
       counts.push(+cMatch[1]);
     }
-    // Pair counts with playlists (order should match)
     playlists.forEach((pl, i) => {
       pl.trackCount = counts[i] ?? 0;
     });
@@ -837,10 +783,9 @@ export class LastFmManager {
 
     let playlistUrl;
 
-    // If playlistId is a number, look up the playlist URL from the user's playlists
     if (/^\d+$/.test(String(playlistId))) {
       const playlists = await this.getPlaylists(userId);
-      const idx = +playlistId - 1; // 1-based to 0-based
+      const idx = +playlistId - 1;
       if (idx < 0 || idx >= playlists.length) {
         throw new Error(`Playlist #${playlistId} not found. You have ${playlists.length} playlist(s). Use \`%lastfm playlists\` to see them.`);
       }
@@ -848,11 +793,9 @@ export class LastFmManager {
     } else if (String(playlistId).startsWith("http")) {
       playlistUrl = String(playlistId);
     } else {
-      // Assume it's a playlist ID slug — build the URL
       playlistUrl = `https://www.last.fm/user/${user.username}/playlists/${playlistId}`;
     }
 
-    // Scrape the playlist page for track info
     const res = await fetch(playlistUrl, {
       headers: { "User-Agent": "RemixBot/1.0 (Last.fm Integration)" },
     });
@@ -864,24 +807,18 @@ export class LastFmManager {
     const html = await res.text();
     const tracks = [];
 
-    // Last.fm playlist pages contain track items with:
-    // <a href="/music/Artist/Track" class="...">Track Name</a>
-    // We extract artist and track from the URL pattern /music/Artist+Name/Track+Name
     const trackLinkRegex = /href="\/music\/([^"]+?)"[^>]*class="[^"]*(?:link-block-target|chartlist-name)[^"]*"[^>]*>([^<]+)<\/a>/gi;
     let tMatch;
     while ((tMatch = trackLinkRegex.exec(html)) !== null && tracks.length < limit) {
       const urlPath = decodeURIComponent(tMatch[1]);
       const name = tMatch[2].trim();
-      // URL format: /music/Artist+Name/Track+Name or /music/Artist+Name/_/Track+Name
       const parts = urlPath.split("/");
       let artist = "Unknown";
       if (parts.length >= 1) {
         artist = parts[0].replace(/\+/g, " ");
       }
       if (parts.length >= 3 && parts[1] === "_") {
-        // /music/Artist/_/Track format
       } else if (parts.length >= 2) {
-        // /music/Artist/Track format — the track name from URL
       }
 
       if (name && name !== "Unknown") {
@@ -894,7 +831,6 @@ export class LastFmManager {
       }
     }
 
-    // Fallback: try a broader regex if the first one didn't find anything
     if (!tracks.length) {
       const broadRegex = /href="\/music\/([^"]+)"[^>]*>([^<]{2,80})<\/a>/gi;
       const seen = new Set();
@@ -902,7 +838,6 @@ export class LastFmManager {
       while ((bMatch = broadRegex.exec(html)) !== null && tracks.length < limit) {
         const urlPath = decodeURIComponent(bMatch[1]);
         const name = bMatch[2].trim();
-        // Only include actual track links (Artist/Track or Artist/_/Track)
         const parts = urlPath.split("/");
         if (parts.length < 2) continue;
         if (seen.has(urlPath)) continue;
@@ -958,7 +893,6 @@ export class LastFmManager {
     }));
   }
 
-  // ── Play helper (for %lastfm play and %play lastfm:loved etc.) ─────────────
 
   /**
    * Fetch tracks from Last.fm by category and return search queries
@@ -988,7 +922,6 @@ export class LastFmManager {
         break;
       case "recent":
         tracks = await this.getRecentTracks(userId, limit);
-        // Filter out "now playing" entries (they have no finished timestamp)
         tracks = tracks.filter(t => !t.now);
         break;
       case "playlist":
@@ -996,13 +929,11 @@ export class LastFmManager {
         tracks = await this.getPlaylistTracks(userId, options.playlistId, limit);
         break;
       case "albums":
-        // Top albums — we fetch albums, then for each album we use the album name + artist as search query
         const albums = await this.getTopAlbums(userId, options.period ?? "overall", limit);
         tracks = albums.map(a => ({
           artist: a.artist,
           name:   a.name,
           url:    a.url,
-          // For albums, search the album name + artist to get the full album
           query:  `${a.artist} ${a.name} album`,
           image:  a.image ?? "",
         }));
@@ -1025,7 +956,6 @@ export class LastFmManager {
     };
   }
 
-  // ── Global stats ────────────────────────────────────────────────────────────
 
   /**
    * Get the total lifetime scrobbles across ALL linked Last.fm users.
@@ -1038,12 +968,10 @@ export class LastFmManager {
   async getTotalScrobbles(concurrency = 3) {
     if (!this.enabled) return 0;
 
-    // Return cached value if still fresh
     if (this._totalScrobblesCache !== null && Date.now() < this._totalScrobblesCacheExpiry) {
       return this._totalScrobblesCache;
     }
 
-    // Deduplicate concurrent calls
     if (this._totalScrobblesInflight) return this._totalScrobblesInflight;
 
     this._totalScrobblesInflight = this._refreshTotalScrobbles(concurrency);
@@ -1061,7 +989,6 @@ export class LastFmManager {
     try {
       const pool = await this._getPool();
 
-      // Get all linked user IDs
       const f = this._botIdFilter();
       const [rows] = await pool.execute(
         `SELECT user_id FROM lastfm_users WHERE 1=1${f.where}`,
@@ -1074,16 +1001,13 @@ export class LastFmManager {
         return 0;
       }
 
-      // Sync each user's scrobble count from the Last.fm API (with concurrency limit)
       const userIds = rows.map(r => r.user_id);
 
-      // Batch the sync calls to avoid overloading the Last.fm API
       for (let i = 0; i < userIds.length; i += concurrency) {
         const batch = userIds.slice(i, i + concurrency);
         await Promise.allSettled(batch.map(uid => this.syncUserScrobbleCount(uid)));
       }
 
-      // Now sum up all scrobble_count values from the DB
       const [sumRows] = await pool.execute(
         `SELECT COALESCE(SUM(scrobble_count), 0) AS total FROM lastfm_users WHERE 1=1${f.where}`,
         [...f.params]
@@ -1097,7 +1021,6 @@ export class LastFmManager {
       return total;
     } catch (err) {
       logger.warn(`[LastFm] _refreshTotalScrobbles failed: ${err.message}`);
-      // Return stale cache if available, otherwise 0
       return this._totalScrobblesCache ?? 0;
     }
   }
@@ -1133,7 +1056,6 @@ export class LastFmManager {
     const pool = await this._getPool();
     const f = this._botIdFilter();
 
-    // Get total count
     const [countRows] = await pool.execute(
       `SELECT COUNT(*) AS total FROM lastfm_users WHERE scrobble_count > 0${f.where}`,
       [...f.params]
@@ -1141,7 +1063,6 @@ export class LastFmManager {
     const totalUsers = Number(countRows[0]?.total ?? 0);
     const totalPages = Math.max(1, Math.ceil(totalUsers / perPage));
 
-    // Clamp page
     page = Math.max(0, Math.min(page, totalPages - 1));
 
     const offset = page * perPage;
@@ -1183,7 +1104,6 @@ export class LastFmManager {
     }
   }
 
-  // ── Internal helpers ───────────────────────────────────────────────────────
 
   _assertEnabled() {
     if (!this.enabled) throw new Error("Last.fm integration is not configured (missing apiKey/apiSecret).");
@@ -1231,7 +1151,6 @@ export class LastFmManager {
 
   _extractDurationSec(track) {
     if (!track.duration) return "";
-    // Duration can be: { seconds: N }, "PT3M0S", or milliseconds number
     if (typeof track.duration === "object" && track.duration.seconds) return track.duration.seconds;
     if (typeof track.duration === "number") return Math.round(track.duration / 1000);
     if (typeof track.duration === "string") {
@@ -1253,7 +1172,7 @@ export class LastFmManager {
         ? track.duration
         : null;
 
-    if (!durationMs || durationMs < 30_000) return false; // too short
+    if (!durationMs || durationMs < 30_000) return false;
 
     const normalizedTitle = normalizeTrackText(this._extractTitle(track));
     const normalizedArtist = normalizeTrackText(this._extractArtist(track));

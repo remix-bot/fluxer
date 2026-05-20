@@ -70,7 +70,6 @@ export class CommandRequirement {
 }
 
 export class Option {
-  // Fluxer uses channel mentions: <#id> and user mentions <@id>
   channelRegex = /^<#(?<id>\d+)>/;
   userRegex = /^<@!?(?<id>\d+)>/;
   idRegex = /^(?<id>\d+)/;
@@ -141,10 +140,9 @@ export class Option {
         const results = this.channelRegex.exec(i) ?? this.idRegex.exec(i);
         const guildId = msg?.channel?.guildId ?? msg?.guildId;
 
-        // dry-run eval mode
         if (guildId === "eval") return (results) ? results.groups["id"] : i;
 
-        const voiceTypes = [2, 13]; // GuildVoice and GuildStageVoice
+        const voiceTypes = [2, 13];
         const byName = msg?.guild?.channels?.find(c => c.name === i && voiceTypes.includes(c.type));
         const cObj = results
             ? client.channels.get(results.groups["id"])
@@ -381,11 +379,8 @@ export class CommandHandler extends EventEmitter {
   invalidFlagError = "Invalid flag `$invalidFlag`. It doesn't match any options on this command.\n`$previousCmd $invalidFlag`";
   textWrapError = "Malformed string `$value`: Missing a closing quote character (`$quote`) after the desired string.";
 
-  // Per-user rate limiting: userId → timestamp of last processed command
-  // Prevents command spam that could saturate worker threads and fill the searches Map.
-  // Owners are exempt so they can always use debug/reload commands.
   _cmdCooldowns = new Map();
-  _cmdCooldownMs = 1500; // 1.5 seconds between commands per user
+  _cmdCooldownMs = 1500;
 
   constructor(handler, prefix = "!") {
     super();
@@ -439,7 +434,6 @@ export class CommandHandler extends EventEmitter {
     if (!msg || !msg.content) return;
     const trimmed = msg.content.trim();
     if (/^<@!?\d+>$/.test(trimmed)) {
-      // Only respond if the bot itself was pinged
       const botId = this.client.user?.id;
       if (botId && (trimmed === `<@${botId}>` || trimmed === `<@!${botId}>`)) {
         return this.onPing?.(msg);
@@ -447,16 +441,12 @@ export class CommandHandler extends EventEmitter {
       return;
     }
 
-    // Per-user rate limit — skip spam commands silently.
-    // Owners are always exempt so %reload and %eval are never blocked.
     const userId = msg.message?.author?.id ?? msg.author?.id;
     if (userId && !this.owners.includes(userId)) {
       const now  = Date.now();
       const last = this._cmdCooldowns.get(userId) ?? 0;
       if (now - last < this._cmdCooldownMs) return;
       this._cmdCooldowns.set(userId, now);
-      // Evict stale entries periodically to keep the Map from growing unbounded.
-      // 500 entries × 8 bytes ≈ negligible, but good hygiene on busy bots.
       if (this._cmdCooldowns.size > 500) {
         const cutoff = now - this._cmdCooldownMs * 2;
         for (const [uid, ts] of this._cmdCooldowns) {
@@ -513,12 +503,8 @@ export class CommandHandler extends EventEmitter {
   }
 
   processCommand(cmd, args, msg, previous = false, external = false) {
-    // Guard first — cmd could be undefined if called from an edge case
     if (!cmd) return logger.warn("[CommandHandler.processCommand] Invalid case: `cmd` falsy.");
 
-    // Check if the bot itself has the critical permissions it needs in this channel.
-    // This runs BEFORE user-requirement checks so the user gets a clear error
-    // about what the bot is missing, rather than a generic 403 crash later.
     if (!external) {
       const channel = msg.channel?.channel ?? msg.channel;
       if (channel?.guild) {
@@ -528,7 +514,6 @@ export class CommandHandler extends EventEmitter {
           try {
             msg.message?.reply?.({ embeds: [permEmbed] }, { ping: false });
           } catch (_) {
-            // Last resort: plain text
             try {
               const names = botPermResult.missing.map(k => REQUIRED_BOT_PERMISSIONS.get(k)?.name ?? k);
               msg.message?.reply?.("I'm missing critical permissions: **" + names.join("**, **") + "**. Ask an admin to fix this.", { ping: false });
@@ -689,16 +674,12 @@ export class CommandHandler extends EventEmitter {
 
         const member = guild.members.get(authorId) ?? null;
         if (member?.permissions) {
-          // cached — check directly
           const missing = req.permissions.filter(p => !member.permissions.has(PermissionFlags[p] ?? p));
           if (missing.length > 0) {
             this.replyHandler(this.t(permGuildId, "cmdBuilder.requirement.permission"), msg);
             return false;
           }
         } else {
-          // not cached — fetch async and re-run
-          // guild.fetchMember(id) is a Fluxer shorthand; guild.members.fetch(id) is the
-          // standard compatible form. Try both so either API name works.
           const fetchPromise = typeof guild.fetchMember === "function"
               ? guild.fetchMember(authorId)
               : typeof guild.members?.fetch === "function"
@@ -709,14 +690,11 @@ export class CommandHandler extends EventEmitter {
             if (missing.length > 0) {
               this.replyHandler(this.t(permGuildId, "cmdBuilder.requirement.permission"), msg);
             } else {
-              // Re-parse args the same way messageHandler does so quoted args survive.
               const guildId2 = msg.channel?.channel?.guildId ?? msg.message?.guildId;
               const prefix2  = this.getPrefix(guildId2);
               const rawContent = msg.message.content;
               const len2 = rawContent.startsWith(prefix2) ? prefix2.length : 0;
               const args = rawContent.slice(len2).replace(/\u00A0/gi, " ").trim().split(" ").map(e => e.trim());
-              // Pass external=true to skip re-checking requirements and avoid
-              // re-entering the fetch loop if the member is still not cached.
               this.processCommand(cmd, args, msg, false, true);
             }
           }).catch(() => this.replyHandler(this.t(permGuildId, "cmdBuilder.requirement.permission"), msg));
@@ -755,7 +733,6 @@ export class CommandLoader {
     this.commands = commands;
     this.context = context;
     this.context.loader ??= this;
-    // expose loader helpers on context so reload.js can use them
     this.context.commandFiles = this.commandFiles;
     this.context.runnables = this.runnables;
 

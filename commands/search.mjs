@@ -5,7 +5,6 @@ import { PROVIDER_CHOICES, PROVIDER_NAMES } from "../src/constants/providers.mjs
 
 const NUMBER_EMOJIS = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣"];
 const CANCEL_EMOJI  = "❌";
-// SESSION_MS is now read from config.timers.searchSessionTimeout (fallback: 30s)
 
 function parseInlineProvider(raw) {
   const match = raw.match(/^([a-z]+):\s*(.+)$/i);
@@ -53,7 +52,6 @@ export async function run(msg, data) {
 
   const name = PROVIDER_NAMES[provider] ?? "YouTube Music";
 
-  // Send loading embed
   const channel = msg.channel?.channel ?? msg.message?.channel;
   if (!channel?.send) return;
 
@@ -79,14 +77,12 @@ export async function run(msg, data) {
   ).catch(() => null);
   if (!rawMsg) return;
 
-  // Fetch results
   const res = await p.fetchResults(query, msg.authorId, provider);
   if (!res?.count) {
     rawMsg.edit({ embeds: [makeEmbed(this.t(msg, "responses.search.noResults"))] }).catch(() => {});
     return;
   }
 
-  // Build results embed
   const results   = p.searches.get(msg.authorId) ?? [];
   const reactions = NUMBER_EMOJIS.slice(0, res.count);
 
@@ -107,7 +103,6 @@ export async function run(msg, data) {
     )]
   }).catch(() => {});
 
-  // Add reactions
   for (const emoji of [...reactions, CANCEL_EMOJI]) {
     await rawMsg.react(emoji).catch(() => {});
   }
@@ -127,7 +122,6 @@ export async function run(msg, data) {
   const authorId = msg.message?.author?.id ?? msg.authorId;
 
   const unobserve = wrapped.onReaction(allReactions, async (e, reactionMsg) => {
-    // Only react to the command author — normalise across Fluxer reaction event shapes
     const reactorId = e.user_id ?? e.userId ?? e.user?.id ?? null;
     if (reactorId && reactorId !== authorId) return;
 
@@ -157,7 +151,6 @@ export async function run(msg, data) {
     }).catch(() => {});
   });
 
-  // Read session timeout from config (fallback 30 s)
   const SESSION_MS = this.config?.timers?.searchSessionTimeout ?? 30_000;
   const timer = setTimeout(() => {
     unobserve();
@@ -165,5 +158,5 @@ export async function run(msg, data) {
     rawMsg.edit({
       embeds: [makeEmbed(this.t(msg, "responses.search.timedOut"), this.t(msg, "responses.search.sessionClosed"), `${name} — Search Results`)]
     }).catch(() => {});
-  }, SESSION_MS); // configurable via config.timers.searchSessionTimeout
+  }, SESSION_MS);
 }

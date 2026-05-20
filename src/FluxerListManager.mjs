@@ -7,7 +7,7 @@
  *   - In-memory response caching with configurable TTL
  *   - Graceful error handling (401/403 auth errors, network failures)
  *
- * FluxerList API docs: https://fluxerlist.com/api/v1
+ * FluxerList API docs: https:
  */
 
 import { logger } from "./constants/Logger.mjs";
@@ -18,7 +18,6 @@ import {
   buildFluxerListUrl,
 } from "./constants/API.mjs";
 
-// ── FluxerListManager ───────────────────────────────────────────────────────────
 
 export class FluxerListManager {
   /**
@@ -37,7 +36,6 @@ export class FluxerListManager {
     this.botSlug    = config?.botSlug ?? config?.botId ?? "";
     this.enabled    = !!this.apiKey;
 
-    // In-memory cache: Map<cacheKey, { data, expiresAt }>
     this._cache = new Map();
 
     if (!this.enabled) {
@@ -47,7 +45,6 @@ export class FluxerListManager {
     }
   }
 
-  // ── Cache helpers ───────────────────────────────────────────────────────────
 
   /**
    * Generate a cache key from the request parameters.
@@ -88,7 +85,6 @@ export class FluxerListManager {
       expiresAt: Date.now() + (ttlMs ?? FLUXERLIST_LIMITS.CACHE_TTL_MS),
     });
 
-    // Evict stale entries periodically to prevent unbounded growth
     if (this._cache.size > 200) {
       const now = Date.now();
       for (const [k, v] of this._cache) {
@@ -97,7 +93,6 @@ export class FluxerListManager {
     }
   }
 
-  // ── API calls ───────────────────────────────────────────────────────────────
 
   /**
    * Fetch the list of voters for a server or bot.
@@ -122,7 +117,6 @@ export class FluxerListManager {
     const page  = options.page  ?? FLUXERLIST_LIMITS.DEFAULT_PAGE;
     const limit = options.limit ?? FLUXERLIST_LIMITS.DEFAULT_LIMIT;
 
-    // Check cache first
     const cacheKey = this._cacheKey(type, resourceId, page, limit);
     if (!options.skipCache) {
       const cached = this._getCached(cacheKey);
@@ -132,14 +126,12 @@ export class FluxerListManager {
       }
     }
 
-    // Build request URL
     const endpoint = type === "server"
       ? FLUXERLIST.ENDPOINTS.SERVER_VOTERS
       : FLUXERLIST.ENDPOINTS.BOT_VOTERS;
 
     const url = buildFluxerListUrl(endpoint, resourceId, { page, limit });
 
-    // Make the API call
     const res = await fetch(url, {
       method: "GET",
       headers: {
@@ -149,7 +141,6 @@ export class FluxerListManager {
       },
     });
 
-    // Handle HTTP errors
     if (res.status === 401) {
       throw new Error("Invalid FluxerList API key. Check your config.json fluxerlist.apiKey.");
     }
@@ -167,12 +158,10 @@ export class FluxerListManager {
 
     const data = await res.json();
 
-    // Validate response shape
     if (typeof data.total !== "number" || !Array.isArray(data.voters)) {
       throw new Error("Unexpected FluxerList API response format.");
     }
 
-    // Cache the result
     this._setCached(cacheKey, data);
 
     logger.settings(`[FluxerList] Fetched ${data.voters.length} voters for ${type} ${resourceId} (page ${page}, total ${data.total})`);
@@ -217,21 +206,18 @@ export class FluxerListManager {
     let allVoters = [];
     let total = Infinity;
 
-    // Safety: max 50 pages to prevent runaway loops
     while (allVoters.length < total && page <= 50) {
       const data = await this.getVoters(type, id, { page, limit, skipCache: options.skipCache });
       allVoters = allVoters.concat(data.voters);
       total = data.total;
       page++;
 
-      // If we got fewer results than the limit, we've reached the last page
       if (data.voters.length < limit) break;
     }
 
     return allVoters;
   }
 
-  // ── Internal ────────────────────────────────────────────────────────────────
 
   _assertEnabled() {
     if (!this.enabled) {

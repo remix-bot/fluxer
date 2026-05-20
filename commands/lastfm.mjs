@@ -23,7 +23,6 @@ export const command = new CommandBuilder()
       .setRequired(false)
   );
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function notConfigured(msg) {
   return {
@@ -41,7 +40,6 @@ function notLinked(prefix) {
   };
 }
 
-// Valid categories that can be played (without a sub-number)
 const SIMPLE_CATEGORIES = ["loved", "top", "recent", "albums"];
 
 function buildLastFmTrackMeta(track) {
@@ -72,7 +70,6 @@ async function resolveLastFmTrack(player, track, resolveProvider = "yt") {
  *
  * @param {object} ctx     - The command `this` context (has .lastfm, .getPlayer, .handler, .t)
  * @param {object} msg     - The message object
- * @param {string} userId  - Discord user ID
  * @param {string} category - "loved", "top", "recent", or "playlist"
  * @param {object} [options]
  * @param {string} [options.period]           - Period for top tracks
@@ -88,7 +85,6 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
 
   if (!lastfm || !lastfm.enabled) return msg.reply(notConfigured(msg));
 
-  // Validate category
   const validCategories = [...SIMPLE_CATEGORIES, "playlist"];
   if (!validCategories.includes(category)) {
     return msg.reply({
@@ -98,7 +94,6 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
     });
   }
 
-  // Playlist requires an ID
   if (category === "playlist" && !options.playlistId) {
     return msg.reply({
       embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
@@ -107,19 +102,15 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
     });
   }
 
-  // Check if user is linked
   const user = await lastfm.getUser(userId);
   if (!user) return msg.reply(notLinked(prefix));
 
-  // Get a player (user must be in a voice channel)
   const p = await ctx.getPlayer(msg, true, true, true);
   if (!p) return;
 
-  // Fetch tracks from Last.fm
   const categoryEmoji = { loved: "❤️", top: "📊", recent: "🕐", playlist: "📋", albums: "💿" }[category];
   const categoryLabel = { loved: "Loved", top: "Top", recent: "Recent", playlist: "Playlist", albums: "Top Albums" }[category];
 
-  // Show which provider is being used for resolving tracks (if not the default YouTube)
   const resolveLabel = resolveProvider !== "yt" ? ` via ${resolveProvider.toUpperCase()}` : "";
 
   let statusMsg;
@@ -152,7 +143,6 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
     return;
   }
 
-  // Play each track sequentially — first one via play(), rest added to queue
   let added = 0;
   let failed = 0;
 
@@ -200,14 +190,12 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
  * @returns {{ category: string, playlistId?: string|number }}
  */
 function parsePlayArgs(msg, data) {
-  // Try from the token option first
   let raw = data.get("token")?.value;
   if (!raw) {
     const content = msg.message?.content ?? "";
     const args = content.split(/\s+/);
     const playIdx = args.indexOf("play");
     if (playIdx >= 0 && args[playIdx + 1]) {
-      // Collect everything after "play"
       raw = args.slice(playIdx + 1).join(" ");
     }
   }
@@ -216,9 +204,6 @@ function parsePlayArgs(msg, data) {
 
   const lower = raw.toLowerCase().trim();
 
-  // Sub-provider syntax: "td:top", "sp", "lf:loved"
-  // Non-lastfm providers only allow "top" (or bare provider defaults to "top")
-  // Last.fm as resolve provider allows all categories: loved, top, recent, albums, playlist
   const subMatch = lower.match(/^([a-z]+):\s*(.*)$/);
   if (subMatch) {
     const maybeProvider = subMatch[1];
@@ -227,16 +212,13 @@ function parsePlayArgs(msg, data) {
       const isLastFmProvider = maybeProvider === "lf" || maybeProvider === "lastfm";
 
       if (!rest) {
-        // No category specified — default based on provider
         if (isLastFmProvider) {
           return { category: "", resolveProvider: maybeProvider, showAllCategories: true };
         }
-        // All other providers default to "top"
         return { category: "top", resolveProvider: maybeProvider };
       }
 
       if (isLastFmProvider) {
-        // Last.fm as resolve provider: all categories allowed
         const playlistMatch = rest.match(/^playlist\s+(\d+)$/);
         if (playlistMatch) {
           return { category: "playlist", playlistId: playlistMatch[1], resolveProvider: maybeProvider };
@@ -245,18 +227,14 @@ function parsePlayArgs(msg, data) {
           return { category: rest, resolveProvider: maybeProvider };
         }
       } else {
-        // Non-lastfm providers: only "top" allowed
         if (rest === "top") {
           return { category: "top", resolveProvider: maybeProvider };
         }
-        // Any other category with a non-lastfm provider is invalid
         return { category: "", resolveProvider: maybeProvider, invalidCategory: rest };
       }
     }
   }
 
-  // Bare provider without colon: "td", "sp", "yt" → defaults to "top"
-  // (lf/lastfm as bare provider shows all categories instead)
   if (PROVIDER_CHOICES.includes(lower)) {
     const isLastFmProvider = lower === "lf" || lower === "lastfm";
     if (isLastFmProvider) {
@@ -265,13 +243,11 @@ function parsePlayArgs(msg, data) {
     return { category: "top", resolveProvider: lower };
   }
 
-  // "playlist 3" or "playlist 1"
   const playlistMatch = lower.match(/^playlist\s+(\d+)$/);
   if (playlistMatch) {
     return { category: "playlist", playlistId: playlistMatch[1] };
   }
 
-  // "loved", "top", "recent"
   if (SIMPLE_CATEGORIES.includes(lower)) {
     return { category: lower };
   }
@@ -279,7 +255,6 @@ function parsePlayArgs(msg, data) {
   return { category: "" };
 }
 
-// ── Run ────────────────────────────────────────────────────────────────────────
 
 export async function run(msg, data) {
   const lastfm = this.lastfm;
@@ -290,9 +265,7 @@ export async function run(msg, data) {
   const userId = msg.message?.author?.id ?? msg.author?.id;
 
   switch (action) {
-    // ── Link ────────────────────────────────────────────────────────────────
     case "link": {
-      // Check if already linked
       const existing = await lastfm.getUser(userId);
       if (existing) {
         return msg.reply({
@@ -302,7 +275,6 @@ export async function run(msg, data) {
         });
       }
 
-      // Step 1: Get auth token
       let token;
       try {
         token = await lastfm.getAuthToken();
@@ -314,7 +286,6 @@ export async function run(msg, data) {
 
       const authUrl = lastfm.getAuthUrl(token);
 
-      // Send auth URL via DM so it's private
       let sent = false;
       try {
         const dm = await msg.author.createDM();
@@ -336,7 +307,6 @@ export async function run(msg, data) {
         });
         sent = true;
       } catch {
-        // DM failed — send in channel with a warning
       }
 
       const replyEmbed = new EmbedBuilder()
@@ -350,9 +320,7 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [replyEmbed] });
     }
 
-    // ── Confirm (completes the auth flow) ──────────────────────────────────
     case "confirm": {
-      // Get token from the option, or fall back to parsing the message
       let tokenValue = data.get("token")?.value;
       if (!tokenValue) {
         const rawContent = msg.message?.content ?? "";
@@ -385,7 +353,6 @@ export async function run(msg, data) {
       });
     }
 
-    // ── Unlink ─────────────────────────────────────────────────────────────
     case "unlink": {
       const user = await lastfm.getUser(userId);
       if (!user) return msg.reply(notLinked(prefix));
@@ -396,7 +363,6 @@ export async function run(msg, data) {
       });
     }
 
-    // ── Toggle scrobbling ──────────────────────────────────────────────────
     case "scrobble": {
       const user = await lastfm.getUser(userId);
       if (!user) return msg.reply(notLinked(prefix));
@@ -414,7 +380,6 @@ export async function run(msg, data) {
       });
     }
 
-    // ── Now playing info ───────────────────────────────────────────────────
     case "np": {
       const user = await lastfm.getUser(userId);
       if (!user) return msg.reply(notLinked(prefix));
@@ -445,7 +410,6 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [embed] });
     }
 
-    // ── Profile ────────────────────────────────────────────────────────────
     case "profile": {
       const user = await lastfm.getUser(userId);
       if (!user) return msg.reply(notLinked(prefix));
@@ -459,7 +423,6 @@ export async function run(msg, data) {
         });
       }
 
-      // Sync scrobble count in background (keeps leaderboard fresh)
       lastfm.syncUserScrobbleCount(userId).catch(() => {});
 
       const embed = new EmbedBuilder()
@@ -477,7 +440,6 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [embed] });
     }
 
-    // ── Playlists ──────────────────────────────────────────────────────────
     case "playlists": {
       const user = await lastfm.getUser(userId);
       if (!user) return msg.reply(notLinked(prefix));
@@ -514,11 +476,9 @@ export async function run(msg, data) {
       });
     }
 
-    // ── Play (loved/top/recent/playlist tracks as queue) ────────────────────
     case "play": {
       const parsed = parsePlayArgs(msg, data);
 
-      // Invalid category used with a non-lastfm provider (e.g. "sp:loved", "td:recent")
       if (parsed.invalidCategory) {
         return msg.reply({
           embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
@@ -571,7 +531,6 @@ export async function run(msg, data) {
       });
     }
 
-    // ── Loved tracks ──────────────────────────────────────────────────────
     case "loved": {
       const user = await lastfm.getUser(userId);
       if (!user) return msg.reply(notLinked(prefix));
@@ -594,7 +553,6 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [buildTrackList(user.username, "❤️ Loved Tracks", tracks, false, prefix)] });
     }
 
-    // ── Top tracks ─────────────────────────────────────────────────────────
     case "top": {
       const user = await lastfm.getUser(userId);
       if (!user) return msg.reply(notLinked(prefix));
@@ -617,7 +575,6 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [buildTrackList(user.username, "📊 Top Tracks", tracks, true, prefix)] });
     }
 
-    // ── Leaderboard ─────────────────────────────────────────────────────
     case "leaderboard":
     case "lb": {
       let lb;
@@ -637,18 +594,14 @@ export async function run(msg, data) {
         });
       }
 
-      // Single page — no pagination needed
       if (lb.totalPages <= 1) {
         const embed = buildLeaderboardEmbed(lb, 0, prefix);
         return msg.reply({ embeds: [embed] });
       }
 
-      // Multi-page with emoji navigation
       let currentPage = 0;
 
       const buildPage = (pageIdx, expired = false) => {
-        // Fetch for this page index (we pre-load only page 0;
-        // subsequent pages are fetched on navigation)
         const footerText = expired
           ? "Controls expired"
           : `Page ${pageIdx + 1}/${lb.totalPages} • Use ◀️▶️ to navigate`;
@@ -701,7 +654,6 @@ export async function run(msg, data) {
           currentPage = currentPage < lb.totalPages - 1 ? currentPage + 1 : 0;
         }
 
-        // Fetch the page data from DB
         try {
           lb = await lastfm.getLeaderboard(currentPage, 10);
         } catch {
@@ -715,7 +667,6 @@ export async function run(msg, data) {
       break;
     }
 
-    // ── Recent tracks ──────────────────────────────────────────────────────
     case "recent": {
       const user = await lastfm.getUser(userId);
       if (!user) return msg.reply(notLinked(prefix));
@@ -781,7 +732,6 @@ export async function run(msg, data) {
   }
 }
 
-// ── Track list embed builder ──────────────────────────────────────────────────
 
 function buildTrackList(username, title, tracks, showPlaycount = false, prefix = "%") {
   const lines = tracks.map((t, i) => {
@@ -802,7 +752,6 @@ function buildTrackList(username, title, tracks, showPlaycount = false, prefix =
     .setFooter({ text: `💡 Use ${prefix}lastfm play loved to play these!` });
 }
 
-// ── Leaderboard embed builder ─────────────────────────────────────────────────
 
 function buildLeaderboardEmbed(lb, pageIdx, prefix) {
   const MEDALS = ["🥇", "🥈", "🥉"];

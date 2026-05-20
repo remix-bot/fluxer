@@ -41,11 +41,9 @@ export async function run(message, data) {
 
     let desc = "";
 
-    // ── Header: track count + remaining time ──────────────────────────────
     const remaining = p.getQueueRemainingTime();
     desc += `📋 **${totalTracks} track${totalTracks !== 1 ? "s" : ""} in queue** • ⏱️ \`${remaining}\`\n`;
 
-    // ── Now Playing block ─────────────────────────────────────────────────
     if (current) {
       const elapsed = p.getCurrentElapsedDuration();
       const total   = p.getCurrentDuration();
@@ -60,7 +58,6 @@ export async function run(message, data) {
 
     desc += `\n`;
 
-    // ── Queue list ────────────────────────────────────────────────────────
     if (totalTracks === 0) {
       desc += this.t(message, "responses.list.emptyInline");
     } else {
@@ -73,8 +70,6 @@ export async function run(message, data) {
         let   title   = vid.title;
         if (title.length > 45) title = title.slice(0, 42) + "...";
         title = link ? `[${title}](${link})` : title;
-        // Mark the very first item in the queue as "Up Next" — useful after
-        // a bot recovery or shuffle so the next song's position is obvious.
         const upNext  = (start + i === 0) ? " ▶" : "";
         desc += `\`${index}.\` ${title}${upNext} • \`${dur}\`\n`;
       });

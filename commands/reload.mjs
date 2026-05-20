@@ -23,7 +23,6 @@ function embed(desc) {
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const ROOT      = path.resolve(__dirname, "..");
 
-// ── Reload a single command ───────────────────────────────────────────────────
 async function reloadCommand(ctx, msg, name) {
   if (name === "index")
     return { ok: false, msg: ctx.t(msg, "responses.reload.indexNoReload") };
@@ -34,14 +33,11 @@ async function reloadCommand(ctx, msg, name) {
   const file = ctx.commandFiles.get(command.uid);
   if (!file)  return { ok: false, msg: ctx.t(msg, "responses.reload.noFileTracked", { name }) };
 
-  // Unregister old
   command.subcommands.forEach(sub => ctx.runnables.delete(sub.uid));
   ctx.handler.removeCommand(command);
   ctx.runnables.delete(command.uid);
   ctx.commandFiles.delete(command.uid);
 
-  // Re-import with cache-buster — use pathToFileURL so Windows drive letters and
-  // spaces in paths are handled correctly (plain "file://" + path breaks on Windows).
   const url   = pathToFileURL(file).href + "?t=" + Date.now();
   const cData = await import(url);
 
@@ -63,7 +59,6 @@ async function reloadCommand(ctx, msg, name) {
   return { ok: true, msg: ctx.t(msg, "responses.reload.reloaded", { name }) };
 }
 
-// ── Reload a src/ or audio/ module ───────────────────────────────────────────
 async function reloadModule(ctx, msg, filePath, label) {
   if (!fs.existsSync(filePath))
     return { ok: false, msg: ctx.t(msg, "responses.reload.fileNotFound", { label }) };
@@ -75,7 +70,6 @@ async function reloadModule(ctx, msg, filePath, label) {
   }
 }
 
-// ── List all module files in a subdirectory ───────────────────────────────────
 function allModuleFiles(subdir) {
   const dir = path.join(ROOT, subdir);
   if (!fs.existsSync(dir)) return [];
@@ -84,7 +78,6 @@ function allModuleFiles(subdir) {
       .map(f => ({ file: path.join(dir, f), label: `${subdir}/${f}` }));
 }
 
-// ── Paginated embed helper ────────────────────────────────────────────────────
 async function showPaged(msg, title, lines, pageSize = 14) {
   const pages = [];
   for (let i = 0; i < lines.length; i += pageSize)
@@ -120,7 +113,6 @@ async function showPaged(msg, title, lines, pageSize = 14) {
   setTimeout(() => { unsub?.(); }, 5 * 60_000);
 }
 
-// ── Batch results → paginated display ────────────────────────────────────────
 async function showResults(msg, results, label) {
   const ok  = results.filter(r => r.ok).length;
   const bad = results.filter(r => !r.ok).length;
@@ -128,11 +120,9 @@ async function showResults(msg, results, label) {
   await showPaged(msg, `🔄 Reload — ${label}`, [header, "", ...results.map(r => r.msg)]);
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
 export async function run(msg, data) {
   const target = (data.get("target")?.value ?? "").trim().toLowerCase();
 
-  // No target — show paginated list of everything reloadable
   if (!target) {
     const cmdLines = this.handler.commands.map(c => `📦 \`${c.name}\` *(command)*`);
     const srcLines = allModuleFiles("src").map(m => `🔧 \`${m.label}\` *(src)*`);
@@ -150,7 +140,6 @@ export async function run(msg, data) {
     return showPaged(msg, this.t(msg, "responses.reload.availableTargetsTitle"), lines);
   }
 
-  // Batch keywords
   if (target === "commands") {
     const results = [];
     for (const c of [...this.handler.commands]) {
@@ -187,13 +176,11 @@ export async function run(msg, data) {
     return showResults(msg, results, "Everything");
   }
 
-  // Single command by name
   if (this.handler.commands.some(c => c.name === target)) {
     const res = await reloadCommand(this, msg, target);
     return msg.reply(embed(res.msg));
   }
 
-  // Single src/ or audio/ module by filename (with or without extension/subdir)
   const allMods = [...allModuleFiles("src"), ...allModuleFiles("audio")];
   const mod = allMods.find(m =>
       m.label.toLowerCase() === target ||

@@ -65,26 +65,15 @@ function getPlayerChannelId(player, fallbackChannelId = null) {
 function botHasVoicePermissions(client, channelId) {
   try {
     const channel = client?.channels?.get?.(channelId);
-    if (!channel) return true; // can't check — assume yes, let gateway decide
+    if (!channel) return true;
     const me = channel.guild?.members?.me;
-    if (!me) return true; // not cached — assume yes
-    // FluxerJS uses member.permissionsIn(channel), NOT channel.permissionsFor(member).
-    // The permissionsFor method does not exist in FluxerJS (it's a Discord.js API).
-    // permissionsIn computes base perms + channel overwrites, and expands Administrator
-    // to ALL_PERMISSIONS_BIGINT — so Admin bots always pass every has() check.
+    if (!me) return true;
     const perms = me.permissionsIn?.(channel);
-    if (!perms) return true; // can't read perms — assume yes
-    // FluxerJS PermissionFlags (from @fluxerjs/util):
-    //   Administrator = 1n << 3n  (0x8)
-    //   ViewChannel  = 1n << 10n (0x400)
-    //   Connect      = 1n << 20n (0x100000)
-    //   Speak        = 1n << 21n (0x200000)
-    // Administrator short-circuit: Admin bypasses all channel restrictions.
+    if (!perms) return true;
     if (perms.has(0x8)) return true;
-    // Bot must be able to see the channel, connect to it, and speak in it.
     return perms.has(0x400) && perms.has(0x100000) && perms.has(0x200000);
   } catch (_) {
-    return true; // can't check — assume yes
+    return true;
   }
 }
 
@@ -104,11 +93,9 @@ function botHasVoicePermissions(client, channelId) {
 function sanitizeJoinError(err, client = null, channelId = null) {
   const msg = String(err?.message ?? err ?? "");
   if (msg.includes("401") || msg.includes("Unauthorized")) {
-    // Gateway said 401 — but is it a real permission issue or a stale session?
     if (client && channelId && !botHasVoicePermissions(client, channelId)) {
-      return "PERMISSION"; // bot genuinely lacks Connect/Speak
+      return "PERMISSION";
     }
-    // Bot has the permissions — this is a stale session race, not a real denial
     return "SESSION_RACE";
   }
   if (msg.includes("permission") || msg.includes("Permission")) {
@@ -123,7 +110,7 @@ function sanitizeJoinError(err, client = null, channelId = null) {
   if (msg.includes("timeout") || msg.includes("timed out")) {
     return "TIMEOUT";
   }
-  return null; // unknown — fall back to raw message
+  return null;
 }
 
 export class PlayerManager {
@@ -173,12 +160,9 @@ export class PlayerManager {
     this.dashboard    = config.dashboard ?? null;
     this.locale       = config.locale ?? null;
     this.timers       = config.timers ?? {};
-    this._lastfm      = null;   // Set later by Remix class after init
+    this._lastfm      = null;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Guild→Player Reverse Index — O(1) lookups instead of O(n) scans
-  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
    * Add a channel to the guild→player reverse index.
@@ -226,7 +210,7 @@ export class PlayerManager {
     for (const channelId of set) {
       const player = this.playerMap.get(channelId);
       if (!player || player._destroyed) {
-        set.delete(channelId); // prune stale entry
+        set.delete(channelId);
         continue;
       }
       result.push([channelId, player]);
@@ -256,7 +240,6 @@ export class PlayerManager {
    */
   getPlayerByChannelId(channelId) {
     const cId = cleanId(channelId);
-    // Try all guild indexes
     for (const [, channelSet] of this._guildPlayerIndex) {
       for (const mapChannelId of channelSet) {
         const player = this.playerMap.get(mapChannelId);
@@ -292,34 +275,18 @@ export class PlayerManager {
       writable: true,
     });
 
-    // ── Per-player channel: standard { type, data } format ────────
-    // The backend PlayerManager.setupEvents() expects:
-    //   { type: "startplay",  data: serialisedVideo }
-    //   { type: "stopplay",   data: null }
-    //   { type: "pause",      data: { elapsedTime: ms } }
-    //   { type: "resume",     data: { elapsedTime: ms } }
-    //   { type: "volume",     data: number }
-    //   { type: "queue",      data: serialisedQueueEvent }
-    //   { type: "join",       data: userId }
-    //   { type: "leave",      data: userId }
 
     const emit = (type, data) => {
       if (!this.dashboard?.enabled) return;
       this.dashboard.updatePlayer({ type, data }, player);
     };
 
-    // ── Global channel: lifecycle events ──────────────────────────────────
-    // The backend PlayerManager.initChannels() expects:
-    //   { type: "init",  player: serialisedPlayer }  — when player connects
-    //   { type: "close", player: serialisedPlayer }  — when player disconnects
 
     const emitGlobal = (type) => {
       if (!this.dashboard?.enabled) return;
       this.dashboard.playerUpdate({ type }, player);
     };
 
-    // Broadcast user list changes to the global :users channel when
-    // someone joins or leaves the player's voice channel.
     const sendUserUpdates = (eventType) => {
       if (!this.dashboard?.enabled) return;
       const channelId = getPlayerChannelId(player, context.channelId);
@@ -339,10 +306,7 @@ export class PlayerManager {
         if (stateChannelId !== channelId) continue;
         const member = guild.members?.get?.(state.userId ?? state.user_id);
         if (!member?.user || member.user?.bot) continue;
-        // Send per-player channel "join"/"leave" event with just the user ID
-        // (matching standard format where data = userId string)
         emit(eventType, member.user.id);
-        // Also send global user update
         this.dashboard.userUpdate({
           type: eventType,
           guildId: cleanId(player._guildId ?? context.guildId),
@@ -351,24 +315,17 @@ export class PlayerManager {
       }
     };
 
-    // ── Player event handlers ─────────────────────────────────────────────
 
     player.on("roomfetched", () => {
-      // Player connected — send "init" on the global channel
       emitGlobal("init");
       sendUserUpdates("join");
     });
 
     player.on("startplay", (song) => {
-      // Send the serialised video to the per-player channel
       emit("startplay", Dashboard.convertVideo(song ?? player.queue?.current));
-      // Emit streamStartPlay with current timestamp so the backend can
-      // calculate elapsed time accurately (standard behaviour)
       emit("streamStartPlay", Date.now());
-      // Also broadcast on global channel for full state update
       this.dashboard.playerUpdate({ type: "startplay" }, player);
 
-      // ── Last.fm: now-playing notification + deferred scrobble ────────────
       if (this._lastfm?.enabled && song) {
         this._handleLastFmStartPlay(player, song);
       }
@@ -380,7 +337,6 @@ export class PlayerManager {
     });
 
     player.on("playback", (playing) => {
-      // Sends "pause" or "resume" with { elapsedTime } — match that format
       const elapsedMs = player._pausedAt
           ? (player._pausedAt.getTime?.() ?? Number(player._pausedAt)) -
             (player.startedPlaying?.getTime?.() ?? Number(player.startedPlaying ?? 0))
@@ -396,37 +352,28 @@ export class PlayerManager {
     });
 
     player.on("filter", (filter) => {
-      // Filter events are Fluxer-specific.
-      // Send as a custom event type; the backend will ignore unknown types.
       emit("filter", filter);
     });
 
     player.on("update", (scope) => {
-      // Generic update — send full player state on global channel
       this.dashboard.playerUpdate({ type: "update" }, player);
     });
 
     player.on("message", (message) => {
-      // No per-player equivalent — skip, only global broadcast
     });
 
     player.on("autoleave", () => {
       sendUserUpdates("leave");
-      // Send "close" on global channel so backend removes the player
       emitGlobal("close");
       emit("stopplay", null);
     });
 
     player.on("leave", () => {
       sendUserUpdates("leave");
-      // Send "close" on global channel so backend removes the player
       emitGlobal("close");
       emit("stopplay", null);
     });
 
-    // ── Queue event handler ───────────────────────────────────────────────
-    // Queue events must be serialised with Dashboard.convertVideo() to match
-    // the format the backend Queue.update() method expects.
 
     player.queue?.on("queue", (queueEvent) => {
       const serialised = { type: queueEvent.type };
@@ -469,7 +416,6 @@ export class PlayerManager {
           };
           break;
         default:
-          // Unknown queue event — pass through as-is
           serialised.data = queueEvent.data;
           break;
       }
@@ -494,9 +440,6 @@ export class PlayerManager {
     return this.locale.translate(guildId, key, replacements);
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Voice Channel Detection
-  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
    * Attempt to detect the voice channel a user is currently in.
@@ -516,7 +459,6 @@ export class PlayerManager {
     const seedObserved = (channelId) => {
       const cleanChannelId = cleanId(channelId);
       if (!cleanChannelId) return null;
-      // Use voiceCache (O(1) with guildId) or fall back to observedVoiceUsers
       const cache = this.voiceCache ?? this.observedVoiceUsers;
       if (cache && !cache.has(userId, cleanGuild)) {
         cache.set(userId, { channelId: cleanChannelId, guildId: cleanGuild });
@@ -539,10 +481,6 @@ export class PlayerManager {
       if (seeded) return seeded;
     } catch (_) {}
 
-    // ── Fallback: VoiceManager.voiceStates direct lookup ────────────────
-    // After a reboot, getVoiceChannelId() may return null if the
-    // VoiceManager hasn't synced yet, but voiceStates (populated from
-    // READY / GUILD_CREATE raw gateway events) may already have the data.
     try {
       const vm = getVoiceManager(this.commands.client);
       if (vm?.voiceStates) {
@@ -596,10 +534,6 @@ export class PlayerManager {
       }
     } catch (_) {}
 
-    // ── Fallback: match user to any active player in the guild ──────────
-    // After a reboot with 24/7, voice states may not be fully populated.
-    // If the guild has active players, check if any of them have the user
-    // as a remote participant in their LiveKit room.
     const liveGuildPlayers = [...this.playerMap.entries()].filter(([channelId, player]) => {
       const fallbackChannel =
         this.commands.client?.channels?.get?.(channelId) ??
@@ -609,8 +543,6 @@ export class PlayerManager {
     if (liveGuildPlayers.length === 1) {
       return getPlayerChannelId(liveGuildPlayers[0][1], liveGuildPlayers[0][0]) || cleanId(liveGuildPlayers[0][0]);
     }
-    // Multiple players — try LiveKit remote participants to find which
-    // channel the user is actually in.
     if (liveGuildPlayers.length > 1) {
       for (const [mapKey, player] of liveGuildPlayers) {
         try {
@@ -630,9 +562,6 @@ export class PlayerManager {
     return null;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Player Retrieval
-  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
    * Get or create a player for the user's voice channel.
@@ -662,9 +591,8 @@ export class PlayerManager {
         } catch (_) {}
         return player;
       }
-      // Also check if a join is in-progress for this channel
       if (this._pendingJoins.has(cleanUserChannelId)) {
-        return null; // A player is being created — caller should retry
+        return null;
       }
     }
 
@@ -676,8 +604,6 @@ export class PlayerManager {
       const channelList = serverPlayers.map(([chId]) => `<#${chId}>`).join(" or ");
 
       if (!userChannelId) {
-        // verifyUser=false: allow controlling the bot without being in voice
-        // (e.g. volume, clear, remove — admin-style controls).
         if (!verifyUser) {
           const first = serverPlayers[0];
           first[1].textChannel = message.channel;
@@ -701,7 +627,6 @@ export class PlayerManager {
         return match[1];
       }
 
-      // User is in a different channel than existing players.
       if (shouldJoin) {
         return new Promise((resolve) => {
           this.initPlayer(message, userChannelId, (p) => resolve(p));
@@ -719,7 +644,6 @@ export class PlayerManager {
 
     if (!userChannelId) {
       if (shouldJoin) {
-        // Auto-detect failed — fall back to interactive channel selection prompt
         return this.promptVC(message);
       }
       message.reply(mkEmbed(this._t(message, "responses._common.noVoiceChannel")));
@@ -735,9 +659,6 @@ export class PlayerManager {
     return null;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Channel Selection Prompt
-  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
    * Prompt the user to select a voice channel.
@@ -828,9 +749,6 @@ export class PlayerManager {
     });
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Leave
-  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
    * Make the player leave its current voice channel.
@@ -859,13 +777,9 @@ export class PlayerManager {
     const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;
     this.playerMap.delete(activeChannelId);
     this._unindexPlayer(player._guildId, activeChannelId);
-    // Clean up pending scrobble timer
     const pendingScrobble = this._pendingScrobbleTimers.get(activeChannelId);
     if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this._pendingScrobbleTimers.delete(activeChannelId); }
     if (activeChannelId !== cleanChannelId) this.playerMap.delete(cleanChannelId);
-    // Leave the voice channel BEFORE confirming to the user.
-    // Previously, the reply was sent first, which meant the user saw "successfully left"
-    // even if player.leave() subsequently threw an error.
     try {
       await player.leave();
     } catch (e) {
@@ -875,9 +789,6 @@ export class PlayerManager {
     await msg.reply(mkEmbed(this._t(msg, "responses._common.successfullyLeft")));
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Player Initialisation
-  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
    * Create and register a new Player for the given voice channel.
@@ -900,11 +811,6 @@ export class PlayerManager {
       return message.reply(mkEmbed(this._t(message, "responses._common.voiceChannelRequired")));
     }
 
-    // Pre-check: verify the bot actually has Connect + Speak permission on the
-    // voice channel BEFORE sending VOICE_STATE_UPDATE to the gateway.  This
-    // avoids a confusing 401 roundtrip when the bot genuinely lacks permission,
-    // and makes the error message accurate instead of relying on the gateway's
-    // ambiguous 401 (which can also mean "stale session").
     if (!botHasVoicePermissions(this.commands?.client, cid)) {
       return message.reply(mkEmbed(
           this._t(message, "responses.join.joinFailedPerms", { channel: `<#${cleanId(cid)}>` })
@@ -919,7 +825,6 @@ export class PlayerManager {
       cb(existing);
       return message.reply(mkEmbed(this._t(message, "responses.join.alreadyJoined", { channel: cid })));
     }
-    // Also block if a join is already in-progress for this channel
     if (this._pendingJoins.has(cleanChannelId)) {
       return message.reply(mkEmbed(this._t(message, "responses.join.joining")));
     }
@@ -950,7 +855,6 @@ export class PlayerManager {
       const ch       = player.textChannel;
       const guildId = cleanId(player._guildId ?? ch?.guildId ?? ch?.guild?.id ?? getMessageGuildId({ channel: ch }));
 
-      // Check 24/7 settings for this channel (per-channel mode)
       const raw247 = (() => {
         try { return this.settings.getServer(guildId)?.get("stay_247"); } catch (_) { return null; }
       })();
@@ -962,7 +866,6 @@ export class PlayerManager {
         return channels.includes(homeChannelId) || channels.includes(activeChannelId);
       })();
 
-      // Per-channel mode: check the mode for this specific channel
       const matchChannel = isIn247List
           ? (channels247list => channels247list.includes(homeChannelId) ? homeChannelId : activeChannelId)(
               Array.isArray(raw247) ? raw247.map(id => String(id).replace(/\D/g, "")) : [String(raw247).replace(/\D/g, "")]
@@ -972,13 +875,6 @@ export class PlayerManager {
           ? get247ChannelMode(this.settings.getServer(guildId), matchChannel)
           : "off";
 
-      // ── Safety guard: re-validate before destroying ────────────────────
-      // Even if autoleave was emitted, don't destroy the player if:
-      //   1. 24/7 mode is "on" or "auto" (bot should never leave)
-      //   2. Humans are still in the channel
-      //   3. There are songs in the queue or currently playing
-      // This catches cases where the autoleave event was emitted from a
-      // code path that didn't check these conditions (e.g. old timers).
       if (mode247 === "auto" || mode247 === "on") {
         logger.inactivity(`[PlayerManager] autoleave suppressed for 24/7 ${mode247} channel ${activeChannelId} (guild ${guildId})`);
         return;
@@ -992,20 +888,14 @@ export class PlayerManager {
         return;
       }
 
-      // Remove player from map and destroy
       this.playerMap.delete(activeChannelId);
       this._unindexPlayer(player._guildId, activeChannelId);
-      // Clean up pending scrobble timer
       const pendingScrobble = this._pendingScrobbleTimers.get(activeChannelId);
       if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this._pendingScrobbleTimers.delete(activeChannelId); }
       if (activeChannelId !== cleanChannelId) this.playerMap.delete(cleanChannelId);
       if (homeChannelId !== activeChannelId) this.playerMap.delete(homeChannelId);
       player.destroy();
 
-      // Notify the channel that the bot left.
-      // For %247 on: bot will rejoin on reboot (but not on disconnect)
-      // For %247 auto: bot will rejoin automatically after disconnect
-      // For non-247: user must manually re-invoke the join command
       const prefix = (() => {
         try { return this.settings.getServer(guildId)?.get("prefix") ?? "%"; } catch (_) { return "%"; }
       })();
@@ -1041,8 +931,6 @@ export class PlayerManager {
           ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
       if (disabled) return;
 
-      // If textChannel is not set (e.g. after reboot recovery via _spawnPlayer),
-      // resolve it from the saved announcementChannelId or guild channels
       if (!ch || typeof ch.send !== "function") {
         try {
           const serverSettings = this.settings.getServer(guildId);
@@ -1075,7 +963,6 @@ export class PlayerManager {
       }
       if (!ch || typeof ch.send !== "function") return;
 
-      // Cache the resolved channel so future announcements don't need to re-resolve
       if (!player.textChannel) player.textChannel = ch;
 
       ch.send(typeof m === "object" && Array.isArray(m.embeds) ? m : mkEmbed(m)).catch(err => {
@@ -1085,15 +972,12 @@ export class PlayerManager {
       });
     });
 
-    // _pendingJoins was already added earlier (right after duplicate check)
 
     (async () => {
       const statusMsg = await message.reply(mkEmbed(this._t(message, "responses.join.joining")));
       try {
         await player.join(cid);
 
-        // Only add to playerMap after join succeeds — this prevents phantom
-        // entries from inflating the player count.
         this.playerMap.set(cleanChannelId, player);
         this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
         this._pendingJoins.delete(cleanChannelId);
@@ -1116,19 +1000,15 @@ export class PlayerManager {
         const errCode = sanitizeJoinError(err, this.commands?.client, cleanChannelId);
         let errorMsg;
         if (errCode === "SESSION_RACE") {
-          // Stale session — retry once after a short delay so the gateway can
-          // clean up the previous voice session.
           logger.warn(`[PlayerManager] Stale voice session detected for channel ${cleanChannelId}, retrying in 2s...`);
           try {
             await new Promise(r => setTimeout(r, 2_000));
-            // Clean up any leftover state before retrying
             if (player._revoice && player._channelId) {
               try { player._revoice._leaveGateway(player._channelId, player._guildId ?? player._resolveGuildId()); } catch (_) {}
               try { player._revoice.deleteConnection(player._channelId); } catch (_) {}
             }
             await player.join(cid);
 
-            // Retry succeeded
             this.playerMap.set(cleanChannelId, player);
             this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
             await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joined", { channel: cid })));
@@ -1165,9 +1045,6 @@ export class PlayerManager {
     })();
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Last.fm Scrobbling
-  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
    * Handle the "startplay" event for Last.fm: send now-playing notification
@@ -1184,16 +1061,13 @@ export class PlayerManager {
     const guildId = cleanId(player._guildId);
     if (!guildId) return;
 
-    // Find all human users in the voice channel
     const channelId = getPlayerChannelId(player);
     const humanUserIds = [];
 
-    // Use VoiceStateCache O(1) channel index instead of iterating all users
     if (this.voiceCache) {
       const users = this.voiceCache.getHumansInChannel(guildId, channelId);
       humanUserIds.push(...users);
     } else if (this.observedVoiceUsers) {
-      // Legacy fallback (VoiceStateCache is iterable via [Symbol.iterator])
       for (const [uid, info] of this.observedVoiceUsers) {
         if (cleanId(info.guildId) === guildId && cleanId(info.channelId) === channelId) {
           humanUserIds.push(uid);
@@ -1201,7 +1075,6 @@ export class PlayerManager {
       }
     }
 
-    // Also check guild voice states as fallback
     const guild = player.client?.guilds?.get(guildId);
     if (guild) {
       const voiceStates = guild.voice_states ?? guild.voiceStates ?? null;
@@ -1215,7 +1088,6 @@ export class PlayerManager {
           const uid = state?.userId ?? state?.user_id;
           const chId = cleanId(state?.channelId ?? state?.channel_id);
           if (uid && chId === channelId) {
-            // Skip bots
             const member = guild.members?.get?.(uid);
             if (member?.user?.bot) continue;
             if (!humanUserIds.includes(uid)) humanUserIds.push(uid);
@@ -1226,9 +1098,6 @@ export class PlayerManager {
 
     const startedAtMs = player.startedPlaying;
 
-    // ── Cancel any previous pending scrobble timer for this channel ───────
-    // Prevents duplicate scrobbles when startplay fires multiple times
-    // (e.g. recovery rejoining, track restart, queue loop).
     const pendingKey = channelId;
     const existing = this._pendingScrobbleTimers.get(pendingKey);
     if (existing) {
@@ -1236,12 +1105,10 @@ export class PlayerManager {
       this._pendingScrobbleTimers.delete(pendingKey);
     }
 
-    // Send now-playing for each linked user
     for (const userId of humanUserIds) {
       lastfm.updateNowPlaying(userId, song).catch(() => {});
     }
 
-    // Schedule deferred scrobble after threshold
     const durationMs = (() => {
       const d = song.duration;
       if (!d) return null;
@@ -1255,15 +1122,13 @@ export class PlayerManager {
         durationMs * lastfm.scrobbleThreshold,
         lastfm.scrobbleMinMs
       );
-      // Don't schedule if threshold is too far out (cap at 10 min)
       if (thresholdMs <= 600_000) {
         const timer = setTimeout(() => {
           this._pendingScrobbleTimers.delete(pendingKey);
-          // Only scrobble if the same song is still playing
           const current = player.queue?.getCurrent();
           if (!current || player._destroyed || player.leaving) return;
           if (current.title !== song.title || current.url !== song.url) return;
-          if (player._paused) return; // don't scrobble if paused
+          if (player._paused) return;
 
           const playedMs = Date.now() - (player.startedPlaying ?? startedAtMs ?? Date.now());
           if (lastfm.shouldScrobble(song, playedMs)) {
@@ -1273,7 +1138,6 @@ export class PlayerManager {
           }
         }, thresholdMs);
 
-        // Store the timer so we can cancel it if startplay fires again
         this._pendingScrobbleTimers.set(pendingKey, { timer, songUrl: song.url, startedAtMs });
       }
     }

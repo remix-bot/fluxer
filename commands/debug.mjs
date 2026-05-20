@@ -53,14 +53,10 @@ export async function run(msg, data) {
       };
 
       const MAX_DESC = 4096;
-      const CODE_WRAP = 12; // "```json\n" (8) + "\n```" (4)
+      const CODE_WRAP = 12;
 
-      // ── Build pages ────────────────────────────────────────────────────────
-      // Page 0: summary + compact server list
-      // Page 1..N: detailed JSON for each server (one per page, or grouped if small)
       const pages = [];
 
-      // Page 0 — Summary
       const summaryLines = [
         `📊 **Summary**`,
         `Players in map: **${summary.playerMapSize}**`,
@@ -73,7 +69,6 @@ export async function run(msg, data) {
         const s = servers[i];
         const status = s.conn === "yes" && !s.destroyed && !s.leaving ? "🟢" : "🔴";
         const line = `${status} \`${s.guildname}\` / \`#${s.name}\` — conn:${s.conn} room:${s.roomState} media:${s.mediaPlayer}`;
-        // Guard against overflow even for the summary
         if (summaryLines.join("\n").length + line.length + 1 > MAX_DESC - 30) {
           summaryLines.push(`… and ${servers.length - i} more (see next pages)`);
           break;
@@ -82,7 +77,6 @@ export async function run(msg, data) {
       }
       pages.push(summaryLines.join("\n"));
 
-      // Pages 1..N — Detailed JSON per-server (group small ones together)
       {
         let groupJson = "";
         let groupStart = 0;
@@ -92,22 +86,20 @@ export async function run(msg, data) {
           const codeBlock = "```json\n" + groupJson + "\n```";
           pages.push(codeBlock.slice(0, MAX_DESC));
           groupJson = "";
-          groupStart = i; // will be set by outer loop
+          groupStart = i;
         };
 
         let i = 0;
         for (i = 0; i < servers.length; i++) {
           const singleJson = JSON.stringify(servers[i], null, 2);
           const candidate = groupJson
-            ? groupJson.slice(0, -1) + ",\n" + singleJson.slice(1) // merge objects into array-like
+            ? groupJson.slice(0, -1) + ",\n" + singleJson.slice(1)
             : singleJson;
 
           if (("```json\n" + candidate + "\n```").length > MAX_DESC && groupJson) {
-            // Current group is full — flush it, start new group with this server
             pages.push(("```json\n" + groupJson + "\n```").slice(0, MAX_DESC));
             groupJson = singleJson;
           } else if (("```json\n" + candidate + "\n```").length > MAX_DESC) {
-            // Even a single server is too big — truncate it
             const budget = MAX_DESC - CODE_WRAP;
             groupJson = singleJson.slice(0, budget);
             pages.push(("```json\n" + groupJson + "\n```").slice(0, MAX_DESC));
@@ -121,7 +113,6 @@ export async function run(msg, data) {
         }
       }
 
-      // ── Single page — no pagination needed ────────────────────────────────
       if (pages.length === 1) {
         const embed = new EmbedBuilder()
           .setColor(getGlobalColor())
@@ -131,7 +122,6 @@ export async function run(msg, data) {
         return msg.reply({ embeds: [embed] });
       }
 
-      // ── Multi-page with reactions ─────────────────────────────────────────
       const totalPages = pages.length;
       let currentPage = 0;
 

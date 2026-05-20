@@ -3,7 +3,6 @@ import { EmbedBuilder }   from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { Utils }          from "../src/Utils.mjs";
 
-// ── Filter catalogue ──────────────────────────────────────────────────────────
 const FILTERS = [
   {
     emoji:   "🔇",
@@ -177,7 +176,7 @@ const SESSION_MS = 60_000;
 function mergeFilterPayloads(keys) {
   const merged = {};
   for (const key of keys) {
-    if (key === "off") continue; // "off" clears everything — handled upstream
+    if (key === "off") continue;
     const f = FILTERS.find(f => f.key === key);
     if (!f || !f.payload || Object.keys(f.payload).length === 0) continue;
     for (const [category, settings] of Object.entries(f.payload)) {
@@ -187,7 +186,6 @@ function mergeFilterPayloads(keys) {
   return merged;
 }
 
-// ── Command definition ────────────────────────────────────────────────────────
 export const command = new CommandBuilder()
     .setName("filter")
     .setDescription(
@@ -197,7 +195,6 @@ export const command = new CommandBuilder()
     .setCategory("music")
     .addAliases("filters", "fx", "effect");
 
-// ── Build page embed ──────────────────────────────────────────────────────────
 function buildPageEmbed(t, msg, page, activeKeys, current) {
   const totalPages = Math.ceil(FILTERS.length / PAGE_SIZE);
   const start      = page * PAGE_SIZE;
@@ -207,7 +204,6 @@ function buildPageEmbed(t, msg, page, activeKeys, current) {
       ? `🎵 **${Utils.truncate(current.title, 45)}**`
       : t(msg, "responses.filter.nothingPlayingInline");
 
-  // Show active filter indicators
   const activeSet = new Set(activeKeys);
   const lines = pageItems.map(f => {
     const isActive = activeSet.has(f.key);
@@ -219,7 +215,6 @@ function buildPageEmbed(t, msg, page, activeKeys, current) {
       ? `\n\n${PREV_EMOJI} Prev  ${NEXT_EMOJI} Next  ${CANCEL_EMOJI} ${t(msg, "responses.filter.closeHint")}`
       : `\n\n${CANCEL_EMOJI} ${t(msg, "responses.filter.closeHint")}`;
 
-  // Build active summary line
   let activeSummary = "";
   if (activeKeys.length > 0) {
     const activeLabels = activeKeys.map(k => {
@@ -243,12 +238,10 @@ function buildPageEmbed(t, msg, page, activeKeys, current) {
       ;
 }
 
-// ── Command handler ───────────────────────────────────────────────────────────
 export async function run(msg) {
   const player = await this.getPlayer(msg, false, false, false);
   if (!player) return;
 
-  // Track multiple active filters (stackable)
   let activeKeys = player.activeFilter?.key
       ? player.activeFilter.key.split("+").filter(Boolean)
       : [];
@@ -340,10 +333,8 @@ export async function run(msg) {
 
     resetTimer();
 
-    // Normalise emoji identifier across Fluxer reaction event shapes
     const emoji = e.emoji_id ?? e.emoji?.name ?? e.emoji?.id ?? e.emoji;
 
-    // ── Navigation ──────────────────────────────────────────────────────────
     if (emoji === CANCEL_EMOJI) {
       return close(this.t(msg, "responses.filter.pickerClosed"));
     }
@@ -374,13 +365,12 @@ export async function run(msg) {
       return;
     }
 
-    // ── Filter selection ────────────────────────────────────────────────────
     const filter = FILTERS.find(f => f.emoji === emoji);
     if (!filter) return;
 
     const track = player.queue.getCurrent();
     const previousActiveKeys = [...activeKeys];
-    if (!track && false) { // pending filters are allowed; keep old fallback block unreachable
+    if (!track && false) {
       await menuMsg.edit({
         embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, null)]
       }).catch(() => {});
@@ -396,20 +386,17 @@ export async function run(msg) {
       return;
     }
 
-    // Toggle behavior: if already active, remove it; otherwise add it
-    // "off" always clears everything
     if (filter.key === "off") {
       activeKeys = [];
     } else {
       const idx = activeKeys.indexOf(filter.key);
       if (idx !== -1) {
-        activeKeys.splice(idx, 1); // Toggle off
+        activeKeys.splice(idx, 1);
       } else {
-        activeKeys.push(filter.key); // Toggle on
+        activeKeys.push(filter.key);
       }
     }
 
-    // Build merged payload from all active keys
     const mergedPayload = mergeFilterPayloads(activeKeys);
     const meta = activeKeys.length > 0
         ? {
@@ -437,7 +424,6 @@ export async function run(msg) {
       return;
     }
 
-    // Update active key and refresh embed (player.activeFilter is already updated by applyFilter)
     activeKeys = meta ? meta.key.split("+") : [];
 
     const successMsg = pending
@@ -464,7 +450,6 @@ export async function run(msg) {
     await menuMsg.edit({ embeds: [confirmEmbed] }).catch(() => {});
     await Utils.sleep(1200);
 
-    // Restore picker (session stays open)
     if (!settled) {
       await menuMsg.edit({
         embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, player.queue.getCurrent())]

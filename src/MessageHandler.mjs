@@ -31,7 +31,6 @@ export const OPTIONAL_PERMISSIONS = ["AddReactions", "ReadMessageHistory", "Mana
 export function parseColor(value, fallback = 0xe9196c) {
   if (!value) return fallback;
   if (typeof value === "number") return value;
-  // Strip leading # ("‌#ff0000" → "ff0000") or 0x prefix ("0xe9196c" → "e9196c")
   const cleaned = String(value).replace(/^#/, "").replace(/^0x/i, "");
   const n = parseInt(cleaned, 16);
   return isNaN(n) ? fallback : n;
@@ -92,7 +91,6 @@ export class MessageHandler {
 
   setupEvents() {
     const reactionUpdate = (reaction, user) => {
-      // fluxerjs reaction events pass a MessageReaction and a User
       const messageId = reaction.message?.id ?? reaction.messageId;
       const emoji = reaction.emoji?.name ?? reaction.emoji?.id ?? reaction.emoji;
       const event = { user_id: user.id, emoji_id: emoji };
@@ -118,19 +116,17 @@ export class MessageHandler {
    * @returns {string[]} Missing permission flag keys.
    */
   checkPermissions(permissions, channel) {
-    if (!channel?.guild) return []; // DMs — no guild perms
+    if (!channel?.guild) return [];
     const me = channel.guild.members?.me ?? null;
     if (!me) {
       logger.warn("[MessageHandler] Cannot check permissions — guild.members.me is null");
-      return []; // can't verify
+      return [];
     }
     const perms = channel.permissionsFor?.(me) ?? null;
     if (!perms) {
       logger.warn("[MessageHandler] Cannot check permissions — channel.permissionsFor() unavailable");
-      return []; // can't verify
+      return [];
     }
-    // Convert string names (e.g. "SendMessages") to numeric PermissionFlags values,
-    // same as CommandHandler.assertRequirements does.
     return permissions.filter(p => !perms.has(PermissionFlags[p] ?? p));
   }
 
@@ -177,7 +173,7 @@ export class MessageHandler {
       }
     }
 
-    const embed = new EmbedBuilder().setColor(0xFF4444); // Red for errors
+    const embed = new EmbedBuilder().setColor(0xFF4444);
 
     if (criticalItems.length > 0) {
       embed.setTitle("Missing Permissions — Bot Cannot Work Properly");
@@ -192,7 +188,7 @@ export class MessageHandler {
           "Some features may not work without these permissions, but the bot can still play music.\n\n" +
           optionalItems.join("\n")
       );
-      embed.setColor(0xFFA500); // Orange for warnings
+      embed.setColor(0xFFA500);
     }
 
     embed.setFooter({
@@ -209,7 +205,6 @@ export class MessageHandler {
    * @returns {Promise<boolean>} If all permissions are given.
    */
   async assertPermissions(permissions, message) {
-    // Ensure bot's guild member is cached before checking
     const guild = message.guild ?? await message.client?.guilds?.resolve?.(message.guildId);
     if (guild && !guild.members?.me) {
       try { await guild.members.fetchMe(); } catch (_) { /* fetch failed, checkPermissions will warn */ }
@@ -229,12 +224,10 @@ export class MessageHandler {
       return false;
     }
 
-    // Build a rich embed listing what's missing and why
     const permEmbed = this.buildPermissionEmbed(missing, message.guildId);
     try {
       await message.reply({ embeds: [permEmbed] }, { ping: false });
     } catch (e) {
-      // If reply fails (e.g. also missing EmbedLinks), fall back to plain text
       logger.warn("[MessageHandler] Failed to send permission embed:", e.message);
       try {
         const names = missing.map(k => REQUIRED_BOT_PERMISSIONS.get(k)?.name ?? k);
@@ -264,8 +257,6 @@ export class MessageHandler {
    * @returns {Message|null}
    */
   get(id) {
-    // channel.messages is a MessageManager — @fluxerjs/core may not expose it.
-    // Guard with optional chaining so the loop is a no-op if the property is absent.
     for (const channel of this.client.channels.values()) {
       const msg = channel.messages?.get?.(id) ?? null;
       if (msg) return new Message(msg, this);
@@ -283,8 +274,6 @@ export class MessageHandler {
     const cached = this.get(id);
     if (cached) return cached;
     const channel = await this.client.channels.fetch(channelId);
-    // channel.fetchMessage() is the @fluxerjs/core method.
-    // Fall back to the channel.messages.fetch() if the former is absent.
     const raw = typeof channel.fetchMessage === "function"
         ? await channel.fetchMessage(id)
         : await channel.messages?.fetch?.(id);
@@ -390,7 +379,6 @@ export class MessageHandler {
     if (!(await this.assertPermissions(["SendMessages", "EmbedLinks"], replyingTo))) return null;
     let opts;
     if (typeof message === "string") {
-      // Auto-wrap plain text in an embed (matches old replyEmbed behavior)
       opts = this.#createEmbed(message, replyingTo);
     } else {
       opts = { ...message };
@@ -407,7 +395,6 @@ export class MessageHandler {
   async replyEmbed(replyingTo, message, options = {}) {
     if (!(await this.assertPermissions(["SendMessages", "EmbedLinks"], replyingTo))) return null;
 
-    // Raw embed payload — pass straight through without re-wrapping
     if (typeof message === "object" && Array.isArray(message.embeds)) {
       return new Message(await replyingTo.reply(message, { ping: false }), this);
     }
@@ -438,7 +425,6 @@ export class MessageHandler {
     }
     let opts;
     if (typeof message === "string") {
-      // Auto-wrap plain text in an embed (matches old sendEmbed behavior)
       opts = this.#createEmbed(message, channel);
     } else {
       opts = message;
@@ -456,7 +442,6 @@ export class MessageHandler {
     if (this.checkPermissions(["SendMessages", "EmbedLinks"], channel).length !== 0) {
       return this.sendMessage(channel, typeof content === "string" ? content : content?.embedText ?? "");
     }
-    // Raw embed payload — pass straight through without re-wrapping
     if (typeof content === "object" && Array.isArray(content.embeds)) {
       return new Message(await channel.send(content), this);
     }
@@ -476,12 +461,10 @@ export class MessageHandler {
    * @returns {Promise<Message>}
    */
   async editEmbed(message, content, embedOptions = {}) {
-    // Transient HTTP status codes worth retrying (gateway/server hiccups).
     const RETRYABLE = new Set([502, 503, 504]);
     const MAX_ATTEMPTS = 3;
     const RETRY_DELAY_MS = 1500;
 
-    // Build the payload once, outside the retry loop.
     let payload;
     if (typeof content === "object" && Array.isArray(content.embeds)) {
       payload = content;
@@ -499,13 +482,11 @@ export class MessageHandler {
       try {
         return new Message(await message.edit(payload), this);
       } catch (err) {
-        // Message was deleted — nothing to edit, bail silently.
         if (err.code === "UNKNOWN_MESSAGE" || err.code === 10008) {
           logger.warn("[MessageHandler] editEmbed: Message no longer exists, skipping edit.");
           return null;
         }
 
-        // Retry on transient gateway errors (502/503/504).
         if (RETRYABLE.has(err.statusCode) && attempt < MAX_ATTEMPTS) {
           logger.warn(`[MessageHandler] editEmbed: ${err.statusCode} on attempt ${attempt}/${MAX_ATTEMPTS}, retrying in ${RETRY_DELAY_MS}ms…`);
           await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
@@ -545,7 +526,6 @@ export class MessageHandler {
       m.edit(send()).catch(() => {});
     });
 
-    // Auto-close after 5 minutes
     const guildId = msg.message?.guildId ?? null;
     setTimeout(() => {
       unobserve();
@@ -561,7 +541,6 @@ export class MessageHandler {
     const { joinVoiceChannel } = await import("@fluxerjs/voice");
     const channel = await this.client.channels.fetch(channelId);
     if (!channel || !("guildId" in channel)) throw new Error("Cannot join a non-guild voice channel.");
-    // @fluxerjs/voice API: joinVoiceChannel(client, channel) — NOT the old object style
     return joinVoiceChannel(this.client, channel);
   }
 }
@@ -777,13 +756,13 @@ export class PageBuilder {
 
   setForm(form) {
     this.form = form;
-    this.initiated = false; // reset so createPages() rebuilds if called again
+    this.initiated = false;
     return this;
   }
 
   setMaxLines(maxLinesPerPage = 2) {
     this.maxLinesPerPage = maxLinesPerPage;
-    this.initiated = false; // reset so createPages() rebuilds with new page size
+    this.initiated = false;
     return this;
   }
 
@@ -912,7 +891,6 @@ export class RichPaginator {
     const tabEmojis   = this._tabs.map(t => t.emoji);
     const allReactions = [...tabEmojis, this._prev, this._next];
 
-    // Send initial embed
     const nativeMsg = this._msg.message ?? this._msg;
     if (!nativeMsg?.reply) return null;
 
@@ -925,7 +903,6 @@ export class RichPaginator {
 
     const guildId = (this._msg.channel?.guildId) ?? (this._msg.guildId) ?? null;
 
-    // Add reactions
     for (const emoji of allReactions) {
       await rawMsg.react(emoji).catch(() => {});
     }
@@ -964,7 +941,6 @@ export class RichPaginator {
       } catch (e) {
         logger.warn("[RichPaginator] removeAllReactions failed:", e?.message ?? e);
       }
-      // Fallback: remove each bot reaction individually
       for (const emoji of allReactions) {
         try {
           await rawMsg.removeReaction(emoji);
@@ -972,10 +948,8 @@ export class RichPaginator {
       }
     };
 
-    // Timer resets on every reaction interaction
     const closeSession = async () => {
       unobserve();
-      // Update footer to show session closed
       const currentEmbed = buildEmbed(state.tab, state.page);
       if (!currentEmbed.footer) currentEmbed.footer = { text: "" };
       currentEmbed.footer.text += " • " + this._handler.t(guildId, "pagination.embed.sclosedTitle");
@@ -990,7 +964,6 @@ export class RichPaginator {
       timer = setTimeout(closeSession, this._timeout);
     };
 
-    // Wrap reaction handler to reset timer on each interaction
     const origHandler = wrapped.handler.observedReactions.get(rawMsg.id);
     if (origHandler) {
       const origCb = origHandler.cb;
@@ -1051,7 +1024,6 @@ export class QueuePaginator {
 
     const guildId = (this._msg.channel?.guildId) ?? (this._msg.guildId) ?? null;
 
-    // No arrows needed for single page
     if (totalPages <= 1) return rawMsg;
 
     const prev = this._prev;
@@ -1108,26 +1080,10 @@ export class QueuePaginator {
   }
 }
 
-// ─── HelpCommand ──────────────────────────────────────────────────────────────
-// Self-contained help command — no help.mjs needed.
-//
-// Usage in index.mjs (inside the Remix constructor, after commands are set up):
-//
-//   import { HelpCommand } from "./src/MessageHandler.mjs";
-//
-//   new HelpCommand(this.handler, this.messages, (msg) => this.getSettings(msg))
-//     .register();
-//
-// That's it. %help, %h, and %commands all work automatically.
-// The \x00help hack in index.mjs and the commands.helpCommand override are
-// no longer needed — remove them both.
 
 const HELP_CMDS_PER_PAGE = 10;
-const HELP_SESSION_MS    = 30 * 1000; // 30 seconds
+const HELP_SESSION_MS    = 30 * 1000;
 
-// ── Tab definitions ───────────────────────────────────────────────────────────
-// Add or remove tabs here. `categories` maps to cmd.category values set via
-// .setCategory() on CommandBuilder. `static: true` renders a hand-written page.
 const HELP_TABS = [
   {
     emoji:  "🏠",
@@ -1227,26 +1183,19 @@ export class HelpCommand {
    * Call once during bot startup, after commands have been loaded.
    */
   register() {
-    // Guard: if register() is called more than once (e.g. via hot-reload), bail out.
-    // A second call would stack another MessageCreate listener and re-wrap the format/reply
-    // handlers a second time, causing duplicate help responses and doubled logic.
     if (this._registered) return;
     this._registered = true;
 
     const HELP_ALIASES = ["help", "h", "commands"];
 
-    // Neutralize built-in help interceptor
     this._commands.helpCommand = "\x00help";
     const _fmt = this._commands.format.bind(this._commands);
     this._commands.format = (text, guildId) =>
         _fmt(text, guildId).replace(/\x00help/g, "help");
 
-    // Intercept replyHandler to swallow the "Unknown Command" error
-    // that CommandHandler emits when it sees %help but can't find it.
     const _reply = this._commands.replyHandler.bind(this._commands);
     this._commands.replyHandler = (message, msg) => {
       if (typeof message === "string" && message.toLowerCase().includes("unknown command")) {
-        // Check if the triggering command was a help alias — if so, drop it silently
         const content = msg?.content ?? msg?.message?.content ?? "";
         const guildId = msg?.channel?.channel?.guildId ?? msg?.message?.guildId;
         const prefix  = this._commands.getPrefix(guildId);
@@ -1259,13 +1208,12 @@ export class HelpCommand {
         else if (content.startsWith(ping))     body = content.slice(ping.length).trim();
         if (body !== null) {
           const first = body.split(/\s+/)[0]?.toLowerCase();
-          if (HELP_ALIASES.includes(first)) return; // silently drop
+          if (HELP_ALIASES.includes(first)) return;
         }
       }
       return _reply(message, msg);
     };
 
-    // Safety evict in case help.mjs is still present
     const evict = () => {
       for (const alias of HELP_ALIASES) {
         const i = this._commands.commandNames.indexOf(alias);
@@ -1284,7 +1232,6 @@ export class HelpCommand {
       return r;
     };
 
-    // Our sole listener for help
     this._messages.onMessage((msg) => {
       if (!msg?.content) return;
       const content = msg.content.trim();
@@ -1307,15 +1254,12 @@ export class HelpCommand {
     });
   }
 
-  // ── Internal handler ───────────────────────────────────────────────────────
 
   _handle(msg, args, prefix) {
     const allCmds = this._commands.commands;
     const query   = (args[0] ?? "").trim();
 
-    // ── Specific command lookup (%help play, %help settings get, …) ──────────
     if (query && isNaN(Number(query))) {
-      // Walk subcommands: %help settings get → finds "settings" then "get"
       let currCmd = null;
       for (const word of [query, ...args.slice(1)]) {
         const pool = currCmd ? currCmd.subcommands : allCmds;
@@ -1335,7 +1279,6 @@ export class HelpCommand {
       return;
     }
 
-    // ── Tab jump by number (%help 2 → open tab index 1) ──────────────────────
     const startTab = query
         ? Math.max(0, Math.min(HELP_TABS.length - 1, parseInt(query) - 1))
         : 0;

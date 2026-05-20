@@ -48,7 +48,6 @@ export class Locale {
       return;
     }
 
-    // Auto-discover all .json files in the locales directory
     let files;
     try {
       files = readdirSync(LOCALES_DIR).filter(f => f.endsWith(".json"));
@@ -93,11 +92,9 @@ export class Locale {
   _getLocaleData(guildId) {
     if (!guildId) return this.locales.get(this.defaultLocale) ?? {};
 
-    // Check cache first
     const cached = this._resolved.get(guildId);
     if (cached) return cached;
 
-    // Resolve locale from guild settings
     let code = this.defaultLocale;
     try {
       const serverSettings = this.settingsMgr?.guilds?.get?.(guildId);
@@ -151,22 +148,17 @@ export class Locale {
    * @returns {string} Translated string, or the key itself if not found
    */
   translate(guildId, key, replacements = {}) {
-    // Resolve locale data for this guild (uses cache internally)
     const localeData = this._getLocaleData(guildId);
 
-    // Try guild's locale first
     let value = this._resolve(localeData, key);
 
-    // Fallback to English if not found in guild locale
     if (value === undefined) {
       value = this._resolve(this.locales.get(this.defaultLocale) ?? {}, key);
     }
 
-    // If still not found, return the key so devs can see what's missing
     if (value === undefined) return key;
     if (typeof value !== "string") return key;
 
-    // Replace {{placeholder}} patterns
     for (const [placeholder, val] of Object.entries(replacements)) {
       value = value.replace(
         new RegExp(`\\{\\{${placeholder}\\}\\}`, "g"),

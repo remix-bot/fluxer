@@ -9,16 +9,13 @@
  * string processing, and validation used across the music bot.
  */
 export class Utils {
-  // ═════════════════════════════════════════════════════════════════════════════
-  // Time & Duration
-  // ═════════════════════════════════════════════════════════════════════════════
 
   /**
    * Format milliseconds to human-readable time string (H:MM:SS or M:SS)
    * @param {number} milliseconds - Duration in milliseconds
    * @returns {string} Formatted time string
-   * @example Utils.prettifyMS(125000) // "2:05"
-   * @example Utils.prettifyMS(3661000) // "1:01:01"
+   * @example Utils.prettifyMS(125000)
+   * @example Utils.prettifyMS(3661000)
    */
   static prettifyMS(milliseconds) {
     if (!milliseconds || milliseconds < 0 || !isFinite(milliseconds)) {
@@ -49,9 +46,9 @@ export class Utils {
     if (parts.some(isNaN) || parts.some(n => n < 0)) return 0;
 
     let ms = 0;
-    if (parts[0] !== undefined) ms += parts[0] * 1000;      // seconds
-    if (parts[1] !== undefined) ms += parts[1] * 60 * 1000;  // minutes
-    if (parts[2] !== undefined) ms += parts[2] * 3600 * 1000; // hours
+    if (parts[0] !== undefined) ms += parts[0] * 1000;
+    if (parts[1] !== undefined) ms += parts[1] * 60 * 1000;
+    if (parts[2] !== undefined) ms += parts[2] * 3600 * 1000;
 
     return ms;
   }
@@ -66,9 +63,6 @@ export class Utils {
     return this.prettifyMS(seconds * 1000);
   }
 
-  // ═════════════════════════════════════════════════════════════════════════════
-  // Array Manipulation
-  // ═════════════════════════════════════════════════════════════════════════════
 
   /**
    * Shuffles array in-place using Fisher-Yates algorithm
@@ -124,9 +118,6 @@ export class Utils {
     return [...new Set(array)];
   }
 
-  // ═════════════════════════════════════════════════════════════════════════════
-  // String Formatting
-  // ═════════════════════════════════════════════════════════════════════════════
 
   /**
    * Truncate text with ellipsis
@@ -154,11 +145,11 @@ export class Utils {
     return title
         .replace(/\s*[\(\[][^\)\]]*(?:feat|ft|featuring|remix|edit|version|prod|official|audio|video|lyrics|visualizer)[^\)\]]*[\)\]]/gi, "")
         .replace(/\s*-\s*(?:feat|ft|featuring)\.?.*/gi, "")
-        .replace(/\s*\|.*$/g, "") // Remove pipe and everything after
-        .replace(/\s*【.*?】/g, "") // Remove Japanese brackets
-        .replace(/\s*\[.*?\]/g, "") // Remove square brackets
-        .replace(/\s*\(.*?\)/g, "") // Remove parentheses
-        .replace(/\s{2,}/g, " ")    // Collapse multiple spaces
+        .replace(/\s*\|.*$/g, "")
+        .replace(/\s*【.*?】/g, "")
+        .replace(/\s*\[.*?\]/g, "")
+        .replace(/\s*\(.*?\)/g, "")
+        .replace(/\s{2,}/g, " ")
         .trim();
   }
 
@@ -171,14 +162,13 @@ export class Utils {
   static sanitizeFilename(str, maxLen = 50) {
     if (!str || typeof str !== "string") return "unknown";
     return str
-        .replace(/[^a-z0-9\u4e00-\u9fa5]/gi, "_") // Keep CJK chars too
+        .replace(/[^a-z0-9\u4e00-\u9fa5]/gi, "_")
         .replace(/_{2,}/g, "_")
         .substring(0, maxLen)
         .replace(/^_+|_+$/g, "");
   }
 
   /**
-   * Escape markdown characters for Discord
    * @param {string} text - Raw text
    * @returns {string} Escaped text
    */
@@ -220,9 +210,6 @@ export class Utils {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
   }
 
-  // ═════════════════════════════════════════════════════════════════════════════
-  // ID Generation
-  // ═════════════════════════════════════════════════════════════════════════════
 
   /**
    * Generate random unique ID
@@ -235,7 +222,6 @@ export class Utils {
     const timestamp = Date.now().toString(36).toUpperCase();
     let random = "";
 
-    // Generate enough random data
     while ((timestamp + random).length < targetLen) {
       random += Math.random().toString(36).substring(2).toUpperCase();
     }
@@ -255,9 +241,6 @@ export class Utils {
     });
   }
 
-  // ═════════════════════════════════════════════════════════════════════════════
-  // Validation & Safety (CRITICAL for worker.mjs compatibility)
-  // ═════════════════════════════════════════════════════════════════════════════
 
   /**
    * Check if a string represents a finite number
@@ -313,9 +296,6 @@ export class Utils {
     }
   }
 
-  // ═════════════════════════════════════════════════════════════════════════════
-  // Async Utilities
-  // ═════════════════════════════════════════════════════════════════════════════
 
   /**
    * Sleep/delay promise
@@ -363,9 +343,6 @@ export class Utils {
    * @returns {Promise<T>}
    */
   static timeout(promise, ms, message = "Operation timed out") {
-    // Always clear the timeout timer once the race settles — whether promise wins or
-    // the timeout wins. Without this, every successful call leaks a live timer for the
-    // full `ms` duration, holding the timer handle in the event loop and bloating heap.
     let timerId;
     const timeoutPromise = new Promise((_, reject) => {
       timerId = setTimeout(() => reject(new Error(message)), ms);
@@ -373,9 +350,6 @@ export class Utils {
     return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timerId));
   }
 
-  // ═════════════════════════════════════════════════════════════════════════════
-  // Object Utilities
-  // ═════════════════════════════════════════════════════════════════════════════
 
   /**
    * Deep clone an object (JSON method - not suitable for circular refs)
@@ -424,9 +398,6 @@ export class Utils {
     return result;
   }
 
-  // ═════════════════════════════════════════════════════════════════════════════
-  // Music-Specific Helpers
-  // ═════════════════════════════════════════════════════════════════════════════
 
   /**
    * Create progress bar string

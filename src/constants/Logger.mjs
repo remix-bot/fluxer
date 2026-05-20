@@ -30,9 +30,8 @@ export function initLogger(config) {
 }
 
 function isEnabled(category) {
-  if (!_config) return true; // default on if not yet initialised
+  if (!_config) return true;
   if (_config.enabled === false) return false;
-  // If the category key is missing, default to true
   return _config[category] !== false;
 }
 
@@ -41,17 +40,14 @@ function ts() {
 }
 
 export const logger = {
-  // ── always-on (errors / warnings critical to operation) ──────────────────
   error(tag, ...args) {
     console.error(`[${ts()}] ${tag}`, ...args);
   },
   warn(tag, ...args) {
-    // warnings are on unless master switch is off
     if (_config?.enabled === false) return;
     console.warn(`[${ts()}] ${tag}`, ...args);
   },
 
-  // ── categorised logs ─────────────────────────────────────────────────────
   player(...args)      { if (isEnabled("player"))      console.log(`[${ts()}]`, ...args); },
   inactivity(...args)  { if (isEnabled("inactivity"))  console.log(`[${ts()}]`, ...args); },
   voice247(...args)    { if (isEnabled("voice247"))     console.log(`[${ts()}]`, ...args); },

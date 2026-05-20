@@ -12,22 +12,15 @@ import { Utils } from "./Utils.mjs";
 import { PROVIDERS } from "./constants/providers.mjs";
 import { logger } from "./constants/Logger.mjs";
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// NodeLink Configuration (forwarded from Player via workerData)
-// ═══════════════════════════════════════════════════════════════════════════════
 
 const nl           = workerData?.data?.nodelink ?? {};
 const NL_HOST      = nl.host      ?? "localhost";
 const NL_PORT      = nl.port      ?? 3000;
-// Shared default — must match NL_DEFAULT_PASSWORD in Player.mjs
 const NL_DEFAULT_PASSWORD = "youshallnotpass";
 const NL_PASSWORD  = nl.password  ?? NL_DEFAULT_PASSWORD;
-const NL_SESSION_ID = nl.sessionId ?? null;   // provided by moonlink.js Manager
+const NL_SESSION_ID = nl.sessionId ?? null;
 const NL_GUILD_ID  = workerData?.data?.guildId ?? null;
 
-// ─── Error sanitizer ──────────────────────────────────────────────────────────
-// Compile regexes once at module load (constants are fixed for the worker's lifetime).
-// Re-compiling on every sanitizeError() call was wasteful and identical each time.
 const _sanitizeRegexes = (() => {
   const r = [];
   if (NL_HOST && NL_HOST !== "localhost") {
@@ -43,21 +36,16 @@ const _sanitizeRegexes = (() => {
   return r;
 })();
 
-// Strips the NodeLink host, port, and password from any string so they are
-// never shown to end-users in messages.
 function sanitizeError(msg) {
   if (!msg) return msg;
   let s = String(msg);
   for (const { re, sub } of _sanitizeRegexes) {
-    re.lastIndex = 0; // reset stateful global regexes between calls
+    re.lastIndex = 0;
     s = s.replace(re, sub);
   }
   return s;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// HTTP Helper
-// ═══════════════════════════════════════════════════════════════════════════════
 
 /**
  * Make a GET request to NodeLink and return the parsed JSON body.
@@ -109,9 +97,6 @@ async function loadTracks(identifier, nlGetFn = nlGet) {
   return nlGetFn(`/v4/loadtracks?identifier=${encodeURIComponent(identifier)}`);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Track Conversion
-// ═══════════════════════════════════════════════════════════════════════════════
 
 /**
  * Convert a NodeLink track object to the internal video format.
@@ -157,15 +142,9 @@ function tokenizeMatchText(value) {
   return normalizeMatchText(value).split(" ").filter(Boolean);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Provider Configuration  (imported from constants/providers.mjs)
-// ═══════════════════════════════════════════════════════════════════════════════
 
 const TYPE_MODIFIERS = ["track","playlist","album","artist","channel","user"];
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// YTUtils Class
-// ═══════════════════════════════════════════════════════════════════════════════
 
 class YTUtils extends EventEmitter {
   constructor() { super(); }
@@ -206,10 +185,8 @@ class YTUtils extends EventEmitter {
     try {
       const urlObj = new URL(url);
 
-      // Check if it's a YouTube Radio/Mix URL
       const list = urlObj.searchParams.get("list");
       if (list && list.startsWith("RD")) {
-        // Extract just the video ID and create clean URL
         const videoId = urlObj.searchParams.get("v");
         if (videoId) {
           logger.worker(`[Worker] Cleaning YouTube Radio URL, extracted video: ${videoId}`);
@@ -217,7 +194,6 @@ class YTUtils extends EventEmitter {
         }
       }
 
-      // Remove start_radio parameter if present
       if (urlObj.searchParams.has("start_radio")) {
         urlObj.searchParams.delete("start_radio");
         return urlObj.toString();
@@ -387,11 +363,9 @@ class YTUtils extends EventEmitter {
   async getVideoData(query, provider = "ytm", trackMeta = null) {
     const request = this._buildRequestContext(query, trackMeta);
 
-    // Handle URLs (including YouTube Radio/Mix)
     if (this.isValidUrl(query)) {
       this.emit("message", "Loading...");
 
-      // Clean YouTube Radio URLs to prevent metadata mismatches
       const cleanedUrl = this._cleanYouTubeUrl(query);
       if (cleanedUrl !== query) {
         logger.worker(`[Worker] URL cleaned: ${query} -> ${cleanedUrl}`);
@@ -405,7 +379,6 @@ class YTUtils extends EventEmitter {
         return { type: "error", data: null, error: sanitizeError(e.message) };
       }
 
-      // Handle playlist results
       if (data.loadType === "playlist") {
         const tracks = (data.data?.tracks ?? []).map(track => this._applyTrackMeta(trackToVideo(track), trackMeta));
         tracks.forEach(t => { t.playlistName = data.data?.info?.name ?? null; });
@@ -413,7 +386,6 @@ class YTUtils extends EventEmitter {
         return { type: "list", data: tracks };
       }
 
-      // Handle single track
       if (data.loadType === "track" && data.data) {
         const video = this._applyTrackMeta(trackToVideo(data.data), trackMeta);
         if (!video) return { type: "error", data: "Failed to parse track data." };
@@ -426,7 +398,6 @@ class YTUtils extends EventEmitter {
         return { type: "error", data: "Empty track data returned." };
       }
 
-      // Handle search results (take first)
       if (data.loadType === "search" && data.data?.length) {
         const bestTrack = this._pickBestTrack(data.data, provider, request) ?? data.data[0];
         const video = this._applyTrackMeta(trackToVideo(bestTrack), trackMeta);
@@ -434,12 +405,10 @@ class YTUtils extends EventEmitter {
         return { type: "video", data: video };
       }
 
-      // No recognizable loadType
       this.emit("message", `**Could not load that URL.** (loadType: ${data.loadType || "unknown"})`);
       return { type: "error", data: null, error: "Unknown loadType: " + (data.loadType || "none") };
     }
 
-    // Handle search queries (non-URLs)
     this.emit("message", `Searching ${this._providerLabel(provider)}...`);
 
     let data;
@@ -450,7 +419,6 @@ class YTUtils extends EventEmitter {
       return { type: "error", data: null, error: sanitizeError(e.message) };
     }
 
-    // Handle search results
     if (data.loadType === "search" && data.data?.length) {
       const trackToUse = this._pickBestTrack(data.data, provider, request) ?? data.data[0];
       const video      = this._applyTrackMeta(trackToVideo(trackToUse), trackMeta);
@@ -458,7 +426,6 @@ class YTUtils extends EventEmitter {
       return { type: "video", data: video };
     }
 
-    // Handle playlist from search
     if (data.loadType === "playlist") {
       const tracks = (data.data?.tracks ?? []).map(track => this._applyTrackMeta(trackToVideo(track), trackMeta));
       if (tracks.length > 0) {
@@ -467,7 +434,6 @@ class YTUtils extends EventEmitter {
       }
     }
 
-    // Single track from search
     if (data.loadType === "track" && data.data) {
       const video = this._applyTrackMeta(trackToVideo(data.data), trackMeta);
       if (!video) return { type: "error", data: "Failed to parse track data." };
@@ -480,22 +446,15 @@ class YTUtils extends EventEmitter {
       return { type: "error", data: "Empty track data returned." };
     }
 
-    // Nothing found
     this.emit("message", `**No results found for '${query}'.**`);
     return { type: "error", data: null, error: "No results found" };
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Worker Entry Point
-// ═══════════════════════════════════════════════════════════════════════════════
 
 const jobId = workerData?.jobId;
 const data  = workerData?.data;
 
-// ─── Pool mode ────────────────────────────────────────────────────────────────
-// When spawned by PlayerWorkerPool, the worker stays alive and handles multiple
-// jobs via parentPort messages instead of exiting after one.
 if (workerData?.poolMode) {
   const utils = new YTUtils();
 
@@ -518,8 +477,6 @@ if (workerData?.poolMode) {
     const NL_SID_job   = nl.sessionId ?? null;
     const NL_GID_job   = jData?.guildId ?? null;
 
-    // Build a job-scoped request helper so pool workers handle different
-    // nodelink configs per job (useful when the session ID rotates).
     const nlGetJob = (path) => new Promise((resolve, reject) => {
       const isHttps  = NL_PORT_job === 443;
       const mod      = isHttps ? https : http;
@@ -577,10 +534,8 @@ if (workerData?.poolMode) {
     }
   });
 
-  // Keep the worker alive — don't exit, the pool will terminate() when done.
 }
 
-// ─── Legacy single-job mode (fallback / dev) ──────────────────────────────────
 else {
 
 if (!jobId) {
