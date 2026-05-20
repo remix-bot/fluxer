@@ -261,7 +261,7 @@ export class FluxerRevoice extends EventEmitter {
    *  This delay runs AFTER the previous join completes and BEFORE the next
    *  one starts, giving the Fluxer gateway time to clean up the previous
    *  voice session. */
-  _globalJoinDelay = 500;
+  _globalJoinDelay = 1500;
 
   /** @type {Set<string>} Channel IDs where disconnect is expected (bot-initiated) */
   _intentionalDisconnects = new Set();
@@ -517,16 +517,15 @@ export class FluxerRevoice extends EventEmitter {
     // Use @fluxerjs/voice to join the channel via the Fluxer gateway.
     // This handles the VOICE_STATE_UPDATE → VOICE_SERVER_UPDATE flow
     // and creates a LiveKit connection with the returned credentials.
+    //
+    // Permission validation is handled upstream in PlayerManager via
+    // botHasVoicePermissions() — real permission errors are caught before
+    // we even reach this point. If we get a 401 here, it's a stale session,
+    // and PlayerManager's sanitizeJoinError will handle the retry.
     let nativeConnection;
     try {
       nativeConnection = await joinVoiceChannel(this.client, channel);
     } catch (e) {
-      if (e.message?.includes("401") || e.message?.includes("Unauthorized")) {
-        const gId = channelGuildId ?? this._resolveGuildForChannel(channelId);
-        logger.warn(
-          `[FluxerRevoice] 401 error for channel ${channelId} in guild ${gId ?? "unknown"}`
-        );
-      }
       throw new Error(`Fluxer voice join failed for ${channelId}: ${e.message}`);
     }
 

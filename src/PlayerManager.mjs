@@ -53,17 +53,69 @@ function getPlayerChannelId(player, fallbackChannelId = null) {
 }
 
 /**
- * Sanitize raw voice-join error messages into user-friendly text.
- * Raw errors like "401 Unauthorized - no permissions to access the room"
- * are confusing to users — map them to clear, translatable messages.
+ * Check whether the bot actually has the Connect permission on a specific
+ * voice channel. This uses @fluxerjs/core's PermissionFlags to test the
+ * bitfield directly, rather than relying on gateway error messages which
+ * conflate real permission denials with stale-session 401s.
+ *
+ * @param {import('@fluxerjs/core').Client} client
+ * @param {string} channelId
+ * @returns {boolean} true if the bot has Connect (and Speak) on the channel
  */
-function sanitizeJoinError(err) {
+function botHasVoicePermissions(client, channelId) {
+  try {
+    const channel = client?.channels?.get?.(channelId);
+    if (!channel) return true; // can't check — assume yes, let gateway decide
+    const me = channel.guild?.members?.me;
+    if (!me) return true; // not cached — assume yes
+    // FluxerJS uses member.permissionsIn(channel), NOT channel.permissionsFor(member).
+    // The permissionsFor method does not exist in FluxerJS (it's a Discord.js API).
+    // permissionsIn computes base perms + channel overwrites, and expands Administrator
+    // to ALL_PERMISSIONS_BIGINT — so Admin bots always pass every has() check.
+    const perms = me.permissionsIn?.(channel);
+    if (!perms) return true; // can't read perms — assume yes
+    // FluxerJS PermissionFlags (from @fluxerjs/util):
+    //   Administrator = 1n << 3n  (0x8)
+    //   ViewChannel  = 1n << 10n (0x400)
+    //   Connect      = 1n << 20n (0x100000)
+    //   Speak        = 1n << 21n (0x200000)
+    // Administrator short-circuit: Admin bypasses all channel restrictions.
+    if (perms.has(0x8)) return true;
+    // Bot must be able to see the channel, connect to it, and speak in it.
+    return perms.has(0x400) && perms.has(0x100000) && perms.has(0x200000);
+  } catch (_) {
+    return true; // can't check — assume yes
+  }
+}
+
+/**
+ * Sanitize raw voice-join error messages into user-friendly text.
+ *
+ * IMPORTANT: A 401/"permission" error from the gateway does NOT always mean
+ * the bot lacks the Connect permission. The Fluxer gateway can also return 401
+ * when the bot's previous voice session hasn't been cleaned up yet (stale
+ * session race). In that case the bot DOES have Connect — it's a transient
+ * error, not a real permission denial.
+ *
+ * To tell the difference, we check the actual channel permissions using
+ * botHasVoicePermissions(). If the bot HAS Connect but got 401, it's a
+ * stale session ("SESSION_RACE"), not a real permission error ("PERMISSION").
+ */
+function sanitizeJoinError(err, client = null, channelId = null) {
   const msg = String(err?.message ?? err ?? "");
   if (msg.includes("401") || msg.includes("Unauthorized")) {
-    return "PERMISSION";
+    // Gateway said 401 — but is it a real permission issue or a stale session?
+    if (client && channelId && !botHasVoicePermissions(client, channelId)) {
+      return "PERMISSION"; // bot genuinely lacks Connect/Speak
+    }
+    // Bot has the permissions — this is a stale session race, not a real denial
+    return "SESSION_RACE";
   }
   if (msg.includes("permission") || msg.includes("Permission")) {
-    return "PERMISSION";
+    if (client && channelId && !botHasVoicePermissions(client, channelId)) {
+      return "PERMISSION";
+    }
+    return "SESSION_RACE";
   }
   if (msg.includes("not found") || msg.includes("Unknown channel")) {
     return "NOT_FOUND";
@@ -848,6 +900,17 @@ export class PlayerManager {
       return message.reply(mkEmbed(this._t(message, "responses._common.voiceChannelRequired")));
     }
 
+    // Pre-check: verify the bot actually has Connect + Speak permission on the
+    // voice channel BEFORE sending VOICE_STATE_UPDATE to the gateway.  This
+    // avoids a confusing 401 roundtrip when the bot genuinely lacks permission,
+    // and makes the error message accurate instead of relying on the gateway's
+    // ambiguous 401 (which can also mean "stale session").
+    if (!botHasVoicePermissions(this.commands?.client, cid)) {
+      return message.reply(mkEmbed(
+          this._t(message, "responses.join.joinFailedPerms", { channel: `<#${cleanId(cid)}>` })
+      ));
+    }
+
     const cleanChannelId = cleanId(cid);
     const existing = this.playerMap.get(cleanChannelId)
       ?? this.getPlayerByChannelId(cleanChannelId);
@@ -1050,9 +1113,41 @@ export class PlayerManager {
       } catch (err) {
         this._pendingJoins.delete(cleanChannelId);
 
-        const errCode = sanitizeJoinError(err);
+        const errCode = sanitizeJoinError(err, this.commands?.client, cleanChannelId);
         let errorMsg;
-        if (errCode === "PERMISSION") {
+        if (errCode === "SESSION_RACE") {
+          // Stale session — retry once after a short delay so the gateway can
+          // clean up the previous voice session.
+          logger.warn(`[PlayerManager] Stale voice session detected for channel ${cleanChannelId}, retrying in 2s...`);
+          try {
+            await new Promise(r => setTimeout(r, 2_000));
+            // Clean up any leftover state before retrying
+            if (player._revoice && player._channelId) {
+              try { player._revoice._leaveGateway(player._channelId, player._guildId ?? player._resolveGuildId()); } catch (_) {}
+              try { player._revoice.deleteConnection(player._channelId); } catch (_) {}
+            }
+            await player.join(cid);
+
+            // Retry succeeded
+            this.playerMap.set(cleanChannelId, player);
+            this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
+            await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joined", { channel: cid })));
+
+            const retryGuildId = cleanId(channel.guildId ?? getMessageGuildId(message));
+            if (retryGuildId) {
+              const savedVol = this.settings.getServer(retryGuildId)?.get("volume");
+              if (savedVol !== undefined && savedVol !== null) {
+                const vol = Number(savedVol);
+                if (!isNaN(vol)) player.setVolume(vol / 100);
+              }
+            }
+            cb(player);
+            return;
+          } catch (retryErr) {
+            logger.warn(`[PlayerManager] Retry also failed for channel ${cleanChannelId}: ${retryErr.message}`);
+            errorMsg = this._t(message, "responses.join.joinFailedGeneric");
+          }
+        } else if (errCode === "PERMISSION") {
           errorMsg = this._t(message, "responses.join.joinFailedPerms", { channel: `<#${cleanChannelId}>` });
         } else if (errCode === "NOT_FOUND") {
           errorMsg = this._t(message, "responses.join.joinFailedNotFound");
