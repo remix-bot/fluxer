@@ -63,7 +63,6 @@ export class Utils {
     return this.prettifyMS(seconds * 1000);
   }
 
-
   /**
    * Shuffles array in-place using Fisher-Yates algorithm
    * @template T
@@ -117,7 +116,6 @@ export class Utils {
     if (!Array.isArray(array)) return [];
     return [...new Set(array)];
   }
-
 
   /**
    * Truncate text with ellipsis
@@ -210,7 +208,6 @@ export class Utils {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
   }
 
-
   /**
    * Generate random unique ID
    * @param {number} [length=16] - Desired length of ID (8-32 recommended)
@@ -240,7 +237,6 @@ export class Utils {
       return v.toString(16);
     });
   }
-
 
   /**
    * Check if a string represents a finite number
@@ -296,7 +292,6 @@ export class Utils {
     }
   }
 
-
   /**
    * Sleep/delay promise
    * @param {number} ms - Milliseconds to sleep
@@ -350,7 +345,6 @@ export class Utils {
     return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timerId));
   }
 
-
   /**
    * Deep clone an object (JSON method - not suitable for circular refs)
    * @template T
@@ -398,24 +392,23 @@ export class Utils {
     return result;
   }
 
-
   /**
    * Create progress bar string
    * @param {number} current - Current position in ms or 0-1 ratio
    * @param {number} [total] - Total duration in ms (if omitted, current is treated as 0-1 ratio)
    * @param {number} [length=15] - Bar length in characters
-   * @param {string} [filledChar="▬"] - Filled character
-   * @param {string} [emptyChar="▬"] - Empty character
-   * @param {string} [indicator="🔘"] - Position indicator
+   * @param {string} [filledChar="━"] - Filled character
+   * @param {string} [emptyChar="─"] - Empty character
+   * @param {string} [indicator="⬤"] - Position indicator
    * @returns {string} Progress bar string
    */
   static progressBar(
       current,
       total,
       length = 15,
-      filledChar = "▬",
-      emptyChar = "▬",
-      indicator = "🔘"
+      filledChar = "━",
+      emptyChar = "─",
+      indicator = "⬤"
   ) {
     let progress;
     if (total !== undefined && total > 0) {

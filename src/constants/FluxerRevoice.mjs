@@ -70,7 +70,6 @@ import { logger } from "./Logger.mjs";
   }
 }
 
-
 /** Helper: returns a human-readable label for a ConnectionState value */
 function stateLabel(cs) {
   if (cs === ConnectionState?.CONN_CONNECTED) return "CONN_CONNECTED";
@@ -81,7 +80,6 @@ function stateLabel(cs) {
   if (cs === 2) return "CONN_RECONNECTING(2)";
   return String(cs);
 }
-
 
 /**
  * A voice connection that wraps a LiveKit Room obtained via the Fluxer
@@ -182,7 +180,6 @@ export class FluxerVoiceConnection extends EventEmitter {
     return this.disconnect();
   }
 }
-
 
 /**
  * Revoice-compatible class that uses the Fluxer gateway for voice joins.
@@ -510,7 +507,6 @@ export class FluxerRevoice extends EventEmitter {
       nativeConnection,
     });
 
-
     room.on(RoomEvent.Disconnected, (reason) => {
       const isIntentional = this._intentionalDisconnects.has(String(channelId));
       const reasonLabel = isIntentional ? "intentional" : (reason ?? "unexpected");
@@ -531,7 +527,6 @@ export class FluxerRevoice extends EventEmitter {
 
       connection.emit("disconnect");
     });
-
 
     room.on(RoomEvent.ParticipantConnected, (participant) => {
       const userId = participant?.identity ?? participant?.sid;

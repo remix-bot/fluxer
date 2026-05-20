@@ -6,7 +6,6 @@ import { get247ChannelMode, remove247ChannelMode } from "./constants/Helpers247.
 import { VoiceStateCache } from "./constants/VoiceStateCache.mjs";
 import { REQUIRED_BOT_PERMISSIONS, CRITICAL_PERMISSIONS } from "./MessageHandler.mjs";
 
-
 /**
  * GatewayHandler — manages raw WebSocket gateway events, voice-state tracking,
  * presence rotation, and high-level Fluxer event handlers (GuildCreate,
@@ -47,7 +46,6 @@ export class GatewayHandler {
     this._deferredDeleteCount = 0;
   }
 
-
   /**
    * Generate a composite key for bots in the observedVoiceBots map.
    * Bots can be in multiple guilds so we namespace by guildId.
@@ -81,7 +79,6 @@ export class GatewayHandler {
 
     return { key: null, value: null };
   }
-
 
   /**
    * Check if the bot has all required permissions in a newly joined guild.
@@ -150,7 +147,6 @@ export class GatewayHandler {
       }
     }
   }
-
 
   /**
    * Seed observedVoiceUsers / observedVoiceBots from all cached guild voice
@@ -224,7 +220,6 @@ export class GatewayHandler {
       }
     }
   }
-
 
   /**
    * Re-read the guild's voice_states cache and update observedVoiceUsers
@@ -400,7 +395,6 @@ export class GatewayHandler {
     return humansFound;
   }
 
-
   /**
    * Attach a raw "message" listener to the shard-0 WebSocket so we can
    * process gateway opcodes (READY, GUILD_CREATE, VOICE_STATE_UPDATE, etc.)
@@ -526,7 +520,6 @@ export class GatewayHandler {
     } catch (_) {}
   }
 
-
   setupPresenceRotation() {
     if (this.presenceContents.length === 0) return;
 
@@ -574,7 +567,6 @@ export class GatewayHandler {
     if (this.presenceTimer) clearInterval(this.presenceTimer);
     this.presenceTimer = setInterval(setPresence, this.presenceInterval);
   }
-
 
   /**
    * Register all high-level Fluxer event listeners on the Fluxer client.
@@ -853,7 +845,6 @@ export class GatewayHandler {
       return;
     }
 
-
     const activeGuildPlayers = [...remix.players.playerMap.entries()].filter(([, player]) =>
         String(player?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
     );
@@ -1101,7 +1092,6 @@ export class GatewayHandler {
     }
   }
 
-
   /** @type {Set<string>} Channel IDs currently being rejoined (dedup guard) */
   _rejoinInProgress = new Set();
 
@@ -1201,7 +1191,6 @@ export class GatewayHandler {
       this._rejoinInProgress.delete(cleanChannelId);
     }
   }
-
 
   /**
    * Invoke after the bot has connected and Moonlink has been initialised.
@@ -1510,7 +1499,6 @@ export class GatewayHandler {
         `[BootRecovery] Boot recovery complete. ${channelsToRejoin.length} channel(s) processed.`
     );
   }
-
 
   /**
    * Perform the actual cleanup for a guild that the bot was removed from.

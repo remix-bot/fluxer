@@ -56,14 +56,17 @@
     "test": "Shows how many people are in each voice channel.",
     "thumbnail": "Request the thumbnail of the currently playing song.",
     "volume": "Get or change the current volume.",
-    "volumedefault": "View or set the server default volume. (Requires Manage Server to set)"
+    "volumedefault": "View or set the server default volume. (Requires Manage Server to set)",
+    "seek": "Seek to a specific position in the currently playing track.",
+    "move": "Move a track from one position to another in the queue.",
+    "autoplay": "Toggle autoplay — automatically play similar tracks when the queue ends."
   },
   "options": {
     "debug": {
       "target": "The target that should be examined."
     },
     "lastfm": {
-      "action": "The action to perform: link, confirm, unlink, np, profile, loved, top, recent, scrobble",
+      "action": "The action to perform: link, confirm, unlink, np, profile, loved, top, recent, artists, love, unlove, scrobble",
       "token": "The auth token from Last.fm (used with 'confirm' action)"
     },
     "eval": {
@@ -122,6 +125,13 @@
     },
     "volumedefault": {
       "volume": "New volume in % (0–200) to save as server default. Leave empty to view current."
+    },
+    "seek": {
+      "position": "Position to seek to (e.g. 1:30, 90, or 1:30:00 for hours)"
+    },
+    "move": {
+      "from": "The current position of the track in the queue (1-based).",
+      "to": "The target position to move the track to (1-based)."
     }
   },
   "pagination": {
@@ -282,6 +292,13 @@
       "profileScrobbles": "🎵 **{{playcount}}** scrobbles",
       "profileRegistered": "👤 Registered: {{date}}",
       "profileLink": "🔗 [Open profile]({{url}})",
+      "noArtists": "🎤 No top artists found for **{{username}}**.",
+      "artistsTitle": "🎤 Top Artists — {{username}}",
+      "lovedTrack": "❤️ Loved **{{name}}** by **{{artist}}** on Last.fm!",
+      "unlovedTrack": "💔 Unloved **{{name}}** by **${{artist}}** on Last.fm.",
+      "loveFailed": "❌ Failed to love track: {{error}}",
+      "unloveFailed": "❌ Failed to unlove track: {{error}}",
+      "nothingPlayingLove": "❌ Nothing is playing right now. Play a song first to love it!",
       "fetchFailed": "❌ Failed to fetch data from Last.fm: {{error}}"
     },
     "list": {
@@ -555,6 +572,19 @@
       "noPermissionSet": "❌ You need **Manage Server** permission to set the server default volume.",
       "outOfRange": "❌ Volume must be between `0` and `{{max}}%`.",
       "saved": "🔊 Server default volume saved as `{{volume}}%`."
+    },
+    "seek": {
+      "nothingPlaying": "❌ There's nothing playing at the moment!",
+      "paused": "❌ Can't seek while paused. Resume first.",
+      "invalidFormat": "❌ Invalid position format. Use `mm:ss`, `hh:mm:ss`, or seconds (e.g. `1:30`, `90`).",
+      "exceedsDuration": "❌ Seek position exceeds track duration (**{{duration}}**).",
+      "seeked": "⏩ Seeked to **{{position}}**",
+      "notSupported": "❌ Seeking is not supported by the current audio node.",
+      "failed": "❌ Failed to seek: {{error}}"
+    },
+    "autoplay": {
+      "enabled": "🔁 Autoplay **enabled** — similar tracks will be added automatically when the queue ends.",
+      "disabled": "➡️ Autoplay **disabled** — the bot will stop when the queue ends."
     }
   }
 }

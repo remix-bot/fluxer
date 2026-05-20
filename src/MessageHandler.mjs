@@ -1080,7 +1080,6 @@ export class QueuePaginator {
   }
 }
 
-
 const HELP_CMDS_PER_PAGE = 10;
 const HELP_SESSION_MS    = 30 * 1000;
 
@@ -1253,7 +1252,6 @@ export class HelpCommand {
       this._handle(msg, args.slice(1), prefix);
     });
   }
-
 
   _handle(msg, args, prefix) {
     const allCmds = this._commands.commands;

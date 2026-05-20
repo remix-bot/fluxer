@@ -64,7 +64,10 @@ We believe music features shouldn't be locked behind paywalls — **all commands
 - **Interactive emoji player** — reaction-based control panel with play, pause, skip, volume, shuffle, and more
 - **Lyrics** — fetch synced lyrics via NodeLink
 - **Radio stations** — built-in support for custom radio streams with keyword-based search
-- **Last.fm integration** — auto-scrobble songs, play loved/top/recent tracks, and view your Last.fm profile
+- **Last.fm integration** — auto-scrobble songs, play loved/top/recent tracks, love/unlove tracks, view top artists, and view your Last.fm profile
+- **Autoplay** — automatically play similar tracks when the queue ends (powered by Last.fm)
+- **Seek** — jump to a specific position in the current track
+- **Queue move** — reorder tracks by moving them to a different position
 - **Server settings** — per-guild configuration for prefix, volume, locale, 24/7 channels, and more
 - **Web dashboard** — optional browser-based control panel with Redis-backed sessions and Fluxer OAuth2 login
 - **Multi-language support** — available in English, Arabic, German, Kurdish (Sorani), and Brazilian Portuguese
@@ -114,6 +117,9 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 | `join` | Make the bot join a specific voice channel | `%join 123456789` | |
 | `leave` | Make the bot leave the current voice channel | `%leave` | `l`, `stop` |
 | `forceleave` | Force the bot to leave any channel (requires Manage Channels) | `%forceleave` | `fl` |
+| `seek` | Seek to a specific position in the current track | `%seek 1:30` / `%seek 90` | |
+| `move` | Move a track from one position to another in the queue | `%move 2 5` | `mv`, `m` |
+| `autoplay` | Toggle autoplay — automatically play similar tracks when queue ends | `%autoplay` | `ap` |
 
 ### Utility
 
@@ -123,7 +129,7 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 | `stats` | Display bot stats (uptime, ping, player count, stored scrobbles) | `%stats` | `info` |
 | `invite` | Get the bot invite link | `%invite` | `addbot`, `remix` |
 | `support` | Get an invite to the support server | `%support` | `server` |
-| `lastfm` | Link Last.fm, toggle scrobbling, view profile, play tracks, leaderboard | `%lastfm link` / `%lastfm play loved` / `%lastfm lb` | `lf`, `lfm` |
+| `lastfm` | Link Last.fm, toggle scrobbling, view profile, love/unlove tracks, top artists, play tracks, leaderboard | `%lastfm link` / `%lastfm love` / `%lastfm artists` / `%lastfm lb` | `lf`, `lfm` |
 | `reload` | Reload commands or modules at runtime (owner) | `%reload` | |
 | `servers` | List servers the bot is in (owner) | `%servers` | |
 | `eval` | Evaluate JavaScript (owner only) | `%eval 1+1` | |

@@ -12,7 +12,6 @@ import { Utils } from "./Utils.mjs";
 import { PROVIDERS } from "./constants/providers.mjs";
 import { logger } from "./constants/Logger.mjs";
 
-
 const nl           = workerData?.data?.nodelink ?? {};
 const NL_HOST      = nl.host      ?? "localhost";
 const NL_PORT      = nl.port      ?? 3000;
@@ -45,7 +44,6 @@ function sanitizeError(msg) {
   }
   return s;
 }
-
 
 /**
  * Make a GET request to NodeLink and return the parsed JSON body.
@@ -97,7 +95,6 @@ async function loadTracks(identifier, nlGetFn = nlGet) {
   return nlGetFn(`/v4/loadtracks?identifier=${encodeURIComponent(identifier)}`);
 }
 
-
 /**
  * Convert a NodeLink track object to the internal video format.
  * @param {object} track
@@ -142,9 +139,7 @@ function tokenizeMatchText(value) {
   return normalizeMatchText(value).split(" ").filter(Boolean);
 }
 
-
 const TYPE_MODIFIERS = ["track","playlist","album","artist","channel","user"];
-
 
 class YTUtils extends EventEmitter {
   constructor() { super(); }
@@ -450,7 +445,6 @@ class YTUtils extends EventEmitter {
     return { type: "error", data: null, error: "No results found" };
   }
 }
-
 
 const jobId = workerData?.jobId;
 const data  = workerData?.data;

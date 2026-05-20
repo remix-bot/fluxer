@@ -252,7 +252,6 @@ export class Remix {
 
       this._attachWsErrorHandlers();
 
-
       const botId = client.user?.id ?? "0";
 
       await this.settingsMgr.setBotId(botId);
@@ -553,7 +552,6 @@ export class Remix {
       process.exit(1);
     });
   }
-
 
   /**
    * Attach error handlers on all @fluxerjs/ws shard WebSockets.
@@ -931,12 +929,9 @@ export class Remix {
     );
   }
 
-
 }
 
-
 const remix = new Remix();
-
 
 const isIgnorableWsCrash = (err) => {
   const message = String(err?.message ?? err ?? "");

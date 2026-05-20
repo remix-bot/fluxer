@@ -18,7 +18,6 @@ import {
   buildFluxerListUrl,
 } from "./constants/API.mjs";
 
-
 export class FluxerListManager {
   /**
    * @param {object} config - The `fluxerlist` section from config.json
@@ -44,7 +43,6 @@ export class FluxerListManager {
       logger.settings("[FluxerList] Enabled — API key configured.");
     }
   }
-
 
   /**
    * Generate a cache key from the request parameters.
@@ -92,7 +90,6 @@ export class FluxerListManager {
       }
     }
   }
-
 
   /**
    * Fetch the list of voters for a server or bot.
@@ -217,7 +214,6 @@ export class FluxerListManager {
 
     return allVoters;
   }
-
 
   _assertEnabled() {
     if (!this.enabled) {

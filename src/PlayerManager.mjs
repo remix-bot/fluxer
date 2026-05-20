@@ -163,7 +163,6 @@ export class PlayerManager {
     this._lastfm      = null;
   }
 
-
   /**
    * Add a channel to the guild→player reverse index.
    * Called after a successful player join.
@@ -275,12 +274,10 @@ export class PlayerManager {
       writable: true,
     });
 
-
     const emit = (type, data) => {
       if (!this.dashboard?.enabled) return;
       this.dashboard.updatePlayer({ type, data }, player);
     };
-
 
     const emitGlobal = (type) => {
       if (!this.dashboard?.enabled) return;
@@ -314,7 +311,6 @@ export class PlayerManager {
         }, member.user);
       }
     };
-
 
     player.on("roomfetched", () => {
       emitGlobal("init");
@@ -373,7 +369,6 @@ export class PlayerManager {
       emitGlobal("close");
       emit("stopplay", null);
     });
-
 
     player.queue?.on("queue", (queueEvent) => {
       const serialised = { type: queueEvent.type };
@@ -439,7 +434,6 @@ export class PlayerManager {
     const guildId = getMessageGuildId(message);
     return this.locale.translate(guildId, key, replacements);
   }
-
 
   /**
    * Attempt to detect the voice channel a user is currently in.
@@ -562,7 +556,6 @@ export class PlayerManager {
     return null;
   }
 
-
   /**
    * Get or create a player for the user's voice channel.
    * @param {Message} message
@@ -659,7 +652,6 @@ export class PlayerManager {
     return null;
   }
 
-
   /**
    * Prompt the user to select a voice channel.
    * @param {Message} msg
@@ -749,7 +741,6 @@ export class PlayerManager {
     });
   }
 
-
   /**
    * Make the player leave its current voice channel.
    * @param {Message} msg
@@ -788,7 +779,6 @@ export class PlayerManager {
     player.destroy();
     await msg.reply(mkEmbed(this._t(msg, "responses._common.successfullyLeft")));
   }
-
 
   /**
    * Create and register a new Player for the given voice channel.
@@ -972,7 +962,6 @@ export class PlayerManager {
       });
     });
 
-
     (async () => {
       const statusMsg = await message.reply(mkEmbed(this._t(message, "responses.join.joining")));
       try {
@@ -1044,7 +1033,6 @@ export class PlayerManager {
       }
     })();
   }
-
 
   /**
    * Handle the "startplay" event for Last.fm: send now-playing notification

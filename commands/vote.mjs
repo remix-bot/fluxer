@@ -34,7 +34,6 @@ export const command = new CommandBuilder()
       .setRequired(false)
   );
 
-
 function notConfigured(prefix) {
   return {
     embeds: [new EmbedBuilder()
@@ -94,7 +93,6 @@ function buildVotersEmbed(voters, total, page, limit, type, resourceId, expired 
 
   return { embeds: [embed] };
 }
-
 
 export async function run(msg, data) {
   const fluxerlist = this.fluxerlist;

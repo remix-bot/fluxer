@@ -8,7 +8,6 @@
  * Edit only here; FluxerListManager.mjs and commands/vote.mjs import from this file.
  */
 
-
 export const FLUXERLIST = {
   /** Base URL for all FluxerList API v1 endpoints */
   BASE_URL: "https://fluxerlist.com/api/v1",

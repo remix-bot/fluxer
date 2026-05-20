@@ -14,7 +14,7 @@ export const command = new CommandBuilder()
   .addChoiceOption(o =>
     o.setName("action")
       .setDescription("The action to perform: link, unlink, np, profile, loved, top, recent, playlists, play, scrobble, leaderboard", "options.lastfm.action")
-      .addChoices("link", "confirm", "unlink", "np", "profile", "loved", "top", "recent", "playlists", "play", "scrobble", "leaderboard", "lb")
+      .addChoices("link", "confirm", "unlink", "np", "profile", "loved", "top", "recent", "playlists", "play", "scrobble", "leaderboard", "lb", "love", "unlove", "artists")
       .setRequired(false)
   )
   .addTextOption(o =>
@@ -22,7 +22,6 @@ export const command = new CommandBuilder()
       .setDescription("The auth token from Last.fm (used with 'confirm' action)")
       .setRequired(false)
   );
-
 
 function notConfigured(msg) {
   return {
@@ -254,7 +253,6 @@ function parsePlayArgs(msg, data) {
 
   return { category: "" };
 }
-
 
 export async function run(msg, data) {
   const lastfm = this.lastfm;
@@ -689,6 +687,100 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [buildTrackList(user.username, "🕐 Recent Tracks", tracks, false, prefix)] });
     }
 
+    case "artists": {
+      const user = await lastfm.getUser(userId);
+      if (!user) return msg.reply(notLinked(prefix));
+
+      let artists;
+      try {
+        artists = await lastfm.getTopArtists(userId, "overall", 15);
+      } catch (err) {
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch top artists: ${err.message}`)]
+        });
+      }
+
+      if (!artists.length) {
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🎤 No top artists found for **${user.username}**.`)]
+        });
+      }
+
+      const lines = artists.map((a, i) => {
+        const num = String(i + 1).padStart(2, " ");
+        let name = a.name;
+        if (name.length > 40) name = name.slice(0, 37) + "...";
+        const link = a.url ? `[${name}](${a.url})` : name;
+        return `\`${num}.\` ${link} — **${a.playcount}** plays`;
+      });
+
+      const desc = lines.join("\n").slice(0, 4096);
+
+      return msg.reply({
+        embeds: [new EmbedBuilder()
+          .setColor(getGlobalColor())
+          .setTitle(`🎤 Top Artists — ${user.username}`)
+          .setDescription(desc)
+          .setFooter({ text: `💡 Use ${prefix}lastfm play top to play your top tracks!` })]
+      });
+    }
+
+    case "love": {
+      const user = await lastfm.getUser(userId);
+      if (!user) return msg.reply(notLinked(prefix));
+
+      const pLove = await this.getPlayer(msg, false, false, false);
+      if (!pLove) return;
+      const track = pLove.queue?.getCurrent();
+      if (!track) {
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Nothing is playing right now. Play a song first to love it!`)]
+        });
+      }
+
+      const artist = track.lastfm?.artist ?? track.requestedArtist ?? track.artist ?? track.artists?.[0]?.name ?? "Unknown";
+      const name = track.lastfm?.name ?? track.requestedTitle ?? track.title ?? track.name ?? "Unknown";
+
+      try {
+        await lastfm.loveTrack(userId, artist, name);
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`❤️ Loved **${name}** by **${artist}** on Last.fm!`)]
+        });
+      } catch (err) {
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to love track: ${err.message}`)]
+        });
+      }
+    }
+
+    case "unlove": {
+      const user = await lastfm.getUser(userId);
+      if (!user) return msg.reply(notLinked(prefix));
+
+      const pUnlove = await this.getPlayer(msg, false, false, false);
+      if (!pUnlove) return;
+      const track = pUnlove.queue?.getCurrent();
+      if (!track) {
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Nothing is playing right now. Play a song first to unlove it!`)]
+        });
+      }
+
+      const artist = track.lastfm?.artist ?? track.requestedArtist ?? track.artist ?? track.artists?.[0]?.name ?? "Unknown";
+      const name = track.lastfm?.name ?? track.requestedTitle ?? track.title ?? track.name ?? "Unknown";
+
+      try {
+        await lastfm.unloveTrack(userId, artist, name);
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`💔 Unloved **${name}** by **${artist}** on Last.fm.`)]
+        });
+      } catch (err) {
+        return msg.reply({
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to unlove track: ${err.message}`)]
+        });
+      }
+    }
+
     default:
       return msg.reply({
         embeds: [new EmbedBuilder()
@@ -703,9 +795,12 @@ export async function run(msg, data) {
             `\`${prefix}lastfm profile\` — View your Last.fm profile`,
             `\`${prefix}lastfm loved\` — View your loved tracks`,
             `\`${prefix}lastfm top\` — View your top tracks`,
+            `\`${prefix}lastfm artists\` — View your top artists`,
             `\`${prefix}lastfm recent\` — View your recent tracks`,
             `\`${prefix}lastfm playlists\` — View your Last.fm playlists`,
             `\`${prefix}lastfm leaderboard\` — Scrobble leaderboard`,
+            `\`${prefix}lastfm love\` — Love the current track`,
+            `\`${prefix}lastfm unlove\` — Unlove the current track`,
             ``,
             `🎶 **Play from Last.fm:**`,
             `\`${prefix}lastfm play loved\` — Play your loved tracks`,
@@ -732,7 +827,6 @@ export async function run(msg, data) {
   }
 }
 
-
 function buildTrackList(username, title, tracks, showPlaycount = false, prefix = "%") {
   const lines = tracks.map((t, i) => {
     const num = String(i + 1).padStart(2, " ");
@@ -751,7 +845,6 @@ function buildTrackList(username, title, tracks, showPlaycount = false, prefix =
     .setDescription(desc)
     .setFooter({ text: `💡 Use ${prefix}lastfm play loved to play these!` });
 }
-
 
 function buildLeaderboardEmbed(lb, pageIdx, prefix) {
   const MEDALS = ["🥇", "🥈", "🥉"];

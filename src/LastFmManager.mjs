@@ -25,7 +25,6 @@ function normalizeTrackText(value) {
     .toLowerCase();
 }
 
-
 /**
  * Build the API signature required by Last.fm for authenticated calls.
  * See: https:
@@ -71,7 +70,6 @@ async function apiCall(params, apiSecret, post = false) {
   return data;
 }
 
-
 export class LastFmManager {
   /**
    * @param {object} config - The `lastfm` section from config.json
@@ -102,7 +100,6 @@ export class LastFmManager {
       logger.settings("[LastFm] Disabled — apiKey or apiSecret missing in config.");
     }
   }
-
 
   /**
    * Set the bot ID for multi-bot database isolation.
@@ -198,7 +195,6 @@ export class LastFmManager {
     return { where: " AND bot_id = ?", params: [String(this.botId)] };
   }
 
-
   async _getPool() {
     if (this._pool) return this._pool;
     const mysql = await import("mysql2/promise");
@@ -242,7 +238,6 @@ export class LastFmManager {
       INSERT IGNORE INTO \`lastfm_stats\` (id, stored_scrobbles, linked_users) VALUES (1, 0, 0)
     `);
   }
-
 
   async getUser(userId) {
     const cached = this._userCache.get(userId);
@@ -308,7 +303,6 @@ export class LastFmManager {
     if (cached) cached.scrobbleEnabled = enabled;
   }
 
-
   /**
    * Step 1: Get an auth token. The user must visit the Last.fm auth URL to approve it.
    * @returns {Promise<string>} The auth token
@@ -341,7 +335,6 @@ export class LastFmManager {
     );
     return data.session;
   }
-
 
   /**
    * Send a "now playing" notification to Last.fm (does NOT count as a scrobble).
@@ -403,7 +396,6 @@ export class LastFmManager {
       logger.warn(`[LastFm] Scrobble failed for ${userId}: ${err.message}`);
     }
   }
-
 
   /**
    * Get the user's loved tracks.
@@ -514,6 +506,54 @@ export class LastFmManager {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Love a track on Last.fm for the given user.
+   * @param {string} userId - The Fluxer user ID
+   * @param {string} artist - Track artist
+   * @param {string} track - Track name
+   */
+  async loveTrack(userId, artist, track) {
+    if (!this.enabled) return;
+    const user = await this.getUser(userId);
+    if (!user) throw new Error("NOT_LINKED");
+
+    await apiCall(
+      {
+        method:     "track.love",
+        api_key:    this.apiKey,
+        sk:         user.sessionKey,
+        artist,
+        track,
+      },
+      this.apiSecret,
+      true
+    );
+  }
+
+  /**
+   * Unlove a track on Last.fm for the given user.
+   * @param {string} userId - The Fluxer user ID
+   * @param {string} artist - Track artist
+   * @param {string} track - Track name
+   */
+  async unloveTrack(userId, artist, track) {
+    if (!this.enabled) return;
+    const user = await this.getUser(userId);
+    if (!user) throw new Error("NOT_LINKED");
+
+    await apiCall(
+      {
+        method:     "track.unlove",
+        api_key:    this.apiKey,
+        sk:         user.sessionKey,
+        artist,
+        track,
+      },
+      this.apiSecret,
+      true
+    );
   }
 
   /**
@@ -645,6 +685,39 @@ export class LastFmManager {
   }
 
   /**
+   * Get similar tracks from Last.fm for a given track.
+   * @param {string} artist
+   * @param {string} track
+   * @param {number} [limit=5]
+   * @returns {Promise<Array<{ artist: string, name: string, url: string, match: number }>>}
+   */
+  async getSimilarTracks(artist, track, limit = 5) {
+    if (!this.enabled) return [];
+
+    try {
+      const data = await apiCall(
+        {
+          method:   "track.getsimilar",
+          api_key:  this.apiKey,
+          artist,
+          track,
+          limit,
+        },
+        this.apiSecret
+      );
+
+      return (data.similartracks?.track ?? []).map(t => ({
+        artist: t.artist?.name ?? "Unknown",
+        name:   t.name,
+        url:    t.url ?? "",
+        match:  parseFloat(t.match ?? 0),
+      })).filter(t => t.match > 0.1);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Parse a Last.fm music URL and extract artist and track info.
    * Supports:
    *   https:
@@ -716,7 +789,6 @@ export class LastFmManager {
 
     return data.user;
   }
-
 
   /**
    * Get a list of the user's Last.fm playlists by scraping their profile page.
@@ -893,6 +965,35 @@ export class LastFmManager {
     }));
   }
 
+  /**
+   * Get the user's top artists.
+   * @param {string} userId
+   * @param {string} [period="overall"] - overall | 7day | 1month | 3month | 6month | 12month
+   * @param {number} [limit=15]
+   * @returns {Promise<Array<{ name: string, url: string, playcount: number, image: string }>>}
+   */
+  async getTopArtists(userId, period = "overall", limit = 15) {
+    const user = await this.getUser(userId);
+    if (!user) throw new Error("NOT_LINKED");
+
+    const data = await apiCall(
+      {
+        method:   "user.gettopartists",
+        api_key:  this.apiKey,
+        user:     user.username,
+        period,
+        limit,
+      },
+      this.apiSecret
+    );
+
+    return (data.topartists?.artist ?? []).map(a => ({
+      name:      a.name,
+      url:       a.url ?? "",
+      playcount: a.playcount ?? 0,
+      image:     a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
+    }));
+  }
 
   /**
    * Fetch tracks from Last.fm by category and return search queries
@@ -955,7 +1056,6 @@ export class LastFmManager {
       })),
     };
   }
-
 
   /**
    * Get the total lifetime scrobbles across ALL linked Last.fm users.
@@ -1103,7 +1203,6 @@ export class LastFmManager {
       return 0;
     }
   }
-
 
   _assertEnabled() {
     if (!this.enabled) throw new Error("Last.fm integration is not configured (missing apiKey/apiSecret).");

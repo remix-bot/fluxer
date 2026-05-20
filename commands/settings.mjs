@@ -29,7 +29,6 @@ function richEmbed(fields, opts = {}) {
   return { embeds: [raw] };
 }
 
-
 const SHORTCUTS = {
   prefix: "prefix",
   pfx:    "prefix",
@@ -50,7 +49,6 @@ let VALID_LOCALES = new Set(["en"]);
 const VOLUME_MIN = 1;
 const VOLUME_MAX = 200;
 const MAX_247_CHANNELS = 10;
-
 
 /** Extract clean numeric channel ID from any format */
 function cleanId(raw) {
@@ -98,7 +96,6 @@ function getGuildId(message) {
 function getGuildName(message) {
   return message.message?.guild?.name ?? message.channel?.guild?.name ?? "this server";
 }
-
 
 /**
  * Get the 24/7 mode for a specific channel.
@@ -521,7 +518,6 @@ async function handle247(ctx, message, value) {
   }
 }
 
-
 /**
  * Validate and save a setting value.
  * @returns {string|null} Error message string, or null on success.
@@ -582,7 +578,6 @@ async function applySet(ctx, message, set, key, rawValue) {
   return null;
 }
 
-
 async function handleShortcut(ctx, message, settingKey, valueTokens) {
   const set = ctx.getSettings(message);
 
@@ -604,7 +599,6 @@ async function handleShortcut(ctx, message, settingKey, valueTokens) {
     return message.reply(embed(ctx.t(message, "responses.settings.setSuccess", { label: settingKey, value: displayValue(settingKey, val) })));
   }
 }
-
 
 export const command = function() {
   if (this.locale) {
@@ -701,7 +695,6 @@ export const command = function() {
               )
       );
 };
-
 
 export async function run(message, data) {
   const set = this.getSettings(message);

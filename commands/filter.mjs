@@ -368,23 +368,7 @@ export async function run(msg) {
     const filter = FILTERS.find(f => f.emoji === emoji);
     if (!filter) return;
 
-    const track = player.queue.getCurrent();
     const previousActiveKeys = [...activeKeys];
-    if (!track && false) {
-      await menuMsg.edit({
-        embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, null)]
-      }).catch(() => {});
-      const errEmbed = new EmbedBuilder()
-          .setColor(getGlobalColor())
-          .setDescription(this.t(msg, "responses.filter.nothingPlaying"))
-          ;
-      await menuMsg.edit({ embeds: [errEmbed] }).catch(() => {});
-      await Utils.sleep(1000);
-      await menuMsg.edit({
-        embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, null)]
-      }).catch(() => {});
-      return;
-    }
 
     if (filter.key === "off") {
       activeKeys = [];

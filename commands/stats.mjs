@@ -9,7 +9,6 @@ export const command = new CommandBuilder()
     .addAliases("info")
     .setCategory("util");
 
-
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 let cachedUserCount = null;
@@ -96,7 +95,6 @@ function getLivePlayerCount(playerMap) {
   return live;
 }
 
-
 let cachedGuildCount    = null;
 let guildCacheExpiresAt = 0;
 
@@ -130,7 +128,6 @@ async function getGuildCount(client) {
     return Object.keys(client.guilds ?? {}).length;
   }
 }
-
 
 function buildEmbed(t, msg, { guildCount, userCount, playerCount, scrobbleCount, linkedUsers, ping, uptime, comHash, comLink, reason, footer, loading, lastfmEnabled }) {
   const num = (v) => Utils.formatNumber(v);
@@ -168,7 +165,6 @@ function buildEmbed(t, msg, { guildCount, userCount, playerCount, scrobbleCount,
   if (typeof builder.setTimestamp === "function") builder.setTimestamp();
   return builder;
 }
-
 
 export async function run(message) {
   const lastfm        = this.lastfm;

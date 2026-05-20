@@ -84,7 +84,6 @@ function isIgnorableMediaStateError(err) {
   return msg.includes("InvalidState") || msg.includes("failed to capture frame") || msg.includes("capture frame");
 }
 
-
 class PlayerWorkerPool {
   constructor(size, workerPath, nlConfig = {}) {
     this._size       = size;
@@ -194,7 +193,6 @@ class PlayerWorkerPool {
   }
 }
 
-
 export class Queue extends EventEmitter {
   data = [];
   current = null;
@@ -292,7 +290,6 @@ export class Queue extends EventEmitter {
   }
 }
 
-
 export default class Player extends EventEmitter {
   /** @type {import("revoice.js").VoiceConnection|null} */
   connection        = null;
@@ -325,10 +322,15 @@ export default class Player extends EventEmitter {
 
   _streamingStopped    = false;
   _skipping            = false;
+  _seeking             = false;
   _currentPassthrough  = null;
   _wasRadio            = false;
   _radioAnnounced      = false;
   _queueEndedSent      = false;
+  _lastPlayedTrack     = null;
+
+  _autoplay            = false;
+  _autoplayHandler     = null;
 
   activeFilter         = null;
   activeFilterPayload  = null;
@@ -394,7 +396,6 @@ export default class Player extends EventEmitter {
       }
     }
   }
-
 
   /**
    * Check if 24/7 mode is enabled for this player's channel.
@@ -465,7 +466,6 @@ export default class Player extends EventEmitter {
     return null;
   }
 
-
   _restoreVolume() {
     if (!this._guildId) return;
     let savedVol = null;
@@ -490,7 +490,6 @@ export default class Player extends EventEmitter {
       }
     }
   }
-
 
   _hasHumansInChannel() {
     if (!this._channelId || !this._guildId) return false;
@@ -605,7 +604,6 @@ export default class Player extends EventEmitter {
     }
   }
 
-
   async _ensureMediaPlayer() {
     if (this._destroyed) return false;
     if (!this.connection) return false;
@@ -625,7 +623,12 @@ export default class Player extends EventEmitter {
         return true;
       }
       logger.mediaplayer("[Player] Existing MediaPlayer unhealthy, cleaning up...");
-      try { await this._mediaPlayer.stop(); } catch (_) {}
+      try {
+        if (this._mediaPlayer.fProc) {
+          try { this._mediaPlayer.fProc.removeAllListeners(); } catch (_) {}
+        }
+        await this._mediaPlayer.stop();
+      } catch (_) {}
       this._mediaPlayer = null;
     }
 
@@ -647,7 +650,7 @@ export default class Player extends EventEmitter {
         if (mp.source && typeof mp.source.captureFrame === "function") {
           const _orig = mp.source.captureFrame.bind(mp.source);
           mp.source.captureFrame = async (frame) => {
-            if (this._streamingStopped || this._skipping || this.leaving || this._destroyed) {
+            if (this._streamingStopped || this._skipping || this._seeking || this.leaving || this._destroyed) {
               return;
             }
             try {
@@ -708,18 +711,24 @@ export default class Player extends EventEmitter {
 
     if (this._mediaPlayer) {
       try {
-        if (this._mediaPlayer.fProc && !this._mediaPlayer.ffmpegFinished) {
-          try { this._mediaPlayer.fProc.kill("SIGKILL"); } catch (_) {}
+        if (this._mediaPlayer.fProc) {
+          try { this._mediaPlayer.fProc.removeAllListeners(); } catch (_) {}
         }
+
         await this._mediaPlayer.stop();
       } catch (e) {
         logger.error("[Player] Error stopping media player:", e.message);
       }
 
+      try {
+        if (this._mediaPlayer?.fProc && !this._mediaPlayer.ffmpegFinished) {
+          try { this._mediaPlayer.fProc.kill("SIGKILL"); } catch (_) {}
+        }
+      } catch (_) {}
+
       this._mediaPlayer = null;
     }
   }
-
 
   async _request(url, options = {}, returnStream = false) {
     return new Promise((resolve, reject) => {
@@ -814,7 +823,6 @@ export default class Player extends EventEmitter {
     return elapsedMs / totalMs >= 0.85 || remainingMs <= 15_000;
   }
 
-
   async _streamViaRevoice(url, inputOptions = []) {
     if (this._streamingStopped) return;
 
@@ -839,7 +847,7 @@ export default class Player extends EventEmitter {
       await new Promise((resolve, reject) => {
         audioStream.on("error", (e) => {
           cleanup();
-          if (this._streamingStopped || this._skipping) return resolve();
+          if (this._streamingStopped || this._skipping || this._seeking) return resolve();
           const graceful = ["aborted", "ECONNRESET", "ERR_STREAM_DESTROYED", "ENOTFOUND", "ETIMEDOUT", "ECONNREFUSED"];
           if (graceful.some(g => e.code === g || e.message?.includes(g))) {
             if (this._didTrackMostlyFinish(currentTrack)) return resolve();
@@ -869,13 +877,13 @@ export default class Player extends EventEmitter {
               return resolve();
             }
             cleanup();
-            if (this._streamingStopped || this._skipping) return resolve();
+            if (this._streamingStopped || this._skipping || this._seeking) return resolve();
             return reject(new Error(`FFmpeg stream ended early: ${ffMsg}`));
           }
 
           logger.error("[Player] FFmpeg error:", ffMsg);
           cleanup();
-          if (this._streamingStopped || this._skipping) return resolve();
+          if (this._streamingStopped || this._skipping || this._seeking) return resolve();
           reject(new Error(`FFmpeg: ${ffMsg}`));
         };
 
@@ -883,7 +891,7 @@ export default class Player extends EventEmitter {
           const playResult = this._mediaPlayer.playStream(audioStream, inputOptions);
           if (playResult && typeof playResult.catch === "function") {
             playResult.catch((e) => {
-              if (isIgnorableMediaStateError(e) || this._streamingStopped || this._skipping || this.leaving) {
+              if (isIgnorableMediaStateError(e) || this._streamingStopped || this._skipping || this._seeking || this.leaving) {
                 logger.mediaplayer("[Player] Suppressed async playStream InvalidState rejection");
                 cleanup();
                 resolve();
@@ -977,7 +985,6 @@ export default class Player extends EventEmitter {
       throw new Error(sanitizeError(err.message, this._nl));
     }
   }
-
 
   async join(channelId) {
     if (this._destroyed) return;
@@ -1259,6 +1266,11 @@ export default class Player extends EventEmitter {
       this._paused     = false;
       this._pausedAt   = null;
       this._playingNext = false;
+      this._autoplay = false;
+      if (this._autoplayHandler) {
+        this.removeListener("queueEnd", this._autoplayHandler);
+        this._autoplayHandler = null;
+      }
       this.leaving     = false;
     } catch (e) {
       logger.error("[Player] leave error:", e.message);
@@ -1280,6 +1292,11 @@ export default class Player extends EventEmitter {
       this.leaving          = true;
       this._streamingStopped = true;
       this._stopInactivityTimer();
+      this._autoplay = false;
+      if (this._autoplayHandler) {
+        this.removeListener("queueEnd", this._autoplayHandler);
+        this._autoplayHandler = null;
+      }
       this.searches.clear();
 
       if (this._workerPool) {
@@ -1308,7 +1325,6 @@ export default class Player extends EventEmitter {
       logger.error("[Player] destroy error:", e.message);
     }
   }
-
 
   get paused() { return this._paused; }
 
@@ -1346,20 +1362,24 @@ export default class Player extends EventEmitter {
   skip() {
     if (!this.connection || !this.queue.getCurrent())
       return ":negative_squared_cross_mark: There's nothing playing at the moment!";
+    this._lastPlayedTrack = this.queue.getCurrent();
     this._skipping       = true;
     this._radioAnnounced = false;
     this.queue.current   = null;
 
     if (this.queue.isEmpty() && !this._wasRadio && !this._queueEndedSent) {
       this._queueEndedSent = true;
-      const prefix = (() => {
-        try {
-          return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
-              ?? this.settings?.get?.("prefix")
-              ?? "%";
-        } catch (_) { return "%"; }
-      })();
-      this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
+      this.emit("queueEnd");
+      if (!this._autoplay) {
+        const prefix = (() => {
+          try {
+            return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
+                ?? this.settings?.get?.("prefix")
+                ?? "%";
+          } catch (_) { return "%"; }
+        })();
+        this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
+      }
     }
 
     this._stopMediaPlayer().then(() => {
@@ -1385,20 +1405,24 @@ export default class Player extends EventEmitter {
     const idx = position - 1;
     if (idx < 0 || idx >= this.queue.size())
       return `:negative_squared_cross_mark: Position ${position} out of range (queue has ${this.queue.size()} tracks).`;
+    this._lastPlayedTrack = this.queue.getCurrent();
     this.queue.data.splice(0, idx);
     this.queue.current = null;
     this._skipping     = true;
 
     if (this.queue.isEmpty() && !this._wasRadio && !this._queueEndedSent) {
       this._queueEndedSent = true;
-      const prefix = (() => {
-        try {
-          return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
-              ?? this.settings?.get?.("prefix")
-              ?? "%";
-        } catch (_) { return "%"; }
-      })();
-      this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
+      this.emit("queueEnd");
+      if (!this._autoplay) {
+        const prefix = (() => {
+          try {
+            return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
+                ?? this.settings?.get?.("prefix")
+                ?? "%";
+          } catch (_) { return "%"; }
+        })();
+        this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
+      }
     }
 
     this._stopMediaPlayer().then(() => {
@@ -1418,7 +1442,6 @@ export default class Player extends EventEmitter {
     return `:track_next: Skipped to position ${position}`;
   }
 
-
   setVolume(v) {
     this.preferredVolume = Utils.clamp(v, 0, 2);
     this.emit("volume", this.preferredVolume);
@@ -1428,6 +1451,75 @@ export default class Player extends EventEmitter {
     return `Volume changed to \`${Math.round(this.preferredVolume * 100)}%\`.`;
   }
 
+  /**
+   * Seek to a specific position (in milliseconds) in the currently playing track.
+   *
+   * 1. Sends a PATCH to the NodeLink REST API so the session state is aware
+   *    of the new position.
+   * 2. Adjusts `startedPlaying` so that elapsed-time calculations remain
+   *    consistent after the seek.
+   * 3. Restarts the audio stream from the new position (re-uses the
+   *    `_replayWithFilters` path so active filters are preserved).
+   *
+   * @param {number} ms  Position in milliseconds to seek to.
+   * @returns {Promise<boolean>}  true if the seek succeeded, false if the
+   *          node doesn't support it or no session is available.
+   */
+  async seekToPosition(ms) {
+    const guildId = this._guildId;
+    if (!guildId) return false;
+
+    const current = this.queue.getCurrent();
+    if (!current?.encoded) return false;
+
+    const liveSessionId = this._moonlink?.getLiveSessionId?.() ?? this._moonlink?.sessionId ?? this._nl.sessionId;
+    if (!liveSessionId) return false;
+
+    const { host, port } = this._nl;
+    const url = `http://${host}:${port}/v4/sessions/${liveSessionId}/players/${guildId}`;
+    const body = JSON.stringify({ position: ms });
+
+    this._seeking = true;
+
+    try {
+      await this._request(url, {
+        method: "PATCH",
+        headers: {
+          "Content-Type":  "application/json",
+          "Content-Length": Buffer.byteLength(body),
+        },
+        body,
+      });
+
+      if (liveSessionId !== this._nl.sessionId) {
+        this._nl.sessionId = liveSessionId;
+        logger.moonlink(`[Player] Synced session ID after seek: ${liveSessionId}`);
+      }
+
+      this.startedPlaying = Date.now() - ms;
+      logger.player(`[Player] Seeked to ${ms}ms — adjusted startedPlaying`);
+
+      if (this.connection && !this.leaving && !this._streamingStopped) {
+        this._replayWithFilters(ms).catch((e) => {
+          logger.warn("[Player] Seek replay failed (non-fatal):", e.message);
+        });
+      }
+
+      await Utils.sleep(500);
+      this._seeking = false;
+
+      return true;
+    } catch (e) {
+      this._seeking = false;
+      const errMsg = e?.message ?? "";
+      if (errMsg.includes("HTTP 404") || errMsg.includes("HTTP 405")) {
+        logger.warn("[Player] Seek not supported by audio node:", errMsg);
+        return false;
+      }
+      logger.error("[Player] Seek request failed:", errMsg);
+      throw new Error(sanitizeError(errMsg, this._nl));
+    }
+  }
 
   async applyFilter(filterPayload, meta = null) {
     const guildId = this._guildId;
@@ -1473,9 +1565,11 @@ export default class Player extends EventEmitter {
         const elapsed = this.startedPlaying ? (Date.now() - this.startedPlaying) : 0;
         const positionMs = Math.max(0, elapsed);
         logger.player(`[Player] Filter applied — restarting stream from ${positionMs}ms`);
+        this._seeking = true;
         this._replayWithFilters(positionMs).catch((e) => {
           logger.warn("[Player] Filter replay failed (non-fatal):", e.message);
         });
+        setTimeout(() => { this._seeking = false; }, 500);
       }
 
       return { ok: true };
@@ -1519,8 +1613,26 @@ export default class Player extends EventEmitter {
     } catch (e) {
       logger.warn("[Player] _replayWithFilters stream error:", e.message);
     }
-  }
 
+    if (!this.leaving && !this._skipping && !this._seeking && !this._paused) {
+      const current = this.queue.getCurrent();
+      if (current?.type === "radio") {
+        logger.player("[Player] Radio stream ended after replay");
+        this._lastPlayedTrack = current;
+        this.queue.current = null;
+        this._streamingStopped = true;
+        this.emit("stopplay");
+        if (!this._is247Enabled()) {
+          this._startInactivityTimer();
+        }
+      } else {
+        this._lastPlayedTrack = current;
+        if (!this.queue.songLoop) this.queue.current = null;
+        this._streamingStopped = false;
+        this.playNext().catch(e => logger.error("[Player] post-replay playNext error:", e.message));
+      }
+    }
+  }
 
   isEmpty()           { return this.queue.isEmpty(); }
 
@@ -1589,10 +1701,15 @@ export default class Player extends EventEmitter {
     return msg;
   }
 
-
   _createProgressBar(length = 15) {
     const current = this.queue.getCurrent();
-    if (!current?.duration || !this.startedPlaying) return Utils.progressBar(0, 1, length);
+    if (!current?.duration || !this.startedPlaying) {
+      const total = this._getTrackDurationMs(current);
+      if (total > 0) {
+        return `${Utils.progressBar(0, total, length)} \`0:00 / ${Utils.prettifyMS(total)}\``;
+      }
+      return Utils.progressBar(0, 1, length);
+    }
 
     const totalMs = this._getTrackDurationMs(current);
     let elapsed = Date.now() - this.startedPlaying;
@@ -1693,36 +1810,43 @@ export default class Player extends EventEmitter {
     const current = this.queue.getCurrent();
     if (!current) return { msg: "There's nothing playing at the moment." };
 
-    const loopqueue = this.queue.loop     ? "**enabled**" : "**disabled**";
-    const songloop  = this.queue.songLoop ? "**enabled**" : "**disabled**";
+    const loopqueue = this.queue.loop     ? "🔄" : "⏹️";
+    const songloop  = this.queue.songLoop ? "🔂" : "⏹️";
     const vol       = `${Math.round((this.preferredVolume || 1) * 100)}%`;
+    const autoplay  = this._autoplay ? "🔁" : "⏹️";
 
-    const vcLine = this._channelId ? `🔊 **Now playing in:** <#${this._channelId}>\n\n` : "";
+    const vcLine = this._channelId ? `🔊 <#${this._channelId}>\n` : "";
 
     if (current.type === "radio") {
       try {
         const data = await meta(current.url);
         return {
-          msg: `${vcLine}📻 Streaming **[${current.title}](${current.author?.url || current.url})**\n\n${current.description || ""}\n\nCurrent song: ${data?.title || "Unknown"}\n\nVolume: ${vol}\n\nQueue loop: ${loopqueue}\nSong loop: ${songloop}`,
+          msg: `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n${current.description || ""}\n\n🎵 Now playing: ${data?.title || "Unknown"}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`,
           image: current.thumbnail
         };
       } catch {
         return {
-          msg: `${vcLine}📻 Streaming **[${current.title}](${current.author?.url || current.url})**\n\nVolume: ${vol}\n\nQueue loop: ${loopqueue}\nSong loop: ${songloop}`,
+          msg: `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`,
           image: current.thumbnail
         };
       }
     }
 
     if (current.type === "external") {
+      const totalMs = this._getTrackDurationMs(current);
+      let progressLine = "";
+      if (totalMs > 0) {
+        progressLine = `\n${this._createProgressBar(20)}`;
+      }
       return {
-        msg: `${vcLine}Playing **[${current.title}](${current.url}) by [${current.artist || "Unknown"}](${current.author?.url || ""})**\n\nVolume: ${vol}\n\nQueue loop: ${loopqueue}\nSong loop: ${songloop}`,
+        msg: `${vcLine}🎵 **[${current.title}](${current.url})** by ${current.artist || "Unknown"}${progressLine}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`,
         image: current.thumbnail
       };
     }
 
+    const progressBar = this._createProgressBar(20);
     return {
-      msg: `${vcLine}🎵 Playing: **[${current.title}](${current.spotifyUrl || current.url})** (${this.getCurrentElapsedDuration()}/${this.getCurrentDuration()})\n\nVolume: ${vol}\n\nQueue loop: ${loopqueue}\nSong loop: ${songloop}`,
+      msg: `${vcLine}🎵 **[${current.title}](${current.spotifyUrl || current.url})**\n${progressBar}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`,
       image: current.thumbnail
     };
   }
@@ -1778,7 +1902,6 @@ export default class Player extends EventEmitter {
     })));
   }
 
-
   _workerPool = null;
 
   _getWorkerPool() {
@@ -1805,7 +1928,6 @@ export default class Player extends EventEmitter {
         "Worker timeout after 60s"
     );
   }
-
 
   async fetchResults(query, id, provider = "ytm") {
     try {
@@ -1892,7 +2014,6 @@ export default class Player extends EventEmitter {
     return events;
   }
 
-
   _buildRadioTrack(radio) {
     return {
       type:        "radio",
@@ -1935,7 +2056,6 @@ export default class Player extends EventEmitter {
     if (!this.leaving) this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
   }
 
-
   async playNext() {
     if (this._playingNext) return;
     this._playingNext = true;
@@ -1954,15 +2074,21 @@ export default class Player extends EventEmitter {
 
     if (this._mediaPlayer) {
       try {
+        if (this._mediaPlayer.fProc) {
+          try { this._mediaPlayer.fProc.removeAllListeners(); } catch (_) {}
+        }
         await this._mediaPlayer.stop();
       } catch (_) {}
     }
 
     this._streamingStopped = false;
 
+    const currentBeforeNext = this.queue.getCurrent();
+    if (currentBeforeNext) this._lastPlayedTrack = currentBeforeNext;
     const songData = this.queue.next();
     if (!songData) {
       this.emit("stopplay");
+      this.emit("queueEnd");
 
       if (!this._is247Enabled()) {
         this._startInactivityTimer();
@@ -1970,7 +2096,7 @@ export default class Player extends EventEmitter {
         logger.voice247("[Player] 24/7 enabled, staying in channel");
       }
 
-      if (!this._wasRadio && !this._queueEndedSent) {
+      if (!this._wasRadio && !this._queueEndedSent && !this._autoplay) {
         this._queueEndedSent = true;
         const prefix = (() => {
           try {
@@ -2105,9 +2231,10 @@ export default class Player extends EventEmitter {
       }
     }
 
-    if (!this.leaving && !this._skipping) {
+    if (!this.leaving && !this._skipping && !this._seeking) {
       if (songData.type === "radio") {
         logger.player(`[Player] Radio stream ended: ${songData.title}`);
+        this._lastPlayedTrack = this.queue.getCurrent() ?? songData;
         this.queue.current = null;
         this._streamingStopped = true;
         this.emit("stopplay");
@@ -2117,6 +2244,7 @@ export default class Player extends EventEmitter {
         return;
       } else {
         if (!this._paused) {
+          this._lastPlayedTrack = this.queue.getCurrent() ?? songData;
           if (!this.queue.songLoop) this.queue.current = null;
           this._streamingStopped = false;
           return this._doPlayNext();
@@ -2124,8 +2252,8 @@ export default class Player extends EventEmitter {
       }
     }
     this._skipping = false;
+    if (this._seeking) this._seeking = false;
   }
-
 
   async lyrics() {
     const current = this.queue.getCurrent();

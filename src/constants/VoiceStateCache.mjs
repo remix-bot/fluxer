@@ -46,7 +46,6 @@ export class VoiceStateCache {
     this._lruBotKeys = [];
   }
 
-
   /** Build composite key "guildId:userId" (both cleaned to digits only) */
   static userKey(guildId, userId) {
     return `${String(guildId ?? "").replace(/\D/g, "")}:${String(userId ?? "").replace(/\D/g, "")}`;
@@ -56,7 +55,6 @@ export class VoiceStateCache {
   static channelKey(guildId, channelId) {
     return `${String(guildId ?? "").replace(/\D/g, "")}:${String(channelId ?? "").replace(/\D/g, "")}`;
   }
-
 
   /**
    * Update voice state for a user.
@@ -129,7 +127,6 @@ export class VoiceStateCache {
       if (idx !== -1) lruKeys.splice(idx, 1);
     }
   }
-
 
   /**
    * Check if there are any human users in a specific channel.
@@ -223,7 +220,6 @@ export class VoiceStateCache {
     if (locations.has(uKey)) return;
     this.updateUser({ guildId, userId, channelId, isBot });
   }
-
 
   /**
    * Remove all entries for a specific guild (used on GuildDelete).
@@ -330,7 +326,6 @@ export class VoiceStateCache {
       }
     }
   }
-
 
   /**
    * Get the "observedVoiceUsers" size (human count).
@@ -480,7 +475,6 @@ export class VoiceStateCache {
     return this.botLocations.has(compositeKey);
   }
 
-
   /**
    * Default iterator — iterates human users.
    * Yields [userId, {channelId, guildId}] — same shape as old observedVoiceUsers Map.
@@ -607,7 +601,6 @@ export class VoiceStateCache {
       yield info;
     }
   }
-
 
   get stats() {
     return {
