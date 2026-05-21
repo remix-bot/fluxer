@@ -2281,19 +2281,7 @@ export default class Player extends EventEmitter {
       const remainingMs = trackOptMatch.endMs - elapsedMs;
       if (remainingMs > 0) {
         const match = trackOptMatch;
-        this._trackEndTimer = setTimeout(() => {
-          if (this._destroyed || this.leaving || !this._activeTrackOpt) return;
-          logger.player(`[Player] TrackOptions: end time reached (${match.endMs}ms), skipping track`);
-          this._activeTrackOpt = null;
-          this._trackEndTimer = null;
-          this._trackEndRemainingMs = null;
-          this._skipping = true;
-          this._stopMediaPlayer().then(() => {
-            this._doPlayNext();
-          }).catch(() => {
-            this._doPlayNext();
-          });
-        }, remainingMs);
+        this._trackEndTimer = setTimeout(() => this._onTrackEndTimeReached(match), remainingMs);
       }
     }
 
@@ -2338,6 +2326,24 @@ export default class Player extends EventEmitter {
   _trackEndTimer = null;
   _trackEndRemainingMs = null;
 
+  _onTrackEndTimeReached(match) {
+    if (this._destroyed || this.leaving || !this._activeTrackOpt) return;
+    logger.player(`[Player] TrackOptions: end time reached (${match.endMs}ms), skipping track`);
+    this._activeTrackOpt = null;
+    this._trackEndTimer = null;
+    this._trackEndRemainingMs = null;
+    if (this.queue.isEmpty()) {
+      logger.player("[Player] TrackOptions: queue empty after end time — letting track continue");
+      return;
+    }
+    this._skipping = true;
+    this._stopMediaPlayer().then(() => {
+      this._doPlayNext();
+    }).catch(() => {
+      this._doPlayNext();
+    });
+  }
+
   _clearTrackEndTimer() {
     if (this._trackEndTimer) {
       clearTimeout(this._trackEndTimer);
@@ -2361,19 +2367,7 @@ export default class Player extends EventEmitter {
     }
     const remainingMs = this._trackEndRemainingMs;
     const match = this._activeTrackOpt;
-    this._trackEndTimer = setTimeout(() => {
-      if (this._destroyed || this.leaving || !this._activeTrackOpt) return;
-      logger.player(`[Player] TrackOptions: end time reached (${match.endMs}ms), skipping track`);
-      this._activeTrackOpt = null;
-      this._trackEndTimer = null;
-      this._trackEndRemainingMs = null;
-      this._skipping = true;
-      this._stopMediaPlayer().then(() => {
-        this._doPlayNext();
-      }).catch(() => {
-        this._doPlayNext();
-      });
-    }, remainingMs);
+    this._trackEndTimer = setTimeout(() => this._onTrackEndTimeReached(match), remainingMs);
     this._trackEndRemainingMs = null;
   }
 
@@ -2383,29 +2377,11 @@ export default class Player extends EventEmitter {
     const elapsedMs = Date.now() - this.startedPlaying;
     const remainingMs = this._activeTrackOpt.endMs - elapsedMs;
     if (remainingMs <= 0) {
-      this._activeTrackOpt = null;
-      this._skipping = true;
-      this._stopMediaPlayer().then(() => {
-        this._doPlayNext();
-      }).catch(() => {
-        this._doPlayNext();
-      });
+      this._onTrackEndTimeReached(this._activeTrackOpt);
       return;
     }
     const match = this._activeTrackOpt;
-    this._trackEndTimer = setTimeout(() => {
-      if (this._destroyed || this.leaving || !this._activeTrackOpt) return;
-      logger.player(`[Player] TrackOptions: end time reached (${match.endMs}ms), skipping track`);
-      this._activeTrackOpt = null;
-      this._trackEndTimer = null;
-      this._trackEndRemainingMs = null;
-      this._skipping = true;
-      this._stopMediaPlayer().then(() => {
-        this._doPlayNext();
-      }).catch(() => {
-        this._doPlayNext();
-      });
-    }, remainingMs);
+    this._trackEndTimer = setTimeout(() => this._onTrackEndTimeReached(match), remainingMs);
   }
 
   async _lookupTrackOptions(songData) {
@@ -2486,19 +2462,7 @@ export default class Player extends EventEmitter {
       const remainingMs = match.endMs - elapsedMs;
       if (remainingMs > 0) {
         this._activeTrackOpt = match;
-        this._trackEndTimer = setTimeout(() => {
-          if (this._destroyed || this.leaving || !this._activeTrackOpt) return;
-          logger.player(`[Player] TrackOptions: end time reached (${match.endMs}ms), skipping track`);
-          this._activeTrackOpt = null;
-          this._trackEndTimer = null;
-          this._trackEndRemainingMs = null;
-          this._skipping = true;
-          this._stopMediaPlayer().then(() => {
-            this._doPlayNext();
-          }).catch(() => {
-            this._doPlayNext();
-          });
-        }, remainingMs);
+        this._trackEndTimer = setTimeout(() => this._onTrackEndTimeReached(match), remainingMs);
       }
     } else {
       this._activeTrackOpt = match;
