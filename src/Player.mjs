@@ -33,6 +33,16 @@ function mkEmbed(desc) {
   return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] };
 }
 
+function formatMsHelper(ms) {
+  if (ms == null || ms < 0) return "0:00";
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 /** NodeLink default password — centralised so it doesn't need to be hardcoded in two places. */
 const NL_DEFAULT_PASSWORD = "youshallnotpass";
 
@@ -362,6 +372,8 @@ export default class Player extends EventEmitter {
     this._observedVoiceUsers = opts.observedVoiceUsers ?? null;
     this._voiceCache          = opts.voiceCache ?? null;
     this.locale       = opts.locale ?? null;
+    this.trackOptions = opts.trackOptions ?? null;
+    this._activeTrackOpt = null;
 
     this._nl = {
       ...this._nl,
@@ -1242,6 +1254,8 @@ export default class Player extends EventEmitter {
       this.leaving = true;
       this._stopInactivityTimer();
       this._streamingStopped = true;
+      this._clearTrackEndTimer();
+      this._activeTrackOpt = null;
 
       if (this._mediaPlayer) {
         this._mediaPlayer.destroy();
@@ -1283,6 +1297,9 @@ export default class Player extends EventEmitter {
   destroy() {
     if (this._destroyed) return;
     this._destroyed = true;
+
+    this._clearTrackEndTimer();
+    this._activeTrackOpt = null;
 
     try {
       if (this._moonlink && this._onMoonlinkReady) {
@@ -1336,6 +1353,7 @@ export default class Player extends EventEmitter {
     this._paused = true;
     this._pausedAt = Date.now();
     this._mediaPlayer?.pause();
+    this._pauseTrackEndTimer();
     this.emit("playback", false);
     this._stopInactivityTimer();
     return ":pause_button: Paused";
@@ -1354,6 +1372,7 @@ export default class Player extends EventEmitter {
     this._paused = false;
     this._pausedAt = null;
     this._mediaPlayer?.resume();
+    this._resumeTrackEndTimer();
     this.emit("playback", true);
     this._stopInactivityTimer();
     return ":arrow_forward: Resumed";
@@ -1365,6 +1384,8 @@ export default class Player extends EventEmitter {
     this._lastPlayedTrack = this.queue.getCurrent();
     this._skipping       = true;
     this._radioAnnounced = false;
+    this._activeTrackOpt = null;
+    this._clearTrackEndTimer();
     this.queue.current   = null;
 
     if (this.queue.isEmpty() && !this._wasRadio && !this._queueEndedSent) {
@@ -1499,6 +1520,8 @@ export default class Player extends EventEmitter {
       this.startedPlaying = Date.now() - ms;
       logger.player(`[Player] Seeked to ${ms}ms — adjusted startedPlaying`);
 
+      this._recalcTrackEndTimer();
+
       if (this.connection && !this.leaving && !this._streamingStopped) {
         this._replayWithFilters(ms).catch((e) => {
           logger.warn("[Player] Seek replay failed (non-fatal):", e.message);
@@ -1629,6 +1652,8 @@ export default class Player extends EventEmitter {
         this._lastPlayedTrack = current;
         if (!this.queue.songLoop) this.queue.current = null;
         this._streamingStopped = false;
+        this._clearTrackEndTimer();
+        this._activeTrackOpt = null;
         this.playNext().catch(e => logger.error("[Player] post-replay playNext error:", e.message));
       }
     }
@@ -1845,8 +1870,14 @@ export default class Player extends EventEmitter {
     }
 
     const progressBar = this._createProgressBar(20);
+    let trackOptLine = "";
+    if (this._activeTrackOpt) {
+      const optStart = formatMsHelper(this._activeTrackOpt.startMs);
+      const optEnd = this._activeTrackOpt.endMs > 0 ? formatMsHelper(this._activeTrackOpt.endMs) : "end";
+      trackOptLine = `\n✂️ Custom: ${optStart} → ${optEnd}`;
+    }
     return {
-      msg: `${vcLine}🎵 **[${current.title}](${current.spotifyUrl || current.url})**\n${progressBar}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`,
+      msg: `${vcLine}🎵 **[${current.title}](${current.spotifyUrl || current.url})**\n${progressBar}${trackOptLine}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`,
       image: current.thumbnail
     };
   }
@@ -2164,6 +2195,7 @@ export default class Player extends EventEmitter {
     if (!this.connection || this.leaving) return;
 
     let streamUrl = null;
+    let startOffsetMs = 0;
 
     if (songData.type === "radio" || songData.type === "external") {
       streamUrl = songData.url;
@@ -2206,9 +2238,28 @@ export default class Player extends EventEmitter {
       return;
     }
 
+    this._activeTrackOpt  = null;
+    this._clearTrackEndTimer();
+
+    let trackOptMatch = null;
+    try {
+      trackOptMatch = await this._lookupTrackOptions(songData);
+    } catch (e) {
+      logger.warn("[Player] TrackOptions lookup error:", e.message);
+    }
+
+    if (trackOptMatch) {
+      this._activeTrackOpt = trackOptMatch;
+      if (trackOptMatch.startMs > 0 && songData.encoded && streamUrl.includes("/v4/loadstream")) {
+        startOffsetMs = trackOptMatch.startMs;
+        streamUrl = streamUrl.replace(/position=\d+/, `position=${startOffsetMs}`);
+        logger.player(`[Player] TrackOptions: starting from ${startOffsetMs}ms via loadstream position param`);
+      }
+    }
+
     logger.player(`[Player:${this._guildId}] Streaming: ${songData.title}`);
 
-    this.startedPlaying   = Date.now();
+    this.startedPlaying   = Date.now() - startOffsetMs;
     this._paused          = false;
     this._pausedAt        = null;
     this._queueEndedSent  = false;
@@ -2218,6 +2269,33 @@ export default class Player extends EventEmitter {
       if (songData.type === "radio") this._radioAnnounced = true;
     }
     this.emit("startplay", songData);
+
+    if (trackOptMatch && trackOptMatch.startMs > 0 && startOffsetMs === 0) {
+      this._applyTrackOptionsSeek(trackOptMatch).catch((e) => {
+        logger.warn("[Player] TrackOptions auto-seek error:", e.message);
+      });
+    }
+
+    if (trackOptMatch && trackOptMatch.endMs > 0) {
+      const elapsedMs = Date.now() - this.startedPlaying;
+      const remainingMs = trackOptMatch.endMs - elapsedMs;
+      if (remainingMs > 0) {
+        const match = trackOptMatch;
+        this._trackEndTimer = setTimeout(() => {
+          if (this._destroyed || this.leaving || !this._activeTrackOpt) return;
+          logger.player(`[Player] TrackOptions: end time reached (${match.endMs}ms), skipping track`);
+          this._activeTrackOpt = null;
+          this._trackEndTimer = null;
+          this._trackEndRemainingMs = null;
+          this._skipping = true;
+          this._stopMediaPlayer().then(() => {
+            this._doPlayNext();
+          }).catch(() => {
+            this._doPlayNext();
+          });
+        }, remainingMs);
+      }
+    }
 
     try {
       await this._streamUrl(streamUrl);
@@ -2230,6 +2308,8 @@ export default class Player extends EventEmitter {
         }
       }
     }
+
+    this._clearTrackEndTimer();
 
     if (!this.leaving && !this._skipping && !this._seeking) {
       if (songData.type === "radio") {
@@ -2253,6 +2333,139 @@ export default class Player extends EventEmitter {
     }
     this._skipping = false;
     if (this._seeking) this._seeking = false;
+  }
+
+  _trackEndTimer = null;
+  _trackEndRemainingMs = null;
+
+  _clearTrackEndTimer() {
+    if (this._trackEndTimer) {
+      clearTimeout(this._trackEndTimer);
+      this._trackEndTimer = null;
+    }
+    this._trackEndRemainingMs = null;
+  }
+
+  _pauseTrackEndTimer() {
+    if (!this._trackEndTimer || !this._activeTrackOpt || this._activeTrackOpt.endMs <= 0) return;
+    clearTimeout(this._trackEndTimer);
+    const elapsedMs = Date.now() - this.startedPlaying;
+    this._trackEndRemainingMs = Math.max(0, this._activeTrackOpt.endMs - elapsedMs);
+    this._trackEndTimer = null;
+  }
+
+  _resumeTrackEndTimer() {
+    if (this._trackEndRemainingMs == null || this._trackEndRemainingMs <= 0 || !this._activeTrackOpt || this._activeTrackOpt.endMs <= 0) {
+      this._trackEndRemainingMs = null;
+      return;
+    }
+    const remainingMs = this._trackEndRemainingMs;
+    const match = this._activeTrackOpt;
+    this._trackEndTimer = setTimeout(() => {
+      if (this._destroyed || this.leaving || !this._activeTrackOpt) return;
+      logger.player(`[Player] TrackOptions: end time reached (${match.endMs}ms), skipping track`);
+      this._activeTrackOpt = null;
+      this._trackEndTimer = null;
+      this._trackEndRemainingMs = null;
+      this._skipping = true;
+      this._stopMediaPlayer().then(() => {
+        this._doPlayNext();
+      }).catch(() => {
+        this._doPlayNext();
+      });
+    }, remainingMs);
+    this._trackEndRemainingMs = null;
+  }
+
+  _recalcTrackEndTimer() {
+    if (!this._activeTrackOpt || this._activeTrackOpt.endMs <= 0) return;
+    this._clearTrackEndTimer();
+    const elapsedMs = Date.now() - this.startedPlaying;
+    const remainingMs = this._activeTrackOpt.endMs - elapsedMs;
+    if (remainingMs <= 0) {
+      this._activeTrackOpt = null;
+      this._skipping = true;
+      this._stopMediaPlayer().then(() => {
+        this._doPlayNext();
+      }).catch(() => {
+        this._doPlayNext();
+      });
+      return;
+    }
+    const match = this._activeTrackOpt;
+    this._trackEndTimer = setTimeout(() => {
+      if (this._destroyed || this.leaving || !this._activeTrackOpt) return;
+      logger.player(`[Player] TrackOptions: end time reached (${match.endMs}ms), skipping track`);
+      this._activeTrackOpt = null;
+      this._trackEndTimer = null;
+      this._trackEndRemainingMs = null;
+      this._skipping = true;
+      this._stopMediaPlayer().then(() => {
+        this._doPlayNext();
+      }).catch(() => {
+        this._doPlayNext();
+      });
+    }, remainingMs);
+  }
+
+  async _lookupTrackOptions(songData) {
+    if (!this.trackOptions || !songData || songData.type === "radio") return null;
+    if (!this._guildId || !this._channelId) return null;
+
+    const userIds = [];
+    if (this._voiceCache) {
+      const humans = this._voiceCache.getHumansInChannel(
+        String(this._guildId).replace(/\D/g, ""),
+        String(this._channelId).replace(/\D/g, "")
+      );
+      userIds.push(...humans);
+    }
+
+    if (userIds.length === 0) {
+      try {
+        const guild = this.client?.guilds?.get?.(this._guildId);
+        const voiceStates = guild?.voice_states ?? guild?.voiceStates;
+        if (voiceStates) {
+          const entries = Array.isArray(voiceStates) ? voiceStates
+            : typeof voiceStates.values === "function" ? [...voiceStates.values()]
+            : Object.values(voiceStates);
+          for (const state of entries) {
+            const ch = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
+            if (ch === String(this._channelId).replace(/\D/g, "")) {
+              const uid = state?.userId ?? state?.user_id;
+              const member = guild?.members?.get?.(uid);
+              if (uid && !member?.user?.bot) userIds.push(uid);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (userIds.length === 0) return null;
+
+    const match = await this.trackOptions.getBestMatchForChannel(userIds, songData);
+    return match || null;
+  }
+
+  async _applyTrackOptionsSeek(match) {
+    if (!match || match.startMs <= 0) return;
+    let seeked = false;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await Utils.sleep(500);
+      try {
+        const result = await this.seekToPosition(match.startMs);
+        if (result) {
+          seeked = true;
+          logger.player(`[Player] TrackOptions: auto-seeked to ${match.startMs}ms for user ${match.userId} (attempt ${attempt + 1})`);
+          break;
+        }
+      } catch (e) {
+        logger.warn(`[Player] TrackOptions auto-seek attempt ${attempt + 1} error:`, e.message);
+      }
+    }
+    if (!seeked) {
+      logger.warn(`[Player] TrackOptions: auto-seek to ${match.startMs}ms failed after all retries`);
+    }
   }
 
   async lyrics() {

@@ -17,6 +17,7 @@ import { VoiceStateCache } from "./src/constants/VoiceStateCache.mjs";
 import { GatewayHandler } from "./src/GatewayHandler.mjs";
 import { LastFmManager } from "./src/LastFmManager.mjs";
 import { FluxerListManager } from "./src/FluxerListManager.mjs";
+import { TrackOptionsManager } from "./src/TrackOptionsManager.mjs";
 
 /**
  * Create a backward-compatible "bot view" wrapper around VoiceStateCache.
@@ -206,6 +207,8 @@ export class Remix {
 
     this.fluxerlist = new FluxerListManager(config.fluxerlist);
 
+    this.trackOptions = new TrackOptionsManager(config.mysql);
+
     settings.on("ready", () => {
       initLogger(config);
       logger.settings("[settings] Loaded from DB.");
@@ -257,6 +260,7 @@ export class Remix {
       await this.settingsMgr.setBotId(botId);
       await this.lastfm.setBotId(botId);
       this.dashboard.setBotId(botId);
+      this.trackOptions.setBotId(botId);
 
       if (!moonlinkInitialised) {
         moonlinkInitialised = true;
@@ -305,6 +309,7 @@ export class Remix {
       dashboard: this.dashboard,
       locale: this.locale,
       timers: this.T,
+      trackOptions: this.trackOptions,
     });
     this.players.observedVoiceUsers = this.observedVoiceUsers;
     this.players.voiceCache = this.voiceCache;
@@ -670,6 +675,7 @@ export class Remix {
       observedVoiceUsers: this.observedVoiceUsers ?? null,
       voiceCache:          this.voiceCache ?? null,
       locale:             this.locale ?? null,
+      trackOptions:       this.trackOptions ?? null,
     });
 
     player._home247Channel = cleanChannelId;

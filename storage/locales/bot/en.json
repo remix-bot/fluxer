@@ -59,7 +59,8 @@
     "volumedefault": "View or set the server default volume. (Requires Manage Server to set)",
     "seek": "Seek to a specific position in the currently playing track.",
     "move": "Move a track from one position to another in the queue.",
-    "autoplay": "Toggle autoplay — automatically play similar tracks when the queue ends."
+    "autoplay": "Toggle autoplay — automatically play similar tracks when the queue ends.",
+    "trackopt": "Set custom start/end times for tracks. Great for album compilations and hidden tracks."
   },
   "options": {
     "debug": {
@@ -132,6 +133,9 @@
     "move": {
       "from": "The current position of the track in the queue (1-based).",
       "to": "The target position to move the track to (1-based)."
+    },
+    "trackopt": {
+      "times": "Start and optional end time, e.g. '0:30' or '0:30 3:45'"
     }
   },
   "pagination": {
@@ -585,6 +589,24 @@
     "autoplay": {
       "enabled": "🔁 Autoplay **enabled** — similar tracks will be added automatically when the queue ends.",
       "disabled": "➡️ Autoplay **disabled** — the bot will stop when the queue ends."
+    },
+    "trackopt": {
+      "notAvailable": "❌ Track options feature is not available.",
+      "nothingPlaying": "❌ There's nothing playing at the moment!",
+      "invalidFormat": "❌ Invalid time format. Use `mm:ss`, `hh:mm:ss`, or seconds.",
+      "invalidEndAfterStart": "❌ End time must be after start time.",
+      "startExceedsDuration": "❌ Start time exceeds track duration (**{{duration}}**).",
+      "endExceedsDuration": "❌ End time exceeds track duration (**{{duration}}**).",
+      "saved": "✅ Track option saved for **{{title}}**\n▶️ Start: **{{start}}** | ⏹️ End: **{{end}}**\n\nThis will apply automatically whenever this track plays in a channel you're in.",
+      "saveFailed": "❌ Failed to save track option.",
+      "notSet": "No custom times set for **{{title}}**.",
+      "current": "📎 Track option for **{{title}}**\n▶️ Start: **{{start}}** | ⏹️ End: **{{end}}**",
+      "removed": "🗑️ Removed track option for **{{title}}**.",
+      "notFound": "No custom times found for **{{title}}**.",
+      "listEmpty": "📭 You have no saved track options. Use `{{prefix}}trackopt set <start> [end]` to add one!",
+      "listTitle": "📋 **Your Track Options** ({{count}})",
+      "listEntry": "• **{{title}}** — {{start}} → {{end}}",
+      "listHint": "Use `{{prefix}}trackopt remove` while a track is playing to delete its option."
     }
   }
 }

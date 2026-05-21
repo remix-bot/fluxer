@@ -161,6 +161,7 @@ export class PlayerManager {
     this.locale       = config.locale ?? null;
     this.timers       = config.timers ?? {};
     this._lastfm      = null;
+    this.trackOptions = config.trackOptions ?? null;
   }
 
   /**
@@ -831,6 +832,7 @@ export class PlayerManager {
       observedVoiceUsers: this.observedVoiceUsers ?? null,
       voiceCache:          this.voiceCache ?? null,
       locale:             this.locale ?? null,
+      trackOptions:       this.trackOptions ?? null,
     });
 
     player.textChannel = message.channel;

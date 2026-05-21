@@ -67,6 +67,7 @@ We believe music features shouldn't be locked behind paywalls — **all commands
 - **Last.fm integration** — auto-scrobble songs, play loved/top/recent tracks, love/unlove tracks, view top artists, and view your Last.fm profile
 - **Autoplay** — automatically play similar tracks when the queue ends (powered by Last.fm)
 - **Seek** — jump to a specific position in the current track
+- **Track options** — set custom start/end times per track (like old iTunes), great for album compilations and hidden tracks
 - **Queue move** — reorder tracks by moving them to a different position
 - **Server settings** — per-guild configuration for prefix, volume, locale, 24/7 channels, and more
 - **Web dashboard** — optional browser-based control panel with Redis-backed sessions and Fluxer OAuth2 login
@@ -120,6 +121,7 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 | `seek` | Seek to a specific position in the current track | `%seek 1:30` / `%seek 90` | |
 | `move` | Move a track from one position to another in the queue | `%move 2 5` | `mv`, `m` |
 | `autoplay` | Toggle autoplay — automatically play similar tracks when queue ends | `%autoplay` | `ap` |
+| `trackopt` | Set custom start/end times for tracks | `%trackopt set 0:30 3:45` | `to` |
 
 ### Utility
 
@@ -216,7 +218,24 @@ Remix requires a MySQL database to store per-guild settings.
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
    ```
 
-4. *(Optional)* If migrating from the legacy settings system, run:
+4. Create the track options table (for the `%trackopt` command):
+   ```sql
+   CREATE TABLE IF NOT EXISTS `track_options` (
+     `id` INT AUTO_INCREMENT PRIMARY KEY,
+     `user_id` VARCHAR(32) NOT NULL,
+     `track_identifier` VARCHAR(512) NOT NULL,
+     `track_title` VARCHAR(512) NOT NULL DEFAULT '',
+     `start_ms` INT UNSIGNED NOT NULL DEFAULT 0,
+     `end_ms` INT UNSIGNED NOT NULL DEFAULT 0,
+     `bot_id` VARCHAR(32) NOT NULL DEFAULT '',
+     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+     UNIQUE KEY `uq_user_track_bot` (`user_id`, `track_identifier`, `bot_id`)
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+   ```
+   This table is auto-created on startup if it doesn't exist, so manual creation is optional.
+
+5. *(Optional)* If migrating from the legacy settings system, run:
    ```bash
    npm run migrate
    ```
@@ -302,6 +321,7 @@ fluxer/
 │   ├── debug.mjs                # Voice connection debugger (owner only, paginated)
 │   ├── stats.mjs                # Bot stats with live player count
 │   ├── lastfm.mjs               # Last.fm account linking, scrobbling, and profile
+│   ├── trackopt.mjs             # Per-track start/end time options (set/get/remove/list)
 │   └── ...                      # All other commands
 ├── src/
 │   ├── CommandHandler.mjs       # Command loader, prefix manager, registry
@@ -313,6 +333,7 @@ fluxer/
 │   ├── GatewayHandler.mjs       # Raw WS events, voice-state tracking, presence rotation
 │   ├── RecoveryManager.mjs      # Session persistence, crash recovery, 24/7 auto-join
 │   ├── LastFmManager.mjs        # Last.fm API client — auth, scrobbling, user data, stored scrobble stats
+│   ├── TrackOptionsManager.mjs  # Per-user track start/end time preferences (auto-seek, auto-skip)
 │   ├── Utils.mjs                # Shared utilities
 │   ├── worker.mjs               # Background task worker
 │   ├── probe.mjs                # FFprobe wrapper for audio stream info
