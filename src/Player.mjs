@@ -2332,10 +2332,6 @@ export default class Player extends EventEmitter {
     this._activeTrackOpt = null;
     this._trackEndTimer = null;
     this._trackEndRemainingMs = null;
-    if (this.queue.isEmpty()) {
-      logger.player("[Player] TrackOptions: queue empty after end time — letting track continue");
-      return;
-    }
     this._skipping = true;
     this._stopMediaPlayer().then(() => {
       this._doPlayNext();
