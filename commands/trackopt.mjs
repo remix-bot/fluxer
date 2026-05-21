@@ -209,7 +209,7 @@ export async function run(msg, data) {
     }
 
     try {
-      const applied = p.applyTrackOption(result);
+      const applied = await p.applyTrackOption(result);
       if (!applied) {
         return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Failed to apply alias.")] });
       }

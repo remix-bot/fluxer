@@ -2468,17 +2468,18 @@ export default class Player extends EventEmitter {
     }
   }
 
-  applyTrackOption(match) {
+  async applyTrackOption(match) {
     if (!match || !this.connection || this._paused) return false;
-
-    if (match.startMs > 0) {
-      this.seekToPosition(match.startMs).catch((e) => {
-        logger.warn("[Player] TrackOptions apply-seek error:", e.message);
-      });
-    }
 
     this._clearTrackEndTimer();
     this._activeTrackOpt = null;
+
+    try {
+      await this.seekToPosition(match.startMs || 0);
+    } catch (e) {
+      logger.warn("[Player] TrackOptions apply-seek error:", e.message);
+      return false;
+    }
 
     if (match.endMs > 0) {
       const elapsedMs = Date.now() - this.startedPlaying;
