@@ -1,6 +1,7 @@
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 
 const DEFAULT_ALIAS = "default";
 
@@ -208,35 +209,9 @@ export async function run(msg, data) {
     }
 
     try {
-      if (result.startMs > 0) {
-        await p.seekToPosition(result.startMs);
-      }
-
-      p._clearTrackEndTimer();
-      p._activeTrackOpt = null;
-
-      if (result.endMs > 0) {
-        const elapsedMs = Date.now() - p.startedPlaying;
-        const remainingMs = result.endMs - elapsedMs;
-        if (remainingMs > 0) {
-          const match = result;
-          p._activeTrackOpt = match;
-          p._trackEndTimer = setTimeout(() => {
-            if (p._destroyed || p.leaving || !p._activeTrackOpt) return;
-            logger.player(`[Player] TrackOptions: end time reached (${match.endMs}ms), skipping track`);
-            p._activeTrackOpt = null;
-            p._trackEndTimer = null;
-            p._trackEndRemainingMs = null;
-            p._skipping = true;
-            p._stopMediaPlayer().then(() => {
-              p._doPlayNext();
-            }).catch(() => {
-              p._doPlayNext();
-            });
-          }, remainingMs);
-        }
-      } else {
-        p._activeTrackOpt = result;
+      const applied = p.applyTrackOption(result);
+      if (!applied) {
+        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Failed to apply alias.")] });
       }
 
       const aliasLabel = safeAlias === DEFAULT_ALIAS ? "default" : safeAlias;

@@ -2468,6 +2468,44 @@ export default class Player extends EventEmitter {
     }
   }
 
+  applyTrackOption(match) {
+    if (!match || !this.connection || this._paused) return false;
+
+    if (match.startMs > 0) {
+      this.seekToPosition(match.startMs).catch((e) => {
+        logger.warn("[Player] TrackOptions apply-seek error:", e.message);
+      });
+    }
+
+    this._clearTrackEndTimer();
+    this._activeTrackOpt = null;
+
+    if (match.endMs > 0) {
+      const elapsedMs = Date.now() - this.startedPlaying;
+      const remainingMs = match.endMs - elapsedMs;
+      if (remainingMs > 0) {
+        this._activeTrackOpt = match;
+        this._trackEndTimer = setTimeout(() => {
+          if (this._destroyed || this.leaving || !this._activeTrackOpt) return;
+          logger.player(`[Player] TrackOptions: end time reached (${match.endMs}ms), skipping track`);
+          this._activeTrackOpt = null;
+          this._trackEndTimer = null;
+          this._trackEndRemainingMs = null;
+          this._skipping = true;
+          this._stopMediaPlayer().then(() => {
+            this._doPlayNext();
+          }).catch(() => {
+            this._doPlayNext();
+          });
+        }, remainingMs);
+      }
+    } else {
+      this._activeTrackOpt = match;
+    }
+
+    return true;
+  }
+
   async lyrics() {
     const current = this.queue.getCurrent();
     if (!current) return null;
