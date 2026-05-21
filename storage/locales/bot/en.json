@@ -60,7 +60,7 @@
     "seek": "Seek to a specific position in the currently playing track.",
     "move": "Move a track from one position to another in the queue.",
     "autoplay": "Toggle autoplay — automatically play similar tracks when the queue ends.",
-    "trackopt": "Set custom start/end times for tracks. Great for album compilations and hidden tracks."
+    "trackopt": "Set custom start/end times for tracks. Supports named aliases — save multiple trims per track for different sections."
   },
   "options": {
     "debug": {
@@ -597,16 +597,26 @@
       "invalidEndAfterStart": "❌ End time must be after start time.",
       "startExceedsDuration": "❌ Start time exceeds track duration (**{{duration}}**).",
       "endExceedsDuration": "❌ End time exceeds track duration (**{{duration}}**).",
-      "saved": "✅ Track option saved for **{{title}}**\n▶️ Start: **{{start}}** | ⏹️ End: **{{end}}**\n\nThis will apply automatically whenever this track plays in a channel you're in.",
+      "saved": "✅ Track option saved for **{{title}}**{{aliasLabel}}\n▶️ Start: **{{start}}** | ⏹️ End: **{{end}}**\n\nThis will apply automatically whenever this track plays in a channel you're in.",
+      "savedAlias": "✅ Track option saved for **{{title}}** [{{alias}}]\n▶️ Start: **{{start}}** | ⏹️ End: **{{end}}**\n\nUse `{{prefix}}trackopt play {{alias}}` to apply this trim while the track is playing.",
       "saveFailed": "❌ Failed to save track option.",
       "notSet": "No custom times set for **{{title}}**.",
-      "current": "📎 Track option for **{{title}}**\n▶️ Start: **{{start}}** | ⏹️ End: **{{end}}**",
+      "current": "📎 Track options for **{{title}}** ({{count}})",
+      "currentEntry": "• **{{alias}}** — {{start}} → {{end}}{{autoTag}}",
       "removed": "🗑️ Removed track option for **{{title}}**.",
+      "removedAlias": "🗑️ Removed alias **{{alias}}** for **{{title}}**.",
+      "removedAll": "🗑️ Removed all track options for **{{title}}**.",
       "notFound": "No custom times found for **{{title}}**.",
+      "aliasNotFound": "❌ No alias **{{alias}}** found for **{{title}}**.\nYour aliases: {{names}}",
+      "applied": "✂️ Applied alias **{{alias}}** — {{start}} → {{end}}",
+      "applyFailed": "❌ Failed to apply alias: {{error}}",
+      "mustBePlaying": "❌ The player must be actively playing to apply an alias.",
+      "invalidAlias": "❌ Invalid alias name. Use letters, numbers, hyphens, or underscores.",
+      "provideAlias": "❌ Provide an alias name. Usage: `{{prefix}}trackopt play <alias>`",
       "listEmpty": "📭 You have no saved track options. Use `{{prefix}}trackopt set <start> [end]` to add one!",
       "listTitle": "📋 **Your Track Options** ({{count}})",
       "listEntry": "• **{{title}}** — {{start}} → {{end}}",
-      "listHint": "Use `{{prefix}}trackopt remove` while a track is playing to delete its option."
+      "listHint": "Use `{{prefix}}trackopt play <alias>` to apply a named trim, or `{{prefix}}trackopt remove [alias]` to delete one."
     }
   }
 }

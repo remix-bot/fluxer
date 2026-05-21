@@ -2,29 +2,46 @@ import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 
+const DEFAULT_ALIAS = "default";
+
 export const command = new CommandBuilder()
   .setName("trackopt")
-  .setDescription("Set custom start/end times for tracks. Like iTunes used to have — great for album compilations and hidden tracks.", "commands.trackopt")
+  .setDescription("Set custom start/end times for tracks. Supports named aliases — save multiple trims per track for different sections.", "commands.trackopt")
   .setCategory("music")
   .addSubcommand(s =>
     s.setName("set")
       .setId("trackopt_set")
-      .setDescription("Set a custom start and/or end time for the current track")
+      .setDescription("Set a custom start/end time for the current track. Add alias:name for multiple trims.")
       .addTextOption(o =>
         o.setName("times")
-          .setDescription("Start and optional end time, e.g. '0:30' or '0:30 3:45'")
+          .setDescription("Start [end] [alias:name], e.g. '0:30 3:45' or '0:30 3:45 alias:hidden'")
           .setRequired(true)
       )
   )
   .addSubcommand(s =>
     s.setName("get")
       .setId("trackopt_get")
-      .setDescription("View your custom start/end time for the current track")
+      .setDescription("View your custom start/end times for the current track")
+  )
+  .addSubcommand(s =>
+    s.setName("play")
+      .setId("trackopt_play")
+      .setDescription("Apply a named alias trim to the currently playing track")
+      .addTextOption(o =>
+        o.setName("alias")
+          .setDescription("Name of the alias to play (e.g. 'hidden', 'outro')")
+          .setRequired(true)
+      )
   )
   .addSubcommand(s =>
     s.setName("remove")
       .setId("trackopt_remove")
-      .setDescription("Remove your custom start/end time for the current track")
+      .setDescription("Remove a custom trim for the current track. Specify alias or leave empty for all.")
+      .addTextOption(o =>
+        o.setName("alias")
+          .setDescription("Alias name to remove, or leave empty to remove all trims for this track")
+          .setRequired(false)
+      )
   )
   .addSubcommand(s =>
     s.setName("list")
@@ -62,6 +79,17 @@ function formatMs(ms) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+function extractAlias(parts) {
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i].toLowerCase().startsWith("alias:")) {
+      const aliasVal = parts[i].slice(6);
+      parts.splice(i, 1);
+      return aliasVal;
+    }
+  }
+  return DEFAULT_ALIAS;
+}
+
 export async function run(msg, data) {
   const trackOpts = this.trackOptions;
   if (!trackOpts) {
@@ -86,10 +114,12 @@ export async function run(msg, data) {
   if (subCommand === "set") {
     const timesRaw = data.get("times")?.value;
     if (!timesRaw) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Provide start and optional end time. Usage: `%trackopt set 0:30` or `%trackopt set 0:30 3:45`")] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Provide start and optional end time. Usage: `%trackopt set 0:30` or `%trackopt set 0:30 3:45 alias:hidden`")] });
     }
 
     const parts = timesRaw.trim().split(/\s+/);
+    const aliasRaw = extractAlias(parts);
+
     const startMs = parseTimeInput(parts[0]);
     if (startMs === null || startMs < 0) {
       return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Invalid start time format. Use `mm:ss`, `hh:mm:ss`, or seconds.")] });
@@ -116,40 +146,118 @@ export async function run(msg, data) {
       }
     }
 
-    const result = await trackOpts.set(userId, current, startMs, endMs);
+    const result = await trackOpts.set(userId, current, startMs, endMs, aliasRaw);
     if (!result) {
       return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Failed to save track option.")] });
     }
 
-    let desc = `✅ Track option saved for **${current.title}**\n`;
+    const aliasLabel = result.alias === DEFAULT_ALIAS ? "" : ` [${result.alias}]`;
+    let desc = `✅ Track option saved for **${current.title}**${aliasLabel}\n`;
     desc += `▶️ Start: **${formatMs(startMs)}**`;
     if (endMs > 0) desc += ` | ⏹️ End: **${formatMs(endMs)}**`;
     else desc += ` | ⏹️ End: **full track**`;
-    desc += `\n\nThis will apply automatically whenever this track plays in a channel you're in.`;
+    if (result.alias === DEFAULT_ALIAS) {
+      desc += `\n\nThis will apply automatically whenever this track plays in a channel you're in.`;
+    } else {
+      desc += `\n\nUse \`%trackopt play ${result.alias}\` to apply this trim while the track is playing.`;
+    }
 
     return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] });
   }
 
   if (subCommand === "get") {
-    const result = await trackOpts.get(userId, current);
-    if (!result) {
+    const rows = await trackOpts.getAllForTrack(userId, current);
+    if (!rows || rows.length === 0) {
       return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`No custom times set for **${current.title}**.`)] });
     }
 
-    let desc = `📎 Track option for **${current.title}**\n`;
-    desc += `▶️ Start: **${formatMs(result.startMs)}**`;
-    if (result.endMs > 0) desc += ` | ⏹️ End: **${formatMs(result.endMs)}**`;
-    else desc += ` | ⏹️ End: **full track**`;
+    let desc = `📎 Track options for **${current.title}** (${rows.length})\n\n`;
+    for (const row of rows) {
+      const aliasLabel = row.alias === DEFAULT_ALIAS ? "default" : row.alias;
+      const endStr = row.end_ms > 0 ? formatMs(row.end_ms) : "end";
+      const autoTag = row.alias === DEFAULT_ALIAS ? " ← auto" : "";
+      desc += `• **${aliasLabel}** — ${formatMs(row.start_ms)} → ${endStr}${autoTag}\n`;
+    }
 
     return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] });
   }
 
-  if (subCommand === "remove") {
-    const removed = await trackOpts.remove(userId, current);
-    if (!removed) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`No custom times found for **${current.title}**.`)] });
+  if (subCommand === "play") {
+    const aliasRaw = data.get("alias")?.value;
+    if (!aliasRaw) {
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Provide an alias name. Usage: `%trackopt play hidden`")] });
     }
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🗑️ Removed track option for **${current.title}**.`)] });
+
+    const safeAlias = aliasRaw.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32);
+    if (!safeAlias) {
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Invalid alias name. Use letters, numbers, hyphens, or underscores.")] });
+    }
+
+    const result = await trackOpts.get(userId, current, safeAlias);
+    if (!result) {
+      const allAliases = await trackOpts.getAllForTrack(userId, current);
+      if (allAliases.length > 0) {
+        const names = allAliases.map(r => r.alias === DEFAULT_ALIAS ? "default" : r.alias).join(", ");
+        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ No alias **${safeAlias}** found for **${current.title}**.\nYour aliases: ${names}`)] });
+      }
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ No alias **${safeAlias}** found for **${current.title}**.`)] });
+    }
+
+    if (!p.connection || p._paused) {
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ The player must be actively playing to apply an alias.")] });
+    }
+
+    try {
+      if (result.startMs > 0) {
+        await p.seekToPosition(result.startMs);
+      }
+
+      p._clearTrackEndTimer();
+      p._activeTrackOpt = null;
+
+      if (result.endMs > 0) {
+        const elapsedMs = Date.now() - p.startedPlaying;
+        const remainingMs = result.endMs - elapsedMs;
+        if (remainingMs > 0) {
+          const match = result;
+          p._activeTrackOpt = match;
+          p._trackEndTimer = setTimeout(() => {
+            if (p._destroyed || p.leaving || !p._activeTrackOpt) return;
+            logger.player(`[Player] TrackOptions: end time reached (${match.endMs}ms), skipping track`);
+            p._activeTrackOpt = null;
+            p._trackEndTimer = null;
+            p._trackEndRemainingMs = null;
+            p._skipping = true;
+            p._stopMediaPlayer().then(() => {
+              p._doPlayNext();
+            }).catch(() => {
+              p._doPlayNext();
+            });
+          }, remainingMs);
+        }
+      } else {
+        p._activeTrackOpt = result;
+      }
+
+      const aliasLabel = safeAlias === DEFAULT_ALIAS ? "default" : safeAlias;
+      const endStr = result.endMs > 0 ? formatMs(result.endMs) : "end";
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`✂️ Applied alias **${aliasLabel}** — ${formatMs(result.startMs)} → ${endStr}`)] });
+    } catch (e) {
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to apply alias: ${e.message}`)] });
+    }
+  }
+
+  if (subCommand === "remove") {
+    const aliasRaw = data.get("alias")?.value;
+    const removed = await trackOpts.remove(userId, current, aliasRaw || null);
+    if (!removed) {
+      const aliasLabel = aliasRaw ? ` **${aliasRaw}**` : "";
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`No custom times found${aliasLabel} for **${current.title}**.`)] });
+    }
+    if (aliasRaw) {
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🗑️ Removed alias **${aliasRaw}** for **${current.title}**.`)] });
+    }
+    return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🗑️ Removed all track options for **${current.title}**.`)] });
   }
 
   if (subCommand === "list") {
@@ -159,12 +267,20 @@ export async function run(msg, data) {
     }
 
     let desc = `📋 **Your Track Options** (${rows.length})\n\n`;
+    let lastTrack = "";
     for (const row of rows) {
       const title = row.track_title || row.track_identifier;
+      const aliasLabel = row.alias === DEFAULT_ALIAS ? "default" : row.alias;
       const endStr = row.end_ms > 0 ? formatMs(row.end_ms) : "end";
-      desc += `• **${title}** — ${formatMs(row.start_ms)} → ${endStr}\n`;
+      if (title !== lastTrack) {
+        if (lastTrack) desc += "\n";
+        desc += `🎵 **${title}**\n`;
+        lastTrack = title;
+      }
+      const autoTag = row.alias === DEFAULT_ALIAS ? " ← auto" : "";
+      desc += `  • ${aliasLabel}: ${formatMs(row.start_ms)} → ${endStr}${autoTag}\n`;
     }
-    desc += `\nUse \`%trackopt remove\` while a track is playing to delete its option.`;
+    desc += `\nUse \`%trackopt play <alias>\` to apply a named trim, or \`%trackopt remove [alias]\` to delete one.`;
 
     return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] });
   }
