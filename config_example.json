@@ -96,11 +96,11 @@
   "geniusToken": "Genius access token (Used for lyrics); optional",
   "lastfm": {
     "Comment": "Last.fm integration: auto-scrobble songs, play loved/top/recent tracks. Register at https://www.last.fm/api/account/create",
+    "enabled": true,
     "apiKey": "your_lastfm_api_key",
     "apiSecret": "your_lastfm_api_secret",
     "scrobbleThreshold": 0.5,
-    "scrobbleMinMs": 240000,
-    "Comment2": "scrobbleThreshold: fraction of track duration before scrobbling (0.5 = 50%). scrobbleMinMs: minimum ms played before scrobble (default 4 min). Both must be met."
+    "scrobbleMinMs": 240000
   },
   "fluxerlist": {
     "Comment": "FluxerList integration: check voters for your server/bot. API keys are allocated by site admins, prefixed with fl_, and visible in your Dashboard. To request access, open a ticket in the Fluxer server.",

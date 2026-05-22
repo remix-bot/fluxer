@@ -78,7 +78,7 @@ export class LastFmManager {
   constructor(config, mysqlConfig) {
     this.apiKey    = config?.apiKey ?? "";
     this.apiSecret = config?.apiSecret ?? "";
-    this.enabled   = !!(this.apiKey && this.apiSecret);
+    this.enabled   = config?.enabled !== false && !!(this.apiKey && this.apiSecret);
     this.scrobbleThreshold = config?.scrobbleThreshold ?? 0.5;
     this.scrobbleMinMs     = config?.scrobbleMinMs ?? 240_000;
 
@@ -97,7 +97,11 @@ export class LastFmManager {
     this._totalScrobblesInflight = null;
 
     if (!this.enabled) {
-      logger.settings("[LastFm] Disabled — apiKey or apiSecret missing in config.");
+      if (config?.enabled === false) {
+        logger.settings("[LastFm] Disabled — \"enabled\" is set to false in config.");
+      } else {
+        logger.settings("[LastFm] Disabled — apiKey or apiSecret missing in config.");
+      }
     }
   }
 
@@ -718,6 +722,534 @@ export class LastFmManager {
   }
 
   /**
+   * Get detailed artist info from Last.fm.
+   * @param {string} artist - Artist name
+   * @param {string} [userId=null] - Optional user ID for user-specific playcount
+   * @returns {Promise<object|null>} Parsed artist object or null on error
+   */
+  async getArtistInfo(artist, userId = null) {
+    if (!this.enabled) return null;
+
+    const params = {
+      method:   "artist.getinfo",
+      api_key:  this.apiKey,
+      artist,
+    };
+
+    if (userId) {
+      const user = await this.getUser(userId);
+      if (user) params.username = user.username;
+    }
+
+    try {
+      const data = await apiCall(params, this.apiSecret);
+      const a = data.artist;
+      if (!a) return null;
+
+      return {
+        name:          a.name ?? "",
+        url:           a.url ?? "",
+        image:         a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
+        tags:          (a.tags?.tag ?? []).map(t => t.name ?? t),
+        bio:           a.bio?.summary ?? a.bio?.content ?? "",
+        stats: {
+          listeners:  Number(a.stats?.listeners ?? 0),
+          playcount:  Number(a.stats?.playcount ?? 0),
+        },
+        similar:       (a.similar?.artist ?? []).map(s => ({
+          name:  s.name ?? "",
+          url:   s.url ?? "",
+          image: s.image?.[2]?.["#text"] ?? s.image?.[1]?.["#text"] ?? "",
+        })),
+        userplaycount: a.stats?.userplaycount ? Number(a.stats.userplaycount) : null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get detailed album info from Last.fm.
+   * @param {string} artist - Artist name
+   * @param {string} album - Album name
+   * @param {string} [userId=null] - Optional user ID for user-specific playcount
+   * @returns {Promise<object|null>} Parsed album object or null on error
+   */
+  async getAlbumInfo(artist, album, userId = null) {
+    if (!this.enabled) return null;
+
+    const params = {
+      method:   "album.getinfo",
+      api_key:  this.apiKey,
+      artist,
+      album,
+    };
+
+    if (userId) {
+      const user = await this.getUser(userId);
+      if (user) params.username = user.username;
+    }
+
+    try {
+      const data = await apiCall(params, this.apiSecret);
+      const a = data.album;
+      if (!a) return null;
+
+      return {
+        name:          a.name ?? "",
+        artist:        a.artist ?? "",
+        url:           a.url ?? "",
+        image:         a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
+        tags:          (a.tags?.tag ?? []).map(t => t.name ?? t),
+        tracks:        (a.tracks?.track ?? []).map(t => ({
+          name:      t.name ?? "",
+          url:       t.url ?? "",
+          duration:  Number(t.duration ?? 0),
+          playcount: Number(t.playcount ?? 0),
+        })),
+        userplaycount: a.userplaycount ? Number(a.userplaycount) : null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get an artist's top tracks from Last.fm.
+   * @param {string} artist - Artist name
+   * @param {number} [limit=10] - Max tracks to return
+   * @returns {Promise<Array<object>>} Array of top tracks
+   */
+  async getArtistTopTracks(artist, limit = 10) {
+    if (!this.enabled) return [];
+
+    try {
+      const data = await apiCall(
+        {
+          method:   "artist.gettoptracks",
+          api_key:  this.apiKey,
+          artist,
+          limit,
+        },
+        this.apiSecret
+      );
+
+      return (data.toptracks?.track ?? []).map(t => ({
+        artist:     t.artist?.name ?? artist,
+        name:       t.name ?? "",
+        url:        t.url ?? "",
+        playcount:  Number(t.playcount ?? 0),
+        image:      t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Get an artist's top albums from Last.fm.
+   * @param {string} artist - Artist name
+   * @param {number} [limit=10] - Max albums to return
+   * @returns {Promise<Array<object>>} Array of top albums
+   */
+  async getArtistTopAlbums(artist, limit = 10) {
+    if (!this.enabled) return [];
+
+    try {
+      const data = await apiCall(
+        {
+          method:   "artist.gettopalbums",
+          api_key:  this.apiKey,
+          artist,
+          limit,
+        },
+        this.apiSecret
+      );
+
+      return (data.topalbums?.album ?? []).map(a => ({
+        name:      a.name ?? "",
+        artist:    a.artist?.name ?? artist,
+        url:       a.url ?? "",
+        playcount: Number(a.playcount ?? 0),
+        image:     a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Get similar artists from Last.fm.
+   * @param {string} artist - Artist name
+   * @param {number} [limit=10] - Max similar artists to return
+   * @returns {Promise<Array<object>>} Array of similar artists with match percentage
+   */
+  async getSimilarArtists(artist, limit = 10) {
+    if (!this.enabled) return [];
+
+    try {
+      const data = await apiCall(
+        {
+          method:   "artist.getsimilar",
+          api_key:  this.apiKey,
+          artist,
+          limit,
+        },
+        this.apiSecret
+      );
+
+      return (data.similarartists?.artist ?? []).map(a => ({
+        name:    a.name ?? "",
+        url:     a.url ?? "",
+        image:   a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
+        match:   parseFloat(a.match ?? 0),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Get a user's top tags from Last.fm.
+   * @param {string} userId - The Fluxer user ID
+   * @param {number} [limit=20] - Max tags to return
+   * @returns {Promise<Array<object>>} Array of top tags with count
+   */
+  async getUserTopTags(userId, limit = 20) {
+    if (!this.enabled) return [];
+
+    const user = await this.getUser(userId);
+    if (!user) return [];
+
+    try {
+      const data = await apiCall(
+        {
+          method:   "user.gettoptags",
+          api_key:  this.apiKey,
+          user:     user.username,
+          limit,
+        },
+        this.apiSecret
+      );
+
+      return (data.toptags?.tag ?? []).map(t => ({
+        name:  t.name ?? "",
+        url:   t.url ?? "",
+        count: Number(t.count ?? 0),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Get detailed tag info from Last.fm.
+   * @param {string} tag - Tag name
+   * @returns {Promise<object|null>} Tag info or null on error
+   */
+  async getTagInfo(tag) {
+    if (!this.enabled) return null;
+
+    try {
+      const data = await apiCall(
+        {
+          method:  "tag.getinfo",
+          api_key: this.apiKey,
+          tag,
+        },
+        this.apiSecret
+      );
+
+      const t = data.tag;
+      if (!t) return null;
+
+      return {
+        name:    t.name ?? "",
+        url:     t.url ?? "",
+        reach:   Number(t.reach ?? 0),
+        count:   Number(t.taggings?.total ?? t.total ?? 0),
+        summary: t.wiki?.summary ?? "",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get top tracks for a tag from Last.fm.
+   * @param {string} tag - Tag name
+   * @param {number} [limit=10] - Max tracks to return
+   * @returns {Promise<Array<object>>} Array of tracks
+   */
+  async getTagTopTracks(tag, limit = 10) {
+    if (!this.enabled) return [];
+
+    try {
+      const data = await apiCall(
+        {
+          method:   "tag.gettoptracks",
+          api_key:  this.apiKey,
+          tag,
+          limit,
+        },
+        this.apiSecret
+      );
+
+      return (data.tracks?.track ?? []).map(t => ({
+        artist:     t.artist?.name ?? "Unknown",
+        name:       t.name ?? "",
+        url:        t.url ?? "",
+        playcount:  Number(t.playcount ?? 0),
+        image:      t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Get top artists for a tag from Last.fm.
+   * @param {string} tag - Tag name
+   * @param {number} [limit=10] - Max artists to return
+   * @returns {Promise<Array<object>>} Array of artists
+   */
+  async getTagTopArtists(tag, limit = 10) {
+    if (!this.enabled) return [];
+
+    try {
+      const data = await apiCall(
+        {
+          method:   "tag.gettopartists",
+          api_key:  this.apiKey,
+          tag,
+          limit,
+        },
+        this.apiSecret
+      );
+
+      return (data.topartists?.artist ?? []).map(a => ({
+        name:      a.name ?? "",
+        url:       a.url ?? "",
+        playcount: Number(a.playcount ?? 0),
+        image:     a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Get play counts for an artist across multiple users ("who knows").
+   * Processes users in batches of 5 for concurrency control.
+   * @param {string} artist - Artist name
+   * @param {Array<string>} userIds - Array of Fluxer user IDs to check
+   * @returns {Promise<Array<{ userId: string, username: string, playcount: number }>>}
+   *   Sorted by playcount descending, only includes users with playcount > 0
+   */
+  async getWhoKnows(artist, userIds) {
+    if (!this.enabled) return [];
+    if (!Array.isArray(userIds) || !userIds.length) return [];
+
+    const concurrency = 5;
+    const results = [];
+
+    for (let i = 0; i < userIds.length; i += concurrency) {
+      const batch = userIds.slice(i, i + concurrency);
+
+      const batchResults = await Promise.allSettled(
+        batch.map(async (uid) => {
+          const user = await this.getUser(uid);
+          if (!user) return null;
+
+          try {
+            const info = await this.getArtistInfo(artist, uid);
+            const playcount = info?.userplaycount ?? 0;
+            return {
+              userId:    uid,
+              username:  user.username,
+              playcount,
+            };
+          } catch {
+            return {
+              userId:    uid,
+              username:  user.username,
+              playcount: 0,
+            };
+          }
+        })
+      );
+
+      for (const r of batchResults) {
+        if (r.status === "fulfilled" && r.value && r.value.playcount > 0) {
+          results.push(r.value);
+        }
+      }
+    }
+
+    results.sort((a, b) => b.playcount - a.playcount);
+    return results;
+  }
+
+  /**
+   * Compare two Last.fm users by their top artists overlap.
+   * @param {string} userId1 - First Fluxer user ID
+   * @param {string} userId2 - Second Fluxer user ID
+   * @returns {Promise<object|null>} Comparison result or null on error
+   */
+  async compareUsers(userId1, userId2) {
+    if (!this.enabled) return null;
+
+    try {
+      const user1Data = await this.getUser(userId1);
+      const user2Data = await this.getUser(userId2);
+      if (!user1Data || !user2Data) return null;
+
+      const [artists1, artists2] = await Promise.all([
+        this.getTopArtists(userId1, "overall", 50),
+        this.getTopArtists(userId2, "overall", 50),
+      ]);
+
+      const names1 = new Set(artists1.map(a => a.name.toLowerCase()));
+      const names2 = new Set(artists2.map(a => a.name.toLowerCase()));
+
+      const commonNames = [...names1].filter(n => names2.has(n));
+      const commonArtists = artists1
+        .filter(a => names2.has(a.name.toLowerCase()))
+        .map(a => ({
+          name:      a.name,
+          url:       a.url,
+          playcount: a.playcount,
+        }));
+
+      const totalUnique = new Set([...names1, ...names2]).size;
+      const matchPercentage = totalUnique > 0
+        ? Math.round((commonNames.length / totalUnique) * 100)
+        : 0;
+
+      return {
+        user1: {
+          username:     user1Data.username,
+          totalArtists: names1.size,
+        },
+        user2: {
+          username:     user2Data.username,
+          totalArtists: names2.size,
+        },
+        commonArtists,
+        matchPercentage,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Get a user's weekly chart list from Last.fm.
+   * @param {string} userId - The Fluxer user ID
+   * @returns {Promise<Array<object>>} Array of chart periods
+   */
+  async getUserWeeklyChartList(userId) {
+    if (!this.enabled) return [];
+
+    const user = await this.getUser(userId);
+    if (!user) return [];
+
+    try {
+      const data = await apiCall(
+        {
+          method:  "user.getweeklychartlist",
+          api_key: this.apiKey,
+          user:    user.username,
+        },
+        this.apiSecret
+      );
+
+      return (data.weeklychartlist?.chart ?? []).map(c => ({
+        from: Number(c.from ?? 0),
+        to:   Number(c.to ?? 0),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Search Last.fm for artists matching a query.
+   * @param {string} query - Search query
+   * @param {number} [limit=10] - Max results to return
+   * @returns {Promise<Array<object>>} Array of matching artists
+   */
+  async searchArtist(query, limit = 10) {
+    if (!this.enabled) return [];
+
+    try {
+      const data = await apiCall(
+        {
+          method:  "artist.search",
+          api_key: this.apiKey,
+          artist:  query,
+          limit,
+        },
+        this.apiSecret
+      );
+
+      const matches = data?.results?.artistmatches?.artist;
+      const artists = Array.isArray(matches)
+        ? matches
+        : matches
+          ? [matches]
+          : [];
+
+      return artists.map(a => ({
+        name:    a.name ?? "",
+        url:     a.url ?? "",
+        image:   a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
+        listeners: Number(a.listeners ?? 0),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Search Last.fm for albums matching a query.
+   * @param {string} query - Search query
+   * @param {number} [limit=10] - Max results to return
+   * @returns {Promise<Array<object>>} Array of matching albums
+   */
+  async searchAlbum(query, limit = 10) {
+    if (!this.enabled) return [];
+
+    try {
+      const data = await apiCall(
+        {
+          method:  "album.search",
+          api_key: this.apiKey,
+          album:   query,
+          limit,
+        },
+        this.apiSecret
+      );
+
+      const matches = data?.results?.albummatches?.album;
+      const albums = Array.isArray(matches)
+        ? matches
+        : matches
+          ? [matches]
+          : [];
+
+      return albums.map(a => ({
+        name:      a.name ?? "",
+        artist:    a.artist ?? "",
+        url:       a.url ?? "",
+        image:     a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Parse a Last.fm music URL and extract artist and track info.
    * Supports:
    *   https:
@@ -1042,8 +1574,40 @@ export class LastFmManager {
           username: user.username,
           tracks,
         };
+      case "artists":
+        const topArtistsList = await this.getTopArtists(userId, options.period ?? "overall", limit);
+        const artistTrackResults = [];
+        const artistConcurrency = 3;
+        for (let ai = 0; ai < topArtistsList.length; ai += artistConcurrency) {
+          const artistBatch = topArtistsList.slice(ai, ai + artistConcurrency);
+          const artistResults = await Promise.allSettled(
+            artistBatch.map(async (ar) => {
+              try {
+                const topTracks = await this.getArtistTopTracks(ar.name, 3);
+                return topTracks.map(t => ({
+                  artist: t.artist ?? ar.name,
+                  name: t.name,
+                  url: t.url,
+                  query: `${t.name} ${t.artist ?? ar.name}`,
+                  image: t.image ?? ar.image ?? "",
+                }));
+              } catch {
+                return [];
+              }
+            })
+          );
+          for (const r of artistResults) {
+            if (r.status === "fulfilled" && r.value) {
+              artistTrackResults.push(...r.value);
+            }
+          }
+        }
+        return {
+          username: user.username,
+          tracks: artistTrackResults.slice(0, limit * 3),
+        };
       default:
-        throw new Error(`Unknown Last.fm category: ${category}. Use loved, top, recent, playlist, or albums.`);
+        throw new Error(`Unknown Last.fm category: ${category}. Use loved, top, recent, playlist, albums, or artists.`);
     }
 
     return {
@@ -1202,6 +1766,523 @@ export class LastFmManager {
     } catch {
       return 0;
     }
+  }
+
+  /**
+   * Get a user's Last.fm friends list.
+   * @param {string} userId - The Fluxer user ID
+   * @param {number} [limit=20] - Max friends to return
+   * @returns {Promise<Array<object>>} Array of friend objects
+   */
+  async getUserFriends(userId, limit = 20) {
+    if (!this.enabled) return [];
+    const user = await this.getUser(userId);
+    if (!user) return [];
+    try {
+      const data = await apiCall({
+        method: "user.getfriends",
+        api_key: this.apiKey,
+        user: user.username,
+        limit,
+      }, this.apiSecret);
+      return (data.friends?.user ?? []).map(f => ({
+        name: f.name ?? "",
+        url: f.url ?? "",
+        image: f.image?.[2]?.["#text"] ?? f.image?.[1]?.["#text"] ?? "",
+        realname: f.realname ?? "",
+        country: f.country ?? "",
+      }));
+    } catch { return []; }
+  }
+
+  /**
+   * Get a user's weekly artist chart.
+   * @param {string} userId - The Fluxer user ID
+   * @param {number|null} [from=null] - Start timestamp
+   * @param {number|null} [to=null] - End timestamp
+   * @returns {Promise<Array<object>>} Array of artist objects
+   */
+  async getUserWeeklyArtistChart(userId, from = null, to = null) {
+    if (!this.enabled) return [];
+    const user = await this.getUser(userId);
+    if (!user) return [];
+    try {
+      const params = {
+        method: "user.getweeklyartistchart",
+        api_key: this.apiKey,
+        user: user.username,
+      };
+      if (from) params.from = from;
+      if (to) params.to = to;
+      const data = await apiCall(params, this.apiSecret);
+      return (data.weeklyartistchart?.artist ?? []).map(a => ({
+        name: a.name ?? "",
+        url: a.url ?? "",
+        playcount: Number(a.playcount ?? 0),
+        image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
+      }));
+    } catch { return []; }
+  }
+
+  /**
+   * Get a user's weekly track chart.
+   * @param {string} userId - The Fluxer user ID
+   * @param {number|null} [from=null] - Start timestamp
+   * @param {number|null} [to=null] - End timestamp
+   * @returns {Promise<Array<object>>} Array of track objects
+   */
+  async getUserWeeklyTrackChart(userId, from = null, to = null) {
+    if (!this.enabled) return [];
+    const user = await this.getUser(userId);
+    if (!user) return [];
+    try {
+      const params = {
+        method: "user.getweeklytrackchart",
+        api_key: this.apiKey,
+        user: user.username,
+      };
+      if (from) params.from = from;
+      if (to) params.to = to;
+      const data = await apiCall(params, this.apiSecret);
+      return (data.weeklytrackchart?.track ?? []).map(t => ({
+        name: t.name ?? "",
+        artist: t.artist?.["#text"] ?? t.artist ?? "",
+        url: t.url ?? "",
+        playcount: Number(t.playcount ?? 0),
+        image: t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
+      }));
+    } catch { return []; }
+  }
+
+  /**
+   * Get a user's weekly album chart.
+   * @param {string} userId - The Fluxer user ID
+   * @param {number|null} [from=null] - Start timestamp
+   * @param {number|null} [to=null] - End timestamp
+   * @returns {Promise<Array<object>>} Array of album objects
+   */
+  async getUserWeeklyAlbumChart(userId, from = null, to = null) {
+    if (!this.enabled) return [];
+    const user = await this.getUser(userId);
+    if (!user) return [];
+    try {
+      const params = {
+        method: "user.getweeklyalbumchart",
+        api_key: this.apiKey,
+        user: user.username,
+      };
+      if (from) params.from = from;
+      if (to) params.to = to;
+      const data = await apiCall(params, this.apiSecret);
+      return (data.weeklyalbumchart?.album ?? []).map(a => ({
+        name: a.name ?? "",
+        artist: a.artist?.["#text"] ?? a.artist ?? "",
+        url: a.url ?? "",
+        playcount: Number(a.playcount ?? 0),
+        image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
+      }));
+    } catch { return []; }
+  }
+
+  /**
+   * Get top tags for an artist.
+   * @param {string} artist - Artist name
+   * @param {number} [limit=10] - Max tags to return
+   * @returns {Promise<Array<object>>} Array of tag objects
+   */
+  async getArtistTopTags(artist, limit = 10) {
+    if (!this.enabled) return [];
+    try {
+      const data = await apiCall({
+        method: "artist.gettoptags",
+        api_key: this.apiKey,
+        artist,
+        limit,
+      }, this.apiSecret);
+      return (data.toptags?.tag ?? []).map(t => ({
+        name: t.name ?? "",
+        url: t.url ?? "",
+        count: Number(t.count ?? 0),
+      }));
+    } catch { return []; }
+  }
+
+  /**
+   * Get top tags for an album.
+   * @param {string} artist - Artist name
+   * @param {string} album - Album name
+   * @param {number} [limit=10] - Max tags to return
+   * @returns {Promise<Array<object>>} Array of tag objects
+   */
+  async getAlbumTopTags(artist, album, limit = 10) {
+    if (!this.enabled) return [];
+    try {
+      const data = await apiCall({
+        method: "album.gettoptags",
+        api_key: this.apiKey,
+        artist,
+        album,
+        limit,
+      }, this.apiSecret);
+      return (data.toptags?.tag ?? []).map(t => ({
+        name: t.name ?? "",
+        url: t.url ?? "",
+        count: Number(t.count ?? 0),
+      }));
+    } catch { return []; }
+  }
+
+  /**
+   * Get top tags for a track.
+   * @param {string} artist - Artist name
+   * @param {string} track - Track name
+   * @param {number} [limit=10] - Max tags to return
+   * @returns {Promise<Array<object>>} Array of tag objects
+   */
+  async getTrackTopTags(artist, track, limit = 10) {
+    if (!this.enabled) return [];
+    try {
+      const data = await apiCall({
+        method: "track.gettoptags",
+        api_key: this.apiKey,
+        artist,
+        track,
+        limit,
+      }, this.apiSecret);
+      return (data.toptags?.tag ?? []).map(t => ({
+        name: t.name ?? "",
+        url: t.url ?? "",
+        count: Number(t.count ?? 0),
+      }));
+    } catch { return []; }
+  }
+
+  /**
+   * Get top albums for a tag.
+   * @param {string} tag - Tag name
+   * @param {number} [limit=10] - Max albums to return
+   * @returns {Promise<Array<object>>} Array of album objects
+   */
+  async getTagTopAlbums(tag, limit = 10) {
+    if (!this.enabled) return [];
+    try {
+      const data = await apiCall({
+        method: "tag.gettopalbums",
+        api_key: this.apiKey,
+        tag,
+        limit,
+      }, this.apiSecret);
+      return (data.albums?.album ?? []).map(a => ({
+        name: a.name ?? "",
+        artist: a.artist?.name ?? "Unknown",
+        url: a.url ?? "",
+        playcount: Number(a.playcount ?? 0),
+        image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
+      }));
+    } catch { return []; }
+  }
+
+  /**
+   * Get top artists by country.
+   * @param {string} country - Country name
+   * @param {number} [limit=10] - Max artists to return
+   * @returns {Promise<Array<object>>} Array of artist objects
+   */
+  async getGeoTopArtists(country, limit = 10) {
+    if (!this.enabled) return [];
+    try {
+      const data = await apiCall({
+        method: "geo.gettopartists",
+        api_key: this.apiKey,
+        country,
+        limit,
+      }, this.apiSecret);
+      return (data.topartists?.artist ?? []).map(a => ({
+        name: a.name ?? "",
+        url: a.url ?? "",
+        listeners: Number(a.listeners ?? 0),
+        image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
+      }));
+    } catch { return []; }
+  }
+
+  /**
+   * Get top tracks by country.
+   * @param {string} country - Country name
+   * @param {number} [limit=10] - Max tracks to return
+   * @returns {Promise<Array<object>>} Array of track objects
+   */
+  async getGeoTopTracks(country, limit = 10) {
+    if (!this.enabled) return [];
+    try {
+      const data = await apiCall({
+        method: "geo.gettoptracks",
+        api_key: this.apiKey,
+        country,
+        limit,
+      }, this.apiSecret);
+      return (data.tracks?.track ?? []).map(t => ({
+        name: t.name ?? "",
+        artist: t.artist?.name ?? "Unknown",
+        url: t.url ?? "",
+        listeners: Number(t.listeners ?? 0),
+        image: t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
+      }));
+    } catch { return []; }
+  }
+
+  /**
+   * Get global trending tracks from Last.fm charts.
+   * @param {number} [limit=10] - Max tracks to return
+   * @returns {Promise<Array<object>>} Array of trending track objects
+   */
+  async getChartTopTracks(limit = 10) {
+    if (!this.enabled) return [];
+    try {
+      const data = await apiCall({
+        method: "chart.gettoptracks",
+        api_key: this.apiKey,
+        limit,
+      }, this.apiSecret);
+      return (data.tracks?.track ?? []).map(t => ({
+        name: t.name ?? "",
+        artist: t.artist?.name ?? "Unknown",
+        url: t.url ?? "",
+        listeners: Number(t.listeners ?? 0),
+        playcount: Number(t.playcount ?? 0),
+        image: t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
+      }));
+    } catch { return []; }
+  }
+
+  /**
+   * Get global trending artists from Last.fm charts.
+   * @param {number} [limit=10] - Max artists to return
+   * @returns {Promise<Array<object>>} Array of trending artist objects
+   */
+  async getChartTopArtists(limit = 10) {
+    if (!this.enabled) return [];
+    try {
+      const data = await apiCall({
+        method: "chart.gettopartists",
+        api_key: this.apiKey,
+        limit,
+      }, this.apiSecret);
+      return (data.artists?.artist ?? []).map(a => ({
+        name: a.name ?? "",
+        url: a.url ?? "",
+        listeners: Number(a.listeners ?? 0),
+        playcount: Number(a.playcount ?? 0),
+        image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
+      }));
+    } catch { return []; }
+  }
+
+  /**
+   * Get play counts for a specific track across multiple users ("who knows track").
+   * @param {string} artist - Artist name
+   * @param {string} track - Track name
+   * @param {Array<string>} userIds - Array of Fluxer user IDs to check
+   * @returns {Promise<Array<{ userId: string, username: string, playcount: number }>>}
+   */
+  async getWhoKnowsTrack(artist, track, userIds) {
+    if (!this.enabled) return [];
+    if (!Array.isArray(userIds) || !userIds.length) return [];
+
+    const concurrency = 5;
+    const results = [];
+
+    for (let i = 0; i < userIds.length; i += concurrency) {
+      const batch = userIds.slice(i, i + concurrency);
+
+      const batchResults = await Promise.allSettled(
+        batch.map(async (uid) => {
+          const user = await this.getUser(uid);
+          if (!user) return null;
+
+          try {
+            const info = await this.getTrackInfo(artist, track, uid);
+            const playcount = Number(info?.userplaycount ?? 0);
+            return {
+              userId: uid,
+              username: user.username,
+              playcount,
+            };
+          } catch {
+            return {
+              userId: uid,
+              username: user.username,
+              playcount: 0,
+            };
+          }
+        })
+      );
+
+      for (const r of batchResults) {
+        if (r.status === "fulfilled" && r.value && r.value.playcount > 0) {
+          results.push(r.value);
+        }
+      }
+    }
+
+    results.sort((a, b) => b.playcount - a.playcount);
+    return results;
+  }
+
+  /**
+   * Get play counts for a specific album across multiple users ("who knows album").
+   * @param {string} artist - Artist name
+   * @param {string} album - Album name
+   * @param {Array<string>} userIds - Array of Fluxer user IDs to check
+   * @returns {Promise<Array<{ userId: string, username: string, playcount: number }>>}
+   */
+  async getWhoKnowsAlbum(artist, album, userIds) {
+    if (!this.enabled) return [];
+    if (!Array.isArray(userIds) || !userIds.length) return [];
+
+    const concurrency = 5;
+    const results = [];
+
+    for (let i = 0; i < userIds.length; i += concurrency) {
+      const batch = userIds.slice(i, i + concurrency);
+
+      const batchResults = await Promise.allSettled(
+        batch.map(async (uid) => {
+          const user = await this.getUser(uid);
+          if (!user) return null;
+
+          try {
+            const info = await this.getAlbumInfo(artist, album, uid);
+            const playcount = Number(info?.userplaycount ?? 0);
+            return {
+              userId: uid,
+              username: user.username,
+              playcount,
+            };
+          } catch {
+            return {
+              userId: uid,
+              username: user.username,
+              playcount: 0,
+            };
+          }
+        })
+      );
+
+      for (const r of batchResults) {
+        if (r.status === "fulfilled" && r.value && r.value.playcount > 0) {
+          results.push(r.value);
+        }
+      }
+    }
+
+    results.sort((a, b) => b.playcount - a.playcount);
+    return results;
+  }
+
+  /**
+   * Find users with similar top artists (affinity).
+   * For each pair of users, compute overlap of their top artists.
+   * @param {Array<string>} userIds - Array of Fluxer user IDs
+   * @param {number} [limit=10] - Max results to return
+   * @returns {Promise<Array<object>>} Array of affinity results
+   */
+  async getAffinity(userIds, limit = 10) {
+    if (!this.enabled) return [];
+    if (!Array.isArray(userIds) || userIds.length < 2) return [];
+
+    const userArtistsMap = new Map();
+    const concurrency = 5;
+
+    for (let i = 0; i < userIds.length; i += concurrency) {
+      const batch = userIds.slice(i, i + concurrency);
+      const results = await Promise.allSettled(
+        batch.map(async (uid) => {
+          const user = await this.getUser(uid);
+          if (!user) return null;
+          try {
+            const artists = await this.getTopArtists(uid, "overall", 50);
+            return { uid, username: user.username, artists };
+          } catch {
+            return null;
+          }
+        })
+      );
+      for (const r of results) {
+        if (r.status === "fulfilled" && r.value) {
+          userArtistsMap.set(r.value.uid, r.value);
+        }
+      }
+    }
+
+    const entries = [...userArtistsMap.values()];
+    const affinityResults = [];
+
+    for (let i = 0; i < entries.length; i++) {
+      for (let j = i + 1; j < entries.length; j++) {
+        const a = entries[i];
+        const b = entries[j];
+        const namesA = new Set(a.artists.map(ar => ar.name.toLowerCase()));
+        const namesB = new Set(b.artists.map(ar => ar.name.toLowerCase()));
+        const common = [...namesA].filter(n => namesB.has(n));
+        if (common.length > 0) {
+          const commonArtists = a.artists
+            .filter(ar => namesB.has(ar.name.toLowerCase()))
+            .map(ar => ({ name: ar.name, url: ar.url, playcount: ar.playcount }));
+          affinityResults.push({
+            users: [a.username, b.username],
+            userIds: [a.uid, b.uid],
+            matchCount: common.length,
+            commonArtists,
+          });
+        }
+      }
+    }
+
+    affinityResults.sort((a, b) => b.matchCount - a.matchCount);
+    return affinityResults.slice(0, limit);
+  }
+
+  /**
+   * Get artist crowns for a user — artists where they are the #1 listener in the server.
+   * @param {string} userId - The Fluxer user ID
+   * @param {Array<string>} userIds - Array of Fluxer user IDs in the server
+   * @returns {Promise<Array<object>>} Array of crown objects
+   */
+  async getCrowns(userId, userIds) {
+    if (!this.enabled) return [];
+    const user = await this.getUser(userId);
+    if (!user) return [];
+    try {
+      const topArtists = await this.getTopArtists(userId, "overall", 50);
+      const crowns = [];
+      const concurrency = 3;
+
+      for (let i = 0; i < topArtists.length; i += concurrency) {
+        const batch = topArtists.slice(i, i + concurrency);
+        const results = await Promise.allSettled(
+          batch.map(async (artist) => {
+            const listeners = await this.getWhoKnows(artist.name, userIds);
+            if (listeners.length > 0 && listeners[0].userId === String(userId)) {
+              return {
+                artist: artist.name,
+                artistUrl: artist.url,
+                userPlaycount: artist.playcount,
+                nextBest: listeners.length > 1 ? listeners[1] : null,
+                image: artist.image ?? "",
+              };
+            }
+            return null;
+          })
+        );
+        for (const r of results) {
+          if (r.status === "fulfilled" && r.value) crowns.push(r.value);
+        }
+      }
+
+      crowns.sort((a, b) => b.userPlaycount - a.userPlaycount);
+      return crowns;
+    } catch { return []; }
   }
 
   _assertEnabled() {
