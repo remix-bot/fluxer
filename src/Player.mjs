@@ -333,6 +333,7 @@ export default class Player extends EventEmitter {
   _streamingStopped    = false;
   _skipping            = false;
   _seeking             = false;
+  _replayingSeek       = false;
   _currentPassthrough  = null;
   _wasRadio            = false;
   _radioAnnounced      = false;
@@ -1254,6 +1255,7 @@ export default class Player extends EventEmitter {
       this.leaving = true;
       this._stopInactivityTimer();
       this._streamingStopped = true;
+      this._replayingSeek = false;
       this._clearTrackEndTimer();
       this._activeTrackOpt = null;
 
@@ -1300,6 +1302,7 @@ export default class Player extends EventEmitter {
 
     this._clearTrackEndTimer();
     this._activeTrackOpt = null;
+    this._replayingSeek = false;
 
     try {
       if (this._moonlink && this._onMoonlinkReady) {
@@ -1610,6 +1613,7 @@ export default class Player extends EventEmitter {
     const current = this.queue.getCurrent();
     if (!current?.encoded || !this.connection || this.leaving) return;
 
+    this._replayingSeek = true;
     this._streamingStopped = true;
     await this._stopMediaPlayer().catch(() => {});
     this._streamingStopped = false;
@@ -1637,6 +1641,8 @@ export default class Player extends EventEmitter {
       logger.warn("[Player] _replayWithFilters stream error:", e.message);
     }
 
+    this._replayingSeek = false;
+
     if (!this.leaving && !this._skipping && !this._seeking && !this._paused) {
       const current = this.queue.getCurrent();
       if (current?.type === "radio") {
@@ -1656,6 +1662,8 @@ export default class Player extends EventEmitter {
         this._activeTrackOpt = null;
         this.playNext().catch(e => logger.error("[Player] post-replay playNext error:", e.message));
       }
+    } else {
+      this._streamingStopped = false;
     }
   }
 
