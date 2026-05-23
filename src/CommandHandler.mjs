@@ -310,17 +310,17 @@ export class HelpHandler {
     cmds = this.userCommands(cmds);
     if (this.paginationHandler && msg && paginate) return this.paginationHandler(msg, this, cmds);
 
+    const guildId = msg.message.guildId;
     let p = (page) ? ` (page ${page.curr}/${page.max})` : "";
     const indexOffset = (page) ? page.offset : 0;
-    let content = "Available Commands" + p + ": \n\n";
-    if (page && page.curr !== 1) content += (indexOffset) + ". [...]\n";
+    let content = this.commands.t(guildId, "cmdHandler.help.availableCommands", { $page: p }) + "\n\n";
+    if (page && page.curr !== 1) content += (indexOffset) + this.commands.t(guildId, "cmdHandler.help.ellipsis") + "\n";
     cmds.forEach((cmd, i) => { content += (i + 1 + indexOffset) + ". **" + cmd.name + "**: " + cmd.description + "\n"; });
-    if (page && page.curr !== page.max) content += (cmds.length + indexOffset) + ". [...]\n";
-    content += "\nRun `$prefix$helpCmd <command>` to learn more about it. You can also include subcommands.\n";
-    content += "For example: `$prefix$helpCmd command subcommandName`";
-    if (page) content += "\n\nTip: Turn pages by using `$prefix$helpCmd <page number>`";
+    if (page && page.curr !== page.max) content += (cmds.length + indexOffset) + this.commands.t(guildId, "cmdHandler.help.ellipsis") + "\n";
+    content += this.commands.format(this.commands.t(guildId, "cmdHandler.help.runHelp"), guildId);
+    if (page) content += this.commands.format(this.commands.t(guildId, "cmdHandler.help.pageTip"), guildId);
 
-    return this.commands.format(content, msg.message.guildId);
+    return this.commands.format(content, guildId);
   }
 
   commandDescription(command) { return command.description; }
@@ -342,42 +342,44 @@ export class HelpHandler {
   }
 
   getCommandHelp(command, msg) {
+    const guildId = msg.message.guildId;
     let content = `${HelpHandler.capitalise(command.name)}\n`;
     content += this.commandDescription(command, msg) + "\n\n";
-    content += "Usage: \n💻 `" + this.commandUsage(command, msg) + "`\n\n";
+    content += this.commands.t(guildId, "cmdHandler.help.usage") + "\n💻 `" + this.commandUsage(command, msg) + "`\n\n";
     if (command.examples.length > 0)
-      content += "Example(s): \n- `" + command.examples.map(e => this.commands.format(e, msg.message.guildId)).join("`\n- `") + "`\n\n";
+      content += this.commands.t(guildId, "cmdHandler.help.examples") + "\n- `" + command.examples.map(e => this.commands.format(e, guildId)).join("`\n- `") + "`\n\n";
     if (command.aliases.length > 1) {
-      content += "Aliases: \n";
+      content += this.commands.t(guildId, "cmdHandler.help.aliases") + "\n";
       command.aliases.forEach(alias => { content += "- " + alias + "\n"; });
       content += "\n";
     }
     if (command.subcommands.length > 0) {
-      content += "Subcommands: \n";
+      content += this.commands.t(guildId, "cmdHandler.help.subcommands") + "\n";
       command.subcommands.forEach(s => {
-        content += "- " + s.name + ": " + (this.commandDescription(s, msg) || "").split("\n")[0] + ((s.options.length > 0) ? "; (`" + s.options.length + " option(s)`)" : "") + "\n";
+        const optCount = s.options.length > 0 ? "; (`" + this.commands.t(guildId, "cmdHandler.help.optionCount", { $count: s.options.length }) + "`)" : "";
+        content += "- " + s.name + ": " + (this.commandDescription(s, msg) || "").split("\n")[0] + optCount + "\n";
       });
       content += "\n";
     } else if (command.options.length > 0) {
-      content += "Arguments: \n";
+      content += this.commands.t(guildId, "cmdHandler.help.arguments") + "\n";
       command.options.forEach(o => {
         const optional = ((o.required) ? "" : "?");
         const flag = (o instanceof Flag) ? "-" : "";
         if (o.type === "choice") {
           const choiceDisplay = Option.formatChoicesInline(o.choices);
           const aliasDisplay = o.aliases.filter(a => a !== null).join('`, `');
-          content += "- **" + flag + o.name + "**" + optional + ": " + (o.description || "").split("\n")[0] + ";\n  - Allowed values: " + choiceDisplay + "\n  - Aliases: `" + aliasDisplay + "`\n";
+          content += "- **" + flag + o.name + "**" + optional + ": " + (o.description || "").split("\n")[0] + ";\n  - " + this.commands.t(guildId, "cmdHandler.help.allowedValues") + choiceDisplay + "\n  - " + this.commands.t(guildId, "cmdHandler.help.aliasesLabel") + "`" + aliasDisplay + "`\n";
         } else {
-          content += "- **" + flag + o.name + "**" + optional + ": " + (o.description || "").split("\n")[0] + "\n  - Aliases: `" + o.aliases.join("`, `") + "`\n";
+          content += "- **" + flag + o.name + "**" + optional + ": " + (o.description || "").split("\n")[0] + "\n  - " + this.commands.t(guildId, "cmdHandler.help.aliasesLabel") + "`" + o.aliases.join("`, `") + "`\n";
         }
         content += "\n";
       });
       content += "\n";
     }
     if (command.requirements.length > 0) {
-      content += "Requirements: \n";
+      content += this.commands.t(guildId, "cmdHandler.help.requirements") + "\n";
       command.requirements.forEach(r => {
-        content += "- " + r.getPermissions().map(e => "Permission `" + e + "`").join("\n- ");
+        content += "- " + r.getPermissions().map(e => this.commands.t(guildId, "cmdHandler.help.permission", { $permission: e })).join("\n- ");
       });
     }
     return content.trim();
@@ -609,7 +611,7 @@ export class CommandHandler extends EventEmitter {
         let value = args[++argIndex];
         if ((value || "").startsWith('"') && (STRING_TYPES.includes(op.type))) {
           const data = collectArguments(argIndex, value, [value]);
-          if (!data) return this.replyHandler(this.textWrapError.replace(/\$value/gi, args.slice(argIndex).join(" ")).replace(/\$quote/gi, args[argIndex].charAt(0)), msg);
+          if (!data) { const twGuildId = msg.channel?.channel?.guildId ?? msg.message?.guildId; return this.replyHandler(this._textWrapErrorMsg(twGuildId, args.slice(argIndex).join(" "), args[argIndex].charAt(0)), msg); }
           argIndex += data.index - argIndex;
           value = data.args.join(" ").slice(1, data.args.join(" ").length - 1);
         }
@@ -617,7 +619,8 @@ export class CommandHandler extends EventEmitter {
         i--;
         const valid = op.validateInput(value, this.client, msg.message);
         if (!valid && (op.required || !op.empty(value))) {
-          const e = op.typeError.replace(/\$previousCmd/gi, previous).replace(/\$currValue/gi, value);
+          const errGuildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
+          const e = this._optionTypeError(errGuildId, op, value, previous);
           return (!external) ? this.replyHandler(e, msg) : e;
         }
         usedArgumentCount += 2;
@@ -633,7 +636,7 @@ export class CommandHandler extends EventEmitter {
       let value = args[argIndex];
       if ((args[argIndex] || "").startsWith('"') && (STRING_TYPES.includes(o.type))) {
         const data = collectArguments(argIndex, args[argIndex], [args[argIndex]]);
-        if (!data) return this.replyHandler(this.textWrapError.replace(/\$value/gi, args.slice(argIndex).join(" ")).replace(/\$quote/gi, args[argIndex].charAt(0)), msg);
+        if (!data) { const twGuildId2 = msg.channel?.channel?.guildId ?? msg.message?.guildId; return this.replyHandler(this._textWrapErrorMsg(twGuildId2, args.slice(argIndex).join(" "), args[argIndex].charAt(0)), msg); }
         argIndex += data.index - argIndex;
         value = data.args.join(" ");
         value = value.slice(1, value.length - 1);
@@ -644,7 +647,8 @@ export class CommandHandler extends EventEmitter {
         valid = o.validateInput(value, this.client, msg.message);
       }
       if (!valid && (o.required || !o.empty(value))) {
-        const e = o.typeError.replace(/\$previousCmd/gi, previous).replace(/\$currValue/gi, value);
+        const errGuildId2 = msg.channel?.channel?.guildId ?? msg.message?.guildId;
+        const e = this._optionTypeError(errGuildId2, o, value, previous);
         return (!external) ? this.replyHandler(e, msg) : e;
       }
       if (o.empty(value)) value = o.defaultValue;
@@ -659,7 +663,8 @@ export class CommandHandler extends EventEmitter {
       let o = texts[0];
       let text = args.slice(usedArgumentCount + 1).join(" ");
       if (o.required && !o.validateInput(text, this.client, msg.message)) {
-        let e = o.typeError.replace(/\$previousCmd/gi, previous).replace(/\$currValue/gi, text);
+        const textErrGuildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
+        let e = this._optionTypeError(textErrGuildId, o, text, previous);
         return (!external) ? this.replyHandler(e, msg) : e;
       }
       const quote = (['"', "'"].includes(text.charAt(0))) ? text.charAt(0) : null;
@@ -735,6 +740,28 @@ export class CommandHandler extends EventEmitter {
 
   validateInput(type, i, m) { return (new Option()).validateInput(i, this.client, m, type); }
   formatInput(type, i, m) { return (new Option()).formatInput(i, this.client, m, type); }
+
+  _optionTypeError(guildId, option, value, previous) {
+    if (option.tError) {
+      return option.tError.replace(/\$previousCmd/gi, previous).replace(/\$currValue/gi, value);
+    }
+    const localeKey = option.type === 'choice' ? 'cmdBuilder.option.invalidChoice'
+      : (option.type === 'channel' || option.type === 'voiceChannel') ? 'cmdBuilder.option.invalidChannel'
+      : 'cmdBuilder.option.invalidType';
+    const choiceStr = option.type === 'choice'
+      ? (option.choices.length > Option.THRESHOLD ? Option.formatChoicesCompact(option.choices) : option.choices.map(c => '- ' + c).join('\n'))
+      : '';
+    return this.t(guildId, localeKey, {
+      $currValue: value,
+      $optionName: option.name,
+      $type: option.type,
+      $choices: choiceStr
+    }).replace(/\$previousCmd/gi, previous);
+  }
+
+  _textWrapErrorMsg(guildId, value, quote) {
+    return this.t(guildId, 'cmdHandler.textWrapError', { $value: value, $quote: quote });
+  }
 
   addCommand(builder) {
     this.commandNames.push(...builder.aliases);

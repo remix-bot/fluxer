@@ -5,18 +5,37 @@
     },
     "subcommand": {
       "invalid": "Invalid subcommand. Try one of the following options: `$previousCmd <$cmdlist>`"
+    },
+    "option": {
+      "invalidChoice": "Invalid value '{{$currValue}}'. The option `{{$optionName}}` has to be one of the following:\n{{$choices}}\nSchematic: `$previousCmd <{{$type}}>`",
+      "invalidChannel": "Invalid value '{{$currValue}}'. The option `{{$optionName}}` has to be a channel mention, id, or name.\nSchematic: `$previousCmd <{{$type}}>`",
+      "invalidType": "Invalid value '{{$currValue}}'. The option `{{$optionName}}` has to be of type `{{$type}}`.\nSchematic: `$previousCmd <{{$type}}>`"
     }
   },
   "cmdHandler": {
     "command": {
-      "invalid": "Unknown command {{command}}!",
-      "suggestion": "Did you mean {{command}}? (Type {{acceptCommand}} to run this)"
+      "invalid": "Unknown command {{command}}!"
     },
     "help": {
       "pageStructure": "Available Commands (page $currPage/$maxPage): \n\n$content\n\nRun `$prefix$helpCmd <command>` to learn more about it. You can also include subcommands.\nFor example: `$prefix$helpCmd settings get`\n\nTip: Use the arrows beneath this message to turn pages, or specify the required page by using `$prefix$helpCmd <page number>`",
-      "unknownCommand": "❌ Unknown command `{{command}}`. Use `{{prefix}}help` to browse."
+      "unknownCommand": "❌ Unknown command `{{command}}`. Use `{{prefix}}help` to browse.",
+      "availableCommands": "Available Commands{{$page}}: ",
+      "runHelp": "\nRun `$prefix$helpCmd <command>` to learn more about it. You can also include subcommands.\nFor example: `$prefix$helpCmd command subcommandName`",
+      "pageTip": "\n\nTip: Turn pages by using `$prefix$helpCmd <page number>`",
+      "ellipsis": ". [...]",
+      "usage": "Usage: ",
+      "examples": "Example(s): ",
+      "aliases": "Aliases: ",
+      "subcommands": "Subcommands: ",
+      "arguments": "Arguments: ",
+      "allowedValues": "Allowed values: ",
+      "aliasesLabel": "Aliases: ",
+      "requirements": "Requirements: ",
+      "permission": "Permission `{{$permission}}`",
+      "optionCount": "{{$count}} option(s)"
     },
     "invalidFlag": "Invalid flag `$invalidFlag`. It doesn't match any options on this command.\n`$previousCmd $invalidFlag`",
+    "textWrapError": "Malformed string `{{$value}}`: Missing a closing quote character (`{{$quote}}`) after the desired string.",
     "page": {
       "invalid": "{{number}} is not a valid page number!"
     },
