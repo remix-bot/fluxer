@@ -1232,7 +1232,7 @@ export async function run(msg, data) {
           const link = t.url ? `[${t.name}](${t.url})` : t.name;
           return `${link} by **${t.artist}** (${matchPct}%)`;
         }).join("\n");
-        embed.addFields([{ name: "Similar Tracks", value: simStr.slice(0, 1024), inline: false }]);
+        embed.addFields({ name: "Similar Tracks", value: simStr.slice(0, 1024), inline: false });
       }
 
       embed.setFooter({ text: `Last.fm: ${user.username}` });
@@ -1449,7 +1449,7 @@ export async function run(msg, data) {
           const link = a.url ? `[${a.name}](${a.url})` : a.name;
           return `\`${num}.\` ${link} (**${a.playcount}** plays)`;
         }).join("\n");
-        embed.addFields([{ name: `Common Artists (${comparison.commonArtists.length})`, value: commonStr.slice(0, 1024), inline: false }]);
+        embed.addFields({ name: `Common Artists (${comparison.commonArtists.length})`, value: commonStr.slice(0, 1024), inline: false });
       }
 
       return msg.reply({ embeds: [embed] });
