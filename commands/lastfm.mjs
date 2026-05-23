@@ -91,7 +91,7 @@ async function resolveLastFmTrack(player, track, resolveProvider = "yt") {
 function extractCurrentTrack(player) {
   const track = player?.queue?.getCurrent();
   if (!track) return null;
-  const artist = track.lastfm?.artist ?? track.requestedArtist ?? track.artist ?? track.artists?.[0]?.name ?? null;
+  const artist = track.lastfm?.artist ?? track.requestedArtist ?? track.artist ?? track.artists?.[0]?.name ?? track.author?.name ?? null;
   const name = track.lastfm?.name ?? track.requestedTitle ?? track.title ?? track.name ?? null;
   const album = track.album ?? track.lastfm?.album ?? null;
   return { artist, name, album, track };
@@ -822,7 +822,7 @@ export async function run(msg, data) {
         });
       }
 
-      const artist = track.lastfm?.artist ?? track.requestedArtist ?? track.artist ?? track.artists?.[0]?.name ?? "Unknown";
+      const artist = track.lastfm?.artist ?? track.requestedArtist ?? track.artist ?? track.artists?.[0]?.name ?? track.author?.name ?? "Unknown";
       const name = track.lastfm?.name ?? track.requestedTitle ?? track.title ?? track.name ?? "Unknown";
 
       try {
@@ -850,7 +850,7 @@ export async function run(msg, data) {
         });
       }
 
-      const artist = track.lastfm?.artist ?? track.requestedArtist ?? track.artist ?? track.artists?.[0]?.name ?? "Unknown";
+      const artist = track.lastfm?.artist ?? track.requestedArtist ?? track.artist ?? track.artists?.[0]?.name ?? track.author?.name ?? "Unknown";
       const name = track.lastfm?.name ?? track.requestedTitle ?? track.title ?? track.name ?? "Unknown";
 
       try {
