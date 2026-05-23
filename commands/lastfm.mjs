@@ -1010,7 +1010,7 @@ export async function run(msg, data) {
         fields.push({ name: "Similar Artists", value: simStr, inline: false });
       }
 
-      embed.addFields(fields);
+      embed.addFields(...fields);
 
       if (info.bio) {
         const cleanBio = info.bio.replace(/<[^>]*>/g, "").trim();
@@ -1107,7 +1107,7 @@ export async function run(msg, data) {
         fields.push({ name: "Tracklist", value: trackLines.join("\n").slice(0, 1024), inline: false });
       }
 
-      embed.addFields(fields);
+      embed.addFields(...fields);
       embed.setFooter({ text: user ? `Last.fm: ${user.username}` : "Last.fm" });
 
       return msg.reply({ embeds: [embed] });
@@ -1211,7 +1211,7 @@ export async function run(msg, data) {
         fields.push({ name: "Tags", value: tagStr, inline: false });
       }
 
-      embed.addFields(fields);
+      embed.addFields(...fields);
 
       if (info.wiki?.summary) {
         const cleanSummary = info.wiki.summary.replace(/<[^>]*>/g, "").trim();
@@ -1381,7 +1381,7 @@ export async function run(msg, data) {
         fields.push({ name: "Top Tracks", value: trackStr.slice(0, 1024), inline: false });
       }
 
-      embed.addFields(fields);
+      embed.addFields(...fields);
 
       if (tagInfo.summary) {
         const cleanSummary = tagInfo.summary.replace(/<[^>]*>/g, "").trim();
