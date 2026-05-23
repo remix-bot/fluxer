@@ -70,6 +70,28 @@ export class CommandRequirement {
 }
 
 export class Option {
+  static THRESHOLD = 10;
+  static COLS_PER_LINE = 5;
+
+  static formatChoicesCompact(choices, perLine = Option.COLS_PER_LINE) {
+    const lines = [];
+    for (let i = 0; i < choices.length; i += perLine) {
+      lines.push(choices.slice(i, i + perLine).map(c => '`' + c + '`').join(' · '));
+    }
+    return lines.join('\n');
+  }
+
+  static formatChoicesInline(choices) {
+    if (choices.length <= Option.THRESHOLD) {
+      return '`' + choices.join('`, `') + '`';
+    }
+    return Option.formatChoicesCompact(choices, 6);
+  }
+
+  static formatChoicesUsage(choices, max = 6) {
+    if (choices.length <= max) return choices.join(' | ');
+    return choices.slice(0, max).join(' | ') + ' | ...';
+  }
   channelRegex = /^<#(?<id>\d+)>/;
   userRegex = /^<@!?(?<id>\d+)>/;
   idRegex = /^(?<id>\d+)/;
@@ -193,8 +215,12 @@ export class Option {
   get typeError() {
     if (this.tError) return this.tError;
     switch (this.type) {
-      case "choice":
-        return "Invalid value '$currValue'. The option `" + this.name + "` has to be one of the following options: \n- " + this.choices.join("\n- ") + "\nSchematic: `$previousCmd <" + this.type + ">`";
+      case "choice": {
+        const choiceStr = this.choices.length > Option.THRESHOLD
+          ? Option.formatChoicesCompact(this.choices)
+          : this.choices.map(c => '- ' + c).join('\n');
+        return "Invalid value '$currValue'. The option `" + this.name + "` has to be one of the following: \n" + choiceStr + "\nSchematic: `$previousCmd <" + this.type + ">`";
+      }
       case "voiceChannel":
       case "channel":
         return "Invalid value '$currValue'. The option `" + this.name + "` has to be a channel mention, id, or name.\nSchematic: `$previousCmd <" + this.type + ">`";
@@ -307,8 +333,8 @@ export class HelpHandler {
     cmd.options.forEach(o => {
       if (o.type === "text") return;
       if (o instanceof Flag)
-        return options += (o.type === "choice") ? "-" + o.aliases[0] + " <" + o.choices.join(" | ") + ">" : " -" + o.aliases[0] + " '" + o.type + "'";
-      options += (o.type === "choice") ? " <" + o.choices.join(" |") + ">" : " '" + o.name + ": " + o.type + "'";
+        return options += (o.type === "choice") ? "-" + o.aliases[0] + " <" + Option.formatChoicesUsage(o.choices) + ">" : " -" + o.aliases[0] + " '" + o.type + "'";
+      options += (o.type === "choice") ? " <" + Option.formatChoicesUsage(o.choices) + ">" : " '" + o.name + ": " + o.type + "'";
     });
     let o = cmd.options.find(e => e.type === "text");
     if (o) options += "'" + o.name + ": " + o.type + "'";
@@ -338,7 +364,9 @@ export class HelpHandler {
         const optional = ((o.required) ? "" : "?");
         const flag = (o instanceof Flag) ? "-" : "";
         if (o.type === "choice") {
-          content += "- **" + flag + o.name + "**" + optional + ": " + (o.description || "").split("\n")[0] + ";\n  - Allowed values: `" + o.choices.join("`, `") + "`\n  - Aliases: `" + o.aliases.join("`, `") + "`\n";
+          const choiceDisplay = Option.formatChoicesInline(o.choices);
+          const aliasDisplay = o.aliases.filter(a => a !== null).join('`, `');
+          content += "- **" + flag + o.name + "**" + optional + ": " + (o.description || "").split("\n")[0] + ";\n  - Allowed values: " + choiceDisplay + "\n  - Aliases: `" + aliasDisplay + "`\n";
         } else {
           content += "- **" + flag + o.name + "**" + optional + ": " + (o.description || "").split("\n")[0] + "\n  - Aliases: `" + o.aliases.join("`, `") + "`\n";
         }
