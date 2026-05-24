@@ -5,6 +5,11 @@
     },
     "subcommand": {
       "invalid": "Ungültiger Unterbefehl. Versuche eine der folgenden Optionen: `$previousCmd <$cmdlist>`"
+    },
+    "option": {
+      "invalidChoice": "Ungültiger Wert '{{$currValue}}'. Die Option `{{$optionName}}` muss eine der folgenden sein:\n{{$choices}}\nSchema: `$previousCmd <{{$type}}>`",
+      "invalidChannel": "Ungültiger Wert '{{$currValue}}'. Die Option `{{$optionName}}` muss eine Kanalerwähnung, ID oder Name sein.\nSchema: `$previousCmd <{{$type}}>`",
+      "invalidType": "Ungültiger Wert '{{$currValue}}'. Die Option `{{$optionName}}` muss vom Typ `{{$type}}` sein.\nSchema: `$previousCmd <{{$type}}>`"
     }
   },
   "cmdHandler": {

@@ -1396,12 +1396,12 @@ export class GatewayHandler {
           const set = remix.settingsMgr.getServer(guildId);
           if (set) {
             const raw = set.get("stay_247");
+            const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
             const channels = new Set(
-                (Array.isArray(raw) ? raw : raw ? [raw] : [])
-                    .filter(id => id && id !== "none" && String(id).replace(/\D/g, "") !== channelId)
+                arr.filter(id => id && id !== "none" && String(id).replace(/\D/g, "") !== channelId)
             );
-            remove247ChannelMode(set, channelId, channels);
             set.set("stay_247", channels.size > 0 ? [...channels] : "none");
+            remove247ChannelMode(set, channelId, channels);
           }
         } catch (cleanupErr) {
           logger.warn(`[BootRecovery] Failed to auto-remove missing channel ${channelId} from 24/7:`, cleanupErr?.message);

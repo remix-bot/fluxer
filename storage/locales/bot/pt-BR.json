@@ -5,6 +5,11 @@
     },
     "subcommand": {
       "invalid": "Subcomando inválido. Tente uma das seguintes opções: `$previousCmd <$cmdlist>`"
+    },
+    "option": {
+      "invalidChoice": "Valor inválido '{{$currValue}}'. A opção `{{$optionName}}` deve ser uma das seguintes:\n{{$choices}}\nEsquema: `$previousCmd <{{$type}}>`",
+      "invalidChannel": "Valor inválido '{{$currValue}}'. A opção `{{$optionName}}` deve ser uma menção de canal, ID ou nome.\nEsquema: `$previousCmd <{{$type}}>`",
+      "invalidType": "Valor inválido '{{$currValue}}'. A opção `{{$optionName}}` deve ser do tipo `{{$type}}`.\nEsquema: `$previousCmd <{{$type}}>`"
     }
   },
   "cmdHandler": {

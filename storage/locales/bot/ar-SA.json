@@ -5,6 +5,11 @@
     },
     "subcommand": {
       "invalid": "أمر فرعي غير صالح. جرّب أحد الخيارات التالية: `$previousCmd <$cmdlist>`"
+    },
+    "option": {
+      "invalidChoice": "قيمة غير صالحة '{{$currValue}}'. يجب أن يكون الخيار `{{$optionName}}` أحد الخيارات التالية:\n{{$choices}}\nالشكل: `$previousCmd <{{$type}}>`",
+      "invalidChannel": "قيمة غير صالحة '{{$currValue}}'. يجب أن يكون الخيار `{{$optionName}}` إشارة قناة أو معرف أو اسم.\nالشكل: `$previousCmd <{{$type}}>`",
+      "invalidType": "قيمة غير صالحة '{{$currValue}}'. يجب أن يكون الخيار `{{$optionName}}` من النوع `{{$type}}`.\nالشكل: `$previousCmd <{{$type}}>`"
     }
   },
   "cmdHandler": {

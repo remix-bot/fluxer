@@ -5,6 +5,11 @@
     },
     "subcommand": {
       "invalid": "فەرمانی لاوەکی نادروست. یەکێک لەم هەڵبژاردانەی خوارەوە تاقی بکەرەوە: `$previousCmd <$cmdlist>`"
+    },
+    "option": {
+      "invalidChoice": "بەهای نادروست '{{$currValue}}'. هەڵبژاردەی `{{$optionName}}` دەبێت یەکێک بێت لەمانەی خوارەوە:\n{{$choices}}\nشێواز: `$previousCmd <{{$type}}>`",
+      "invalidChannel": "بەهای نادروست '{{$currValue}}'. هەڵبژاردەی `{{$optionName}}` دەبێت باسی کەناڵ، ID، یان ناو بێت.\nشێواز: `$previousCmd <{{$type}}>`",
+      "invalidType": "بەهای نادروست '{{$currValue}}'. هەڵبژاردەی `{{$optionName}}` دەبێت جۆری `{{$type}}` بێت.\nشێواز: `$previousCmd <{{$type}}>`"
     }
   },
   "cmdHandler": {
