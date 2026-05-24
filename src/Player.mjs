@@ -14,7 +14,20 @@
 
 import Revoicejs from "revoice.js";
 const { MediaPlayer } = Revoicejs;
-import { ConnectionState, RoomEvent as LKRoomEvent } from "@livekit/rtc-node";
+
+const ConnectionState = Object.freeze({
+  CONN_DISCONNECTED: 0,
+  CONN_CONNECTED:   1,
+  CONN_RECONNECTING: 2,
+});
+
+const LKRoomEvent = Object.freeze({
+  ConnectionStateChanged:  "connectionStateChanged",
+  Disconnected:           "disconnected",
+  ParticipantConnected:   "participantConnected",
+  ParticipantDisconnected:"participantDisconnected",
+});
+
 import { getVoiceManager } from "@fluxerjs/voice";
 import { Utils } from "./Utils.mjs";
 import { EventEmitter } from "node:events";

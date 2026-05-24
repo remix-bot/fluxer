@@ -27,8 +27,21 @@
  */
 
 import { EventEmitter } from "node:events";
-import { Room, RoomEvent, ConnectionState } from "@livekit/rtc-node";
 import { joinVoiceChannel, getVoiceManager } from "@fluxerjs/voice";
+
+const ConnectionState = Object.freeze({
+  CONN_DISCONNECTED: 0,
+  CONN_CONNECTED:   1,
+  CONN_RECONNECTING: 2,
+});
+
+const RoomEvent = Object.freeze({
+  ConnectionStateChanged:  "connectionStateChanged",
+  Disconnected:           "disconnected",
+  ParticipantConnected:   "participantConnected",
+  ParticipantDisconnected:"participantDisconnected",
+});
+
 import { logger } from "./Logger.mjs";
 
 {
@@ -94,7 +107,7 @@ function stateLabel(cs) {
  *   Events: "disconnect", "error", "autoleave"
  */
 export class FluxerVoiceConnection extends EventEmitter {
-  /** @type {Room|null} */
+  /** @type {any} LiveKit Room instance from @fluxerjs/voice */
   room        = null;
   channelId   = null;
   _voice      = null;
