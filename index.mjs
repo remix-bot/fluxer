@@ -577,27 +577,43 @@ export class Remix {
       const wsManager = this.client?.ws;
       if (!wsManager) return;
 
+      const lastLogged = { _ts: 0 };
+      const LOG_COOLDOWN = 15_000;
+
+      const logWsError = (label, err) => {
+        const now = Date.now();
+        if (now - lastLogged._ts < LOG_COOLDOWN) return;
+        lastLogged._ts = now;
+        logger.warn(`[WS] ${label} transport error (auto-recovering): ${err?.message ?? err}`);
+      };
+
       const attachToSocket = (wsObj, label) => {
         if (!wsObj) return;
         if (wsObj._fluxerErrorHandled) return;
         wsObj._fluxerErrorHandled = true;
 
         if (typeof wsObj.on === "function") {
-          wsObj.on("error", (err) => {
-            logger.warn(`[WS] ${label} transport error (auto-recovering): ${err?.message ?? err}`);
-          });
+          wsObj.on("error", (err) => logWsError(label, err));
         }
         if (typeof wsObj.addEventListener === "function") {
           wsObj.addEventListener("error", (event) => {
             const err = event?.error ?? event?.message ?? event;
-            logger.warn(`[WS] ${label} transport error (auto-recovering): ${err?.message ?? err}`);
+            logWsError(label, err);
           });
         }
       };
 
+      const attachToShard = (shard, id) => {
+        if (!shard) return;
+        if (shard._fluxerErrorHandled) return;
+        shard._fluxerErrorHandled = true;
+        shard.on("error", (err) => logWsError(`Shard ${id}`, err));
+        if (shard.ws) attachToSocket(shard.ws, `Shard ${id} socket`);
+      };
+
       if (wsManager.shards && typeof wsManager.shards.forEach === "function") {
         wsManager.shards.forEach((shard, id) => {
-          attachToSocket(shard?.ws, `Shard ${id}`);
+          attachToShard(shard, id);
         });
       }
 
@@ -606,15 +622,16 @@ export class Remix {
       }
 
       if (typeof wsManager.on === "function" && !wsManager._fluxerErrorHandled) {
-        attachToSocket(wsManager, "WSManager");
+        wsManager._fluxerErrorHandled = true;
+        wsManager.on("error", ({ shardId, error }) => {
+          logWsError(`WSManager (shard ${shardId})`, error);
+        });
       }
 
       if (typeof wsManager.on === "function" && !wsManager._shardCreateHandled) {
         wsManager._shardCreateHandled = true;
         wsManager.on("shardCreate", (shard) => {
-          if (shard?.ws) {
-            attachToSocket(shard.ws, `Shard ${shard.id ?? "?"}`);
-          }
+          attachToShard(shard, shard.id ?? "?");
         });
       }
 
@@ -949,6 +966,9 @@ const isIgnorableWsCrash = (err) => {
       );
 };
 
+let _lastWsCrashLog = 0;
+const WS_CRASH_LOG_COOLDOWN = 30_000;
+
 process.on("unhandledRejection", (reason, p) => {
   if (reason?.message?.includes("AudioSource is closed")) return;
   logger.error("[Error_Handling] Unhandled Rejection/Catch");
@@ -956,8 +976,11 @@ process.on("unhandledRejection", (reason, p) => {
 });
 process.on("uncaughtException", (err, origin) => {
   if (isIgnorableWsCrash(err)) {
-    logger.warn("[Error_Handling] Suppressed recoverable websocket transport crash.");
-    logger.warn("Error:", err?.stack ?? err, origin);
+    const now = Date.now();
+    if (now - _lastWsCrashLog > WS_CRASH_LOG_COOLDOWN) {
+      _lastWsCrashLog = now;
+      logger.warn("[Error_Handling] Suppressed recoverable websocket transport crash (will not re-log for 30s).");
+    }
     return;
   }
   logger.error("[Error_Handling] Uncaught Exception/Catch");
@@ -965,6 +988,7 @@ process.on("uncaughtException", (err, origin) => {
   process.exit(1);
 });
 process.on("uncaughtExceptionMonitor", (err, origin) => {
+  if (isIgnorableWsCrash(err)) return;
   logger.error("[Error_Handling] Uncaught Exception/Catch (MONITOR)");
   logger.error("Error:", err, origin);
 });
