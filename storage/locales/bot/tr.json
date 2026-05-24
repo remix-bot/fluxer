@@ -1,0 +1,641 @@
+{
+  "cmdBuilder": {
+    "requirement": {
+      "permission": "Bu komutu çalıştırmak için gerekli izne sahip değilsiniz!"
+    },
+    "subcommand": {
+      "invalid": "Geçersiz alt komut. Şu seçeneklerden birini deneyin: `$previousCmd <$cmdlist>`"
+    },
+    "option": {
+      "invalidChoice": "Geçersiz değer '{{$currValue}}'. `{{$optionName}}` seçeneği şu değerlerden biri olmalıdır:\n{{$choices}}\nKullanım: `$previousCmd <{{$type}}>`",
+      "invalidChannel": "Geçersiz değer '{{$currValue}}'. `{{$optionName}}` seçeneği bir kanal etiketi, ID'si veya adı olmalıdır.\nKullanım: `$previousCmd <{{$type}}>`",
+      "invalidType": "Geçersiz değer '{{$currValue}}'. `{{$optionName}}` seçeneği `{{$type}}` türünde olmalıdır.\nKullanım: `$previousCmd <{{$type}}>`"
+    }
+  },
+  "cmdHandler": {
+    "command": {
+      "invalid": "Bilinmeyen komut {{command}}!"
+    },
+    "help": {
+      "pageStructure": "Kullanılabilir Komutlar (sayfa $currPage/$maxPage): \n\n$content\n\nDaha fazla bilgi için `$prefix$helpCmd <komut>` yazın. Alt komutları da ekleyebilirsiniz.\nÖrnek: `$prefix$helpCmd settings get`\n\nİpucu: Sayfalar arasında geçiş yapmak için bu mesajın altındaki okları kullanın veya `$prefix$helpCmd <sayfa numarası>` ile istediğiniz sayfayı belirtin",
+      "unknownCommand": "❌ Bilinmeyen komut `{{command}}`. Komutları görüntülemek için `{{prefix}}help` kullanın.",
+      "availableCommands": "Kullanılabilir Komutlar{{$page}}: ",
+      "runHelp": "\nDaha fazla bilgi için `$prefix$helpCmd <komut>` yazın. Alt komutları da ekleyebilirsiniz.\nÖrnek: `$prefix$helpCmd komut altKomutAdı`",
+      "pageTip": "\n\nİpucu: Sayfalar arasında geçiş yapmak için `$prefix$helpCmd <sayfa numarası>` kullanın",
+      "ellipsis": ". [...]",
+      "usage": "Kullanım: ",
+      "examples": "Örnek(ler): ",
+      "aliases": "Kısayollar: ",
+      "subcommands": "Alt komutlar: ",
+      "arguments": "Argümanlar: ",
+      "allowedValues": "İzin verilen değerler: ",
+      "aliasesLabel": "Kısayollar: ",
+      "requirements": "Gereksinimler: ",
+      "permission": "İzin `{{$permission}}`",
+      "optionCount": "{{$count}} seçenek"
+    },
+    "invalidFlag": "Geçersiz bayrak `$invalidFlag`. Bu komuttaki hiçbir seçenekle eşleşmiyor.\n`$previousCmd $invalidFlag`",
+    "textWrapError": "Hatalı biçimlendirilmiş dize `{{$value}}`: İstenen dizeden sonra kapatma tırnak işareti (`{{$quote}}`) eksik.",
+    "page": {
+      "invalid": "{{number}} geçerli bir sayfa numarası değil!"
+    },
+    "permissions": {
+      "message": "Lütfen {{channel}} kanalında bana {{permission}} iznini verin veya bir sunucu yöneticisiyle iletişime geçin. Bu izin olmadan çalışamam."
+    }
+  },
+  "commands": {
+    "clear": "Kuyruktaki tüm şarkıları kaldırın.",
+    "debug": "Çeşitli amaçlar için bir hata ayıklama komutu.",
+    "eval": "JavaScript kodunu değerlendirir (Sahip Only).",
+    "filter": "Etkileşimli bir filtre seçici açın — ses efekti uygulamak için bir emojiye tepki verin.",
+    "forceleave": "İçinde olmasanız bile botu bir kanaldan çıkmaya zorlayın.",
+    "invite": "Remix ve destek sunucusu için davet bağlantısını alın.",
+    "join": "Botu ses kanalınıza katılmaya zorlayın veya bir kanal belirtin.",
+    "leave": "Botu bir ses kanalından çıkarın. Bir kanal belirtin veya şu an bulunduğunuz kanal için boş bırakın.",
+    "lastfm": "Last.fm hesabınızı bağlayın, scrobbling'i açın veya profilinizi görüntüleyin.",
+    "list": "Şu anki ses kanalınızdaki kuyruktaki şarkıları listeleyin.",
+    "loop": "Kuyruğunuzun/şarkınızın döngüsünü açın veya kapatın.",
+    "lyrics": "NodeLink'ten senkronize şarkı sözlerini görüntüleyin.",
+    "np": "Şu an çalan şarkının adını ve URL'sini isteyin.",
+    "pause": "Ses kanalınızdaki çalmayı duraklatın.",
+    "play": "Bir URL veya arama sorgusundan şarkı veya çalma listesi çalın.\nYouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal ve daha fazlasını destekler.\nVarsayılan arama: YouTube Music. `-p <sağlayıcı>` veya `sp: blinding lights` gibi satır içi önek kullanın.",
+    "player": "Canlı ilerleme çubuğlu etkileşimli bir oynatıcı kontrol paneli oluşturun.",
+    "playnext": "%play ile aynıdır, ancak sonucu kuyruğun en üstüne ekler.",
+    "radio": "Bir radyo istasyonu çalın. Tüm istasyonları görüntülemek için `%radio list` kullanın.",
+    "reload": "Komutları, kaynak modüllerini veya ses modüllerini yeniden yükleyin. Tüm hedefleri görmek için boş bırakın.",
+    "remove": "Kuyruktan belirli bir şarkıyı kaldırın.",
+    "resume": "Ses kanalınızdaki çalmayı devam ettirin.",
+    "search": "Bir sorgu için arama sonuçlarını görüntüleyin ve çalmak için birini seçin.\nTüm sağlayıcıları destekler — `sp: şarkı` gibi satır içi önek veya `-p dz` kullanın.",
+    "servers": "Botun bulunduğu sunucuların listesini alın.",
+    "settings": "Mevcut sunucudaki ayarları değiştirin/görüntüleyin.",
+    "shuffle": "Kuyruğu rastgele yeniden sıralar.",
+    "skip": "Şu an çalan şarkıyı atlayın.",
+    "stats": "Çalışma süresi gibi bot istatistiklerini görüntüleyin.",
+    "support": "Remix destek sunucusu. Yardım istemek, hata bildirmek veya sadece sohbet etmekten çekinmeyin :)",
+    "test": "Her ses kanalında kaç kişi olduğunu gösterir.",
+    "thumbnail": "Şu an çalan şarkının küçük resmini isteyin.",
+    "volume": "Mevcut ses seviyesini görüntüleyin veya değiştirin.",
+    "volumedefault": "Sunucu varsayılan ses seviyesini görüntüleyin veya ayarlayın. (Ayarlamak için Sunucuyu Yönet yetkisi gerekir)",
+    "seek": "Şu an çalan parçada belirli bir konuma gidin.",
+    "move": "Kuyrukta bir parçayı bir konumdan diğerine taşıyın.",
+    "autoplay": "Otomatik çalmayı açın/kapatın — kuyruk bittiğinde benzer parçaları otomatik olarak çalar.",
+    "trackopt": "Parçalar için özel başlangıç/bitiş süreleri ayarlayın. Adlandırılmış kısayolları destekler — her parça için farklı bölümlerde birden fazla kırpma kaydedin."
+  },
+  "options": {
+    "debug": {
+      "target": "İncelenmesi gereken hedef."
+    },
+    "lastfm": {
+      "action": "Yapılacak işlem: link, confirm, unlink, np, profile, loved, top, recent, artists, love, unlove, scrobble",
+      "token": "Last.fm'den gelen yetkilendirme token'ı ('confirm' işlemi ile kullanılır)"
+    },
+    "eval": {
+      "expression": "Değerlendirilecek JavaScript ifadesi"
+    },
+    "filter": {
+      "name": "Filtre adı"
+    },
+    "forceleave": {
+      "channelId": "Ayrılması gereken kanal."
+    },
+    "join": {
+      "channel": "Katılacak bir ses kanalı etiketi, ID'si veya adı. Varsayılan olarak şu anki kanalınız."
+    },
+    "loop": {
+      "type": "Hangi döngünün açılıp kapatılacağını belirtir."
+    },
+    "play": {
+      "query": "Bir arama sorgusu, URL veya `sp: şarkı adı` gibi sağlayıcı önekli sorgu.",
+      "provider": "Arama sağlayıcısı. Varsayılan: YouTube Music. Veya satır içi önek kullanın: sp:, dz:, am:, yt:, sc: vb."
+    },
+    "playnext": {
+      "query": "Bir arama sorgusu, URL veya `sp: şarkı adı` gibi sağlayıcı önekli sorgu.",
+      "provider": "Arama sağlayıcısı. Varsayılan: YouTube Music."
+    },
+    "radio": {
+      "station": "İstasyon adı, görüntülemek için 'list' veya varsayılan için boş bırakın."
+    },
+    "reload": {
+      "target": "Komut/modül adı veya: all | commands | src | audio"
+    },
+    "remove": {
+      "index": "Şarkının kuyruktaki konumu. Konumları 'list' komutuyla görebilirsiniz."
+    },
+    "search": {
+      "provider": "Arama sağlayıcısı. Varsayılan: YouTube Music.",
+      "query": "Aranacak sorgu veya `sp: şarkı adı` gibi sağlayıcı önekli sorgu."
+    },
+    "settings": {
+      "get": {
+        "setting": "Bir ayarın mevcut değerini alın."
+      },
+      "set": {
+        "setting": "Ayarlamak istediğiniz ayarın adı.",
+        "value": "Yeni değer."
+      },
+      "reset": {
+        "setting": "Hangi ayarın sıfırlanacağı."
+      },
+      "help": {
+        "setting": "Tüm kullanılabilir ayarları görmek için boş bırakın."
+      }
+    },
+    "volume": {
+      "volume": "Yüzde olarak yeni ses seviyesi (örn. `30` veya `100`). %100'ün üzerine çıkarsanız kalite kaybı olabilir."
+    },
+    "volumedefault": {
+      "volume": "Sunucu varsayılanı olarak kaydedilecek yeni ses seviyesi % (0–200). Mevcut değeri görmek için boş bırakın."
+    },
+    "seek": {
+      "position": "Gidilecek konum (örn. 1:30, 90 veya saat için 1:30:00)"
+    },
+    "move": {
+      "from": "Parçanın kuyruktaki mevcut konumu (1'den başlayarak).",
+      "to": "Parçanın taşınacağı hedef konum (1'den başlayarak)."
+    },
+    "trackopt": {
+      "times": "Başlangıç ve isteğe bağlı bitiş süresi, örn. '0:30' veya '0:30 3:45'"
+    }
+  },
+  "pagination": {
+    "embed": {
+      "sclosedContent": "{{content}}\nOturum kapatıldı - Sayfa değiştirmek buradan **çalışmaz**.",
+      "sclosedTitle": "Oturum Kapatıldı"
+    },
+    "error": {
+      "perms": {
+        "messages": "{{channel}} kanalında mesaj gönderemiyorum. Lütfen bir sunucu yöneticisiyle iletişime geçin ve bana \"SendMessage\" iznini verin.",
+        "reactions": "Çalışmak için tepki izinlerine ihtiyacım var. Lütfen bir sunucu yöneticisiyle iletişime geçin."
+      }
+    }
+  },
+  "subcommands": {
+    "settings": {
+      "get": "Belirli bir ayarın değerini veya sunucunun ayarlarını alın.",
+      "set": "Belirli bir ayarın değerini değiştirin.",
+      "reset": "Bir ayarı varsayılan değerine sıfırlayın.",
+      "help": "Ayarlar sistemi için yardım gösterin veya belirli bir ayarı açıklayın."
+    }
+  },
+  "voice": {
+    "join": {
+      "cancelled": "İptal edildi!",
+      "error": {
+        "dc": "Görünüşe göre aynı ses kanalında değiliz.",
+        "invalid": "Geçersiz ses kanalı. Lütfen tekrar deneyin ve büyük/küçük harfleri kontrol edin! (`x` iptal etmek için)",
+        "perms": "Bir şeyler ters gitti. {{channel}} kanalına katılamıyorum. Gerekli izinlere sahip miyim?"
+      },
+      "warning": {
+        "nc": "{{channel}} kanalına bağlı görünmüyorsunuz. Katılmayı unuttunuz mu?"
+      }
+    }
+  },
+  "responses": {
+    "_common": {
+      "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
+      "noVoiceChannel": "⚠️ Lütfen önce bir ses kanalına katılın.",
+      "noVoiceStrict": "⚠️ Bu komutu kullanmak için bir ses kanalına katılmanız gerekiyor.",
+      "alreadyInChannel": "⚠️ Zaten {{channels}} kanalında çalıyorum. O kanala katılın veya kendi kanalınızda müzik başlatmak için `{{prefix}}play` kullanın.",
+      "notInVoice": "Bir ses kanalında değilim.",
+      "queueEmpty": "📭 Kuyruk boş. Şarkı eklemek için `{{prefix}}play` kullanın!",
+      "queueEnded": "🎵 Kuyruk bitti — çalacak bir şey kalmadı. Daha fazla şarkı eklemek için `{{prefix}}play` kullanın!",
+      "notConnected": "Görünüşe göre aynı ses kanalında değiliz.",
+      "controlsExpired": "⌛ Kontrollerin süresi doldu",
+      "sessionEnded": "Oturum sona erdi",
+      "navigateHint": "💡 ⬅️ ➡️ Gezin",
+      "voiceSelectionPrompt": "Lütfen aşağıdaki tepkilerden birine tıklayarak kanallardan birini seçin",
+      "voiceSelectionHint": "Ses kanalını içeren bir mesaj gönderin! (Etiket/ID/Ad)\nİptal etmek için 'x' gönderin.",
+      "voiceSelectionTimedOut": "⏱️ Ses kanalı seçimi zaman aşımına uğradı.",
+      "voiceConnectionLost": "❌ Ses bağlantısı koptu. Lütfen tekrar katılın.",
+      "couldNotGetStream": "❌ **{{title}}** için yayın URL'si alınamadı — atlanıyor.",
+      "errorStreaming": "❌ **{{title}}** yayınlanırken hata oluştu — atlanıyor.",
+      "successfullyLeft": "✅ Başarıyla Ayrıldı",
+      "voiceSelectionInvalid": "Geçersiz ses kanalı. Tekrar deneyin veya `x` yazın.",
+      "voiceChannelRequired": "❌ Bu komutu kullanmadan önce lütfen bir **ses kanalına** katılın!",
+      "joinPermissionError": "❌ <#{{channel}}> kanalına katılma iznim yok. Lütfen o kanalda bana **Bağlan** izni verin.",
+      "joinFailedPermissions": "❌ Ses kanalına katılma başarısız — izinler eksik. Lütfen **Bağlan** ve **Konuş** izinlerime sahip olduğumdan emin olun.",
+      "joinFailedGeneric": "❌ Ses kanalına katılma başarısız. Lütfen tekrar deneyin.",
+      "joinFailedNotFound": "❌ Ses kanalı bulunamadı."
+    },
+    "clear": {
+      "cleared": "🗑️ Kuyruk temizlendi."
+    },
+    "debug": {
+      "voiceTitle": "🔧 Ses Hata Ayıklama"
+    },
+    "eval": {
+      "resultTitle": "Değerlendirme Sonucu",
+      "resultTitleError": "❌ Değerlendirme Sonucu",
+      "resultTitleSuccess": "✅ Değerlendirme Sonucu",
+      "typeLabel": "Tür:",
+      "timeLabel": "Süre:",
+      "pageLabel": "Sayfa {{page}}/{{total}}",
+      "navigateHint": "• ⬅️ ➡️ Gezin • ❌ Sil",
+      "deleteHint": "• ❌ Sil",
+      "controlsExpired": "⌛ Kontrollerin süresi doldu"
+    },
+    "filter": {
+      "pickerTitle": "🎛️ Ses Filtresi Seçici",
+      "nothingPlaying": "❌ Şu anda çalan bir şey yok.",
+      "nothingPlayingInline": "*Çalan bir şey yok*",
+      "applyFailed": "❌ **{{filter}}** uygulanamadı: `{{reason}}`\n\nNodeLink düğümünüzde filtrelerin etkin olduğundan emin olun.",
+      "applied": "{{emoji}} **{{label}}** uygulandı!",
+      "removed": "{{emoji}} **{{label}}** kaldırıldı.",
+      "cleared": "🔇 Filtreler temizlendi — orijinal ses geri yüklendi.",
+      "pendingCleared": "Filtre temizlendi. Bir sonraki çalınabilir parçada orijinal ses kullanılacak.",
+      "pendingApplied": "{{label}} kaydedildi. Bir sonraki çalınabilir parçaya uygulanacak.",
+      "pendingRemoved": "{{label}} kaldırıldı. Bir sonraki çalınabilir parça güncellenmiş filtreleri kullanacak.",
+      "noFilterActive": "🔇 Aktif filtre yok.",
+      "filtersActive": "✅ Aktif filtreler: **{{filters}}**.",
+      "reactToToggle": "💡 Açıp kapatmak için tekrar tepki verin veya kapatmak için ❌.",
+      "sessionTimedOut": "⌛ Oturum zaman aşımına uğradı.",
+      "pickerClosed": "👋 Filtre seçici kapatıldı.",
+      "footer": "Sayfa {{page}}/{{total}} • Açıp kapatmak için bir filtre emojisine tepki verin",
+      "activeLabel": "**← aktif**",
+      "closeHint": "❌ Kapat"
+    },
+    "forceleave": {
+      "channelNotFound": "❌ Kanal bulunamadı.",
+      "wrongServer": "❌ Bu komutun ses kanalıyla aynı sunucuda çalıştırılması gerekiyor.",
+      "playerNotFound": "❌ Oynatıcı bulunamadı.",
+      "playerNotInit": "❌ Oynatıcı başlatılmadı."
+    },
+    "invite": {
+      "title": "Remix'i Davet Et",
+      "description": "Remix'i doğrudan [FluxerList](<https://fluxerlist.com/bots/remix>) üzerinden sunucunuza ekleyin.\n\nDestek, güncellemeler ve doğrudan geri bildirim için [fluxer.gg/remix](https://fluxer.gg/remix) topluluğumuza katılın."
+    },
+    "join": {
+      "channelNotFound": "`{{channel}}` kanalı bulunamadı\nBu komut hakkında daha fazla bilgi için yardım komutunu kullanın. (`%help join`)",
+      "alreadyJoined": "Zaten <#{{channel}}> kanalına katıldınız.",
+      "audioNodeConnecting": "⚠️ Ses düğümü hala bağlanıyor — lütfen birkaç saniye sonra tekrar deneyin.",
+      "joining": "⏳ Kanala katılıyor...",
+      "joined": "✅ Başarıyla <#{{channel}}> kanalına katılındı",
+      "joinFailed": "❌ Katılma başarısız: {{error}}",
+      "noVoiceChannel": "❌ Bir ses kanalında değilsiniz. Lütfen önce birine katılın veya bir kanal belirtin: `{{prefix}}join <#kanal>`",
+      "voiceChannelNotFound": "❌ Ses kanalı bulunamadı. `<#kanalid>` gibi bir etiket veya tam kanal adını kullanmayı deneyin.",
+      "autoLeaveInactive": "Hareketsizlik nedeniyle <#{{channel}}> kanalından ayrılındı.",
+      "autoLeaveInactive247": "Hareketsizlik nedeniyle <#{{channel}}> kanalından ayrılındı.\nSesli kalmamı istiyorsanız `{{prefix}}247 on` veya `{{prefix}}247 auto` kullanın\nKayıtlı tüm kanalları görüntülemek ve yönetmek için `{{prefix}}247` kullanın.",
+      "joinFailedPerms": "❌ <#{{channel}}> kanalına katılma iznim yok. Lütfen **Bağlan** iznim olduğundan emin olun.",
+      "voiceChannelUnknown": "bilinmeyen ses kanalı"
+    },
+    "leave": {
+      "noVoiceChannel": "⚠️ Lütfen önce bir ses kanalına katılın veya bir tane belirtin: `{{prefix}}leave <#kanal>`",
+      "notInVoice": "Bir ses kanalında değilim.",
+      "joinChannel": "⚠️ Bu komutu kullanmak için lütfen {{channel}} kanalına katılın.",
+      "multipleChannels": "⚠️ Birden fazla kanalda çalıyorum! Lütfen birine katılın:\n{{channels}}",
+      "specifyChannel": "⚠️ Bir ses kanalında değilsiniz. Şu kanallardayım:\n{{channels}}\n\nBelirli bir kanaldan ayrılmak için `{{prefix}}leave <#kanal>` kullanın.",
+      "noPlayerInChannel": "⚠️ <#{{channel}}> kanalında çalmıyorum. Şu kanallardayım:\n{{channels}}",
+      "playerNotInit": "Oynatıcı başlatılmadı.",
+      "leftRejoin247": "✅ Başarıyla Ayrıldı — birkaç saniye içinde <#{{channel}}> kanalına tekrar katılınıyor.\n24/7 modunu kalıcı olarak devre dışı bırakmak için `{{prefix}}247 off` kullanın.",
+      "left247On": "✅ Başarıyla Ayrıldı.\n24/7 modu **açık** — bot otomatik olarak tekrar katılmayacak. Geri getirmek için `{{prefix}}play` veya tamamen devre dışı bırakmak için `{{prefix}}247 off` kullanın.\nKayıtlı tüm kanalları görüntülemek için `{{prefix}}247` kullanın.",
+      "autoRejoinHint": "⚠️ 24/7 modu etkin (auto) — birkaç saniye içinde <#{{channel}}> kanalına tekrar katılacağım.\nBeni kalıcı olarak çıkarmak için önce 24/7 modunu devre dışı bırakın: `{{prefix}}247 off`"
+    },
+    "lastfm": {
+      "notConfigured": "❌ Last.fm entegrasyonu bu botta yapılandırılmamış. Bot sahibinden yapılandırmayı isteyin.",
+      "notLinked": "❌ Bağlı bir Last.fm hesabınız yok. Başlamak için `{{prefix}}lastfm link` kullanın.",
+      "linked": "✅ Last.fm hesabı **[{{username}}](https://last.fm/user/{{username}})** bağlandı! Scrobbling varsayılan olarak etkindir.",
+      "alreadyLinked": "✅ Zaten **{{username}}** bağlı! Bağlantıyı kesmek için `{{prefix}}lastfm unlink` veya scrobbling'i açıp kapatmak için `{{prefix}}lastfm scrobble` kullanın.",
+      "unlinked": "✅ Last.fm hesabı **{{username}}** bağlantısı kesildi.",
+      "scrobbleEnabled": "✅ Scrobbling **etkin** — dinlediğiniz şarkılar **{{username}}** hesabına scrobble edilecek.",
+      "scrobbleDisabled": "⏸️ Scrobbling **devre dışı** — şarkılar scrobble edilmeyecek. Hesabınız hala bağlı.",
+      "authDM": "📧 Last.fm yetkilendirme bağlantısı için DM'lerinizi kontrol edin! Onayladıktan sonra burada `{{prefix}}lastfm confirm <token>` çalıştırın.",
+      "authDMFailed": "⚠️ Size DM gönderemedim. Last.fm'de yetkilendirmek için [buraya tıklayın]({{url}}), ardından `{{prefix}}lastfm confirm <token>` çalıştırın.",
+      "confirmUsage": "❌ Kullanım: `{{prefix}}lastfm confirm <token>` — yetkilendirme DM'inden token'ı girin.",
+      "confirmFailed": "❌ Oturum alınamadı: {{error}}\nÖnce Last.fm'de token'ı onayladığınızdan emin olun.",
+      "tokenFailed": "❌ Yetkilendirme token'ı alınamadı: {{error}}",
+      "noLoved": "❤️ **{{username}}** için sevilen parça bulunamadı.",
+      "noTop": "📊 **{{username}}** için en çok dinlenen parça bulunamadı.",
+      "noRecent": "🕐 **{{username}}** için son dinlenen parça bulunamadı.",
+      "lovedTitle": "❤️ Sevilen Parçalar — {{username}}",
+      "topTitle": "📊 En Çok Dinlenen Parçalar — {{username}}",
+      "recentTitle": "🕐 Son Dinlenen Parçalar — {{username}}",
+      "nowPlaying": "🎵 Last.fm'de Şu An Çalıyor",
+      "lastPlayed": "🕐 Last.fm'de Son Çalınan",
+      "profileTitle": "Last.fm Profili: {{username}}",
+      "profileScrobbles": "🎵 **{{playcount}}** scrobble",
+      "profileRegistered": "👤 Kayıt tarihi: {{date}}",
+      "profileLink": "🔗 [Profili aç]({{url}})",
+      "noArtists": "🎤 **{{username}}** için en çok dinlenen sanatçı bulunamadı.",
+      "artistsTitle": "🎤 En Çok Dinlenen Sanatçılar — {{username}}",
+      "lovedTrack": "❤️ Last.fm'de **{{name}}** — **{{artist}}** sevildi!",
+      "unlovedTrack": "💔 Last.fm'de **{{name}}** — **{{artist}}** sevilenlerden çıkarıldı.",
+      "loveFailed": "❌ Parça sevilemedi: {{error}}",
+      "unloveFailed": "❌ Parça sevilenlerden çıkarılamadı: {{error}}",
+      "nothingPlayingLove": "❌ Şu anda çalan bir şey yok. Sevmek için önce bir şarkı çalın!",
+      "fetchFailed": "❌ Last.fm'den veri alınamadı: {{error}}"
+    },
+    "list": {
+      "empty": "📭 Kuyruk boş. Şarkı eklemek için `{{prefix}}play` kullanın!",
+      "emptyInline": "_Kuyruk boş._",
+      "nowPlaying": "🎵 **Şu An Çalıyor**",
+      "header": "📋 **Kuyrukta {{count}} parça** • ⏱️ `{{time}}`",
+      "upNext": " ▶",
+      "queueTitle": "🎧 Kuyruk"
+    },
+    "loop": {
+      "invalidChoice": "'{{choice}}' geçerli değil. `song` veya `queue` kullanın",
+      "songActivated": "🔂 Şarkı döngüsü etkinleştirildi",
+      "songDisabled": "➡️ Şarkı döngüsü devre dışı bırakıldı",
+      "queueActivated": "🔁 Kuyruk döngüsü etkinleştirildi",
+      "queueDisabled": "➡️ Kuyruk döngüsü devre dışı bırakıldı"
+    },
+    "queue": {
+      "empty": "Kuyruk boş.",
+      "indexOutOfBounds": "Geçersiz sıra numarası",
+      "removed": "**{{title}}** kuyruktan başarıyla kaldırıldı.",
+      "sourceOutOfBounds": "Kaynak sıra numarası geçersiz",
+      "targetOutOfBounds": "Hedef sıra numarası geçersiz",
+      "alreadyInPosition": "Parça zaten o konumda",
+      "moved": "**{{title}}** parçası {{from}} konumundan {{to}} konumuna taşındı."
+    },
+    "lyrics": {
+      "nothingPlaying": "❌ Şu anda çalan bir şey yok.",
+      "searching": "Yükleniyor **{{title}}** için şarkı sözleri aranıyor...",
+      "noLyrics": "❌ **{{title}}** için şarkı sözü mevcut değil.\n\n💡 NodeLink şarkı sözleri eklentisinde bu parça olmayabilir. Popüler bir şarkı deneyin!",
+      "error": "❌ Hata: {{error}}",
+      "syncedBadge": " ⏱️ Senkronize",
+      "nodeLinkFooter": "NodeLink • {{lines}} satır",
+      "controlsExpired": "⌛ Kontrollerin süresi doldu • NodeLink • {{lines}} satır",
+      "sessionClosed": "Oturum kapatıldı • NodeLink • {{lines}} satır"
+    },
+    "np": {
+      "loading": "⏳ Yükleniyor...",
+      "nothingPlaying": "Şu anda çalan bir şey yok.",
+      "nowPlayingIn": "🔊 **Şu an çalınan kanal:** <#{{channel}}>",
+      "playing": "🎵 Çalıyor: **[{{title}}]({{url}})** ({{elapsed}}/{{duration}})",
+      "volume": "Ses seviyesi: {{volume}}%",
+      "queueLoop": "Kuyruk döngüsü: **{{state}}**",
+      "songLoop": "Şarkı döngüsü: **{{state}}**",
+      "streaming": "📻 Yayınlanıyor **[{{title}}]({{url}})**",
+      "playingBy": "[{{artist}}]({{artistUrl}}) tarafından **[{{title}}]({{url}})** çalınıyor"
+    },
+    "pause": {
+      "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
+      "alreadyPaused": "❌ Zaten duraklatılmış!",
+      "paused": "⏸️ Duraklatıldı"
+    },
+    "play": {
+      "searching": "🔍 Aranıyor...",
+      "loading": "Yükleniyor...",
+      "loadingFailed": "**Parça yüklenemedi.**",
+      "added": "[{{title}}]({{url}}) kuyruğa başarıyla eklendi.",
+      "addedPlaylist": "**{{count}}** şarkı kuyruğa başarıyla eklendi.",
+      "nowPlaying": "🎵 <#{{channel}}> kanalında {{author}} tarafından [{{title}}]({{url}}) çalınıyor",
+      "noResults": "'{{query}}' için sonuç bulunamadı.",
+      "searchFailed": "**Arama başarısız. Lütfen tekrar deneyin.**",
+      "noData": "Parça yüklenemedi - veri döndürülmedi.",
+      "loadFailed": "Parça yüklenemedi.",
+      "unexpectedResult": "Parça yükleyiciden beklenmeyen sonuç.",
+      "loadError": "Parça yüklenirken bir hata oluştu.",
+      "searchingProvider": "{{provider}} aranıyor..."
+    },
+    "playnext": {
+      "searching": "🔍 Aranıyor..."
+    },
+    "player": {
+      "title": "🎧 Müzik Oynatıcı Kontrolleri",
+      "inactiveTitle": "🎧 Müzik Oynatıcı (Etkin Değil)",
+      "nowPlayingLabel": "Şu An Çalıyor",
+      "volumeLabel": "🔊 Ses: `{{volume}}%`",
+      "queueLabel": "📋 Kuyruk: `{{count}}` parça",
+      "loopOff": "Döngü: ❌ Kapalı",
+      "loopSong": "Döngü: 🎂 Şarkı",
+      "loopQueue": "Döngü: 🔁 Kuyruk",
+      "filterOff": "Filtre: 🔇 Kapalı",
+      "filterActive": "Filtre: {{emoji}} **{{label}}**",
+      "filterStacked": "Filtre: 🔥 **{{label}}**",
+      "reactHint": "💡 *Çalmayı kontrol etmek için tepki verin*",
+      "sessionExpires": "⏱️ Oturum {{minutes}} dakikalık hareketsizlik sonra sona erecek",
+      "requestedBy": "{{username}} tarafından istendi • Kontroller aktif",
+      "controlsDisabled": "⌛ Kontroller devre dışı (yeniden etkinleştirmek için tepki verin)",
+      "sessionClosed": "Oturum kapatıldı{{reason}}",
+      "closedByUser": "👋 Oynatıcı kontrolleri kapatıldı",
+      "startedPlaying": "▶️ Çalmaya başladı",
+      "resumed": "▶️ Devam ettirildi",
+      "pausedState": "⏸️ Duraklatıldı",
+      "stopped": "⏹️ Durduruldu",
+      "stoppedCleared": "⏹️ Durduruldu ve temizlendi",
+      "shuffled": "🔀 Kuyruk karıştırıldı",
+      "added": "➕ Eklendi: {{title}}",
+      "volumeChanged": "🔊 Ses: {{volume}}%",
+      "filtersCleared": "🔇 Filtreler temizlendi",
+      "filterApplied": "{{emoji}} Filtre: **{{label}}** uygulandı",
+      "filterStackedApplied": "🔥 Filtreler: **{{label}}** uygulandı",
+      "songLoopEnabled": "🔂 Şarkı döngüsü etkin",
+      "queueLoopEnabled": "🔁 Kuyruk döngüsü etkin",
+      "loopDisabled": "❌ Döngü devre dışı",
+      "alreadyPlaying": "▶️ Zaten çalınıyor",
+      "startingPlayback": "▶️ Çalmaya başlanıyor",
+      "previousNotImplemented": "⏮️ Önceki parça (uygulanmadı)",
+      "openingFilterPicker": "🎛️ Filtre seçici açılıyor — yukarıdaki filtre menüsünü kontrol edin veya `filter` komutunu kullanın.",
+      "filterError": "⚠️ Filtre hatası: {{error}}",
+      "fetchingLyrics": "📜 Şarkı sözleri alınıyor...",
+      "noLyricsFound": "❌ NodeLink'te şarkı sözü bulunamadı",
+      "lyricsDisplayed": "Şarkı sözleri görüntülendi ({{lines}} satır, {{pages}} sayfa)",
+      "lyricsError": "⚠️ Şarkı sözleri hatası: {{error}}"
+    },
+    "radio": {
+      "noStations": "❌ Yapılandırılmış radyo istasyonu yok.",
+      "stationsTitle": "📻 **Radyo İstasyonları (Sayfa {{page}}/{{total}})**",
+      "timedOut": "📻 Radyo seçimi zaman aşımına uğradı.",
+      "cancelled": "❌ Radyo seçimi iptal edildi.",
+      "unknownStation": "❌ Bilinmeyen istasyon `{{station}}`. Kullanılabilir: {{stations}}\n\nGörüntülemek için `%radio list` kullanın.",
+      "nowPlaying": "📻 <#{{channel}}> kanalında [{{author}}]({{url}}) tarafından _{{title}}_ yayınlanıyor",
+      "skipHint": "_Radyoyu durdurmak için `%skip` veya istasyon değiştirmek için `%radio list` kullanın._",
+      "prevNext": "⬅️ Önceki   ➡️ Sonraki   ❌ İptal"
+    },
+    "reload": {
+      "indexNoReload": "❌ `index.mjs` sıcak yeniden yüklenemez — tam yeniden başlatma yapın.",
+      "unknownCommand": "❌ Bilinmeyen komut `{{name}}`",
+      "noFileTracked": "❌ `{{name}}` için izlenen dosya yok",
+      "noBuilder": "❌ `{{name}}`'den döndürülen oluşturucu yok",
+      "reloaded": "✅ `{{name}}`",
+      "fileNotFound": "❌ Dosya bulunamadı: `{{label}}`",
+      "moduleError": "❌ `{{label}}`: {{error}}",
+      "unknownTarget": "❌ Bilinmeyen hedef `{{target}}`.\nTüm yeniden yüklenebilir hedefleri görmek için `%reload`'u argüman olmadan çalıştırın.",
+      "availableTargetsTitle": "🔄 Yeniden Yükle — Kullanılabilir Hedefler",
+      "runHint": "`%reload <hedef>` çalıştırın veya bir toplu anahtar kelime kullanın:",
+      "batchKeywords": "`all` · `commands` · `src` · `audio`",
+      "resultsHeader": "✅ **{{ok}}** yeniden yüklendi · ❌ **{{bad}}** başarısız"
+    },
+    "remove": {
+      "indexOutOfBounds": "Geçersiz sıra numarası",
+      "removed": "**{{title}}** kuyruktan başarıyla kaldırıldı."
+    },
+    "resume": {
+      "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
+      "notPaused": "❌ Duraklatılmış değil!",
+      "resumed": "▶️ Devam ettirildi"
+    },
+    "search": {
+      "loadingResults": "⏳ Sonuçlar yükleniyor...",
+      "searching": "{{provider}} aranıyor...",
+      "noResults": "❌ Sonuç bulunamadı.",
+      "resultsTitle": "{{provider}} — Arama Sonuçları",
+      "reactHint": "Kuyruğa eklemek için bir numarayla tepki verin • ❌ iptal • 30sn zaman aşımı",
+      "cancelled": "❌ İptal edildi.",
+      "added": "✅ [{{title}}]({{url}}) kuyruğa eklendi!",
+      "timedOut": "⏰ Arama zaman aşımına uğradı.",
+      "sessionClosed": "Oturum kapatıldı"
+    },
+    "servers": {
+      "noServers": "_Sunucu bulunamadı._",
+      "title": "🌐 Sunucular ({{count}})",
+      "pageTitle": "🌐 Sunucular ({{count}}) - Sayfa {{page}}/{{total}}",
+      "listComplete": "Liste tamamlandı"
+    },
+    "settings": {
+      "unknownSetting": "❌ Bilinmeyen ayar `{{setting}}`.",
+      "availableSettings": "Kullanılabilir: `{{settings}}`",
+      "setSuccess": "✅ **{{label}}** {{value}} olarak ayarlandı",
+      "resetSuccess": "🔄 `{{setting}}` varsayılan değerine sıfırlandı: {{value}}",
+      "mustBeBool": "❌ `{{setting}}` bir boole değeri olmalıdır.\nKabul edilen: `true`, `false`, `on`, `off`, `enable`, `disable`",
+      "volumeRange": "❌ Ses seviyesi **1** ile **200** arasında bir sayı olmalıdır.",
+      "invalidLocale": "❌ `{{locale}}` desteklenen bir dil değil.\nKullanılabilir diller: {{locales}}",
+      "prefixLength": "❌ Önek **1** ile **5** karakter arasında olmalıdır.",
+      "prefixSpaces": "❌ Önek boşluk içeremez.",
+      "invalid247": "❌ 24/7 modu için geçersiz değer `{{value}}`.\n\n**Geçerli seçenekler:**\n• `on` — Kalıcı olarak bağlı kal, `{{prefix}}leave`'den sonra otomatik yeniden katılma yok\n• `auto` — Bağlı kal ve `{{prefix}}leave` veya bağlantı kesilmesinden sonra otomatik yeniden katıl\n• `off` — Hareketsizlikten sonra ayrıl\n\nHer kanalın kendi modu vardır. Kayıtlı tüm kanalları görmek için `{{prefix}}247` kullanın.",
+      "noServer": "❌ Sunucunuz algılanamadı.",
+      "noVoice247": "❌ Bir ses kanalında değilsiniz. Önce birine katılın, ardından `{{prefix}}247 {{mode}}` tekrar çalıştırın.\n\n💡 Her kanalın kendi 24/7 modu ayarı vardır.",
+      "247Disabled": "✅ <#{{channel}}> için 24/7 modu **devre dışı bırakıldı**. Bot ayrıldı.\n💡 Kalan kayıtlı kanalları görmek için `{{prefix}}247` kullanın.",
+      "247DisabledAll": "✅ Bu sunucudaki tüm kanallar için 24/7 modu **devre dışı bırakıldı**.\nBot hareketsizlikten sonra sesli kanaldan ayrılacak.",
+      "247Set": "✅ <#{{channel}}> için 24/7 modu **{{mode}}** olarak ayarlandı.\n{{summary}}\n\n💡 Kayıtlı tüm kanalları görmek için `{{prefix}}247` kullanın.",
+      "247Joined": "✅ <#{{channel}}> için 24/7 modu **{{mode}}** olarak ayarlandı. Bot katıldı!\n{{summary}}\n\n💡 Kayıtlı tüm kanalları görmek için `{{prefix}}247` kullanın.",
+      "247JoinFailed": "⚠️ <#{{channel}}> için 24/7 modu kaydedildi, ancak katılma başarısız: {{error}}\n{{summary}}\n\nDaha sonra `{{prefix}}join` veya `{{prefix}}play` deneyin veya kaldırmak için `{{prefix}}247 off`.",
+      "247Status": "♾️ **24/7 Modu**: {{status}}\n\nEtkinleştirmek için `{{prefix}}247 on` veya `{{prefix}}247 auto` — devre dışı bırakmak için `{{prefix}}247 off` kullanın.",
+      "helpTitle": "⚙️ Ayarlar Yardımı",
+      "helpAvailable": "**Kullanılabilir ayarlar:** {{settings}}",
+      "helpSubcommands": "**Alt komutlar:**\n• `{{prefix}}settings get` — tüm mevcut değerleri listele\n• `{{prefix}}settings get <ayar>` — tek bir ayarı görüntüle\n• `{{prefix}}settings set <ayar> <değer>` — bir ayarı değiştir\n• `{{prefix}}settings reset <ayar>` — varsayılan değeri geri yükle\n• `{{prefix}}settings help <ayar>` — bir ayarı açıkla",
+      "helpShortcuts": "**Kısayollar:** `{{prefix}}prefix`, `{{prefix}}247`",
+      "serverTitle": "⚙️ Sunucu Ayarları",
+      "serverHeader": "Sunucu: **{{name}}**",
+      "shortcutsHint": "Kısayollar: `{{prefix}}247`, `{{prefix}}prefix`\nHerhangi bir ayar hakkında bilgi için `{{prefix}}settings help <ayar>` kullanın.",
+      "247Panel": {
+        "title": "♾️ 24/7 Modu",
+        "noChannelsSaved": "Kayıtlı ses kanalı yok.",
+        "gettingStarted": "Başlangıç",
+        "gettingStartedValue": "• `{{prefix}}247 on` — kalıcı olarak kal\n• `{{prefix}}247 auto` — kal + bağlantı kesilmesinden sonra otomatik yeniden katıl",
+        "footer": "{{prefix}}247 on | {{prefix}}247 auto | {{prefix}}247 off",
+        "channelsSaved_one": "{{count}} kanal kaydedildi",
+        "channelsSaved_other": "{{count}} kanal kaydedildi",
+        "summaryOn": "✅ {{count}} açık",
+        "summaryAuto": "🔄 {{count}} otomatik",
+        "modeOn": "✅ Açık",
+        "modeAuto": "🔄 Otomatik",
+        "modeOff": "❌ Kapalı",
+        "enabledTitle": "♾️ 24/7 {{mode}}",
+        "enabledDescription": "{{channel}} → **{{mode}}** — {{summary}}",
+        "enabledFooter": "Bir kanal için devre dışı bırakmak üzere {{prefix}}247 off",
+        "savedChannels": "Kayıtlı Kanallar",
+        "currentMarker": " ←",
+        "disabledTitle": "♾️ 24/7 Devre Dışı",
+        "noChannelsSavedField": "Kayıtlı Kanal Yok",
+        "allChannelsRemoved": "Tüm 24/7 kanalları kaldırıldı. Bot hareketsizlikten sonra sesli kanaldan ayrılacak.",
+        "channelRemoved": "<#{{channel}}> kaldırıldı",
+        "channelsRemaining_one": "{{count}} kanal kaldı",
+        "channelsRemaining_other": "{{count}} kanal kaldı",
+        "reenableFooter": "Yeniden etkinleştirmek için {{prefix}}247 on | {{prefix}}247 auto",
+        "allChannelsLabel": "❌ Tüm Kanallar",
+        "allChannelsDisabled": "Bu sunucudaki tüm kanallar için 24/7 modu **devre dışı bırakıldı**.\nBot hareketsizlikten sonra sesli kanaldan ayrılacak.",
+        "noChannelsSavedShort": "Kayıtlı kanal yok",
+        "joinFailed": "⚠️ 24/7 {{mode}} kaydedildi, ancak <#{{channel}}> kanalına katılma başarısız.\nHata: `{{error}}`\n\nDaha sonra `{{prefix}}join` veya `{{prefix}}play` deneyin."
+      }
+    },
+    "shuffle": {
+      "emptyQueue": "Kuyrukta karıştırılacak bir şey yok.",
+      "shuffled": "🔀 Kuyruk karıştırıldı"
+    },
+    "skip": {
+      "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
+      "skipped": "⏭️ Atlandı",
+      "skippedTrack": "⏭️ [{{title}}]({{url}}) atlandı",
+      "skippedToPosition": "⏭️ {{position}} konumuna atlandı"
+    },
+    "stats": {
+      "title": "Remix Müzik Botu",
+      "servers": "📂  **Sunucular**",
+      "users": "👥  **Kullanıcılar**",
+      "players": "🎧  **Oynatıcılar**",
+      "scrobbles": "🎵  **Scrobble'lar**",
+      "linkedUsers": "🔗  **Bağlı Last.fm**",
+      "ping": "🏓  **Ping**",
+      "uptime": "⏱️  **Çalışma Süresi**",
+      "build": "🔧  **Yapı**",
+      "lastRestart": "🪛  **Son yeniden başlatma**",
+      "supportKofi": "☕ [Bizi Ko-fi'de destekleyin](https://ko-fi.com/remixbot)",
+      "community": "💬 [Topluluk](https://fluxer.gg/Remix)"
+    },
+    "support": {
+      "title": "💬 Destek",
+      "description": "Remix ile ilgili herhangi bir konuda sunucumuza gidin:\n[Remix HQ](https://fluxer.gg/remix)\n\nKatılmak istemiyorsanız, sunucuda listelenen ekip üyeleriyle iletişime geçmekten çekinmeyin."
+    },
+    "test": {
+      "notInServer": "❌ Bir sunucuda kullanılmalıdır.",
+      "noOneInVoice": "Sesli kanalda kimse yok.",
+      "title": "🎙️ Ses Kanalı Üyeleri",
+      "channelEntry": "🔊 **{{name}}**: {{count}} üye"
+    },
+    "thumbnail": {
+      "nothingPlaying": "Şu anda çalan bir şey yok.",
+      "noThumbnail": "Küçük resim mevcut değil.",
+      "thumbnail": "[{{title}}]({{url}}) küçük resmi:"
+    },
+    "volume": {
+      "current": "🔊 Mevcut ses seviyesi: `{{volume}}%`",
+      "outOfRange": "❌ Ses seviyesi `0` ile `{{max}}%` arasında olmalıdır.",
+      "changed": "🔊 Bu oturum için ses seviyesi `{{volume}}%` olarak değiştirildi.",
+      "setPending": "Ses seviyesi `{{volume}}%` olarak ayarlandı — bağlanıldığında uygulanacak."
+    },
+    "volumedefault": {
+      "title": "🔊 Ses Seviyesi Ayarları",
+      "serverDefault": "• Sunucu varsayılanı: `{{volume}}%`",
+      "currentVolume": "• Mevcut oynatıcı sesi: `{{volume}}%`",
+      "changeHint": "Varsayılanı değiştirmek için: `{{prefix}}volumedefault <0-{{max}}>`",
+      "noPermission": "⚠️ Varsayılanı değiştirmek için **Sunucuyu Yönet** izni gerekli.",
+      "noPermissionSet": "❌ Sunucu varsayılan ses seviyesini ayarlamak için **Sunucuyu Yönet** izni gerekli.",
+      "outOfRange": "❌ Ses seviyesi `0` ile `{{max}}%` arasında olmalıdır.",
+      "saved": "🔊 Sunucu varsayılan ses seviyesi `{{volume}}%` olarak kaydedildi."
+    },
+    "seek": {
+      "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
+      "paused": "❌ Duraklatılmışken konuma gidilemez. Önce devam ettirin.",
+      "invalidFormat": "❌ Geçersiz konum biçimi. `dd:ss`, `sa:dd:ss` veya saniye kullanın (örn. `1:30`, `90`).",
+      "exceedsDuration": "❌ Konum parça süresini aşıyor (**{{duration}}**).",
+      "seeked": "⏩ **{{position}}** konumuna gidildi",
+      "notSupported": "❌ Mevcut ses düğümü konuma gitmeyi desteklemiyor.",
+      "failed": "❌ Konuma gitme başarısız: {{error}}"
+    },
+    "autoplay": {
+      "enabled": "🔁 Otomatik çalma **etkin** — kuyruk bittiğinde benzer parçalar otomatik olarak eklenecek.",
+      "disabled": "➡️ Otomatik çalma **devre dışı** — kuyruk bittiğinde bot duracak."
+    },
+    "trackopt": {
+      "notAvailable": "❌ Parça seçenekleri özelliği mevcut değil.",
+      "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
+      "invalidFormat": "❌ Geçersiz süre biçimi. `dd:ss`, `sa:dd:ss` veya saniye kullanın.",
+      "invalidEndAfterStart": "❌ Bitiş süresi başlangıç süresinden sonra olmalıdır.",
+      "startExceedsDuration": "❌ Başlangıç süresi parça süresini aşıyor (**{{duration}}**).",
+      "endExceedsDuration": "❌ Bitiş süresi parça süresini aşıyor (**{{duration}}**).",
+      "saved": "✅ **{{title}}** için parça seçeneği kaydedildi{{aliasLabel}}\n▶️ Başlangıç: **{{start}}** | ⏹️ Bitiş: **{{end}}**\n\nBu parça bulunduğunuz kanalda çaldığında otomatik olarak uygulanacaktır.",
+      "savedAlias": "✅ **{{title}}** [{{alias}}] için parça seçeneği kaydedildi\n▶️ Başlangıç: **{{start}}** | ⏹️ Bitiş: **{{end}}**\n\nBu kırpma parça çalarken uygulamak için `{{prefix}}trackopt play {{alias}}` kullanın.",
+      "saveFailed": "❌ Parça seçeneği kaydedilemedi.",
+      "notSet": "**{{title}}** için özel süre ayarlanmamış.",
+      "current": "📎 **{{title}}** için parça seçenekleri ({{count}})",
+      "currentEntry": "• **{{alias}}** — {{start}} → {{end}}{{autoTag}}",
+      "removed": "🗑️ **{{title}}** için parça seçeneği kaldırıldı.",
+      "removedAlias": "🗑️ **{{title}}** için **{{alias}}** kısayolu kaldırıldı.",
+      "removedAll": "🗑️ **{{title}}** için tüm parça seçenekleri kaldırıldı.",
+      "notFound": "**{{title}}** için özel süre bulunamadı.",
+      "aliasNotFound": "❌ **{{title}}** için **{{alias}}** kısayolu bulunamadı.\nKısayollarınız: {{names}}",
+      "applied": "✂️ **{{alias}}** kısayolu uygulandı — {{start}} → {{end}}",
+      "applyFailed": "❌ Kısayol uygulanamadı: {{error}}",
+      "mustBePlaying": "❌ Kısayol uygulamak için oynatıcı aktif olarak çalıyor olmalıdır.",
+      "invalidAlias": "❌ Geçersiz kısayol adı. Harf, rakam, tire veya alt çizgi kullanın.",
+      "provideAlias": "❌ Bir kısayol adı girin. Kullanım: `{{prefix}}trackopt play <kısayol>`",
+      "listEmpty": "📭 Kayıtlı parça seçeneğiniz yok. Eklemek için `{{prefix}}trackopt set <başlangıç> [bitiş]` kullanın!",
+      "listTitle": "📋 **Parça Seçenekleriniz** ({{count}})",
+      "listEntry": "• **{{title}}** — {{start}} → {{end}}",
+      "listHint": "Adlandırılmış bir kırpma uygulamak için `{{prefix}}trackopt play <kısayol>` veya birini silmek için `{{prefix}}trackopt remove [kısayol]` kullanın."
+    }
+  }
+}
