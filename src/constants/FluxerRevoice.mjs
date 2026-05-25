@@ -29,18 +29,21 @@
 import { EventEmitter } from "node:events";
 import { joinVoiceChannel, getVoiceManager } from "@fluxerjs/voice";
 
-const ConnectionState = Object.freeze({
+export const ConnectionState = Object.freeze({
   CONN_DISCONNECTED: 0,
   CONN_CONNECTED:   1,
   CONN_RECONNECTING: 2,
 });
 
-const RoomEvent = Object.freeze({
+export const LKRoomEvent = Object.freeze({
   ConnectionStateChanged:  "connectionStateChanged",
   Disconnected:           "disconnected",
   ParticipantConnected:   "participantConnected",
   ParticipantDisconnected:"participantDisconnected",
 });
+
+/** @deprecated Use LKRoomEvent instead — kept for backward compat within this file */
+const RoomEvent = LKRoomEvent;
 
 import { logger } from "./Logger.mjs";
 

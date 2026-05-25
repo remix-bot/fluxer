@@ -9,7 +9,6 @@ export const command = new CommandBuilder()
   .addAliases("ap");
 
 export async function run(msg, data) {
-  const prefix = this.handler?.getPrefix?.(msg.message?.guildId) ?? "%";
   const p = await this.getPlayer(msg, true, true, false);
   if (!p) return;
 
@@ -19,7 +18,7 @@ export async function run(msg, data) {
     if (!p._autoplayHandler) {
       p._autoplayHandler = async () => {
         if (!p._autoplay) return;
-        if (p.queue?.getCurrent() || !p.queue?.isEmpty()) return;
+        if (p.queue?.getCurrent() && !p.queue?.isEmpty()) return;
 
         const lastTrack = p._lastPlayedTrack;
         if (!lastTrack) return;

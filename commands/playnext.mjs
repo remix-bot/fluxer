@@ -55,6 +55,6 @@ export async function run(message, data) {
   const messages = p.playFirst(query, provider);
   messages.on("message", d => {
     const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
-    statusMsg.edit({ embeds: [embed] }).catch(() => {});
+    if (statusMsg) statusMsg.edit({ embeds: [embed] }).catch(() => {});
   });
 }

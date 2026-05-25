@@ -4,7 +4,7 @@ import { logger } from "./constants/Logger.mjs";
 import { ServerSettings } from "./Settings.mjs";
 import { get247ChannelMode, remove247ChannelMode } from "./constants/Helpers247.mjs";
 import { VoiceStateCache } from "./constants/VoiceStateCache.mjs";
-import { REQUIRED_BOT_PERMISSIONS, CRITICAL_PERMISSIONS } from "./MessageHandler.mjs";
+import { REQUIRED_BOT_PERMISSIONS } from "./MessageHandler.mjs";
 
 /**
  * GatewayHandler — manages raw WebSocket gateway events, voice-state tracking,
@@ -126,7 +126,7 @@ export class GatewayHandler {
           `  All missing: ${missingNames.join(", ")}`
       );
     } else {
-      logger.info(
+      logger.guild(
           `[GuildCreate] Server ${guildId} is missing optional permissions: ${result.optionalMissing.join(", ")}`
       );
     }
@@ -745,12 +745,12 @@ export class GatewayHandler {
           if (evictGuildId && evictUserId) {
             const currentLoc = remix.voiceCache.getUserLocation(evictGuildId, evictUserId);
             if (currentLoc && currentLoc.channelId === evictEntry.channelId) {
-              remix.voiceCache.updateUser({ guildId: evictGuildId, userId: evictUserId, channelId: null, isBot: false });
+              remix.voiceCache.updateUser({ guildId: evictGuildId, userId: evictUserId, channelId: null, isBot: evictEntry.isBot ?? false });
             }
           }
         }
       }
-      if (nextKey) this._prevVoiceState.set(nextKey, { channelId, guildId: guildId ?? prev?.guildId });
+      if (nextKey) this._prevVoiceState.set(nextKey, { channelId, guildId: guildId ?? prev?.guildId, isBot: isBot === true });
     } else {
       if (prevKey) this._prevVoiceState.delete(prevKey);
     }

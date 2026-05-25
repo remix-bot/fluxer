@@ -294,7 +294,7 @@ export async function run(msg) {
     try {
       switch (control.action) {
         case "previous":
-          reply = this.t(msg, "responses.player.previousNotImplemented");
+          reply = "Previous track is not available yet.";
           break;
 
         case "resume":

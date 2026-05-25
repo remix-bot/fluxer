@@ -991,7 +991,7 @@ export async function run(msg, data) {
       fields.push({ name: "Listeners", value: Utils.formatNumber(info.stats?.listeners ?? 0), inline: true });
       fields.push({ name: "Global Plays", value: Utils.formatNumber(info.stats?.playcount ?? 0), inline: true });
 
-      if (info.userplaycount !== null && user) {
+      if (info.userplaycount != null && user) {
         fields.push({ name: "Your Plays", value: Utils.formatNumber(info.userplaycount), inline: true });
       }
 
@@ -1085,7 +1085,7 @@ export async function run(msg, data) {
         fields.push({ name: "Artist", value: info.artist, inline: true });
       }
 
-      if (info.userplaycount !== null && user) {
+      if (info.userplaycount != null && user) {
         fields.push({ name: "Your Plays", value: Utils.formatNumber(info.userplaycount), inline: true });
       }
 

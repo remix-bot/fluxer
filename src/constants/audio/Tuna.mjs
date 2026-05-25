@@ -8,19 +8,19 @@ class Tuna {
   }
   get(path, params = {}) {
     return new Promise((resolve, rej) => {
-      var query = "";
+      let query = "";
       for (let key in params) {
         query += ((query.length === 0) ? "?" : "&") + key + "=" + encodeURIComponent(params[key]);
       }
-      var options = {
+      const options = {
         method: "GET",
         hostname: "tuna-api.voicemod.net",
         path: path + query,
         headers: { "x-api-key": this.apiKey },
         maxRedirects: 20
       };
-      var req = https.request(options, function(res) {
-        var chunks = [];
+      const req = https.request(options, function(res) {
+        const chunks = [];
         res.on("data", (chunk) => { chunks.push(chunk); });
         res.on("end", () => {
           try {

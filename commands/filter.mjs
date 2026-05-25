@@ -403,7 +403,7 @@ export async function run(msg) {
       await menuMsg.edit({ embeds: [errEmbed] }).catch(() => {});
       await Utils.sleep(1500);
       await menuMsg.edit({
-        embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, track)]
+        embeds: [buildPageEmbed(this.t.bind(this), msg, page, activeKeys, player.queue.getCurrent())]
       }).catch(() => {});
       return;
     }

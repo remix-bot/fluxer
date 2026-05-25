@@ -15,19 +15,7 @@
 import Revoicejs from "revoice.js";
 const { MediaPlayer } = Revoicejs;
 
-const ConnectionState = Object.freeze({
-  CONN_DISCONNECTED: 0,
-  CONN_CONNECTED:   1,
-  CONN_RECONNECTING: 2,
-});
-
-const LKRoomEvent = Object.freeze({
-  ConnectionStateChanged:  "connectionStateChanged",
-  Disconnected:           "disconnected",
-  ParticipantConnected:   "participantConnected",
-  ParticipantDisconnected:"participantDisconnected",
-});
-
+import { ConnectionState, LKRoomEvent } from "./constants/FluxerRevoice.mjs";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { Utils } from "./Utils.mjs";
 import { EventEmitter } from "node:events";
@@ -46,15 +34,6 @@ function mkEmbed(desc) {
   return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] };
 }
 
-function formatMsHelper(ms) {
-  if (ms == null || ms < 0) return "0:00";
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
 
 /** NodeLink default password — centralised so it doesn't need to be hardcoded in two places. */
 const NL_DEFAULT_PASSWORD = "youshallnotpass";
@@ -568,8 +547,10 @@ export default class Player extends EventEmitter {
     try {
       const room = this.connection?.room;
       if (room?.isConnected && room.remoteParticipants) {
+        const botId = this.client?.user?.id;
         for (const [, participant] of room.remoteParticipants) {
-          if (participant?.identity || participant?.sid) {
+          const pId = participant?.identity || participant?.sid;
+          if (pId && pId !== botId) {
             return true;
           }
         }
@@ -1893,8 +1874,8 @@ export default class Player extends EventEmitter {
     const progressBar = this._createProgressBar(20);
     let trackOptLine = "";
     if (this._activeTrackOpt) {
-      const optStart = formatMsHelper(this._activeTrackOpt.startMs);
-      const optEnd = this._activeTrackOpt.endMs > 0 ? formatMsHelper(this._activeTrackOpt.endMs) : "end";
+      const optStart = Utils.prettifyMS(this._activeTrackOpt.startMs);
+      const optEnd = this._activeTrackOpt.endMs > 0 ? Utils.prettifyMS(this._activeTrackOpt.endMs) : "end";
       trackOptLine = `\n✂️ Custom: ${optStart} → ${optEnd}`;
     }
     return {

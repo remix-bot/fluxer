@@ -76,21 +76,26 @@ export class Dashboard {
         }
 
         case "allServers": {
+          let guilds;
           try {
-            const guilds = await this.remix.client.user.fetchGuilds();
-            return guilds.map(g => Dashboard.convertServer(g));
+            guilds = await this.remix.client.user.fetchGuilds();
           } catch (e) {
             const id = Utils.uid();
             logger.dashboard("[Dashboard] allServers error:", id, e);
             return [];
           }
+          let result = guilds.map(g => Dashboard.convertServer(g));
           if (data.accessor) {
             try {
               const accessorUser = await this.remix.client.users.fetch(data.accessor).catch(() => null);
-              if (accessorUser) return await this.remix.getSharedServers(accessorUser);
+              if (accessorUser) {
+                const shared = await this.remix.getSharedServers(accessorUser);
+                const sharedIds = new Set(shared.map(s => s.id));
+                result = result.filter(g => sharedIds.has(g.id));
+              }
             } catch (_) {}
           }
-          return [];
+          return result;
         }
 
         case "commands": {
@@ -434,8 +439,8 @@ export class Dashboard {
     } else if (typeof user.avatarURL === "function") {
       try { avatarUrl = user.avatarURL() ?? ""; } catch (_) {}
     }
-    if (!avatarUrl && user.discriminator) {
-      avatarUrl = `https://fluxerusercontent.com/embed/avatars/${parseInt(user.discriminator || "0") % 5}.png`;
+    if (!avatarUrl) {
+      avatarUrl = `https://fluxerusercontent.com/embed/avatars/${parseInt(user.id?.slice(-4) ?? "0") % 5}.png`;
     }
     return {
       id: user.id,
@@ -476,7 +481,7 @@ export class Dashboard {
    */
   static convertChannel(channel) {
     const type = channel.type ?? 0;
-    const isVoice = channel.isVoice?.() ?? (type === 2) ?? false;
+    const isVoice = channel.isVoice?.() || type === 2;
     const isCategory = type === 4;
     const isText = !isVoice && !isCategory && (
         type === 0 || type === 5 || type === 13 ||

@@ -68,7 +68,6 @@ function getUserCount(client) {
 
 function getLivePlayerCount(playerMap) {
   let live = 0;
-  const seenGuilds = new Set();
 
   for (const [mapKey, player] of playerMap ?? []) {
     if (!player || player._destroyed || player.leaving) continue;
@@ -87,9 +86,6 @@ function getLivePlayerCount(playerMap) {
     }
 
     live++;
-
-    const guildId = String(player._guildId ?? "").replace(/\D/g, "");
-    if (guildId) seenGuilds.add(guildId);
   }
 
   return live;

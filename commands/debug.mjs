@@ -79,15 +79,6 @@ export async function run(msg, data) {
 
       {
         let groupJson = "";
-        let groupStart = 0;
-
-        const flushGroup = () => {
-          if (!groupJson) return;
-          const codeBlock = "```json\n" + groupJson + "\n```";
-          pages.push(codeBlock.slice(0, MAX_DESC));
-          groupJson = "";
-          groupStart = i;
-        };
 
         let i = 0;
         for (i = 0; i < servers.length; i++) {

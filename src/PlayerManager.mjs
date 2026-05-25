@@ -356,9 +356,6 @@ export class PlayerManager {
       this.dashboard.playerUpdate({ type: "update" }, player);
     });
 
-    player.on("message", (message) => {
-    });
-
     player.on("autoleave", () => {
       sendUserUpdates("leave");
       emitGlobal("close");
@@ -911,8 +908,6 @@ export class PlayerManager {
         });
       }
     });
-
-    player.on("leave", () => {});
 
     player.on("message", (m) => {
       let ch       = player.textChannel;

@@ -93,12 +93,8 @@ export class VoiceStateCache {
       if (!set) { set = new Set(); channelIdx.set(cKey, set); }
       set.add(cleanUser);
 
+      locations.delete(uKey);
       locations.set(uKey, { channelId: cleanChannel, guildId: cleanGuild, userId: cleanUser });
-
-      if (locations.has(uKey)) {
-        locations.delete(uKey);
-        locations.set(uKey, { channelId: cleanChannel, guildId: cleanGuild, userId: cleanUser });
-      }
 
       while (locations.size > maxEntries) {
         const evictKey = locations.keys().next().value;

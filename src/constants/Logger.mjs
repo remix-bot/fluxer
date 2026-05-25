@@ -47,6 +47,10 @@ export const logger = {
     if (_config?.enabled === false) return;
     console.warn(`[${ts()}] ${tag}`, ...args);
   },
+  info(tag, ...args) {
+    if (_config?.enabled === false) return;
+    console.log(`[${ts()}] ${tag}`, ...args);
+  },
 
   player(...args)      { if (isEnabled("player"))      console.log(`[${ts()}]`, ...args); },
   inactivity(...args)  { if (isEnabled("inactivity"))  console.log(`[${ts()}]`, ...args); },

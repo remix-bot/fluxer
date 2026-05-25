@@ -19,13 +19,13 @@ function cleanId(value) {
 }
 
 export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
-  if (!this.client.channels.has(cid)) {
+  const cleanChannelId = cleanId(cid);
+  if (!this.client.channels.has(cleanChannelId)) {
     ecb();
     const embed = new EmbedBuilder().setColor(getGlobalColor())
         .setDescription(this.t(message, "responses.join.channelNotFound", { channel: cid }));
     return message.reply({ embeds: [embed] });
   }
-  const cleanChannelId = cleanId(cid);
   const existing = this.players.playerMap.get(cleanChannelId)
       ?? [...this.players.playerMap.values()].find((player) => cleanId(player?._channelId) === cleanChannelId);
   if (existing) {

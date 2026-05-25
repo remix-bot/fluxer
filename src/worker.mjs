@@ -544,26 +544,14 @@ const post = (event, payload) => {
 };
 
 utils.on("message", (m) => {
-  if (jobId === "dev") { logger.worker("[Message]", m); return; }
   post("message", m);
 });
 
 utils.on("error", (m) => {
-  if (jobId === "dev") { logger.worker("[Error]", m); return; }
   post("error", m);
 });
 
 (async () => {
-  if (jobId === "dev") {
-    try {
-      const result = await utils.getVideoData("Neoni funeral", "ytm");
-      logger.worker("[Worker result]", result);
-    } catch (e) {
-      logger.error("[Worker error]", e);
-    }
-    return;
-  }
-
   try {
     switch (jobId) {
       case "generalQuery": {
