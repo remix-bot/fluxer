@@ -385,8 +385,20 @@ function format247Summary(set, t, guildId) {
   return lines.join("\n");
 }
 
-function prettifySettingLabel(key) {
-  const custom = {
+function prettifySettingLabel(key, t, guildId) {
+  const localeMap = {
+    songAnnouncements: "responses.settings.labelSongAnnouncements",
+    prefix: "responses.settings.labelPrefix",
+    pfx: "responses.settings.labelPfp",
+    locale: "responses.settings.labelLocale",
+    stay_247: "responses.settings.label247",
+    volume: "responses.settings.labelVolume",
+    announcementChannelId: "responses.settings.labelAnnouncementChannel",
+    restrictVolume: "responses.settings.labelRestrictVolume",
+    autojoin_channel: "responses.settings.labelAutojoinChannel"
+  };
+  if (localeMap[key] && t && guildId) return t(guildId, localeMap[key]);
+  const fallback = {
     songAnnouncements: "Song announcements",
     prefix: "Prefix",
     pfx: "Bot avatar style",
@@ -397,7 +409,7 @@ function prettifySettingLabel(key) {
     restrictVolume: "Restrict volume",
     autojoin_channel: "Autojoin channel"
   };
-  return custom[key] ?? key.replace(/_/g, " ");
+  return fallback[key] ?? key.replace(/_/g, " ");
 }
 
 async function handle247(ctx, message, value) {
@@ -483,8 +495,7 @@ async function handle247(ctx, message, value) {
   const channels = get247Channels(set);
   if (!channels.has(id) && channels.size >= MAX_247_CHANNELS) {
     return message.reply(embed(
-        `You can save up to ${MAX_247_CHANNELS} 24/7 voice channels in one server. ` +
-        `Use \`${set.get("prefix") ?? "%"}247 off\` in one of the saved channels first.`
+        ctx.t(message, "responses.settings.max247Channels", { max: MAX_247_CHANNELS, prefix: set.get("prefix") ?? "%" })
     ));
   }
   channels.add(id);
@@ -806,7 +817,7 @@ export async function run(message, data) {
       ));
     }
 
-    const description = this.settingsMgr.descriptions?.[settingKey] ?? "No description available.";
+    const description = this.settingsMgr.descriptions?.[settingKey] ?? this.t(message, "responses.settings.noDescription");
     const currentVal  = set.get(settingKey);
     const defaultVal  = this.settingsMgr.defaults?.[settingKey];
 

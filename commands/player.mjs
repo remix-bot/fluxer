@@ -92,9 +92,9 @@ export async function run(msg) {
     const volumeBar = "█".repeat(volBars) + "░".repeat(10 - volBars);
 
     const queueSize = player.queue.size();
-    const loopStatus = player.queue.songLoop ? "🔂 Song" : player.queue.loop ? "🔁 Queue" : "❌ Off";
+    const loopStatus = player.queue.songLoop ? this.t(msg, "responses.player.loopSong") : player.queue.loop ? this.t(msg, "responses.player.loopQueue") : this.t(msg, "responses.player.loopOff");
 
-    let filterStatus = "🔇 Off";
+    let filterStatus = this.t(msg, "responses.player.filterOff");
     if (player.activeFilter) {
       if (player.activeFilter.label.includes("+")) {
         filterStatus = `🔥 **${player.activeFilter.label}**`;
@@ -114,8 +114,8 @@ export async function run(msg) {
       `${progressBar}`,
       `${timeDisplay}`,
       ``,
-      `🔊 Volume: \`${volPercent}%\` ${volumeBar}`,
-      `📋 Queue: \`${queueSize}\` tracks | Loop: ${loopStatus} | Filter: ${filterStatus}`,
+      this.t(msg, "responses.player.volumeLabel", { volume: volPercent }) + " " + volumeBar,
+      `${this.t(msg, "responses.player.queueLabel", { count: queueSize })} | Loop: ${loopStatus} | Filter: ${filterStatus}`,
       ``,
       state.message ? `💬 *${state.message}*` : `💡 *${this.t(msg, "responses.player.reactHint")}*`,
       ``,
@@ -177,7 +177,7 @@ export async function run(msg) {
     emojiRemoveTimeout = setTimeout(async () => {
       await clearReactions();
       const disabledEmbed = buildEmbed({ message: this.t(msg, "responses.player.controlsDisabled") });
-      disabledEmbed.footer = { text: this.t(msg, "responses._common.controlsExpired") + " • React to refresh" };
+      disabledEmbed.footer = { text: this.t(msg, "responses._common.controlsExpired") };
       await message.edit({ embeds: [disabledEmbed] }).catch(() => {});
     }, EMOJI_REMOVE_TIMEOUT);
   };
@@ -294,7 +294,7 @@ export async function run(msg) {
     try {
       switch (control.action) {
         case "previous":
-          reply = "Previous track is not available yet.";
+          reply = this.t(msg, "responses.player.previousNotAvailable");
           break;
 
         case "resume":
@@ -491,7 +491,7 @@ export async function run(msg) {
           return;
       }
     } catch (err) {
-      reply = `⚠️ Error: ${err.message}`;
+      reply = this.t(msg, "responses.player.errorGeneric", { error: err.message });
     }
 
     if (shouldUpdate) refresh({ message: reply });

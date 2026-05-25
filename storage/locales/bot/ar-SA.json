@@ -19,7 +19,21 @@
     },
     "help": {
       "pageStructure": "الأوامر المتاحة (صفحة $currPage/$maxPage): \n\n$content\n\nاكتب `$prefix$helpCmd <أمر>` لمعرفة المزيد. يمكنك أيضًا تضمين الأوامر الفرعية.\nمثال: `$prefix$helpCmd settings get`\n\nنصيحة: استخدم الأسهم أسفل هذه الرسالة لتقليل الصفحات، أو حدد رقم الصفحة المطلوب باستخدام `$prefix$helpCmd <رقم الصفحة>`",
-      "unknownCommand": "❌ أمر غير معروف `{{command}}`. استخدم `{{prefix}}help` للتصفح."
+      "unknownCommand": "❌ أمر غير معروف `{{command}}`. استخدم `{{prefix}}help` للتصفح.",
+      "availableCommands": "الأوامر المتاحة{{$page}}: ",
+      "runHelp": "\nاكتب `$prefix$helpCmd <أمر>` لمعرفة المزيد. يمكنك أيضًا تضمين الأوامر الفرعية.\nمثال: `$prefix$helpCmd أمر اسم_الأمر_الفرعي`",
+      "pageTip": "\n\nنصيحة: استخدم `$prefix$helpCmd <رقم الصفحة>` لتقليب الصفحات",
+      "ellipsis": ". [...]",
+      "usage": "الاستخدام: ",
+      "examples": "مثال/أمثلة: ",
+      "aliases": "الأسماء البديلة: ",
+      "subcommands": "الأوامر الفرعية: ",
+      "arguments": "الوسائط: ",
+      "allowedValues": "القيم المسموحة: ",
+      "aliasesLabel": "الأسماء البديلة: ",
+      "requirements": "المتطلبات: ",
+      "permission": "الصلاحية `{{$permission}}`",
+      "optionCount": "{{$count}} خيار/خيارات"
     },
     "invalidFlag": "علامة غير صالحة `$invalidFlag`. لا تتطابق مع أي خيار لهذا الأمر.\n`$previousCmd $invalidFlag`",
     "page": {
@@ -27,7 +41,8 @@
     },
     "permissions": {
       "message": "يرجى منحي إذن {{permission}} في {{channel}} أو تواصل مع مسؤول الخادم. لا أستطيع العمل بدون هذا الإذن."
-    }
+    },
+    "textWrapError": "سلسلة مشوهة `{{$value}}`: يوجد علامة اقتباس إغلاق مفقودة (`{{$quote}}`) بعد السلسلة المطلوبة."
   },
   "commands": {
     "clear": "أزل جميع الأغاني من قائمة الانتظار.",
@@ -60,7 +75,13 @@
     "test": "يوضح عدد الأشخاص الموجودين في كل قناة صوتية.",
     "thumbnail": "اطلب الصورة المصغرة للأغنية التي يتم تشغيلها حالياً.",
     "volume": "عرض أو تغيير مستوى الصوت الحالي.",
-    "volumedefault": "عرض أو تعيين مستوى الصوت الافتراضي للخادم. (يتطلب إدارة الخادم للتعيين)"
+    "volumedefault": "عرض أو تعيين مستوى الصوت الافتراضي للخادم. (يتطلب إدارة الخادم للتعيين)",
+    "lastfm": "اربط حساب Last.fm الخاص بك، أو بدّل السكرابل، أو اعرض ملفك الشخصي.",
+    "vote": "اعرض معلومات التصويت أو تحقق من الناخبين لسيرفرك/بوتك على FluxerList",
+    "seek": "انتقل إلى موضع محدد في المقطع الذي يعمل حالياً.",
+    "move": "انقل مقطعاً من موضع إلى آخر في قائمة الانتظار.",
+    "autoplay": "بدّل التشغيل التلقائي — شغّل مقاطع مشابهة تلقائياً عند انتهاء القائمة.",
+    "trackopt": "عيّن أوقات بداية/نهاية مخصصة للمقاطع. يدعم الأسماء المستعارة — احفظ عمليات قص متعددة لكل مقطع."
   },
   "options": {
     "debug": {
@@ -122,6 +143,24 @@
     },
     "volumedefault": {
       "volume": "مستوى صوت جديد % (0-200) لحفظه كقيمة افتراضية للخادم. اتركه فارغاً لعرض القيمة الحالية."
+    },
+    "lastfm": {
+      "action": "الإجراء المطلوب: link، confirm، unlink، np، profile، loved، top، recent، artists، love، unlove، scrobble",
+      "token": "رمز المصادقة من Last.fm (يُستخدم مع إجراء 'confirm')"
+    },
+    "vote": {
+      "action": "الإجراء المطلوب: info، check، voters",
+      "type": "نوع المورد: سيرفر أو بوت"
+    },
+    "seek": {
+      "position": "الموضع للانتقال إليه (مثلاً 1:30، 90، أو 1:30:00 للساعات)"
+    },
+    "move": {
+      "from": "الموضع الحالي للمقطع في قائمة الانتظار (يبدأ من 1).",
+      "to": "الموضع المستهدف لنقل المقطع إليه (يبدأ من 1)."
+    },
+    "trackopt": {
+      "times": "وقت البداية والنهاية الاختياري، مثلاً '0:30' أو '0:30 3:45'"
     }
   },
   "pagination": {
@@ -188,7 +227,10 @@
       "cleared": "🗑️ تم مسح قائمة الانتظار."
     },
     "debug": {
-      "voiceTitle": "🔧 تصحيح الصوت"
+      "voiceTitle": "🔧 تصحيح الصوت",
+      "summary": "📊 **الملخص**",
+      "pageLabel": "صفحة {{page}}/{{total}}",
+      "navigateHint": "استخدم ⬅️➡️ للتنقل"
     },
     "eval": {
       "resultTitle": "نتيجة التقييم",
@@ -365,7 +407,9 @@
       "fetchingLyrics": "📜 جارٍ جلب الكلمات...",
       "noLyricsFound": "❌ لم يتم العثور على كلمات في NodeLink",
       "lyricsDisplayed": "تم عرض الكلمات ({{lines}} سطر، {{pages}} صفحة)",
-      "lyricsError": "⚠️ خطأ في الكلمات: {{error}}"
+      "lyricsError": "⚠️ خطأ في الكلمات: {{error}}",
+      "previousNotAvailable": "⏮️ المقطع السابق غير متاح بعد.",
+      "errorGeneric": "⚠️ خطأ: {{error}}"
     },
     "radio": {
       "noStations": "❌ لا توجد محطات إذاعية مُعدّة.",
@@ -475,7 +519,7 @@
         "noChannelsSaved": "لا توجد قنوات صوتية محفوظة.",
         "gettingStarted": "البدء",
         "gettingStartedValue": "• `{{prefix}}247 on` — البقاء بشكل دائم\n• `{{prefix}}247 auto` — البقاء + إعادة الانضمام تلقائياً بعد قطع الاتصال",
-        "footer": "{{prefix}}247 on | {{prefix}}247 auto | {{prefix}}247 off",
+        "footer": "{{prefix}}247 على | {{prefix}}247 تلقائي | {{prefix}}247 إيقاف",
         "channelsSaved_one": "قناة {{count}} محفوظة",
         "channelsSaved_other": "{{count}} قنوات محفوظة",
         "summaryOn": "✅ {{count}} مفعّل",
@@ -499,7 +543,8 @@
         "allChannelsDisabled": "وضع 24/7 **معطّل** لجميع القنوات في هذا الخادم.\nسيغادر البوت الصوت بعد عدم النشاط.",
         "noChannelsSavedShort": "لا توجد قنوات محفوظة",
         "joinFailed": "⚠️ تم حفظ 24/7 {{mode}}، لكن فشل الانضمام إلى <#{{channel}}>.\nخطأ: `{{error}}`\n\nجرّب `{{prefix}}join` أو `{{prefix}}play` لاحقاً."
-      }
+      },
+      "max247Channels": "يمكنك حفظ ما يصل إلى {{max}} قنوات صوتية 24/7 في خادم واحد. استخدم `{{prefix}}247 off` في إحدى القنوات المحفوظة أولاً."
     },
     "shuffle": {
       "emptyQueue": "لا يوجد شيء لخلطه في قائمة الانتظار.",
@@ -555,6 +600,181 @@
       "noPermissionSet": "❌ تحتاج إذن **إدارة الخادم** لتعيين مستوى الصوت الافتراضي للخادم.",
       "outOfRange": "❌ يجب أن يكون مستوى الصوت بين `0` و `{{max}}%`.",
       "saved": "🔊 تم حفظ مستوى الصوت الافتراضي للخادم كـ `{{volume}}%`."
+    },
+    "gateway": {
+      "missingPermsFallback": "⚠️ تنقصني صلاحيات أحتاجها للعمل بشكل صحيح! المفقودة: **{{perms}}**. يرجى طلب مسؤول الخادم منح هذه الصلاحيات في إعدادات الخادم ← الأدوار."
+    },
+    "lastfm": {
+      "notConfigured": "❌ تكامل Last.fm غير مُعدّ على هذا البوت. اطلب من مالك البوت إضافة مفتاح Last.fm API إلى الإعدادات.",
+      "notLinked": "❌ ليس لديك حساب Last.fm مرتبط. استخدم `{{prefix}}lastfm link` للبدء.",
+      "linked": "✅ تم ربط حساب Last.fm **[{{username}}](https://last.fm/user/{{username}})**! السكرابل مفعّل بشكل افتراضي.",
+      "alreadyLinked": "✅ لديك بالفعل **{{username}}** مرتبط! استخدم `{{prefix}}lastfm unlink` لفصل الاتصال، أو `{{prefix}}lastfm scrobble` لتبديل السكرابل.",
+      "unlinked": "✅ تم فصل حساب Last.fm **{{username}}**.",
+      "scrobbleEnabled": "✅ السكرابل **مفعّل** — الأغاني التي تستمع إليها سيتم تسجيلها في **{{username}}**.",
+      "scrobbleDisabled": "⏸️ السكرابل **معطّل** — لن يتم تسجيل الأغاني. حسابك لا يزال مرتبطاً.",
+      "authDM": "📧 تحقق من رسائلك الخاصة للحصول على رابط تفويض Last.fm! بعد الموافقة، شغّل `{{prefix}}lastfm confirm <token>` هنا.",
+      "authDMFailed": "⚠️ لم أتمكن من إرسال رسالة خاصة. [انقر هنا للتفويض على Last.fm]({{url}})، ثم شغّل `{{prefix}}lastfm confirm <token>`.",
+      "confirmUsage": "❌ الاستخدام: `{{prefix}}lastfm confirm <token>` — أدخل الرمز من رسالة التفويض.",
+      "confirmFailed": "❌ فشل الحصول على الجلسة: {{error}}\nتأكد من أنك وافقت على الرمز على Last.fm أولاً.",
+      "tokenFailed": "❌ فشل الحصول على رمز المصادقة: {{error}}",
+      "noLoved": "❤️ لا توجد مقاطع محبوبة لـ **{{username}}**.",
+      "noTop": "📊 لا توجد مقاطع أعلى لـ **{{username}}**.",
+      "noRecent": "🕐 لا توجد مقاطع حديثة لـ **{{username}}**.",
+      "lovedTitle": "❤️ المقاطع المحبوبة — {{username}}",
+      "topTitle": "📊 أعلى المقاطع — {{username}}",
+      "recentTitle": "🕐 المقاطع الحديثة — {{username}}",
+      "nowPlaying": "🎵 يعمل حالياً على Last.fm",
+      "lastPlayed": "🕐 آخر ما تم تشغيله على Last.fm",
+      "profileTitle": "ملف Last.fm الشخصي: {{username}}",
+      "profileScrobbles": "🎵 **{{playcount}}** سكرابل",
+      "profileRegistered": "👤 مسجّل: {{date}}",
+      "profileLink": "🔗 [فتح الملف الشخصي]({{url}})",
+      "noArtists": "🎤 لا توجد فنون أعلى لـ **{{username}}**.",
+      "artistsTitle": "🎤 أعلى الفنانين — {{username}}",
+      "lovedTrack": "❤️ تم حب **{{name}}** لـ **{{artist}}** على Last.fm!",
+      "unlovedTrack": "💔 تم إزالة الحب عن **{{name}}** لـ **{{artist}}** على Last.fm.",
+      "loveFailed": "❌ فشل حب المقطع: {{error}}",
+      "unloveFailed": "❌ فشل إزالة حب المقطع: {{error}}",
+      "nothingPlayingLove": "❌ لا يوجد شيء يعمل حالياً. شغّل أغنية أولاً لحبها!",
+      "fetchFailed": "❌ فشل جلب البيانات من Last.fm: {{error}}",
+      "authLinkTitle": "🎵 اربط حساب Last.fm الخاص بك",
+      "authLinkBody": "انقر على الرابط أدناه لتفويض Remix على Last.fm:\n**[تفويض على Last.fm]({{authUrl}})**\nبعد النقر على \"نعم، السماح بالوصول\"، ارجع وشغّل:\n\\u0060{{prefix}}lastfm confirm {{token}}\\u0060\n_ينتهي هذا الرابط خلال 60 دقيقة._",
+      "npTrackInfo": "**{{name}}** لـ **{{artist}}**\n[فتح على Last.fm]({{url}})",
+      "npFooter": "Last.fm: {{username}}",
+      "profileScrobbleStatus": "🔄 السكرابل: {{status}}",
+      "profileScrobbleEnabled": "✅ مفعّل",
+      "profileScrobbleDisabled": "⏸️ معطّل",
+      "profileScrobbleFooter": "استخدم {{prefix}}lastfm scrobble لتبديل السكرابل",
+      "noPlaylists": "📋 لا توجد قوائم تشغيل لـ **{{username}}**.",
+      "playlistsTitle": "📋 قوائم التشغيل — {{username}}",
+      "playlistsFooter": "💡 استخدم {{prefix}}lastfm play playlist <رقم> لتشغيل واحدة!",
+      "nothingPlayingUnlove": "❌ لا يوجد شيء يعمل حالياً. شغّل أغنية أولاً لإزالة الحب!",
+      "nothingPlayingNoArtist": "❌ لا يوجد شيء يعمل حالياً ولم يتم تحديد فنان. شغّل أغنية أو حدد اسم فنان.",
+      "whoknowsChecking": "🔍 جارٍ التحقق ممن يستمع إلى **{{artist}}** في هذا الخادم...",
+      "whoknowsNobody": "👤 لا أحد في هذا الخادم استمع إلى **{{artist}}** على Last.fm.",
+      "whoknowsTitle": "👤 من يعرف {{artist}}؟",
+      "whoknowsFooter": "آخر تحديث: {{date}}",
+      "whoknowsTrackChecking": "🔍 جارٍ التحقق ممن يعرف **{{track}}** لـ **{{artist}}** في هذا الخادم...",
+      "whoknowsTrackNobody": "👤 لا أحد في هذا الخادم استمع إلى **{{track}}** لـ **{{artist}}** على Last.fm.",
+      "whoknowsTrackTitle": "👤 من يعرف {{track}}؟",
+      "whoknowsTrackFooter": "آخر تحديث: {{date}}",
+      "whoknowsAlbumChecking": "🔍 جارٍ التحقق ممن يعرف **{{album}}**...",
+      "whoknowsAlbumNobody": "👤 لا أحد في هذا الخادم استمع إلى **{{album}}** على Last.fm.",
+      "whoknowsAlbumTitle": "👤 من يعرف {{album}}؟",
+      "leaderboardEmpty": "🎵 لا توجد سكرابلات مسجلة بعد. اربط حساب Last.fm الخاص بك...",
+      "leaderboardControlsExpired": "⌛ انتهت صلاحية عناصر التحكم",
+      "leaderboardPageFooter": "صفحة {{page}}/{{total}} • استخدم ◀️▶️ للتنقل",
+      "artistsFooter": "Last.fm: {{username}}",
+      "noArtistSpecified": "❌ لم يتم تحديد فنان. شغّل أغنية أو حدد اسم فنان.",
+      "artistNotFound": "❌ الفنان **{{artist}}** غير موجود على Last.fm.",
+      "noAlbumSpecified": "❌ لم يتم تحديد ألبوم. شغّل أغنية أو حدد اسم ألبوم.",
+      "albumNotFound": "❌ الألبوم **{{album}}** غير موجود على Last.fm.",
+      "noTrackSpecified": "❌ لم يتم تحديد مقطع. شغّل أغنية أو حدد اسم مقطع.",
+      "trackNotFound": "❌ المقطع **{{track}}** لـ **{{artist}}** غير موجود على Last.fm.",
+      "noTopAlbums": "💿 لا توجد ألبومات أعلى لـ **{{username}}**.",
+      "topAlbumsTitle": "💿 ألبومات أعلى — {{username}}",
+      "topAlbumsFooter": "Last.fm: {{username}}",
+      "noTopTags": "🏷️ لا توجد وسوم أعلى لـ **{{username}}**.",
+      "topTagsTitle": "🏷️ وسوم أعلى — {{username}}",
+      "topTagsFooter": "Last.fm: {{username}}",
+      "tagProvideName": "❌ حدد اسم وسم عبر خيار الرمز.",
+      "tagNotFound": "❌ الوسم **{{tag}}** غير موجود على Last.fm.",
+      "compareSpecifyUser": "❌ حدد مستخدماً للمقارنة. استخدم .",
+      "compareUserNotLinked": "❌ تعذر مقارنة الملفات الشخصية. تأكد من أن كلا المستخدمين مرتبطان.",
+      "compareFailed": "❌ تعذر مقارنة الملفات الشخصية. تأكد من أن كلا المستخدمين مرتبطان.",
+      "compareTitle": "🤝 مقارنة الذوق",
+      "coverNothingPlaying": "❌ لا يوجد شيء يعمل حالياً. شغّل أغنية للحصول على غلاف الألبوم!",
+      "coverNotFound": "🖼️ لم يتم العثور على غلاف ألبوم لـ **{{track}}** لـ **{{artist}}**.",
+      "coverTitle": "🖼️ {{album}}",
+      "coverFooter": "{{track}} لـ {{artist}}",
+      "refreshFailed": "❌ تعذر الوصول إلى الخادم.",
+      "refreshSuccess": "✅ تم تحديث قائمة الأعضاء! تم العثور على **{{count}}** عضواً.",
+      "affinityNeedUsers": "👥 تحتاج إلى مستخدمين مرتبطين على الأقل في هذا الخادم للتحقق من التقارب.",
+      "affinityChecking": "🔍 جارٍ التحقق من التقارب الموسيقي بين أعضاء الخادم...",
+      "affinityNoCommon": "👥 لا توجد فنانون مشتركون بين أي أعضاء الخادم.",
+      "affinityTitle": "👥 تقارب موسيقي",
+      "affinityFooter": "بناءً على فناني Last.fm المشتركين",
+      "crownsChecking": "👑 جارٍ التحقق من ألقاب الفنانين الخاصة بك...",
+      "crownsNone": "👑 لا تمتلك أي ألقاب فنانين في هذا الخادم. استمر في الاستماع!",
+      "crownsTitle": "👑 ألقاب الفنانين — {{username}}",
+      "crownsFooter": "آخر تحديث: {{date}}",
+      "noArtistTags": "🏷️ لا توجد وسوم للفنان **{{artist}}**.",
+      "artistTagsTitle": "🏷️ وسوم أعلى لـ {{artist}}"
+    },
+    "messages": {
+      "missingCriticalPermsTitle": "صلاحيات مفقودة — البوت لا يستطيع العمل بشكل صحيح",
+      "missingCriticalPermsDesc": "ينقص البوت **صلاحيات حرجة** يحتاجها للعمل. يرجى طلب مسؤول الخادم منحها.",
+      "missingOptionalPermsTitle": "صلاحيات اختيارية مفقودة",
+      "missingOptionalPermsDesc": "بعض الميزات قد لا تعمل بدون هذه الصلاحيات، لكن البوت لا يزال يستطيع تشغيل الموسيقى.",
+      "permFooter": "أعد دعوة البوت بالصلاحيات الصحيحة باستخدام رابط الدعوة، أو عدّل دور البوت في إعدادات الخادم ← الأدوار.",
+      "needPermsFallback": "أحتاج الصلاحيات التالية: **{{perms}}**. يرجى طلب مسؤول الخادم منحها."
+    },
+    "vote": {
+      "notConfigured": "❌ تكامل FluxerList غير مُعدّ على هذا البوت. اطلب من مالك البوت إضافة مفتاح FluxerList API إلى الإعدادات.",
+      "noResourceId": "❌ لا يوجد معرف {{type}} مُعدّ. قدّمه عبر `{{prefix}}vote check {{type}} <id-or-slug>` أو عيّنه في config.json.",
+      "infoTitle": "تصويت FluxerList",
+      "infoDescription": "صوّت لهذا البوت/السيرفر على [FluxerList]({{siteUrl}})!\n\nFluxerList هي منصة لعرض السيرفرات والبوتات حيث يمكن للمستخدمين التصويت للمساعدة في نمو المجتمع.\n\n**الأوامر:**\n`{{prefix}}vote info` — اعرض هذه المعلومات ورابط التصويت\n`{{prefix}}vote info server` — اعرض رابط التصويت لسيرفر\n`{{prefix}}vote check` — تحقق ممن صوّت (للمالك فقط)\n`{{prefix}}vote voters` — اعرض قائمة الناخبين (للمالك فقط)",
+      "voteTitle": "صوّت على FluxerList",
+      "supportDesc": "ادعم هذا {{type}} بالتصويت على FluxerList!",
+      "voteLink": "**[صوّت واعرض الملف الشخصي]({{url}})**",
+      "findLink": "زر [FluxerList]({{siteUrl}}) للعثور على هذا {{type}} والتصويت له.",
+      "helpGrow": "أصواتك تساعد هذا {{type}} على النمو والوصول لمزيد من المستخدمين.",
+      "fetchVotersFailed": "❌ فشل جلب الناخبين: {{error}}",
+      "noVotersYet": "لم يصوّت أحد لهذا {{type}} بعد. شارك رابط التصويت للبدء!",
+      "serverVoters": "ناخبو السيرفر",
+      "botVoters": "ناخبو البوت",
+      "noVotersOnPage": "لم يتم العثور على ناخبين في هذه الصفحة.",
+      "controlsExpired": "انتهت صلاحية التحكم",
+      "pageInfo": "صفحة {{page}}/{{totalPages}} من {{total}} ناخب • استخدم ◀️▶️ للتنقل",
+      "voterTotal": "{{total}} ناخب(ناخبين) إجمالاً",
+      "defaultCommandsTitle": "**أوامر تصويت FluxerList:**",
+      "defaultCommandsList": "`{{prefix}}vote` — اعرض معلومات التصويت والرابط\n`{{prefix}}vote info` — اعرض معلومات التصويت ورابط التصويت\n`{{prefix}}vote check` — تحقق ممن صوّت (للمالك فقط)\n`{{prefix}}vote voters` — اعرض قائمة الناخبين (للمالك فقط)",
+      "optionsTitle": "**الخيارات:**",
+      "optionsList": "`{{prefix}}vote check server` — تحقق من الناخبين لسيرفر\n`{{prefix}}vote check bot` — تحقق من الناخبين لبوت",
+      "votedDate": "صوّت {{date}}",
+      "unknownUser": "مستخدم#{{id}}",
+      "unknownDate": "غير معروف"
+    },
+    "seek": {
+      "nothingPlaying": "❌ لا يوجد شيء يعمل حالياً!",
+      "paused": "❌ لا يمكن الانتقال أثناء الإيقاف المؤقت. استأنف أولاً.",
+      "invalidFormat": "❌ تنسيق موضع غير صالح. استخدم `mm:ss` أو `hh:mm:ss` أو ثوانٍ (مثلاً `1:30`، `90`).",
+      "exceedsDuration": "❌ موضع الانتقال يتجاوز مدة المقطع (**{{duration}}**).",
+      "seeked": "⏩ تم الانتقال إلى **{{position}}**",
+      "notSupported": "❌ الانتقال غير مدعوم من عقدة الصوت الحالية.",
+      "failed": "❌ فشل الانتقال: {{error}}"
+    },
+    "autoplay": {
+      "enabled": "🔁 التشغيل التلقائي **مفعّل** — سيتم إضافة مقاطع مشابهة تلقائياً عند انتهاء القائمة.",
+      "disabled": "➡️ التشغيل التلقائي **معطّل** — سيتوقف البوت عند انتهاء القائمة."
+    },
+    "trackopt": {
+      "notAvailable": "❌ ميزة خيارات المقطع غير متاحة.",
+      "nothingPlaying": "❌ لا يوجد شيء يعمل حالياً!",
+      "invalidFormat": "❌ تنسيق وقت غير صالح. استخدم `mm:ss` أو `hh:mm:ss` أو ثوانٍ.",
+      "invalidEndAfterStart": "❌ يجب أن يكون وقت النهاية بعد وقت البدء.",
+      "startExceedsDuration": "❌ وقت البداية يتجاوز مدة المسار (**{{duration}}**).",
+      "endExceedsDuration": "❌ وقت النهاية يتجاوز مدة المسار (**{{duration}}**).",
+      "saved": "✅ تم حفظ خيارات المسار لـ **{{title}}**{{aliasLabel}}\\n▶️ البداية: **{{start}}** | ⏹️ النهاية: **{{end}}**\\n\\nسيتم تطبيق هذا تلقائيًا عند تشغيل هذا المسار في القناة التي أنت فيها.",
+      "savedAlias": "✅ تم حفظ خيارات المسار لـ **{{title}}** [{{alias}}]\\n▶️ البداية: **{{start}}** | ⏹️ النهاية: **{{end}}**\\n\\nاستخدم `{{prefix}}trackopt play {{alias}}` لتطبيق هذا التقصير أثناء تشغيل المسار.",
+      "saveFailed": "❌ فشل حفظ خيارات المسار.",
+      "notSet": "لم يتم تعيين أوقات مخصصة لـ **{{title}}**.",
+      "current": "📎 خيارات المسار لـ **{{title}}** ({{count}})",
+      "currentEntry": "• **{{alias}}** — {{start}} → {{end}}{{autoTag}}",
+      "removed": "🗑️ تم حذف خيارات المسار لـ **{{title}}**.",
+      "removedAlias": "🗑️ تم حذف الاسم المستعار **{{alias}}** لـ **{{title}}**.",
+      "removedAll": "🗑️ تم حذف جميع خيارات المسار لـ **{{title}}**.",
+      "notFound": "لم يتم العثور على أوقات مخصصة لـ **{{title}}**.",
+      "aliasNotFound": "❌ لم يتم العثور على الاسم المستعار **{{alias}}** لـ **{{title}}**.\\nأسماءك المستعارة: {{names}}",
+      "applied": "✂️ تم تطبيق الاسم المستعار **{{alias}}** — {{start}} → {{end}}",
+      "applyFailed": "❌ فشل تطبيق الاسم المستعار: {{error}}",
+      "mustBePlaying": "❌ يجب أن يكون المشغل يعمل بنشاط لتطبيق اسم مستعار.",
+      "invalidAlias": "❌ اسم مستعار غير صالح. استخدم الحروف، الأرقام، الشرطات، أو الشراطات السفلية.",
+      "provideAlias": "❌ قدم اسم مستعار. الاستخدام: `{{prefix}}trackopt play <alias>`",
+      "listEmpty": "📭 ليس لديك خيارات مسار محفوظة. استخدم `{{prefix}}trackopt set <start> [end]` لإضافة واحدة!",
+      "listTitle": "📋 **خيارات المسار الخاصة بك** ({{count}})",
+      "listEntry": "• **{{title}}** — {{start}} → {{end}}",
+      "listHint": "استخدم `{{prefix}}trackopt play <alias>` لتطبيق تقصير مسمى، أو `{{prefix}}trackopt remove [alias]` لحذف واحد."
     }
   }
 }

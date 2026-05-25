@@ -19,7 +19,21 @@
     },
     "help": {
       "pageStructure": "Comandos Disponíveis (página $currPage/$maxPage): \n\n$content\n\nExecute `$prefix$helpCmd <comando>` para saber mais. Você também pode incluir subcomandos.\nExemplo: `$prefix$helpCmd settings get`\n\nDica: Use as setas abaixo desta mensagem para mudar de página, ou especifique o número da página com `$prefix$helpCmd <número da página>`",
-      "unknownCommand": "❌ Comando desconhecido `{{command}}`. Use `{{prefix}}help` para navegar."
+      "unknownCommand": "❌ Comando desconhecido `{{command}}`. Use `{{prefix}}help` para navegar.",
+      "availableCommands": "Comandos Disponíveis{{$page}}: ",
+      "runHelp": "\nExecute `$prefix$helpCmd <comando>` para saber mais. Você também pode incluir subcomandos.\nExemplo: `$prefix$helpCmd comando nomeDoSubcomando`",
+      "pageTip": "\n\nDica: Use `$prefix$helpCmd <número da página>` para mudar de página",
+      "ellipsis": ". [...]",
+      "usage": "Uso: ",
+      "examples": "Exemplo(s): ",
+      "aliases": "Apelidos: ",
+      "subcommands": "Subcomandos: ",
+      "arguments": "Argumentos: ",
+      "allowedValues": "Valores permitidos: ",
+      "aliasesLabel": "Apelidos: ",
+      "requirements": "Requisitos: ",
+      "permission": "Permissão `{{$permission}}`",
+      "optionCount": "{{$count}} opção(ões)"
     },
     "invalidFlag": "Flag inválida `$invalidFlag`. Não corresponde a nenhuma opção deste comando.\n`$previousCmd $invalidFlag`",
     "page": {
@@ -27,7 +41,8 @@
     },
     "permissions": {
       "message": "Por favor, conceda-me a permissão {{permission}} em {{channel}} ou entre em contato com um administrador do servidor. Não consigo operar sem isso."
-    }
+    },
+    "textWrapError": "String malformada `{{$value}}`: Faltando um caractere de aspa de fechamento (`{{$quote}}`) após a string desejada."
   },
   "commands": {
     "clear": "Remova todas as músicas da fila.",
@@ -60,7 +75,13 @@
     "test": "Mostra quantas pessoas estão em cada canal de voz.",
     "thumbnail": "Solicite a thumbnail da música que está tocando atualmente.",
     "volume": "Veja ou altere o volume atual.",
-    "volumedefault": "Veja ou defina o volume padrão do servidor. (Requer Gerenciar Servidor para definir)"
+    "volumedefault": "Veja ou defina o volume padrão do servidor. (Requer Gerenciar Servidor para definir)",
+    "lastfm": "Vincule sua conta do Last.fm, alterne o scrobbling ou veja seu perfil.",
+    "vote": "Veja informações de votação ou verifique eleitores para seu servidor/bot no FluxerList",
+    "seek": "Vá para uma posição específica na faixa que está tocando.",
+    "move": "Mova uma faixa de uma posição para outra na fila.",
+    "autoplay": "Alterne o autoplay — toque faixas similares automaticamente quando a fila terminar.",
+    "trackopt": "Defina horários de início/fim personalizados para faixas. Suporta aliases nomeados — salve múltiplos recortes por faixa para diferentes seções."
   },
   "options": {
     "debug": {
@@ -122,6 +143,24 @@
     },
     "volumedefault": {
       "volume": "Novo volume em % (0-200) para salvar como padrão do servidor. Deixe vazio para ver o atual."
+    },
+    "lastfm": {
+      "action": "A ação a realizar: link, confirm, unlink, np, profile, loved, top, recent, artists, love, unlove, scrobble",
+      "token": "O token de autenticação do Last.fm (usado com a ação 'confirm')"
+    },
+    "vote": {
+      "action": "A ação a realizar: info, check, voters",
+      "type": "Tipo de recurso: servidor ou bot"
+    },
+    "seek": {
+      "position": "Posição para qual ir (ex: 1:30, 90, ou 1:30:00 para horas)"
+    },
+    "move": {
+      "from": "A posição atual da faixa na fila (baseada em 1).",
+      "to": "A posição de destino para mover a faixa (baseada em 1)."
+    },
+    "trackopt": {
+      "times": "Horário de início e fim opcional, ex: '0:30' ou '0:30 3:45'"
     }
   },
   "pagination": {
@@ -188,7 +227,10 @@
       "cleared": "🗑️ Fila limpa."
     },
     "debug": {
-      "voiceTitle": "🔧 Debug de Voz"
+      "voiceTitle": "🔧 Debug de Voz",
+      "summary": "📊 **Resumo**",
+      "pageLabel": "Página {{page}}/{{total}}",
+      "navigateHint": "Use ⬅️➡️ para navegar"
     },
     "eval": {
       "resultTitle": "Resultado da Avaliação",
@@ -365,7 +407,9 @@
       "fetchingLyrics": "📜 Buscando letras...",
       "noLyricsFound": "❌ Nenhuma letra encontrada no NodeLink",
       "lyricsDisplayed": "Letras exibidas ({{lines}} linhas, {{pages}} páginas)",
-      "lyricsError": "⚠️ Erro nas letras: {{error}}"
+      "lyricsError": "⚠️ Erro nas letras: {{error}}",
+      "previousNotAvailable": "⏮️ Faixa anterior ainda não está disponível.",
+      "errorGeneric": "⚠️ Erro: {{error}}"
     },
     "radio": {
       "noStations": "❌ Nenhuma estação de rádio configurada.",
@@ -384,7 +428,7 @@
       "noBuilder": "❌ Nenhum builder retornado de `{{name}}`",
       "reloaded": "✅ `{{name}}`",
       "fileNotFound": "❌ Arquivo não encontrado: `{{label}}`",
-      "moduleError": "❌ `{{label}}`: {{error}}",
+      "moduleError": "❌ `{{label}}`: {{error}",
       "unknownTarget": "❌ Alvo desconhecido `{{target}}`.\nExecute `%reload` sem argumentos para ver todos os alvos recarregáveis.",
       "availableTargetsTitle": "🔄 Recarregar — Alvos Disponíveis",
       "runHint": "Execute `%reload <alvo>` ou use uma palavra-chave em lote:",
@@ -499,7 +543,8 @@
         "allChannelsDisabled": "Modo 24/7 **desativado** para todos os canais neste servidor.\nO bot sairá do canal de voz após inatividade.",
         "noChannelsSavedShort": "Nenhum canal salvo",
         "joinFailed": "⚠️ 24/7 {{mode}} salvo, mas falha ao entrar em <#{{channel}}>.\nErro: `{{error}}`\n\nTente `{{prefix}}join` ou `{{prefix}}play` mais tarde."
-      }
+      },
+      "max247Channels": "Você pode salvar até {{max}} canais de voz 24/7 em um servidor. Use `{{prefix}}247 off` em um dos canais salvos primeiro."
     },
     "shuffle": {
       "emptyQueue": "Não há nada para embaralhar na fila.",
@@ -555,6 +600,181 @@
       "noPermissionSet": "❌ Você precisa da permissão **Gerenciar Servidor** para definir o volume padrão do servidor.",
       "outOfRange": "❌ O volume deve estar entre `0` e `{{max}}%`.",
       "saved": "🔊 Volume padrão do servidor salvo como `{{volume}}%`."
+    },
+    "gateway": {
+      "missingPermsFallback": "⚠️ Estou sem permissões que preciso para funcionar corretamente! Faltando: **{{perms}}**. Por favor, peça a um administrador do servidor para conceder essas permissões em Configurações do Servidor → Cargos."
+    },
+    "lastfm": {
+      "notConfigured": "❌ Integração com Last.fm não está configurada neste bot. Peça ao dono do bot para adicionar uma chave de API do Last.fm na configuração.",
+      "notLinked": "❌ Você não tem uma conta Last.fm vinculada. Use `{{prefix}}lastfm link` para começar.",
+      "linked": "✅ Conta Last.fm **[{{username}}](https://last.fm/user/{{username}})** vinculada! Scrobbling está ativado por padrão.",
+      "alreadyLinked": "✅ Você já tem **{{username}}** vinculado! Use `{{prefix}}lastfm unlink` para desconectar, ou `{{prefix}}lastfm scrobble` para alternar o scrobbling.",
+      "unlinked": "✅ Conta Last.fm **{{username}}** foi desvinculada.",
+      "scrobbleEnabled": "✅ Scrobbling **ativado** — as músicas que você ouve serão scrobbled para **{{username}}**.",
+      "scrobbleDisabled": "⏸️ Scrobbling **desativado** — as músicas não serão scrobbled. Sua conta ainda está vinculada.",
+      "authDM": "📧 Verifique suas DMs para o link de autorização do Last.fm! Após aprovar, execute `{{prefix}}lastfm confirm <token>` aqui.",
+      "authDMFailed": "⚠️ Não consegui te enviar DM. [Clique aqui para autorizar no Last.fm]({{url}}), depois execute `{{prefix}}lastfm confirm <token>`.",
+      "confirmUsage": "❌ Uso: `{{prefix}}lastfm confirm <token>` — forneça o token da DM de autenticação.",
+      "confirmFailed": "❌ Falha ao obter sessão: {{error}}\nCertifique-se de ter aprovado o token no Last.fm primeiro.",
+      "tokenFailed": "❌ Falha ao obter token de autenticação: {{error}}",
+      "noLoved": "❤️ Nenhuma faixa favorita encontrada para **{{username}}**.",
+      "noTop": "📊 Nenhuma faixa popular encontrada para **{{username}}**.",
+      "noRecent": "🕐 Nenhuma faixa recente encontrada para **{{username}}**.",
+      "lovedTitle": "❤️ Faixas Favoritas — {{username}}",
+      "topTitle": "📊 Faixas Populares — {{username}}",
+      "recentTitle": "🕐 Faixas Recentes — {{username}}",
+      "nowPlaying": "🎵 Tocando Agora no Last.fm",
+      "lastPlayed": "🕐 Última Tocada no Last.fm",
+      "profileTitle": "Perfil Last.fm: {{username}}",
+      "profileScrobbles": "🎵 **{{playcount}}** scrobbles",
+      "profileRegistered": "👤 Registrado: {{date}}",
+      "profileLink": "🔗 [Abrir perfil]({{url}})",
+      "noArtists": "🎤 Nenhum artista popular encontrado para **{{username}}**.",
+      "artistsTitle": "🎤 Artistas Populares — {{username}}",
+      "lovedTrack": "❤️ Favoritou **{{name}}** de **{{artist}}** no Last.fm!",
+      "unlovedTrack": "💔 Desfavoritou **{{name}}** de **{{artist}}** no Last.fm.",
+      "loveFailed": "❌ Falha ao favoritar faixa: {{error}}",
+      "unloveFailed": "❌ Falha ao desfavoritar faixa: {{error}}",
+      "nothingPlayingLove": "❌ Nada está tocando agora. Toque uma música primeiro para favoritar!",
+      "fetchFailed": "❌ Falha ao buscar dados do Last.fm: {{error}}",
+      "authLinkTitle": "🎵 Vincule sua conta Last.fm",
+      "authLinkBody": "Clique no link abaixo para autorizar o Remix no Last.fm:\n**[Autorizar no Last.fm]({{authUrl}})**\nApós clicar em \"Sim, permitir acesso\", volte e execute:\n\\u0060{{prefix}}lastfm confirm {{token}}\\u0060\n_Este link expira em 60 minutos._",
+      "npTrackInfo": "**{{name}}** de **{{artist}}**\n[Abrir no Last.fm]({{url}})",
+      "npFooter": "Last.fm: {{username}}",
+      "profileScrobbleStatus": "🔄 Scrobbling: {{status}}",
+      "profileScrobbleEnabled": "✅ ativado",
+      "profileScrobbleDisabled": "⏸️ desativado",
+      "profileScrobbleFooter": "Use {{prefix}}lastfm scrobble para alternar o scrobbling",
+      "noPlaylists": "📋 Nenhuma playlist encontrada para **{{username}}**.",
+      "playlistsTitle": "📋 Playlists — {{username}}",
+      "playlistsFooter": "💡 Use {{prefix}}lastfm play playlist <número> para tocar uma!",
+      "nothingPlayingUnlove": "❌ Nada está tocando agora. Toque uma música primeiro para desfavoritar!",
+      "nothingPlayingNoArtist": "❌ Nada está tocando e nenhum artista especificado. Toque uma música ou forneça um nome de artista.",
+      "whoknowsChecking": "🔍 Verificando quem ouve **{{artist}}** neste servidor...",
+      "whoknowsNobody": "👤 Ninguém neste servidor ouviu **{{artist}}** no Last.fm.",
+      "whoknowsTitle": "👤 Quem conhece {{artist}}?",
+      "whoknowsFooter": "Última atualização: {{date}}",
+      "whoknowsTrackChecking": "🔍 Verificando quem conhece **{{track}}** de **{{artist}}** neste servidor...",
+      "whoknowsTrackNobody": "👤 Ninguém neste servidor ouviu **{{track}}** de **{{artist}}** no Last.fm.",
+      "whoknowsTrackTitle": "👤 Quem conhece {{track}}?",
+      "whoknowsTrackFooter": "Última atualização: {{date}}",
+      "whoknowsAlbumChecking": "🔍 Verificando quem conhece **{{album}}**...",
+      "whoknowsAlbumNobody": "👤 Ninguém neste servidor ouviu **{{album}}** no Last.fm.",
+      "whoknowsAlbumTitle": "👤 Quem conhece {{album}}?",
+      "leaderboardEmpty": "🎵 Nenhum scrobble registrado ainda. Vincule sua conta do Last.fm...",
+      "leaderboardControlsExpired": "⌛ Controles expirados",
+      "leaderboardPageFooter": "Página {{page}}/{{total}} • Use ◀️▶️ para navegar",
+      "artistsFooter": "Last.fm: {{username}}",
+      "noArtistSpecified": "❌ Nenhum artista especificado. Toque uma música ou forneça um nome de artista.",
+      "artistNotFound": "❌ Artista **{{artist}}** não encontrado no Last.fm.",
+      "noAlbumSpecified": "❌ Nenhum álbum especificado. Toque uma música ou forneça um nome de álbum.",
+      "albumNotFound": "❌ Álbum **{{album}}** não encontrado no Last.fm.",
+      "noTrackSpecified": "❌ Nenhuma faixa especificada. Toque uma música ou forneça um nome de faixa.",
+      "trackNotFound": "❌ Faixa **{{track}}** de **{{artist}}** não encontrada no Last.fm.",
+      "noTopAlbums": "💿 Nenhum álbum popular encontrado para **{{username}}**.",
+      "topAlbumsTitle": "💿 Álbuns Populares — {{username}}",
+      "topAlbumsFooter": "Last.fm: {{username}}",
+      "noTopTags": "🏷️ Nenhuma tag popular encontrada para **{{username}}**.",
+      "topTagsTitle": "🏷️ Tags Populares — {{username}}",
+      "topTagsFooter": "Last.fm: {{username}}",
+      "tagProvideName": "❌ Forneça um nome de tag pela opção de token.",
+      "tagNotFound": "❌ Tag **{{tag}}** não encontrada no Last.fm.",
+      "compareSpecifyUser": "❕ Especifique um usuário para comparar. Use .",
+      "compareUserNotLinked": "❌ Não foi possível comparar perfis. Certifique-se de que ambos os usuários estão vinculados.",
+      "compareFailed": "❌ Não foi possível comparar perfis. Certifique-se de que ambos os usuários estão vinculados.",
+      "compareTitle": "🤝 Comparação de Gosto",
+      "coverNothingPlaying": "❌ Nada está tocando agora. Toque uma música para obter a capa do álbum!",
+      "coverNotFound": "🖼️ Nenhuma capa de álbum encontrada para **{{track}}** de **{{artist}}**.",
+      "coverTitle": "🖼️ {{album}}",
+      "coverFooter": "{{track}} de {{artist}}",
+      "refreshFailed": "❌ Não foi possível acessar o servidor.",
+      "refreshSuccess": "✅ Lista de membros atualizada! **{{count}}** membros encontrados.",
+      "affinityNeedUsers": "👥 São necessários pelo menos 2 usuários vinculados neste servidor para verificar afinidade.",
+      "affinityChecking": "🔍 Verificando afinidade musical entre os membros do servidor...",
+      "affinityNoCommon": "👥 Nenhum artista em comum encontrado entre os membros do servidor.",
+      "affinityTitle": "👥 Afinidade Musical",
+      "affinityFooter": "Baseado em artistas comuns do Last.fm",
+      "crownsChecking": "👑 Verificando suas coroas de artista...",
+      "crownsNone": "👑 Você não possui coroas de artista neste servidor. Continue ouvindo!",
+      "crownsTitle": "👑 Coroas de Artista — {{username}}",
+      "crownsFooter": "Última atualização: {{date}}",
+      "noArtistTags": "🏷️ Nenhuma tag encontrada para o artista **{{artist}}**.",
+      "artistTagsTitle": "🏷️ Tags Populares para {{artist}}"
+    },
+    "messages": {
+      "missingCriticalPermsTitle": "Permissões Ausentes — Bot Não Pode Funcionar Corretamente",
+      "missingCriticalPermsDesc": "O bot está sem **permissões críticas** que precisa para funcionar. Por favor, peça a um administrador do servidor para concedê-las.",
+      "missingOptionalPermsTitle": "Permissões Opcionais Ausentes",
+      "missingOptionalPermsDesc": "Algumas funcionalidades podem não funcionar sem estas permissões, mas o bot ainda pode tocar música.",
+      "permFooter": "Reconvide o bot com as permissões corretas usando o link de convite, ou edite o cargo do bot em Configurações do Servidor → Cargos.",
+      "needPermsFallback": "Preciso das seguintes permissões: **{{perms}}**. Por favor, peça a um admin do servidor para concedê-las."
+    },
+    "vote": {
+      "notConfigured": "❌ Integração com FluxerList não está configurada neste bot. Peça ao dono do bot para adicionar uma chave de API do FluxerList na configuração.",
+      "noResourceId": "❌ Nenhum ID de {{type}} configurado. Forneça com `{{prefix}}vote check {{type}} <id-or-slug>` ou defina em config.json.",
+      "infoTitle": "Votação FluxerList",
+      "infoDescription": "Vote para este bot/servidor no [FluxerList]({{siteUrl}})!\n\nFluxerList é uma plataforma de listagem de servidores e bots onde os usuários podem votar para ajudar a crescer a comunidade.\n\n**Comandos:**\n`{{prefix}}vote info` — Mostra esta informação e link de votação\n`{{prefix}}vote info server` — Mostra link de votação para um servidor\n`{{prefix}}vote check` — Verifique quem votou (somente dono)\n`{{prefix}}vote voters` — Veja a lista de eleitores (somente dono)",
+      "voteTitle": "Vote no FluxerList",
+      "supportDesc": "Apoie este {{type}} votando no FluxerList!",
+      "voteLink": "**[Vote e Veja o Perfil]({{url}})**",
+      "findLink": "Visite [FluxerList]({{siteUrl}}) para encontrar e votar neste {{type}}.",
+      "helpGrow": "Seus votos ajudam este {{type}} a crescer e alcançar mais usuários.",
+      "fetchVotersFailed": "❌ Falha ao buscar eleitores: {{error}}",
+      "noVotersYet": "Ninguém votou neste {{type}} ainda. Compartilhe o link de votação para começar!",
+      "serverVoters": "Eleitores do Servidor",
+      "botVoters": "Eleitores do Bot",
+      "noVotersOnPage": "Nenhum eleitor encontrado nesta página.",
+      "controlsExpired": "Controles expirados",
+      "pageInfo": "Página {{page}}/{{totalPages}} de {{total}} eleitores • Use ◀️▶️ para navegar",
+      "voterTotal": "{{total}} eleitor(es) no total",
+      "defaultCommandsTitle": "**Comandos de Votação FluxerList:**",
+      "defaultCommandsList": "`{{prefix}}vote` — Mostra info de votação e link\n`{{prefix}}vote info` — Mostra info de votação e link\n`{{prefix}}vote check` — Verifique quem votou (somente dono)\n`{{prefix}}vote voters` — Veja a lista de eleitores (somente dono)",
+      "optionsTitle": "**Opções:**",
+      "optionsList": "`{{prefix}}vote check server` — Verifique eleitores de um servidor\n`{{prefix}}vote check bot` — Verifique eleitores de um bot",
+      "votedDate": "votou {{date}}",
+      "unknownUser": "Usuário#{{id}}",
+      "unknownDate": "Desconhecido"
+    },
+    "seek": {
+      "nothingPlaying": "❌ Não está tocando nada no momento!",
+      "paused": "❌ Não é possível buscar enquanto pausado. Retome primeiro.",
+      "invalidFormat": "❌ Formato de posição inválido. Use `mm:ss`, `hh:mm:ss`, ou segundos (ex: `1:30`, `90`).",
+      "exceedsDuration": "❌ Posição de busca excede a duração da faixa (**{{duration}}**).",
+      "seeked": "⏩ Pulou para **{{position}}**",
+      "notSupported": "❌ Busca não é suportada pelo nó de áudio atual.",
+      "failed": "❌ Falha ao buscar: {{error}}"
+    },
+    "autoplay": {
+      "enabled": "🔁 Autoplay **ativado** — faixas similares serão adicionadas automaticamente quando a fila terminar.",
+      "disabled": "➡️ Autoplay **desativado** — o bot parará quando a fila terminar."
+    },
+    "trackopt": {
+      "notAvailable": "❌ Recurso de opções de faixa não está disponível.",
+      "nothingPlaying": "❌ Não está tocando nada no momento!",
+      "invalidFormat": "❌ Formato de horário inválido. Use `mm:ss`, `hh:mm:ss`, ou segundos.",
+      "invalidEndAfterStart": "❌ O tempo final deve ser após o tempo inicial.",
+      "startExceedsDuration": "❌ O tempo inicial excede a duração da faixa (**{{duration}}**).",
+      "endExceedsDuration": "❌ O tempo final excede a duração da faixa (**{{duration}}**).",
+      "saved": "✅ Opção de faixa salva para **{{title}}**{{aliasLabel}}\\n▶️ Início: **{{start}}** | ⏹️ Fim: **{{end}}**\\n\\nIsso será aplicado automaticamente sempre que esta faixa tocar em um canal em que você está.",
+      "savedAlias": "✅ Opção de faixa salva para **{{title}}** [{{alias}}]\\n▶️ Início: **{{start}}** | ⏹️ Fim: **{{end}}**\\n\\nUse `{{prefix}}trackopt play {{alias}}` para aplicar este recorte enquanto a faixa está tocando.",
+      "saveFailed": "❌ Falha ao salvar opção de faixa.",
+      "notSet": "Nenhum tempo personalizado definido para **{{title}}**.",
+      "current": "📎 Opções de faixa para **{{title}}** ({{count}})",
+      "currentEntry": "• **{{alias}}** — {{start}} → {{end}}{{autoTag}}",
+      "removed": "🗑️ Opção de faixa removida para **{{title}}**.",
+      "removedAlias": "🗑️ Apelido **{{alias}}** removido para **{{title}}**.",
+      "removedAll": "🗑️ Todas as opções de faixa removidas para **{{title}}**.",
+      "notFound": "Nenhum tempo personalizado encontrado para **{{title}}**.",
+      "aliasNotFound": "❌ Nenhum apelido **{{alias}}** encontrado para **{{title}}**.\\nSeus apelidos: {{names}}",
+      "applied": "✂️ Apelido **{{alias}}** aplicado — {{start}} → {{end}}",
+      "applyFailed": "❌ Falha ao aplicar apelido: {{error}}",
+      "mustBePlaying": "❌ O reprodutor deve estar tocando ativamente para aplicar um apelido.",
+      "invalidAlias": "❌ Nome de apelido inválido. Use letras, números, hífens ou sublinhados.",
+      "provideAlias": "❌ Forneça um nome de apelido. Uso: `{{prefix}}trackopt play <alias>`",
+      "listEmpty": "📭 Você não tem opções de faixa salvas. Use `{{prefix}}trackopt set <start> [end]` para adicionar uma!",
+      "listTitle": "📋 **Suas Opções de Faixa** ({{count}})",
+      "listEntry": "• **{{title}}** — {{start}} → {{end}}",
+      "listHint": "Use `{{prefix}}trackopt play <alias>` para aplicar um recorte nomeado, ou `{{prefix}}trackopt remove [alias]` para excluir um."
     }
   }
 }

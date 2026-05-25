@@ -19,23 +19,23 @@ export async function run(msg, data) {
   if (!p) return;
 
   if (!p.queue?.getCurrent()) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ There's nothing playing at the moment!")] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.seek.nothingPlaying"))] });
   }
 
   if (p._paused) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Can't seek while paused. Resume first.")] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.seek.paused"))] });
   }
 
   let seekMs = parseSeekPosition(positionInput);
   if (seekMs === null || seekMs < 0) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Invalid position format. Use \`mm:ss\`, \`hh:mm:ss\`, or seconds (e.g. \`1:30\`, \`90\`, \`0:30\`).`)] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.seek.invalidFormat"))] });
   }
 
   const trackDuration = p._getTrackDurationMs(p.queue.getCurrent());
 
   if (trackDuration > 0 && seekMs >= trackDuration) {
     const maxStr = formatDuration(trackDuration);
-    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Position exceeds track duration (**${maxStr}**). Use a value between \`0:00\` and \`${maxStr}\`.`)] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.seek.exceedsDuration", { duration: maxStr }))] });
   }
 
   try {
@@ -43,12 +43,12 @@ export async function run(msg, data) {
     if (result) {
       const seekStr = formatDuration(seekMs);
       const totalStr = trackDuration > 0 ? formatDuration(trackDuration) : "∞";
-      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`⏩ Seeked to **${seekStr}** / ${totalStr}`)] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.seek.seeked", { position: seekStr }))] });
     } else {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Seeking is not supported by the current audio node.")] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.seek.notSupported"))] });
     }
   } catch (err) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to seek: ${err.message}`)] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.seek.failed", { error: err.message }))] });
   }
 }
 

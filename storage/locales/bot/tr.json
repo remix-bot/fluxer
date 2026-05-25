@@ -14,7 +14,8 @@
   },
   "cmdHandler": {
     "command": {
-      "invalid": "Bilinmeyen komut {{command}}!"
+      "invalid": "Bilinmeyen komut {{command}}!",
+      "suggestion": "Demek istediğiniz {{command}} miydi? (Çalıştırmak için {{acceptCommand}} yazın)"
     },
     "help": {
       "pageStructure": "Kullanılabilir Komutlar (sayfa $currPage/$maxPage): \n\n$content\n\nDaha fazla bilgi için `$prefix$helpCmd <komut>` yazın. Alt komutları da ekleyebilirsiniz.\nÖrnek: `$prefix$helpCmd settings get`\n\nİpucu: Sayfalar arasında geçiş yapmak için bu mesajın altındaki okları kullanın veya `$prefix$helpCmd <sayfa numarası>` ile istediğiniz sayfayı belirtin",
@@ -79,7 +80,8 @@
     "seek": "Şu an çalan parçada belirli bir konuma gidin.",
     "move": "Kuyrukta bir parçayı bir konumdan diğerine taşıyın.",
     "autoplay": "Otomatik çalmayı açın/kapatın — kuyruk bittiğinde benzer parçaları otomatik olarak çalar.",
-    "trackopt": "Parçalar için özel başlangıç/bitiş süreleri ayarlayın. Adlandırılmış kısayolları destekler — her parça için farklı bölümlerde birden fazla kırpma kaydedin."
+    "trackopt": "Parçalar için özel başlangıç/bitiş süreleri ayarlayın. Adlandırılmış kısayolları destekler — her parça için farklı bölümlerde birden fazla kırpma kaydedin.",
+    "vote": "FluxerList üzerinde sunucunuz/botunuz için oylama bilgilerini görüntüleyin veya oy verenleri kontrol edin"
   },
   "options": {
     "debug": {
@@ -155,6 +157,10 @@
     },
     "trackopt": {
       "times": "Başlangıç ve isteğe bağlı bitiş süresi, örn. '0:30' veya '0:30 3:45'"
+    },
+    "vote": {
+      "action": "Yapılacak işlem: info, check, voters",
+      "type": "Kaynak türü: sunucu veya bot"
     }
   },
   "pagination": {
@@ -221,7 +227,10 @@
       "cleared": "🗑️ Kuyruk temizlendi."
     },
     "debug": {
-      "voiceTitle": "🔧 Ses Hata Ayıklama"
+      "voiceTitle": "🔧 Ses Hata Ayıklama",
+      "summary": "📊 **Özet**",
+      "pageLabel": "Sayfa {{page}}/{{total}}",
+      "navigateHint": "Gezinmek için ⬅️➡️ kullanın"
     },
     "eval": {
       "resultTitle": "Değerlendirme Sonucu",
@@ -322,7 +331,70 @@
       "loveFailed": "❌ Parça sevilemedi: {{error}}",
       "unloveFailed": "❌ Parça sevilenlerden çıkarılamadı: {{error}}",
       "nothingPlayingLove": "❌ Şu anda çalan bir şey yok. Sevmek için önce bir şarkı çalın!",
-      "fetchFailed": "❌ Last.fm'den veri alınamadı: {{error}}"
+      "fetchFailed": "❌ Last.fm'den veri alınamadı: {{error}}",
+      "authLinkTitle": "🎵 Last.fm hesabınızı bağlayın",
+      "authLinkBody": "Last.fm üzerinde Remix'i yetkilendirmek için aşağıdaki bağlantıya tıklayın:\n**[Last.fm üzerinde yetkilendir]({{authUrl}})**\n\"Evet, erişime izin ver\" seçeneğine tıkladıktan sonra şu komutu çalıştırın:\n\\u0060{{prefix}}lastfm confirm {{token}}\\u0060\n_Bu bağlantı 60 dakika içinde sona erer._",
+      "npTrackInfo": "**{{name}}** — **{{artist}}**\n[Last.fm üzerinde aç]({{url}})",
+      "npFooter": "Last.fm: {{username}}",
+      "profileScrobbleStatus": "🔄 Scrobbling: {{status}}",
+      "profileScrobbleEnabled": "✅ etkin",
+      "profileScrobbleDisabled": "⏸️ devre dışı",
+      "profileScrobbleFooter": "Scrobbling'i açıp kapatmak için {{prefix}}lastfm scrobble kullanın",
+      "noPlaylists": "📋 **{{username}}** için çalma listesi bulunamadı.",
+      "playlistsTitle": "📋 Çalma Listeleri — {{username}}",
+      "playlistsFooter": "💡 Bir tane çalmak için {{prefix}}lastfm play playlist <numara> kullanın!",
+      "nothingPlayingUnlove": "❌ Şu anda çalan bir şey yok. Sevilenlerden çıkarmak için önce bir şarkı çalın!",
+      "nothingPlayingNoArtist": "❌ Şu anda çalan bir şey yok ve sanatçı belirtilmedi. Bir şarkı çalın veya sanatçı adı girin.",
+      "whoknowsChecking": "🔍 Bu sunucuda kimin **{{artist}}** dinlediği kontrol ediliyor...",
+      "whoknowsNobody": "👤 Bu sunucuda kimse Last.fm üzerinde **{{artist}}** dinlememiş.",
+      "whoknowsTitle": "👤 Kim bilir {{artist}}?",
+      "whoknowsFooter": "Son güncelleme: {{date}}",
+      "whoknowsTrackChecking": "🔍 Bu sunucuda kimin **{{track}}** — **{{artist}}** dinlediği kontrol ediliyor...",
+      "whoknowsTrackNobody": "👤 Bu sunucuda kimse Last.fm üzerinde **{{track}}** — **{{artist}}** dinlememiş.",
+      "whoknowsTrackTitle": "👤 Kim bilir {{track}}?",
+      "whoknowsTrackFooter": "Son güncelleme: {{date}}",
+      "whoknowsAlbumChecking": "🔍 Kimin **{{album}}** dinlediği kontrol ediliyor...",
+      "whoknowsAlbumNobody": "👤 Bu sunucuda kimse Last.fm üzerinde **{{album}}** dinlememiş.",
+      "whoknowsAlbumTitle": "👤 Kim bilir {{album}}?",
+      "leaderboardEmpty": "🎵 Henüz scrobble kaydedilmedi. Last.fm hesabınızı bağlayın...",
+      "leaderboardControlsExpired": "⌛ Kontrollerin süresi doldu",
+      "leaderboardPageFooter": "Sayfa {{page}}/{{total}} • Gezinmek için ◀️▶️ kullanın",
+      "artistsFooter": "Last.fm: {{username}}",
+      "noArtistSpecified": "❌ Sanatçı belirtilmedi. Bir şarkı çalın veya sanatçı adı girin.",
+      "artistNotFound": "❌ Sanatçı **{{artist}}** Last.fm üzerinde bulunamadı.",
+      "noAlbumSpecified": "❌ Albüm belirtilmedi. Bir şarkı çalın veya albüm adı girin.",
+      "albumNotFound": "❌ Albüm **{{album}}** Last.fm üzerinde bulunamadı.",
+      "noTrackSpecified": "❌ Parça belirtilmedi. Bir şarkı çalın veya parça adı girin.",
+      "trackNotFound": "❌ Parça **{{track}}** — **{{artist}}** Last.fm üzerinde bulunamadı.",
+      "noTopAlbums": "💿 **{{username}}** için en çok dinlenen albüm bulunamadı.",
+      "topAlbumsTitle": "💿 En Çok Dinlenen Albümler — {{username}}",
+      "topAlbumsFooter": "Last.fm: {{username}}",
+      "noTopTags": "🏷️ **{{username}}** için en çok dinlenen etiket bulunamadı.",
+      "topTagsTitle": "🏷️ En Çok Dinlenen Etiketler — {{username}}",
+      "topTagsFooter": "Last.fm: {{username}}",
+      "tagProvideName": "❌ Token seçeneği ile bir etiket adı belirtin.",
+      "tagNotFound": "❌ Etiket **{{tag}}** Last.fm üzerinde bulunamadı.",
+      "compareSpecifyUser": "❕ Karşılaştırmak için bir kullanıcı belirtin.  kullanın.",
+      "compareUserNotLinked": "❌ Profiller karşılaştırılamadı. Her iki kullanıcının da bağlı olduğundan emin olun.",
+      "compareFailed": "❌ Profiller karşılaştırılamadı. Her iki kullanıcının da bağlı olduğundan emin olun.",
+      "compareTitle": "🤝 Zevk Karşılaştırması",
+      "coverNothingPlaying": "❌ Şu anda çalan bir şey yok. Albüm kapağını almak için bir şarkı çalın!",
+      "coverNotFound": "🖼️ **{{track}}** — **{{artist}}** için albüm kapağı bulunamadı.",
+      "coverTitle": "🖼️ {{album}}",
+      "coverFooter": "{{track}} — {{artist}}",
+      "refreshFailed": "❌ Sunucuya erişilemedi.",
+      "refreshSuccess": "✅ Üye listesi yenilendi! **{{count}}** üye bulundu.",
+      "affinityNeedUsers": "👥 Afiniteyi kontrol etmek için bu sunucuda en az 2 bağlı kullanıcı gerekli.",
+      "affinityChecking": "🔍 Sunucu üyeleri arasındaki müzik afinite kontrol ediliyor...",
+      "affinityNoCommon": "👥 Sunucu üyeleri arasında ortak sanatçı bulunamadı.",
+      "affinityTitle": "👥 Müzik Afinite",
+      "affinityFooter": "Ortak Last.fm sanatçılarına dayalı",
+      "crownsChecking": "👑 Sanatçı taçlarınız kontrol ediliyor...",
+      "crownsNone": "👑 Bu sunucuda hiç sanatçı tacınız yok. Dinlemeye devam edin!",
+      "crownsTitle": "👑 Sanatçı Taçları — {{username}}",
+      "crownsFooter": "Son güncelleme: {{date}}",
+      "noArtistTags": "🏷️ Sanatçı **{{artist}}** için etiket bulunamadı.",
+      "artistTagsTitle": "🏷️ {{artist}} için En Çok Dinlenen Etiketler"
     },
     "list": {
       "empty": "📭 Kuyruk boş. Şarkı eklemek için `{{prefix}}play` kullanın!",
@@ -432,7 +504,9 @@
       "fetchingLyrics": "📜 Şarkı sözleri alınıyor...",
       "noLyricsFound": "❌ NodeLink'te şarkı sözü bulunamadı",
       "lyricsDisplayed": "Şarkı sözleri görüntülendi ({{lines}} satır, {{pages}} sayfa)",
-      "lyricsError": "⚠️ Şarkı sözleri hatası: {{error}}"
+      "lyricsError": "⚠️ Şarkı sözleri hatası: {{error}}",
+      "previousNotAvailable": "⏮️ Önceki parça henüz mevcut değil.",
+      "errorGeneric": "⚠️ Hata: {{error}}"
     },
     "radio": {
       "noStations": "❌ Yapılandırılmış radyo istasyonu yok.",
@@ -515,7 +589,7 @@
         "noChannelsSaved": "Kayıtlı ses kanalı yok.",
         "gettingStarted": "Başlangıç",
         "gettingStartedValue": "• `{{prefix}}247 on` — kalıcı olarak kal\n• `{{prefix}}247 auto` — kal + bağlantı kesilmesinden sonra otomatik yeniden katıl",
-        "footer": "{{prefix}}247 on | {{prefix}}247 auto | {{prefix}}247 off",
+        "footer": "{{prefix}}247 açık | {{prefix}}247 otomatik | {{prefix}}247 kapalı",
         "channelsSaved_one": "{{count}} kanal kaydedildi",
         "channelsSaved_other": "{{count}} kanal kaydedildi",
         "summaryOn": "✅ {{count}} açık",
@@ -539,7 +613,35 @@
         "allChannelsDisabled": "Bu sunucudaki tüm kanallar için 24/7 modu **devre dışı bırakıldı**.\nBot hareketsizlikten sonra sesli kanaldan ayrılacak.",
         "noChannelsSavedShort": "Kayıtlı kanal yok",
         "joinFailed": "⚠️ 24/7 {{mode}} kaydedildi, ancak <#{{channel}}> kanalına katılma başarısız.\nHata: `{{error}}`\n\nDaha sonra `{{prefix}}join` veya `{{prefix}}play` deneyin."
-      }
+      },
+      "enabled": "✅ etkin",
+      "disabled": "❌ devre dışı",
+      "label247": "24/7 modu",
+      "labelPrefix": "Ön ek",
+      "labelSongAnnouncements": "Şarkı duyuruları",
+      "labelPfp": "Bot avatar stili",
+      "labelLocale": "Yerel ayar",
+      "labelVolume": "Varsayılan ses",
+      "labelAnnouncementChannel": "Duyuru kanalı",
+      "labelRestrictVolume": "Ses kısıtlaması",
+      "labelAutojoinChannel": "Otomatik katılma kanalı",
+      "noDescription": "Açıklama mevcut değil.",
+      "validValues": "**Geçerli değerler:** {{values}}",
+      "validRange": "**Geçerli aralık:** {{min}}–{{max}}",
+      "currentValue": "**Mevcut değer:**",
+      "defaultValue": "**Varsayılan:**",
+      "settingTitle": "⚙️ {{setting}}",
+      "savedChannel": "Kaydedilen kanal: <#{{channel}}>",
+      "savedChannels": "Kaydedilmiş kanallar ({{count}}): {{channels}}",
+      "statusDisabled": "❌ devre dışı",
+      "savedChannelsNone": "Kaydedilmiş kanallar: yok",
+      "modeAuto": "🔄 Otomatik",
+      "modeOn": "✅ Açık",
+      "modeOff": "❌ Kapalı",
+      "channelsLabel": "{{count}} kanal",
+      "channelsLabelPlural": "{{count}} kanal",
+      "thisServer": "bu sunucu",
+      "max247Channels": "Bir sunucuda en fazla {{max}} 24/7 ses kanalı kaydedebilirsiniz. Önce kayıtlı kanallardan birinde `{{prefix}}247 off` kullanın."
     },
     "shuffle": {
       "emptyQueue": "Kuyrukta karıştırılacak bir şey yok.",
@@ -636,6 +738,43 @@
       "listTitle": "📋 **Parça Seçenekleriniz** ({{count}})",
       "listEntry": "• **{{title}}** — {{start}} → {{end}}",
       "listHint": "Adlandırılmış bir kırpma uygulamak için `{{prefix}}trackopt play <kısayol>` veya birini silmek için `{{prefix}}trackopt remove [kısayol]` kullanın."
+    },
+    "gateway": {
+      "missingPermsFallback": "⚠️ Düzgün çalışmak için ihtiyacım olan izinler eksik! Eksik: **{{perms}}**. Lütfen bir sunucu yöneticisinden bu izinleri Sunucu Ayarları → Roller'den vermesini isteyin."
+    },
+    "messages": {
+      "missingCriticalPermsTitle": "Eksik İzinler — Bot Düzgün Çalışamıyor",
+      "missingCriticalPermsDesc": "Botta çalışması için gereken **kritik izinler** eksik. Lütfen bir sunucu yöneticisinden bunları vermesini isteyin.",
+      "missingOptionalPermsTitle": "Eksik İsteğe Bağlı İzinler",
+      "missingOptionalPermsDesc": "Bu izinler olmadan bazı özellikler çalışmayabilir, ancak bot hala müzik çalabilir.",
+      "permFooter": "Davet bağlantısını kullanarak botu doğru izinlerle yeniden davet edin veya botun rolünü Sunucu Ayarları → Roller'den düzenleyin.",
+      "needPermsFallback": "Şu izinlere ihtiyacım var: **{{perms}}**. Lütfen bir sunucu yöneticisinden bunları vermesini isteyin."
+    },
+    "vote": {
+      "notConfigured": "❌ FluxerList entegrasyonu bu botta yapılandırılmamış. Bot sahibinden FluxerList API anahtarı eklemesini isteyin.",
+      "noResourceId": "❌ {{type}} ID yapılandırılmamış. `{{prefix}}vote check {{type}} <id-or-slug>` ile sağlayın veya config.json'da ayarlayın.",
+      "infoTitle": "FluxerList Oylama",
+      "infoDescription": "Bu bot/sunucu için [FluxerList]({{siteUrl}}) üzerinde oy verin!\n\nFluxerList, kullanıcıların topluluğun büyümesine yardımcı olmak için oy verebileceği bir sunucu ve bot listeleme platformudur.\n\n**Komutlar:**\n`{{prefix}}vote info` — Bu bilgiyi ve oylama bağlantısını göster\n`{{prefix}}vote info server` — Bir sunucu için oylama bağlantısını göster\n`{{prefix}}vote check` — Kimin oy verdiğini kontrol et (sadece sahip)\n`{{prefix}}vote voters` — Oy verenler listesini görüntüle (sadece sahip)",
+      "voteTitle": "FluxerList'te Oy Ver",
+      "supportDesc": "Bu {{type}} için FluxerList'te oy vererek destekleyin!",
+      "voteLink": "**[Oy Ver ve Profili Görüntüle]({{url}})**",
+      "findLink": "Bu {{type}} için bulmak ve oy vermek için [FluxerList]({{siteUrl}}) ziyaret edin.",
+      "helpGrow": "Oylarınız bu {{type}} büyümesine ve daha fazla kullanıcıya ulaşmasına yardımcı olur.",
+      "fetchVotersFailed": "❌ Oy verenler alınamadı: {{error}}",
+      "noVotersYet": "Bu {{type}} için henüz kimse oy vermedi. Başlamak için oylama bağlantısını paylaşın!",
+      "serverVoters": "Sunucu Oy Verenler",
+      "botVoters": "Bot Oy Verenler",
+      "noVotersOnPage": "Bu sayfada oy veren bulunamadı.",
+      "controlsExpired": "Kontrollerin süresi doldu",
+      "pageInfo": "Sayfa {{page}}/{{totalPages}} / {{total}} oy veren • Gezinmek için ◀️▶️ kullanın",
+      "voterTotal": "Toplam {{total}} oy veren",
+      "defaultCommandsTitle": "**FluxerList Oylama Komutları:**",
+      "defaultCommandsList": "`{{prefix}}vote` — Oylama bilgisini ve bağlantıyı göster\n`{{prefix}}vote info` — Oylama bilgisini ve bağlantıyı göster\n`{{prefix}}vote check` — Kimin oy verdiğini kontrol et (sadece sahip)\n`{{prefix}}vote voters` — Oy verenler listesini görüntüle (sadece sahip)",
+      "optionsTitle": "**Seçenekler:**",
+      "optionsList": "`{{prefix}}vote check server` — Bir sunucu için oy verenleri kontrol et\n`{{prefix}}vote check bot` — Bir bot için oy verenleri kontrol et",
+      "votedDate": "{{date}} tarihinde oy verdi",
+      "unknownUser": "Kullanıcı#{{id}}",
+      "unknownDate": "Bilinmiyor"
     }
   }
 }

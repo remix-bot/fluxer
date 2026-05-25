@@ -72,7 +72,7 @@ export async function run(msg, data) {
 
   const nativeMsg = msg.message ?? msg;
   const rawMsg = await nativeMsg.reply(
-      { embeds: [makeEmbed(this.t(msg, "responses.search.loadingResults"), this.t(msg, "responses.play.searchingProvider", { provider: name }), `Searching ${name}...`)] },
+      { embeds: [makeEmbed(this.t(msg, "responses.search.loadingResults"), this.t(msg, "responses.play.searchingProvider", { provider: name }), this.t(msg, "responses.search.resultsTitle", { provider: name }))]},
       { ping: false }
   ).catch(() => null);
   if (!rawMsg) return;
@@ -99,7 +99,7 @@ export async function run(msg, data) {
     embeds: [makeEmbed(
         desc,
         this.t(msg, "responses.search.reactHint"),
-        `${name} — Search Results`
+        this.t(msg, "responses.search.resultsTitle", { provider: name })
     )]
   }).catch(() => {});
 
@@ -131,7 +131,7 @@ export async function run(msg, data) {
 
     if (e.emoji_id === CANCEL_EMOJI) {
       rawMsg.edit({
-        embeds: [makeEmbed(this.t(msg, "responses.search.cancelled"), null, `${name} — Search Results`)]
+        embeds: [makeEmbed(this.t(msg, "responses.search.cancelled"), null, this.t(msg, "responses.search.resultsTitle", { provider: name }))]
       }).catch(() => {});
       return;
     }
@@ -146,7 +146,7 @@ export async function run(msg, data) {
       embeds: [makeEmbed(
           this.t(msg, "responses.search.added", { title: v.title, url: v.url }),
           null,
-          `${name} — Search Results`
+          this.t(msg, "responses.search.resultsTitle", { provider: name })
       )]
     }).catch(() => {});
   });
@@ -156,7 +156,7 @@ export async function run(msg, data) {
     unobserve();
     clearReactions().catch(() => {});
     rawMsg.edit({
-      embeds: [makeEmbed(this.t(msg, "responses.search.timedOut"), this.t(msg, "responses.search.sessionClosed"), `${name} — Search Results`)]
+      embeds: [makeEmbed(this.t(msg, "responses.search.timedOut"), this.t(msg, "responses.search.sessionClosed"), this.t(msg, "responses.search.resultsTitle", { provider: name }))]
     }).catch(() => {});
   }, SESSION_MS);
 }

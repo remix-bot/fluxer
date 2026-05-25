@@ -19,7 +19,21 @@
     },
     "help": {
       "pageStructure": "فەرمانە بەردەستەکان (لاپەڕە $currPage/$maxPage): \n\n$content\n\nبۆ زانینی زیاتر `$prefix$helpCmd <فەرمان>` بنووسە. دەتوانیت فەرمانی لاوەکیش لەخوابگرێت.\nنموونە: `$prefix$helpCmd settings get`\n\nتێبینی: تیرەکانی خوارەوەی ئەم نامەیە بەکاربهێنە بۆ گۆڕینی لاپەڕەکان، یان ژمارەی لاپەڕەی پێویست دیاریبکە بە `$prefix$helpCmd <ژمارەی لاپەڕە>`",
-      "unknownCommand": "❌ فەرمانی نەناسراو `{{command}}`. بۆ گەڕان `{{prefix}}help` بەکاربهێنە."
+      "unknownCommand": "❌ فەرمانی نەناسراو `{{command}}`. بۆ گەڕان `{{prefix}}help` بەکاربهێنە.",
+      "availableCommands": "فەرمانە بەردەستەکان{{$page}}: ",
+      "runHelp": "\nبۆ زانینی زیاتر `$prefix$helpCmd <فەرمان>` بنووسە. دەتوانیت فەرمانی لاوەکیش لەخوابگرێت.\nنموونە: `$prefix$helpCmd فەرمان ناوی_فەرمانی_لاوەکی`",
+      "pageTip": "\n\nتێبینی: بۆ گۆڕینی لاپەڕەکان `$prefix$helpCmd <ژمارەی لاپەڕە>` بەکاربهێنە",
+      "ellipsis": ". [...]",
+      "usage": "بەکارهێنان: ",
+      "examples": "نموونە(کان): ",
+      "aliases": "ناوە بدیلەکان: ",
+      "subcommands": "فەرمانە لاوەکییەکان: ",
+      "arguments": "ئارگومێنتەکان: ",
+      "allowedValues": "بەها ئامادەکان: ",
+      "aliasesLabel": "ناوە بدیلەکان: ",
+      "requirements": "پێویستییەکان: ",
+      "permission": "مۆڵەت `{{$permission}}`",
+      "optionCount": "{{$count}} هەڵبژاردن(ەکان)"
     },
     "invalidFlag": "ئاڵای نادروست `$invalidFlag`. لەگەڵ هیچ هەڵبژاردنێکی ئەم فەرمانە نایگونجێت.\n`$previousCmd $invalidFlag`",
     "page": {
@@ -27,7 +41,8 @@
     },
     "permissions": {
       "message": "تکایە مۆڵەتی {{permission}}م پێ بدە لە {{channel}} یان پەیوەندی بە بەڕێوەبەری سێرڤەرەوە بکە. من بەبێ ئەمە ناتوانم کار بکەم."
-    }
+    },
+    "textWrapError": "دەستەواژەی هەڵە `{{$value}}`: هێمای داخستنی هەڵبژاردن (`{{$quote}}`) لەدوای دەستەواژەکە نەماوە."
   },
   "commands": {
     "clear": "هەموو گۆرانییەکان لە ڕیزبەندییەکە بسڕەوە.",
@@ -60,7 +75,13 @@
     "test": "نیشاندانی ژمارەی خەڵک لە هەر کەناڵێکی دەنگیدا.",
     "thumbnail": "وێنەی بچووکی گۆرانیی ئێستا داوا بکە.",
     "volume": "ئاستی دەنگی ئێستا ببینە یان بگۆڕە.",
-    "volumedefault": "ئاستی دەنگی بنەڕەتی سێرڤەر ببینە یان دابنێ. (پێویستی بە بەڕێوەبردنی سێرڤەر هەیە بۆ دامەزراندن)"
+    "volumedefault": "ئاستی دەنگی بنەڕەتی سێرڤەر ببینە یان دابنێ. (پێویستی بە بەڕێوەبردنی سێرڤەر هەیە بۆ دامەزراندن)",
+    "lastfm": "هەژماری Last.fm خۆت ببەستە، scrobbling بکەوە، یان پرۆفایلەکەت ببینە.",
+    "vote": "زانیاری دەنگدان ببینە یان دەنگدەران بپشکنە بۆ سێرڤەر/بوتەکەت لە FluxerList",
+    "seek": "بچۆرەوە شوێنێکی دیاریکراو لە تراکی ئێستادا.",
+    "move": "تراکێک لە شوێنێکەوە بگوازەرەوە بۆ شوێنێکی تر لە ڕیزبەندییەکەدا.",
+    "autoplay": "لێدانی خۆکار بکەوە/ناچالاک بکە — بە خۆکارایەتی تراکی هاوشێوە لێبدە کاتێک ڕیزبەندییەکە تەواو بوو.",
+    "trackopt": "کاتی دەستپێکردن/کۆتایی تایبەت بۆ تراکەکان دابنێ. ناوی بدیل پشتگیری دەکات — چەندین بڕین بۆ هەر تراکێک بۆ بەشە جیاوازەکان پاشەکەوت بکە."
   },
   "options": {
     "debug": {
@@ -122,6 +143,24 @@
     },
     "volumedefault": {
       "volume": "ئاستی دەنگی نوێ % (0-200) بۆ پاشەکەوتکردن وەک بنەڕەتی سێرڤەر. بەتاڵی بهێڵە بۆ بینینی ئێستا."
+    },
+    "lastfm": {
+      "action": "کردارەکەی کە دەکرێت: link، confirm، unlink، np، profile، loved، top، recent، artists، love، unlove، scrobble",
+      "token": "تۆکنی ڕێپێوان لە Last.fm (بۆ کرداری 'confirm' بەکاردێت)"
+    },
+    "vote": {
+      "action": "کردارەکەی کە دەکرێت: info، check، voters",
+      "type": "جۆری سەرچاوە: سێرڤەر یان بوت"
+    },
+    "seek": {
+      "position": "شوێنی گەڕانەوە (بۆ نموونە 1:30، 90، یان 1:30:00 بۆ کاتژمێر)"
+    },
+    "move": {
+      "from": "شوێنی ئێستای تراکەکە لە ڕیزبەندییەکەدا (لە 1ەوە).",
+      "to": "شوێنی ئامانج بۆ گواستنەوەی تراکەکە (لە 1ەوە)."
+    },
+    "trackopt": {
+      "times": "کاتی دەستپێکردن و کۆتایی ئیختیاری، بۆ نموونە '0:30' یان '0:30 3:45'"
     }
   },
   "pagination": {
@@ -188,7 +227,10 @@
       "cleared": "🗑️ ڕیزبەندییەکە پاککرایەوە."
     },
     "debug": {
-      "voiceTitle": "🔧 دیباگی دەنگ"
+      "voiceTitle": "🔧 دیباگی دەنگ",
+      "summary": "📊 **پوختە**",
+      "pageLabel": "لاپەڕە {{page}}/{{total}}",
+      "navigateHint": "بۆ ناوەڕۆک ⬅️➡️ بەکاربهێنە"
     },
     "eval": {
       "resultTitle": "ئەنجامی هەڵسەنگاندن",
@@ -365,7 +407,9 @@
       "fetchingLyrics": "📜 هێنانی دەق...",
       "noLyricsFound": "❌ هیچ دەقێک لە NodeLink نەدۆزرایەوە",
       "lyricsDisplayed": "دەق نیشان درا ({{lines}} هێڵ، {{pages}} لاپەڕە)",
-      "lyricsError": "⚠️ هەڵەی دەق: {{error}}"
+      "lyricsError": "⚠️ هەڵەی دەق: {{error}}",
+      "previousNotAvailable": "⏮️ تراکی پێشوو هێشتا بەردەست نییە.",
+      "errorGeneric": "⚠️ هەڵە: {{error}}"
     },
     "radio": {
       "noStations": "❌ هیچ ستەیشنێکی ڕادیۆیی ڕێکنەخراوە.",
@@ -475,7 +519,7 @@
         "noChannelsSaved": "هیچ کەناڵێکی دەنگ پاشەکەوت نەکراوە.",
         "gettingStarted": "دەستپێکردن",
         "gettingStartedValue": "• `{{prefix}}247 on` — بەهەمیشەیی بمێنەرەوە\n• `{{prefix}}247 auto` — بمێنەرەوە + دووبارە خۆکارانە بەشداریکردن لە دوای پچڕان",
-        "footer": "{{prefix}}247 on | {{prefix}}247 auto | {{prefix}}247 off",
+        "footer": "{{prefix}}247 چالاک | {{prefix}}247 خۆکار | {{prefix}}247 ناکاراک",
         "channelsSaved_one": "{{count}} کەناڵ پاشەکەوت کرا",
         "channelsSaved_other": "{{count}} کەناڵ پاشەکەوت کران",
         "summaryOn": "✅ {{count}} چالاک",
@@ -499,7 +543,8 @@
         "allChannelsDisabled": "دۆخی 24/7 **ناچالاک کرا** بۆ هەموو کەناڵەکان لەم سێرڤەرەدا.\nبۆت لە دوای بێچالاکبوون دەنگ جێدەهێڵێت.",
         "noChannelsSavedShort": "هیچ کەناڵێک پاشەکەوت نەکراوە",
         "joinFailed": "⚠️ 24/7 {{mode}} پاشەکەوت کرا، بەڵام بەشداریکردن لە <#{{channel}}> سەرکەوتوو نەبوو.\nهەڵە: `{{error}}`\n\n`{{prefix}}join` یان `{{prefix}}play` تاقی بکەرەوە دواتر."
-      }
+      },
+      "max247Channels": "دەتوانیت تا {{max}} کەناڵی دەنگی 24/7 لە یەک سێرڤەردا پاشەکەوت بکەیت. سەرەتا `{{prefix}}247 off` لە یەکێک لە کەناڵە پاشەکەوتکراوەکان بەکاربهێنە."
     },
     "shuffle": {
       "emptyQueue": "هیچ شتێک نییە لە ڕیزبەندییەکەدا بۆ تێکەڵکردن.",
@@ -555,6 +600,181 @@
       "noPermissionSet": "❌ پێویستە مۆڵەتی **بەڕێوەبردنی سێرڤەر** هەبێت بۆ دانانی ئاستی دەنگی بنەڕەتی سێرڤەر.",
       "outOfRange": "❌ ئاستی دەنگ دەبێت لەنێوان `0` و `{{max}}%` بێت.",
       "saved": "🔊 ئاستی دەنگی بنەڕەتی سێرڤەر وەک `{{volume}}%` پاشەکەوت کرا."
+    },
+    "gateway": {
+      "missingPermsFallback": "⚠️ مۆڵەتەکانم کەمە کە پێویستیم بەوانەیە بۆ کارکردنی دروست! کەمەکان: **{{perms}}**. تکایە لە بەڕێوەبەری سێرڤەر بخۆشتن ئەم مۆڵەتانە لە ڕێکخستنەکانی سێرڤەر ← ڕۆڵەکان."
+    },
+    "lastfm": {
+      "notConfigured": "❌ تەواوکاری Last.fm لەسەر ئەم بوتە ڕێکنەخراوە. لە خاوەنی بوتەکە بخۆشتن کلیلی Last.fm API زیاد بکات.",
+      "notLinked": "❌ هەژمارێکی Last.fm بەستراوەتەوەت نییە. بۆ دەستپێکردن `{{prefix}}lastfm link` بەکاربهێنە.",
+      "linked": "✅ هەژماری Last.fm **[{{username}}](https://last.fm/user/{{username}})** بەسترایەوە! Scrobbling بە بنەڕەتی چالاکە.",
+      "alreadyLinked": "✅ پێشتر **{{username}}** بەستراوەتەوە! بۆ هەڵوەشاندنەوە `{{prefix}}lastfm unlink` بەکاربهێنە، یان بۆ گۆڕینی scrobbling `{{prefix}}lastfm scrobble`.",
+      "unlinked": "✅ بەستنی هەژماری Last.fm **{{username}}** هەڵوەشایەوە.",
+      "scrobbleEnabled": "✅ Scrobbling **چالاکە** — گۆرانییەکانت تۆمار دەکرێن بۆ **{{username}}**.",
+      "scrobbleDisabled": "⏸️ Scrobbling **ناچالاکە** — گۆرانییەکان تۆمار ناکرێن. هەژمارەکەت هێشتا بەستراوە.",
+      "authDM": "📧 بۆ لینکی ڕێپێوانی Last.fm DMەکەت بپشکنە! دوای ڕێگەپێدان، `{{prefix}}lastfm confirm <token>` لێرە بجوڵێنە.",
+      "authDMFailed": "⚠️ نەمتوانی DM بنێرم. [لێرە کلیک بکە بۆ ڕێپێوان لە Last.fm]({{url}})، پاشان `{{prefix}}lastfm confirm <token>` بجوڵێنە.",
+      "confirmUsage": "❌ بەکارهێنان: `{{prefix}}lastfm confirm <token>` — تۆکنەکە لە DMی ڕێپێوانەوە بدە.",
+      "confirmFailed": "❌ سەرکەوتوو نەبوو لە وەرگرتنی دانیشتن: {{error}}\nدڵنیا ببەرەوە سەرەتا تۆکنەکەت لە Last.fm پەسەند کردووە.",
+      "tokenFailed": "❌ سەرکەوتوو نەبوو لە وەرگرتنی تۆکنی ڕێپێوان: {{error}}",
+      "noLoved": "❤️ هیچ تراکێکی خۆشەویست نەدۆزرایەوە بۆ **{{username}}**.",
+      "noTop": "📊 هیچ تراکی سەرەکی نەدۆزرایەوە بۆ **{{username}}**.",
+      "noRecent": "🕐 هیچ تراکی نوێ نەدۆزرایەوە بۆ **{{username}}**.",
+      "lovedTitle": "❤️ تراکە خۆشەویستەکان — {{username}}",
+      "topTitle": "📊 تراکە سەرەکییەکان — {{username}}",
+      "recentTitle": "🕐 تراکە نوێیەکان — {{username}}",
+      "nowPlaying": "🎵 ئێستا لێدەدرێت لە Last.fm",
+      "lastPlayed": "🕐 دوایین لێدراو لە Last.fm",
+      "profileTitle": "پرۆفایلی Last.fm: {{username}}",
+      "profileScrobbles": "🎵 **{{playcount}}** scrobble",
+      "profileRegistered": "👤 تۆمارکراو: {{date}}",
+      "profileLink": "🔗 [پرۆفایل بکەرەوە]({{url}})",
+      "noArtists": "🎤 هیچ هونەرمەندی سەرەکی نەدۆزرایەوە بۆ **{{username}}**.",
+      "artistsTitle": "🎤 هونەرمەندە سەرەکییەکان — {{username}}",
+      "lovedTrack": "❤️ **{{name}}** لەلایەن **{{artist}}** خۆشەویست کرا لە Last.fm!",
+      "unlovedTrack": "💔 خۆشەویستی **{{name}}** لەلایەن **{{artist}}** لابرا لە Last.fm.",
+      "loveFailed": "❌ خۆشەویستیکردنی تراک سەرکەوتوو نەبوو: {{error}}",
+      "unloveFailed": "❌ لابردنی خۆشەویستی تراک سەرکەوتوو نەبوو: {{error}}",
+      "nothingPlayingLove": "❌ هیچ شتێک لە ئێستادا لێنادرێت. سەرەتا گۆرانییەک لێبدە بۆ خۆشەویستیکردن!",
+      "fetchFailed": "❌ وەرگرتنی داتا لە Last.fm سەرکەوتوو نەبوو: {{error}}",
+      "authLinkTitle": "🎵 هەژماری Last.fm خۆت ببەستە",
+      "authLinkBody": "لینکی خوارەوە کلیک بکە بۆ ڕێپێوانی Remix لە Last.fm:\n**[ڕێپێوان لە Last.fm]({{authUrl}})**\nدوای کلیککردن لەسەر \"بەڵێ، ڕێگەبدە\"، بگەڕێوە و بجوڵێنە:\n\\u0060{{prefix}}lastfm confirm {{token}}\\u0060\n_ئەم لینکە لە ماوەی ٦٠ خولەکدا بەسەر دەچێت._",
+      "npTrackInfo": "**{{name}}** لەلایەن **{{artist}}**\n[بکەرەوە لە Last.fm]({{url}})",
+      "npFooter": "Last.fm: {{username}}",
+      "profileScrobbleStatus": "🔄 Scrobbling: {{status}}",
+      "profileScrobbleEnabled": "✅ چالاک",
+      "profileScrobbleDisabled": "⏸️ ناچالاک",
+      "profileScrobbleFooter": "بۆ گۆڕینی scrobbling {{prefix}}lastfm scrobble بەکاربهێنە",
+      "noPlaylists": "📋 هیچ لیستی لێدانیەک بۆ **{{username}}** نەدۆزرایەوە.",
+      "playlistsTitle": "📋 لیستەکانی لێدان — {{username}}",
+      "playlistsFooter": "💡 بۆ لێدانی یەکێکیان {{prefix}}lastfm play playlist <ژمارە> بەکاربهێنە!",
+      "nothingPlayingUnlove": "❌ هیچ شتێک لە ئێستادا لێنادرێت. سەرەتا گۆرانییەک لێبدە بۆ لابردنی خۆشەویستی!",
+      "nothingPlayingNoArtist": "❌ هیچ شتێک لێنادرێت و هونەرمەند دیاری نەکراوە. گۆرانییەک لێبدە یان ناوی هونەرمەند بدە.",
+      "whoknowsChecking": "🔍 پشکنین بۆ ئەوەی کێ گوێی لە **{{artist}}** دەگرێت لەم سێرڤەرە...",
+      "whoknowsNobody": "👤 هیچ کەسێک لەم سێرڤەرە گوێی لە **{{artist}}** نەگرتووە لە Last.fm.",
+      "whoknowsTitle": "👤 کێ دەزانێت {{artist}}؟",
+      "whoknowsFooter": "دوایین نوێکردنەوە: {{date}}",
+      "whoknowsTrackChecking": "🔍 پشکنین بۆ ئەوەی کێ دەزانێت **{{track}}** لەلایەن **{{artist}}** لەم سێرڤەرە...",
+      "whoknowsTrackNobody": "👤 هیچ کەسێک لەم سێرڤەرە گوێی لە **{{track}}** لەلایەن **{{artist}}** نەگرتووە لە Last.fm.",
+      "whoknowsTrackTitle": "👤 کێ دەزانێت {{track}}؟",
+      "whoknowsTrackFooter": "دوایین نوێکردنەوە: {{date}}",
+      "whoknowsAlbumChecking": "🔍 پشکنین بۆ ئەوەی کێ دەزانێت **{{album}}**...",
+      "whoknowsAlbumNobody": "👤 هیچ کەسێک لەم سێرڤەرە گوێی لە **{{album}}** نەگرتووە لە Last.fm.",
+      "whoknowsAlbumTitle": "👤 کێ دەزانێت {{album}}؟",
+      "leaderboardEmpty": "🎵 هیچ scrobble تۆمار نەکراوە. هەژماری Last.fm خۆت ببەستە...",
+      "leaderboardControlsExpired": "⌛ کۆنتڕۆڵەکان بەسەرچوون",
+      "leaderboardPageFooter": "لاپەڕە {{page}}/{{total}} • بۆ ناوەڕۆک ◀️▶️ بەکاربهێنە",
+      "artistsFooter": "Last.fm: {{username}}",
+      "noArtistSpecified": "❌ هونەرمەند دیاری نەکراوە. گۆرانییەک لێبدە یان ناوی هونەرمەند بدە.",
+      "artistNotFound": "❌ هونەرمەندی **{{artist}}** لە Last.fm نەدۆزرایەوە.",
+      "noAlbumSpecified": "❌ ئەلبوم دیاری نەکراوە. گۆرانییەک لێبدە یان ناوی ئەلبوم بدە.",
+      "albumNotFound": "❌ ئەلبومی **{{album}}** لە Last.fm نەدۆزرایەوە.",
+      "noTrackSpecified": "❌ تراک دیاری نەکراوە. گۆرانییەک لێبدە یان ناوی تراک بدە.",
+      "trackNotFound": "❅ تراکی **{{track}}** لەلایەن **{{artist}}** لە Last.fm نەدۆزرایەوە.",
+      "noTopAlbums": "💿 هیچ ئەلبومی سەرەکی بۆ **{{username}}** نەدۆزرایەوە.",
+      "topAlbumsTitle": "💿 ئەلبومە سەرەکییەکان — {{username}}",
+      "topAlbumsFooter": "Last.fm: {{username}}",
+      "noTopTags": "🏷️ هیچ تاگی سەرەکی بۆ **{{username}}** نەدۆزرایەوە.",
+      "topTagsTitle": "🏷️ تاگە سەرەکییەکان — {{username}}",
+      "topTagsFooter": "Last.fm: {{username}}",
+      "tagProvideName": "❌ ناوی تاگ بدە لەڕێگەی هەڵبژاردنی تۆکنەوە.",
+      "tagNotFound": "❌ تاگی **{{tag}}** لە Last.fm نەدۆزرایەوە.",
+      "compareSpecifyUser": "❌ بەکارهێنەرێک دیاریبکە بۆ بەراوردکردن.  بەکاربهێنە.",
+      "compareUserNotLinked": "❌ نەتوانرا پرۆفایلەکان بەراورد بکرێن. دڵنیا ببەرەوە هەردوو بەکارهێنەر بەستراون.",
+      "compareFailed": "❌ نەتوانرا پرۆفایلەکان بەراورد بکرێن. دڵنیا ببەرەوە هەردوو بەکارهێنەر بەستراون.",
+      "compareTitle": "🤝 بەراوردی چێژ",
+      "coverNothingPlaying": "❌ هیچ شتێک لێنادرێت. گۆرانییەک لێبدە بۆ وەرگرتنی بەرگی ئەلبوم!",
+      "coverNotFound": "🖼️ بەرگی ئەلبوم بۆ **{{track}}** لەلایەن **{{artist}}** نەدۆزرایەوە.",
+      "coverTitle": "🖼️ {{album}}",
+      "coverFooter": "{{track}} لەلایەن {{artist}}",
+      "refreshFailed": "❌ نەتوانرا بچیتە ناو سێرڤەرەکە.",
+      "refreshSuccess": "✅ لیستی ئەندامان نوێکرایەوە! **{{count}}** ئەندام دۆزرایەوە.",
+      "affinityNeedUsers": "👥 لانیکەم ٢ بەکارهێنەری بەستراو لەم سێرڤەرە پێویستە بۆ پشکنینی هاوشێوەیی.",
+      "affinityChecking": "🔍 پشکنینی هاوشێوەیی موزیکی لە نێوان ئەندامانی سێرڤەر...",
+      "affinityNoCommon": "👥 هیچ هونەرمەندی هاوبەش لە نێوان هیچ ئەندامانی سێرڤەر نەدۆزرایەوە.",
+      "affinityTitle": "👥 هاوشێوەیی موزیکی",
+      "affinityFooter": "لەسەر بنەمای هونەرمەندانی هاوبەشی Last.fm",
+      "crownsChecking": "👑 پشکنینی تاجەکانی هونەرمەندەکانت...",
+      "crownsNone": "👑 هیچ تاجی هونەرمەندت لەم سێرڤەرە نییە. بەردەوام بە گوێگرتن!",
+      "crownsTitle": "👑 تاجەکانی هونەرمەند — {{username}}",
+      "crownsFooter": "دوایین نوێکردنەوە: {{date}}",
+      "noArtistTags": "🏷️ هیچ تاگێک بۆ هونەرمەندی **{{artist}}** نەدۆزرایەوە.",
+      "artistTagsTitle": "🏷️ تاگە سەرەکییەکان بۆ {{artist}}"
+    },
+    "messages": {
+      "missingCriticalPermsTitle": "مۆڵەتە کەمەکان — بۆت ناتوانێت بە دروستی کار بکات",
+      "missingCriticalPermsDesc": "مۆڵەتی **گرنگ** کەمە کە بۆت پێویستی بەوانەیە بۆ کارکردن. تکایە لە بەڕێوەبەری سێرڤەر بخۆشتن.",
+      "missingOptionalPermsTitle": "مۆڵەتی ئیختیاری کەمە",
+      "missingOptionalPermsDesc": "هەندێک تایبەتمەندی لەوانەیە بەبێ ئەم مۆڵەتانە کار نەکات، بەڵام بۆت هێشتا دەتوانێت موزیک لێبدات.",
+      "permFooter": "بۆتەکە بە مۆڵەتی دروست دووبارە بانگبکەوە بە بەکارهێنانی لینکی بانگکردن، یان ڕۆڵی بۆت بگۆڕە لە ڕێکخستنەکانی سێرڤەر ← ڕۆڵەکان.",
+      "needPermsFallback": "ئەم مۆڵەتانەم پێویستە: **{{perms}}**. تکایە لە بەڕێوەبەری سێرڤەر بخۆشتن."
+    },
+    "vote": {
+      "notConfigured": "❌ تەواوکاری FluxerList لەسەر ئەم بوتە ڕێکنەخراوە. لە خاوەنی بوتەکە بخۆشتن کلیلی FluxerList API زیاد بکات.",
+      "noResourceId": "❌ هیچ {{type}} ID ڕێکنەخراوە. بە `{{prefix}}vote check {{type}} <id-or-slug>` دایبنێ یان لە config.json دایبنێ.",
+      "infoTitle": "دەنگدانی FluxerList",
+      "infoDescription": "بۆ ئەم بوت/سێرڤەرە دەنگبدە لە [FluxerList]({{siteUrl}})!\n\nFluxerList پلاتفۆرمێکی لیستی سێرڤەر و بوتە کە بەکارهێنەران دەتوانن دەنگبدەن بۆ یارمەتیدانی گەشتی کۆمەڵگە.\n\n**فەرمانەکان:**\n`{{prefix}}vote info` — ئەم زانیارییە و لینکی دەنگدان نیشانبدە\n`{{prefix}}vote info server` — لینکی دەنگدان بۆ سێرڤەر نیشانبدە\n`{{prefix}}vote check` — پشکنی کێ دەنگیدا (تەنها بۆ خاوەن)\n`{{prefix}}vote voters` — لیستی دەنگدەران نیشانبدە (تەنها بۆ خاوەن)",
+      "voteTitle": "لە FluxerList دەنگبدە",
+      "supportDesc": "ئەم {{type}} پشتگیری بکە بە دەنگدان لە FluxerList!",
+      "voteLink": "**[دەنگبدە و پرۆفایل ببینە]({{url}})**",
+      "findLink": "سەردانی [FluxerList]({{siteUrl}}) بکە بۆ دۆزینەوە و دەنگدان بۆ ئەم {{type}}.",
+      "helpGrow": "دەنگەکانت یارمەتی ئەم {{type}} دەدەن بۆ گەشتی زیاتر.",
+      "fetchVotersFailed": "❌ وەرگرتنی دەنگدەران سەرکەوتوو نەبوو: {{error}}",
+      "noVotersYet": "هیچ کەسێک بۆ ئەم {{type}} دەنگینەداوە. لینکی دەنگدان بڵاوکەرەوە بۆ دەستپێکردن!",
+      "serverVoters": "دەنگدەرانی سێرڤەر",
+      "botVoters": "دەنگدەرانی بوت",
+      "noVotersOnPage": "هیچ دەنگدەرێک لەم لاپەڕەیە نەدۆزرایەوە.",
+      "controlsExpired": "کۆنتڕۆڵەکان بەسەرچوون",
+      "pageInfo": "لاپەڕە {{page}}/{{totalPages}} لە {{total}} دەنگدەر • بۆ ناوەڕۆک ◀️▶️ بەکاربهێنە",
+      "voterTotal": "{{total}} دەنگدەر(ەکان) بە گشتی",
+      "defaultCommandsTitle": "**فەرمانەکانی دەنگدانی FluxerList:**",
+      "defaultCommandsList": "`{{prefix}}vote` — زانیاری دەنگدان و لینک نیشانبدە\n`{{prefix}}vote info` — زانیاری دەنگدان و لینک نیشانبدە\n`{{prefix}}vote check` — پشکنی کێ دەنگیدا (تەنها بۆ خاوەن)\n`{{prefix}}vote voters` — لیستی دەنگدەران نیشانبدە (تەنها بۆ خاوەن)",
+      "optionsTitle": "**هەڵبژاردنەکان:**",
+      "optionsList": "`{{prefix}}vote check server` — دەنگدەرانی سێرڤەر بپشکنە\n`{{prefix}}vote check bot` — دەنگدەرانی بوت بپشکنە",
+      "votedDate": "دەنگیدا {{date}}",
+      "unknownUser": "بەکارهێنەر#{{id}}",
+      "unknownDate": "نەناسراو"
+    },
+    "seek": {
+      "nothingPlaying": "❌ هیچ شتێک پەخش ناکرێت لە ئێستادا!",
+      "paused": "❌ ناتوانرێت لە کاتی وەستاودا بگەڕێیتەوە. سەرەتا بەردەوامبکە.",
+      "invalidFormat": "❅ شێوازی شوێنی نادروست. `mm:ss`، `hh:mm:ss`، یان چرکە بەکاربهێنە (بۆ نموونە `1:30`، `90`).",
+      "exceedsDuration": "❌ شوێنی گەڕانەوە لە ماوەی تراکەکە زیاترە (**{{duration}}**).",
+      "seeked": "⏩ گەڕایەوە بۆ **{{position}}**",
+      "notSupported": "❌ گەڕانەوە لەلایەن گرێی دەنگی ئێستاوە پشتگیری ناکرێت.",
+      "failed": "❌ گەڕانەوە سەرکەوتوو نەبوو: {{error}}"
+    },
+    "autoplay": {
+      "enabled": "🔁 لێدانی خۆکار **چالاک کرا** — تراکی هاوشێوە بە خۆکارایەتی زیاد دەکرێن کاتێک ڕیزبەندییەکە تەواو بوو.",
+      "disabled": "➡️ لێدانی خۆکار **ناچالاک کرا** — بۆت وەستێت کاتێک ڕیزبەندییەکە تەواو بوو."
+    },
+    "trackopt": {
+      "notAvailable": "❌ تایبەتمەندی هەڵبژاردنی تراک بەردەست نییە.",
+      "nothingPlaying": "❌ هیچ شتێک پەخش ناکرێت لە ئێستادا!",
+      "invalidFormat": "❅ شێوازی کاتی نادروست. `mm:ss`، `hh:mm:ss`، یان چرکە بەکاربهێنە.",
+      "invalidEndAfterStart": "❕ کاتی کۆتایی دەبێت دوای کاتە سەرەتاییەکە بێت.",
+      "startExceedsDuration": "❌ کاتی دەستپێکردن زیاترە لە ماوەی تراک (**{{duration}}**).",
+      "endExceedsDuration": "❌ کاتی کۆتایی زیاترە لە ماوەی تراک (**{{duration}}**).",
+      "saved": "✅ هەڵبژاردەی تراک بۆ **{{title}}**{{aliasLabel}} هەڵگیرا\\n▶️ دەستپێکردن: **{{start}}** | ⏹️ کۆتایی: **{{end}}**\\n\\nئەمە بۆخۆی دەخرێتە جێبەجێ کاتێک ئەم تراکە لە کەناڵێکدا دەژێیت.",
+      "savedAlias": "✅ هەڵبژاردەی تراک بۆ **{{title}}** [{{alias}}] هەڵگیرا\\n▶️ دەستپێکردن: **{{start}}** | ⏹️ کۆتایی: **{{end}}**\\n\\n`{{prefix}}trackopt play {{alias}}` بەکاربێنە بۆ جێبەجێکردنی ئەم دەرکردنە لەکاتێکدا تراکەکە دەژێت.",
+      "saveFailed": "❌ هەڵگرتنی هەڵبژاردەی تراک سەرکەوتوو نەبوو.",
+      "notSet": "هیج کاتی دیاریکراو نییە بۆ **{{title}}**.",
+      "current": "📎 هەڵبژاردەکانی تراک بۆ **{{title}}** ({{count}})",
+      "currentEntry": "• **{{alias}}** — {{start}} → {{end}}{{autoTag}}",
+      "removed": "🗑️ هەڵبژاردەی تراک بۆ **{{title}}** لابرا.",
+      "removedAlias": "🗑️ ناوی لێدوان **{{alias}}** بۆ **{{title}}** لابرا.",
+      "removedAll": "🗑️ هەموو هەڵبژاردەکانی تراک بۆ **{{title}}** لابرا.",
+      "notFound": "هیج کاتی دیاریکراو نەدۆزرایەوە بۆ **{{title}}**.",
+      "aliasNotFound": "❌ ناوی لێدوان **{{alias}}** نەدۆزرایەوە بۆ **{{title}}**.\\nناوەکانی لێدوانەکەت: {{names}}",
+      "applied": "✂️ ناوی لێدوان **{{alias}}** جێبەجێ کرا — {{start}} → {{end}}",
+      "applyFailed": "❌ جێبەجێکردنی ناوی لێدوان سەرکەوتوو نەبوو: {{error}}",
+      "mustBePlaying": "❌ پێشکەشکەر دەبێت چالاک بێت بۆ جێبەجێکردنی ناوی لێدوان.",
+      "invalidAlias": "❌ ناوی لێدوان نادروستە. پیت، ژمارە، تیرە، یان ژێرتیژ بەکاربێنە.",
+      "provideAlias": "❌ ناوی لێدوان بدە. بەکارهێنان: `{{prefix}}trackopt play <alias>`",
+      "listEmpty": "📭 هیچ هەڵبژاردەیەکی تراک هەڵنەگیراوەتەوە. `{{prefix}}trackopt set <start> [end]` بەکاربێنە بە زیادکردنی یەک!",
+      "listTitle": "📋 **هەڵبژاردەکانی تراکت** ({{count}})",
+      "listEntry": "• **{{title}}** — {{start}} → {{end}}",
+      "listHint": "`{{prefix}}trackopt play <alias>` بەکاربێنە بە جێبەجێکردنی دەرکردەیەکی ناوەند، یان `{{prefix}}trackopt remove [alias]` بۆ سڕینەوەی یەک."
     }
   }
 }

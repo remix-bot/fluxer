@@ -89,11 +89,10 @@ export async function run(msg, data) {
       p.on("queueEnd", p._autoplayHandler);
     }
 
-    const lfStatus = this.lastfm?.enabled ? " with Last.fm recommendations" : " using YouTube search";
     return msg.reply({
       embeds: [new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setDescription(`🔁 Autoplay **enabled**${lfStatus} — similar tracks will be added automatically when the queue ends.`)]
+        .setDescription(this.t(msg, "responses.autoplay.enabled"))]
     });
   } else {
     if (p._autoplayHandler) {
@@ -104,7 +103,7 @@ export async function run(msg, data) {
     return msg.reply({
       embeds: [new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setDescription(`➡️ Autoplay **disabled** — the bot will stop when the queue ends.`)]
+        .setDescription(this.t(msg, "responses.autoplay.disabled"))]
     });
   }
 }

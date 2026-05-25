@@ -34,19 +34,19 @@ export const command = new CommandBuilder()
       .setRequired(false)
   );
 
-function notConfigured(prefix) {
+function notConfigured(prefix, t, guildId) {
   return {
     embeds: [new EmbedBuilder()
       .setColor("#ff0000")
-      .setDescription(`FluxerList integration is not configured on this bot. Ask the bot owner to add a FluxerList API key to the config.`)]
+      .setDescription(t(guildId, "responses.vote.notConfigured"))]
   };
 }
 
-function noResourceId(type, prefix) {
+function noResourceId(type, prefix, t, guildId) {
   return {
     embeds: [new EmbedBuilder()
       .setColor("#ff0000")
-      .setDescription(`No ${type} ID configured. Provide it with \`${prefix}vote check ${type} <id-or-slug>\` or set it in config.json.`)]
+      .setDescription(t(guildId, "responses.vote.noResourceId", { type, prefix }))]
   };
 }
 
@@ -61,29 +61,29 @@ function noResourceId(type, prefix) {
  * @param {boolean} expired - Whether the navigation controls have expired
  * @returns {object} Embed payload
  */
-function buildVotersEmbed(voters, total, page, limit, type, resourceId, expired = false) {
+function buildVotersEmbed(voters, total, page, limit, type, resourceId, expired = false, t, guildId) {
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   const lines = voters.map((v, i) => {
     const rank = (page - 1) * limit + i + 1;
     const num = String(rank).padStart(2, " ");
-    const username = v.username || `User#${v.fluxerId}`;
+    const username = v.username || t(guildId, "responses.vote.unknownUser", { id: v.fluxerId });
     const dateStr = v.votedAt
       ? new Date(v.votedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-      : "Unknown";
-    return `\`${num}.\` **${username}** — voted ${dateStr}`;
+      : t(guildId, "responses.vote.unknownDate");
+    return `\`${num}.\` **${username}** — ${t(guildId, "responses.vote.votedDate", { date: dateStr })}`;
   });
 
   const desc = lines.length > 0
     ? lines.join("\n").slice(0, 4096)
-    : "No voters found on this page.";
+    : t(guildId, "responses.vote.noVotersOnPage");
 
-  const title = type === "server" ? "Server Voters" : "Bot Voters";
+  const title = type === "server" ? t(guildId, "responses.vote.serverVoters") : t(guildId, "responses.vote.botVoters");
   const footerText = expired
-    ? "Controls expired"
+    ? t(guildId, "responses.vote.controlsExpired")
     : totalPages > 1
-      ? `Page ${page}/${totalPages} of ${Utils.formatNumber(total)} voters \u2022 Use \u25C0\u25B6 to navigate`
-      : `${Utils.formatNumber(total)} voter${total !== 1 ? "s" : ""} total`;
+      ? t(guildId, "responses.vote.pageInfo", { page, totalPages, total: Utils.formatNumber(total) })
+      : t(guildId, "responses.vote.voterTotal", { total: Utils.formatNumber(total) });
 
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
@@ -101,6 +101,8 @@ export async function run(msg, data) {
   const type = data.get("type")?.value ?? "bot";
   const resourceId = data.get("id")?.value || null;
   const page = data.get("page")?.value ?? 1;
+  const t = this.locale?.translate?.bind(this.locale);
+  const guildId = msg.message?.guildId;
 
   switch (action) {
     case "info": {
@@ -111,41 +113,30 @@ export async function run(msg, data) {
         return msg.reply({
           embeds: [new EmbedBuilder()
             .setColor(getGlobalColor())
-            .setTitle("FluxerList Vote")
-            .setDescription([
-              `Vote for this bot/server on [FluxerList](${FLUXERLIST.SITE_URL})!`,
-              ``,
-              `FluxerList is a server and bot listing platform where users can vote to help grow the community.`,
-              ``,
-              `**Commands:**`,
-              `\`${prefix}vote info\` \u2014 Show this info & vote link`,
-              `\`${prefix}vote info server\` \u2014 Show vote link for a server`,
-              `\`${prefix}vote check\` \u2014 Check who voted (owner-only)`,
-              `\`${prefix}vote voters\` \u2014 View the voter list (owner-only)`,
-            ].join("\n"))]
+            .setTitle(this.t(msg, "responses.vote.infoTitle"))
+            .setDescription(this.t(msg, "responses.vote.infoDescription", { siteUrl: FLUXERLIST.SITE_URL, prefix }))]
         });
       }
 
       const slug = resourceId || (resolvedType === "server" ? fluxerlist?.serverSlug : fluxerlist?.botSlug);
       const voteUrl = slug ? buildVoteLink(resolvedType, slug) : null;
-      const label = resolvedType === "server" ? "Server" : "Bot";
 
       const descLines = [
-        `Support this ${label.toLowerCase()} by voting on FluxerList!`,
+        this.t(msg, "responses.vote.supportDesc", { type: resolvedType }),
         ``,
       ];
 
       if (voteUrl) {
-        descLines.push(`**[Vote & View Profile](${voteUrl})**`, ``);
+        descLines.push(this.t(msg, "responses.vote.voteLink", { url: voteUrl }), ``);
       } else {
-        descLines.push(`Visit [FluxerList](${FLUXERLIST.SITE_URL}) to find and vote for this ${label.toLowerCase()}.`, ``);
+        descLines.push(this.t(msg, "responses.vote.findLink", { siteUrl: FLUXERLIST.SITE_URL, type: resolvedType }), ``);
       }
 
-      descLines.push(`Your votes help this ${label.toLowerCase()} grow and reach more users.`);
+      descLines.push(this.t(msg, "responses.vote.helpGrow", { type: resolvedType }));
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(`Vote on FluxerList`)
+        .setTitle(this.t(msg, "responses.vote.voteTitle"))
         .setDescription(descLines.join("\n"));
 
       return msg.reply({ embeds: [embed] });
@@ -153,12 +144,12 @@ export async function run(msg, data) {
 
     case "check":
     case "voters": {
-      if (!fluxerlist || !fluxerlist.enabled) return msg.reply(notConfigured(prefix));
+      if (!fluxerlist || !fluxerlist.enabled) return msg.reply(notConfigured(prefix, t, guildId));
 
       const resolvedType = type || "bot";
       const id = resourceId || (resolvedType === "server" ? fluxerlist.serverId : fluxerlist.botId);
 
-      if (!id) return msg.reply(noResourceId(resolvedType, prefix));
+      if (!id) return msg.reply(noResourceId(resolvedType, prefix, t, guildId));
 
       let voterData;
       try {
@@ -167,7 +158,7 @@ export async function run(msg, data) {
         return msg.reply({
           embeds: [new EmbedBuilder()
             .setColor("#ff0000")
-            .setDescription(`Failed to fetch voters: ${err.message}`)]
+            .setDescription(this.t(msg, "responses.vote.fetchVotersFailed", { error: err.message }))]
         });
       }
 
@@ -175,21 +166,21 @@ export async function run(msg, data) {
         return msg.reply({
           embeds: [new EmbedBuilder()
             .setColor(getGlobalColor())
-            .setDescription(`No one has voted for this ${resolvedType} yet. Share the vote link to get started!`)]
+            .setDescription(this.t(msg, "responses.vote.noVotersYet", { type: resolvedType }))]
         });
       }
 
       const totalPages = Math.max(1, Math.ceil(voterData.total / 20));
 
       if (totalPages <= 1) {
-        const embed = buildVotersEmbed(voterData.voters, voterData.total, voterData.page, 20, resolvedType, id);
+        const embed = buildVotersEmbed(voterData.voters, voterData.total, voterData.page, 20, resolvedType, id, false, t, guildId);
         return msg.reply(embed);
       }
 
       let currentPage = voterData.page;
 
       const buildPage = (pageIdx, expired = false) => {
-        return buildVotersEmbed(voterData.voters, voterData.total, pageIdx, 20, resolvedType, id, expired);
+        return buildVotersEmbed(voterData.voters, voterData.total, pageIdx, 20, resolvedType, id, expired, t, guildId);
       };
 
       const replyMsg = await msg.reply(buildPage(currentPage));
@@ -254,16 +245,12 @@ export async function run(msg, data) {
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
           .setDescription([
-            `**FluxerList Vote Commands:**`,
+            this.t(msg, "responses.vote.defaultCommandsTitle"),
             ``,
-            `\`${prefix}vote\` \u2014 Show vote info & link`,
-            `\`${prefix}vote info\` \u2014 Show voting info & vote link`,
-            `\`${prefix}vote check\` \u2014 Check who voted (owner-only)`,
-            `\`${prefix}vote voters\` \u2014 View the voter list (owner-only)`,
+            this.t(msg, "responses.vote.defaultCommandsList", { prefix }),
             ``,
-            `**Options:**`,
-            `\`${prefix}vote check server\` \u2014 Check voters for a server`,
-            `\`${prefix}vote check bot\` \u2014 Check voters for a bot`,
+            this.t(msg, "responses.vote.optionsTitle"),
+            this.t(msg, "responses.vote.optionsList", { prefix }),
           ].join("\n"))]
       });
   }

@@ -176,24 +176,22 @@ export class MessageHandler {
     const embed = new EmbedBuilder().setColor(0xFF4444);
 
     if (criticalItems.length > 0) {
-      embed.setTitle("Missing Permissions — Bot Cannot Work Properly");
+      embed.setTitle(this.t(guildId, "responses.messages.missingCriticalPermsTitle"));
       embed.setDescription(
-          "The bot is missing **critical permissions** it needs to function. " +
-          "Please ask a server administrator to grant them.\n\n" +
+          this.t(guildId, "responses.messages.missingCriticalPermsDesc") + "\n\n" +
           criticalItems.join("\n")
       );
     } else if (optionalItems.length > 0) {
-      embed.setTitle("Missing Optional Permissions");
+      embed.setTitle(this.t(guildId, "responses.messages.missingOptionalPermsTitle"));
       embed.setDescription(
-          "Some features may not work without these permissions, but the bot can still play music.\n\n" +
+          this.t(guildId, "responses.messages.missingOptionalPermsDesc") + "\n\n" +
           optionalItems.join("\n")
       );
       embed.setColor(0xFFA500);
     }
 
     embed.setFooter({
-      text: "Re-invite the bot with correct permissions using the invite link, " +
-            "or edit the bot's role in Server Settings → Roles."
+      text: this.t(guildId, "responses.messages.permFooter")
     });
 
     return embed;
@@ -231,7 +229,7 @@ export class MessageHandler {
       logger.warn("[MessageHandler] Failed to send permission embed:", e.message);
       try {
         const names = missing.map(k => REQUIRED_BOT_PERMISSIONS.get(k)?.name ?? k);
-        await message.reply("I need the following permissions: **" + names.join("**, **") + "**. Please ask a server admin to grant them.", { ping: false });
+        await message.reply(this.t(message.guildId, "responses.messages.needPermsFallback", { perms: names.join("** **") }), { ping: false });
       } catch (_) { /* completely blocked */ }
     }
     return false;

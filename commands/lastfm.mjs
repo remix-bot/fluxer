@@ -43,19 +43,19 @@ export const command = new CommandBuilder()
       .setRequired(false)
   );
 
-function notConfigured(msg) {
+function notConfigured(ctx, msg) {
   return {
     embeds: [new EmbedBuilder()
       .setColor("#ff0000")
-      .setDescription("❌ Last.fm integration is not configured on this bot. Ask the bot owner to add a Last.fm API key to the config.")]
+      .setDescription(ctx.t(msg, "responses.lastfm.notConfigured"))]
   };
 }
 
-function notLinked(prefix) {
+function notLinked(ctx, msg, prefix) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(getGlobalColor())
-      .setDescription(`❌ You don't have a Last.fm account linked. Use \`${prefix}lastfm link\` to get started.`)]
+      .setDescription(ctx.t(msg, "responses.lastfm.notLinked", { prefix }))]
   };
 }
 
@@ -156,7 +156,7 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   const prefix = ctx.handler?.getPrefix?.(msg.message?.guildId) ?? "%";
   const resolveProvider = options.resolveProvider || "yt";
 
-  if (!lastfm || !lastfm.enabled) return msg.reply(notConfigured(msg));
+  if (!lastfm || !lastfm.enabled) return msg.reply(notConfigured(ctx, msg));
 
   const validCategories = [...SIMPLE_CATEGORIES, "playlist"];
   if (!validCategories.includes(category)) {
@@ -176,7 +176,7 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   }
 
   const user = await lastfm.getUser(userId);
-  if (!user) return msg.reply(notLinked(prefix));
+  if (!user) return msg.reply(notLinked(ctx, msg, prefix));
 
   const p = await ctx.getPlayer(msg, true, true, true);
   if (!p) return;
@@ -200,8 +200,8 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
     result = await lastfm.getTracksForPlay(userId, category, options);
   } catch (err) {
     const errMsg = err.message === "NOT_LINKED"
-      ? notLinked(prefix)
-      : { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch Last.fm tracks: ${err.message}`)] };
+      ? notLinked(ctx, msg, prefix)
+      : { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(ctx.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
     if (statusMsg) statusMsg.edit(errMsg).catch(() => msg.reply(errMsg));
     else msg.reply(errMsg);
     return;
@@ -330,7 +330,7 @@ function parsePlayArgs(msg, data) {
 
 export async function run(msg, data) {
   const lastfm = this.lastfm;
-  if (!lastfm || !lastfm.enabled) return msg.reply(notConfigured(msg));
+  if (!lastfm || !lastfm.enabled) return msg.reply(notConfigured(this, msg));
 
   const prefix = this.handler?.getPrefix?.(msg.message?.guildId) ?? "%";
   const action = data.get("action")?.value ?? "profile";
@@ -344,7 +344,7 @@ export async function run(msg, data) {
         return msg.reply({
           embeds: [new EmbedBuilder()
             .setColor(getGlobalColor())
-            .setDescription(`✅ You already have **${existing.username}** linked! Use \`${prefix}lastfm unlink\` to disconnect, or \`${prefix}lastfm scrobble\` to toggle scrobbling.`)]
+            .setDescription(this.t(msg, "responses.lastfm.alreadyLinked", { username: existing.username, prefix }))]
         });
       }
 
@@ -353,7 +353,7 @@ export async function run(msg, data) {
         token = await lastfm.getAuthToken();
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to get auth token: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.tokenFailed", { error: err.message }))]
         });
       }
 
@@ -365,17 +365,8 @@ export async function run(msg, data) {
         await dm.send({
           embeds: [new EmbedBuilder()
             .setColor(getGlobalColor())
-            .setTitle("🎵 Link your Last.fm account")
-            .setDescription([
-              `Click the link below to authorize Remix on Last.fm:`,
-              ``,
-              `**[Authorize on Last.fm](${authUrl})**`,
-              ``,
-              `After you click "Yes, allow access", come back and run:`,
-              `\`${prefix}lastfm confirm ${token}\``,
-              ``,
-              `_This link expires in 60 minutes._`,
-            ].join("\n"))
+            .setTitle(this.t(msg, "responses.lastfm.authLinkTitle"))
+            .setDescription(this.t(msg, "responses.lastfm.authLinkBody", { url: authUrl, prefix, token }))
           ]
         });
         sent = true;
@@ -386,8 +377,8 @@ export async function run(msg, data) {
         .setColor(getGlobalColor())
         .setDescription(
           sent
-            ? `📧 Check your DMs for the Last.fm authorization link! After approving, run \`${prefix}lastfm confirm <token>\` here.`
-            : `⚠️ I couldn't DM you. [Click here to authorize on Last.fm](${authUrl}), then run \`${prefix}lastfm confirm <token>\`.`
+            ? this.t(msg, "responses.lastfm.authDM", { prefix })
+            : this.t(msg, "responses.lastfm.authDMFailed", { url: authUrl, prefix })
         );
 
       return msg.reply({ embeds: [replyEmbed] });
@@ -404,7 +395,7 @@ export async function run(msg, data) {
 
       if (!tokenValue) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Usage: \`${prefix}lastfm confirm <token>\` — provide the token from the auth DM.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.confirmUsage", { prefix }))]
         });
       }
 
@@ -413,7 +404,7 @@ export async function run(msg, data) {
         session = await lastfm.getSession(tokenValue);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to get session: ${err.message}\nMake sure you approved the token on Last.fm first.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.confirmFailed", { error: err.message }))]
         });
       }
 
@@ -422,23 +413,23 @@ export async function run(msg, data) {
       return msg.reply({
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
-          .setDescription(`✅ Last.fm account **[${session.name}](https://last.fm/user/${session.name})** linked! Scrobbling is enabled by default.`)]
+          .setDescription(this.t(msg, "responses.lastfm.linked", { username: session.name }))]
       });
     }
 
     case "unlink": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       await lastfm.removeUser(userId);
       return msg.reply({
-        embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`✅ Last.fm account **${user.username}** has been unlinked.`)]
+        embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.unlinked", { username: user.username }))]
       });
     }
 
     case "scrobble": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       const newState = !user.scrobbleEnabled;
       await lastfm.setScrobble(userId, newState);
@@ -447,38 +438,38 @@ export async function run(msg, data) {
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
           .setDescription(newState
-            ? `✅ Scrobbling **enabled** — songs you listen to will be scrobbled to **${user.username}**.`
-            : `⏸️ Scrobbling **disabled** — songs won't be scrobbled. Your account is still linked.`
+            ? this.t(msg, "responses.lastfm.scrobbleEnabled", { username: user.username })
+            : this.t(msg, "responses.lastfm.scrobbleDisabled")
           )]
       });
     }
 
     case "np": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       let recentData;
       try {
         recentData = await lastfm.getRecentTracks(userId, 1);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch recent tracks: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!recentData.length) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🎵 No recent tracks found for **${user.username}**.`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.noRecent", { username: user.username }))]
         });
       }
 
       const track = recentData[0];
-      const statusEmoji = track.now ? "🎵 Now Playing" : "🕐 Last Played";
+      const statusEmoji = track.now ? this.t(msg, "responses.lastfm.nowPlaying") : this.t(msg, "responses.lastfm.lastPlayed");
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setAuthor({ name: `${statusEmoji} on Last.fm`, iconURL: track.image || undefined })
-        .setDescription(`**${track.name}** by **${track.artist}**\n[Open on Last.fm](${track.url})`)
-        .setFooter({ text: `Last.fm: ${user.username}` });
+        .setAuthor({ name: statusEmoji, iconURL: track.image || undefined })
+        .setDescription(this.t(msg, "responses.lastfm.npTrackInfo", { name: track.name, artist: track.artist, url: track.url }))
+        .setFooter({ text: this.t(msg, "responses.lastfm.npFooter", { username: user.username }) });
 
       return msg.reply({ embeds: [embed] });
     }
@@ -486,14 +477,14 @@ export async function run(msg, data) {
     case "profile": {
       const profileUserId = targetUserId || userId;
       const user = await lastfm.getUser(profileUserId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       let info;
       try {
         info = await lastfm.getUserInfo(profileUserId);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch profile: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -501,35 +492,35 @@ export async function run(msg, data) {
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setAuthor({ name: `Last.fm Profile: ${info.name}`, iconURL: info.image?.[2]?.["#text"] || undefined, url: info.url })
+        .setAuthor({ name: this.t(msg, "responses.lastfm.profileTitle", { username: info.name }), iconURL: info.image?.[2]?.["#text"] || undefined, url: info.url })
         .setDescription([
-          `🎵 **${Utils.formatNumber(info.playcount ?? 0)}** scrobbles`,
-          `👤 Registered: ${info.registered?.unixtime ? new Date(+info.registered.unixtime * 1000).toLocaleDateString() : "unknown"}`,
-          `🔄 Scrobbling: ${user.scrobbleEnabled ? "✅ Enabled" : "⏸️ Disabled"}`,
+          this.t(msg, "responses.lastfm.profileScrobbles", { playcount: Utils.formatNumber(info.playcount ?? 0) }),
+          this.t(msg, "responses.lastfm.profileRegistered", { date: info.registered?.unixtime ? new Date(+info.registered.unixtime * 1000).toLocaleDateString() : "unknown" }),
+          this.t(msg, "responses.lastfm.profileScrobbleStatus", { status: user.scrobbleEnabled ? this.t(msg, "responses.lastfm.profileScrobbleEnabled") : this.t(msg, "responses.lastfm.profileScrobbleDisabled") }),
           ``,
-          `🔗 [Open profile](${info.url})`,
+          this.t(msg, "responses.lastfm.profileLink", { url: info.url }),
         ].join("\n"))
-        .setFooter({ text: `Use ${prefix}lastfm scrobble to toggle scrobbling` });
+        .setFooter({ text: this.t(msg, "responses.lastfm.profileScrobbleFooter", { prefix }) });
 
       return msg.reply({ embeds: [embed] });
     }
 
     case "playlists": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       let playlists;
       try {
         playlists = await lastfm.getPlaylists(userId);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch playlists: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!playlists.length) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`📋 No playlists found for **${user.username}**.`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.noPlaylists", { username: user.username }))]
         });
       }
 
@@ -544,9 +535,9 @@ export async function run(msg, data) {
       return msg.reply({
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
-          .setTitle(`📋 Playlists — ${user.username}`)
+          .setTitle(this.t(msg, "responses.lastfm.playlistsTitle", { username: user.username }))
           .setDescription(desc)
-          .setFooter({ text: `💡 Use ${prefix}lastfm play playlist <number> to play one!` })]
+          .setFooter({ text: this.t(msg, "responses.lastfm.playlistsFooter", { prefix }) })]
       });
     }
 
@@ -609,29 +600,29 @@ export async function run(msg, data) {
 
     case "loved": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       let tracks;
       try {
         tracks = await lastfm.getLovedTracks(userId, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch loved tracks: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!tracks.length) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`❤️ No loved tracks found for **${user.username}**.`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.noLoved", { username: user.username }))]
         });
       }
 
-      return msg.reply({ embeds: [buildTrackList(user.username, "❤️ Loved Tracks", tracks, false, prefix)] });
+      return msg.reply({ embeds: [buildTrackList(user.username, this.t(msg, "responses.lastfm.lovedTitle", { username: user.username }), tracks, false, prefix)] });
     }
 
     case "top": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       const period = extractPeriod(data, msg);
 
@@ -640,18 +631,18 @@ export async function run(msg, data) {
         tracks = await lastfm.getTopTracks(userId, period, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch top tracks: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!tracks.length) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`📊 No top tracks found for **${user.username}**.`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.noTop", { username: user.username }))]
         });
       }
 
       const periodLabel = period !== "overall" ? ` (${period})` : "";
-      return msg.reply({ embeds: [buildTrackList(user.username, `📊 Top Tracks${periodLabel}`, tracks, true, prefix)] });
+      return msg.reply({ embeds: [buildTrackList(user.username, this.t(msg, "responses.lastfm.topTitle", { username: user.username }) + periodLabel, tracks, true, prefix)] });
     }
 
     case "leaderboard":
@@ -661,14 +652,14 @@ export async function run(msg, data) {
         lb = await lastfm.getLeaderboard(0, 10);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch leaderboard: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!lb.entries.length) {
         return msg.reply({
           embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
-            `🎵 No scrobbles recorded yet. Link your Last.fm account with \`${prefix}lastfm link\` and start listening!`
+            this.t(msg, "responses.lastfm.leaderboardEmpty", { prefix })
           )]
         });
       }
@@ -682,8 +673,8 @@ export async function run(msg, data) {
 
       const buildPage = (pageIdx, expired = false) => {
         const footerText = expired
-          ? "Controls expired"
-          : `Page ${pageIdx + 1}/${lb.totalPages} • Use ◀️▶️ to navigate`;
+          ? this.t(msg, "responses.lastfm.leaderboardControlsExpired")
+          : this.t(msg, "responses.lastfm.leaderboardPageFooter", { current: pageIdx + 1, total: lb.totalPages });
         const embed = buildLeaderboardEmbed(lb, pageIdx, prefix);
         embed.setFooter({ text: footerText });
         return { embeds: [embed] };
@@ -748,29 +739,29 @@ export async function run(msg, data) {
 
     case "recent": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       let tracks;
       try {
         tracks = await lastfm.getRecentTracks(userId, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch recent tracks: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!tracks.length) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🕐 No recent tracks found for **${user.username}**.`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.noRecent", { username: user.username }))]
         });
       }
 
-      return msg.reply({ embeds: [buildTrackList(user.username, "🕐 Recent Tracks", tracks, false, prefix)] });
+      return msg.reply({ embeds: [buildTrackList(user.username, this.t(msg, "responses.lastfm.recentTitle", { username: user.username }), tracks, false, prefix)] });
     }
 
     case "artists": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       const period = extractPeriod(data, msg);
 
@@ -779,13 +770,13 @@ export async function run(msg, data) {
         artists = await lastfm.getTopArtists(userId, period, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch top artists: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!artists.length) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🎤 No top artists found for **${user.username}**.`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.noArtists", { username: user.username }))]
         });
       }
 
@@ -803,22 +794,22 @@ export async function run(msg, data) {
       return msg.reply({
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
-          .setTitle(`🎤 Top Artists${periodLabel} — ${user.username}`)
+          .setTitle(this.t(msg, "responses.lastfm.artistsTitle", { username: user.username }) + periodLabel)
           .setDescription(desc)
-          .setFooter({ text: `💡 Use ${prefix}lastfm play top to play your top tracks!` })]
+          .setFooter({ text: this.t(msg, "responses.lastfm.artistsFooter", { prefix }) })]
       });
     }
 
     case "love": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       const pLove = await this.getPlayer(msg, false, false, false);
       if (!pLove) return;
       const track = pLove.queue?.getCurrent();
       if (!track) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Nothing is playing right now. Play a song first to love it!`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.nothingPlayingLove"))]
         });
       }
 
@@ -828,25 +819,25 @@ export async function run(msg, data) {
       try {
         await lastfm.loveTrack(userId, artist, name);
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`❤️ Loved **${name}** by **${artist}** on Last.fm!`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.lovedTrack", { name, artist }))]
         });
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to love track: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.loveFailed", { error: err.message }))]
         });
       }
     }
 
     case "unlove": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       const pUnlove = await this.getPlayer(msg, false, false, false);
       if (!pUnlove) return;
       const track = pUnlove.queue?.getCurrent();
       if (!track) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Nothing is playing right now. Play a song first to unlove it!`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.nothingPlayingUnlove"))]
         });
       }
 
@@ -856,11 +847,11 @@ export async function run(msg, data) {
       try {
         await lastfm.unloveTrack(userId, artist, name);
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`💔 Unloved **${name}** by **${artist}** on Last.fm.`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.unlovedTrack", { name, artist }))]
         });
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to unlove track: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.unloveFailed", { error: err.message }))]
         });
       }
     }
@@ -868,7 +859,7 @@ export async function run(msg, data) {
     case "whoknows":
     case "wk": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       let artistName = null;
       const tokenTextWk = data.get("token")?.value;
@@ -884,7 +875,7 @@ export async function run(msg, data) {
 
       if (!artistName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Nothing is playing right now and no artist specified. Play a song or provide an artist name!`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.nothingPlayingNoArtist"))]
         });
       }
 
@@ -892,7 +883,7 @@ export async function run(msg, data) {
       try {
         statusMsg = await msg.reply({
           embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
-            `🔍 Checking who listens to **${artistName}** in this server...`
+            this.t(msg, "responses.lastfm.whoknowsChecking", { artist: artistName })
           )]
         });
       } catch { statusMsg = null; }
@@ -904,7 +895,7 @@ export async function run(msg, data) {
       try {
         listeners = await lastfm.getWhoKnows(artistName, memberIds);
       } catch (err) {
-        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to check who knows: ${err.message}`)] };
+        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
         if (statusMsg) statusMsg.edit(errEmbed).catch(() => msg.reply(errEmbed));
         else msg.reply(errEmbed);
         return;
@@ -912,7 +903,7 @@ export async function run(msg, data) {
 
       if (!listeners.length) {
         const noData = { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
-          `👤 Nobody in this server has listened to **${artistName}** on Last.fm.`
+          this.t(msg, "responses.lastfm.whoknowsNobody", { artist: artistName })
         )] };
         if (statusMsg) statusMsg.edit(noData).catch(() => msg.reply(noData));
         else msg.reply(noData);
@@ -931,9 +922,9 @@ export async function run(msg, data) {
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(`👤 Who knows ${artistName}?`)
+        .setTitle(this.t(msg, "responses.lastfm.whoknowsTitle", { artist: artistName }))
         .setDescription(desc)
-        .setFooter({ text: `${listeners.length} listener${listeners.length !== 1 ? "s" : ""} · ${Utils.formatNumber(totalPlays)} total plays` });
+        .setFooter({ text: this.t(msg, "responses.lastfm.whoknowsFooter", { count: listeners.length, plural: listeners.length !== 1 ? "s" : "", totalPlays: Utils.formatNumber(totalPlays) }) });
 
       const replyPayload = { embeds: [embed] };
       if (statusMsg) statusMsg.edit(replyPayload).catch(() => msg.reply(replyPayload));
@@ -961,7 +952,7 @@ export async function run(msg, data) {
       if (!artistName) {
         return msg.reply({
           embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
-            `❌ No artist specified. Play a song or provide an artist name via the token option.`
+            this.t(msg, "responses.lastfm.noArtistSpecified")
           )]
         });
       }
@@ -971,13 +962,13 @@ export async function run(msg, data) {
         info = await lastfm.getArtistInfo(artistName, userId);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch artist info: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!info) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Artist **${artistName}** not found on Last.fm.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.artistNotFound", { artist: artistName }))]
         });
       }
 
@@ -1053,7 +1044,7 @@ export async function run(msg, data) {
       if (!albumName) {
         return msg.reply({
           embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
-            `❌ No album specified. Play a song or provide an album name (e.g. \`artist - album\`) via the token option.`
+            this.t(msg, "responses.lastfm.noAlbumSpecified")
           )]
         });
       }
@@ -1063,13 +1054,13 @@ export async function run(msg, data) {
         info = await lastfm.getAlbumInfo(artistName || "", albumName, userId);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch album info: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!info) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Album **${albumName}** not found on Last.fm.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.albumNotFound", { album: albumName }))]
         });
       }
 
@@ -1116,7 +1107,7 @@ export async function run(msg, data) {
     case "trackinfo":
     case "ti": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       let artistName = null;
       let trackName = null;
@@ -1148,7 +1139,7 @@ export async function run(msg, data) {
       if (!artistName || !trackName) {
         return msg.reply({
           embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
-            `❌ No track specified. Play a song or provide a track name (e.g. \`artist - track\`) via the token option.`
+            this.t(msg, "responses.lastfm.noTrackSpecified")
           )]
         });
       }
@@ -1158,13 +1149,13 @@ export async function run(msg, data) {
         info = await lastfm.getTrackInfo(artistName, trackName, userId);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch track info: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!info) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Track **${trackName}** by **${artistName}** not found on Last.fm.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.trackNotFound", { track: trackName, artist: artistName }))]
         });
       }
 
@@ -1242,7 +1233,7 @@ export async function run(msg, data) {
 
     case "topalbums": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       const period = extractPeriod(data, msg);
 
@@ -1251,13 +1242,13 @@ export async function run(msg, data) {
         albums = await lastfm.getTopAlbums(userId, period, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch top albums: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!albums.length) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`💿 No top albums found for **${user.username}**.`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.noTopAlbums", { username: user.username }))]
         });
       }
 
@@ -1275,14 +1266,14 @@ export async function run(msg, data) {
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(`💿 Top Albums${periodLabel} — ${user.username}`)
+        .setTitle(this.t(msg, "responses.lastfm.topAlbumsTitle", { period: periodLabel, username: user.username }))
         .setDescription(desc);
 
       if (albums[0]?.image) {
         embed.setThumbnail(albums[0].image);
       }
 
-      embed.setFooter({ text: `💡 Use ${prefix}lastfm play albums to play your top albums!` });
+      embed.setFooter({ text: this.t(msg, "responses.lastfm.topAlbumsFooter", { prefix }) });
 
       return msg.reply({ embeds: [embed] });
     }
@@ -1290,20 +1281,20 @@ export async function run(msg, data) {
     case "toptags":
     case "tags": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       let tags;
       try {
         tags = await lastfm.getUserTopTags(userId, 20);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch top tags: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!tags.length) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🏷️ No top tags found for **${user.username}**.`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.noTopTags", { username: user.username }))]
         });
       }
 
@@ -1318,9 +1309,9 @@ export async function run(msg, data) {
       return msg.reply({
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
-          .setTitle(`🏷️ Top Tags — ${user.username}`)
+          .setTitle(this.t(msg, "responses.lastfm.topTagsTitle", { username: user.username }))
           .setDescription(desc)
-          .setFooter({ text: `💡 Use ${prefix}lastfm tag <name> to view info about a tag!` })]
+          .setFooter({ text: this.t(msg, "responses.lastfm.topTagsFooter", { prefix }) })]
       });
     }
 
@@ -1329,7 +1320,7 @@ export async function run(msg, data) {
       if (!tagName) {
         return msg.reply({
           embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
-            `❌ Provide a tag name via the token option. Example: \`${prefix}lastfm tag rock\``
+            this.t(msg, "responses.lastfm.tagProvideName", { prefix })
           )]
         });
       }
@@ -1346,13 +1337,13 @@ export async function run(msg, data) {
         ]);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch tag info: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!tagInfo) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Tag **${tagName}** not found on Last.fm.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.tagNotFound", { tag: tagName }))]
         });
       }
 
@@ -1397,12 +1388,12 @@ export async function run(msg, data) {
     case "compare":
     case "fmc": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       if (!targetUserId) {
         return msg.reply({
           embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
-            `❌ Specify another user to compare with. Example: \`${prefix}lastfm compare -user @user\``
+            this.t(msg, "responses.lastfm.compareSpecifyUser", { prefix })
           )]
         });
       }
@@ -1411,7 +1402,7 @@ export async function run(msg, data) {
       if (!targetUser) {
         return msg.reply({
           embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
-            `❌ That user doesn't have a Last.fm account linked.`
+            this.t(msg, "responses.lastfm.compareUserNotLinked")
           )]
         });
       }
@@ -1421,19 +1412,19 @@ export async function run(msg, data) {
         comparison = await lastfm.compareUsers(userId, targetUserId);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to compare users: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!comparison) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Could not compare profiles. Make sure both users are linked.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.compareFailed"))]
         });
       }
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(`🤝 Taste Comparison`)
+        .setTitle(this.t(msg, "responses.lastfm.compareTitle"))
         .setDescription([
           `**${comparison.user1.username}** vs **${comparison.user2.username}**`,
           ``,
@@ -1458,13 +1449,13 @@ export async function run(msg, data) {
     case "cover":
     case "art": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       const pCover = await this.getPlayer(msg, false, false, false);
       const current = extractCurrentTrack(pCover);
       if (!current || !current.name) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Nothing is playing right now. Play a song to get its album cover!`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.coverNothingPlaying"))]
         });
       }
 
@@ -1500,15 +1491,15 @@ export async function run(msg, data) {
 
       if (!coverUrl) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🖼️ No album cover found for **${trackName}** by **${artistName}**.`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.coverNotFound", { track: trackName, artist: artistName }))]
         });
       }
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(`🖼️ ${albumTitle}`)
+        .setTitle(this.t(msg, "responses.lastfm.coverTitle", { album: albumTitle }))
         .setImage(coverUrl)
-        .setFooter({ text: `🎵 ${trackName} by ${artistName}` });
+        .setFooter({ text: this.t(msg, "responses.lastfm.coverFooter", { track: trackName, artist: artistName }) });
 
       return msg.reply({ embeds: [embed] });
     }
@@ -1518,7 +1509,7 @@ export async function run(msg, data) {
       const guild = msg.message?.guild ?? msg.message?.member?.guild;
       if (!guild) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Could not access the server.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.refreshFailed"))]
         });
       }
       let count = 0;
@@ -1535,28 +1526,28 @@ export async function run(msg, data) {
         count = memberIds.length;
       }
       return msg.reply({
-        embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`✅ Member list refreshed! Found **${Utils.formatNumber(count)}** members in this server.`)]
+        embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.refreshSuccess", { count: Utils.formatNumber(count) }))]
       });
     }
 
     case "affinity":
     case "af": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       const guild = msg.message?.guild ?? msg.message?.member?.guild;
       const memberIds = await getGuildLinkedUsers(guild);
 
       if (memberIds.length < 2) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`👥 Need at least 2 linked users in this server to check affinity.`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.affinityNeedUsers"))]
         });
       }
 
       let statusMsg;
       try {
         statusMsg = await msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🔍 Checking music affinity among server members...`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.affinityChecking"))]
         });
       } catch { statusMsg = null; }
 
@@ -1564,14 +1555,14 @@ export async function run(msg, data) {
       try {
         affinityResults = await lastfm.getAffinity(memberIds, 10);
       } catch (err) {
-        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to check affinity: ${err.message}`)] };
+        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
         if (statusMsg) statusMsg.edit(errEmbed).catch(() => msg.reply(errEmbed));
         else msg.reply(errEmbed);
         return;
       }
 
       if (!affinityResults.length) {
-        const noData = { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`👥 No common artists found between any server members.`)] };
+        const noData = { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.affinityNoCommon"))] };
         if (statusMsg) statusMsg.edit(noData).catch(() => msg.reply(noData));
         else msg.reply(noData);
         return;
@@ -1586,9 +1577,9 @@ export async function run(msg, data) {
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(`👥 Music Affinity`)
+        .setTitle(this.t(msg, "responses.lastfm.affinityTitle"))
         .setDescription(desc)
-        .setFooter({ text: `${memberIds.length} members checked` });
+        .setFooter({ text: this.t(msg, "responses.lastfm.affinityFooter", { count: memberIds.length }) });
 
       const replyPayload = { embeds: [embed] };
       if (statusMsg) statusMsg.edit(replyPayload).catch(() => msg.reply(replyPayload));
@@ -1599,7 +1590,7 @@ export async function run(msg, data) {
     case "crowns":
     case "cr": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       const guild = msg.message?.guild ?? msg.message?.member?.guild;
       const memberIds = await getGuildLinkedUsers(guild);
@@ -1607,7 +1598,7 @@ export async function run(msg, data) {
       let statusMsg;
       try {
         statusMsg = await msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`👑 Checking your artist crowns...`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.crownsChecking"))]
         });
       } catch { statusMsg = null; }
 
@@ -1615,14 +1606,14 @@ export async function run(msg, data) {
       try {
         crowns = await lastfm.getCrowns(userId, memberIds);
       } catch (err) {
-        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch crowns: ${err.message}`)] };
+        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
         if (statusMsg) statusMsg.edit(errEmbed).catch(() => msg.reply(errEmbed));
         else msg.reply(errEmbed);
         return;
       }
 
       if (!crowns.length) {
-        const noData = { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`👑 You don't hold any artist crowns in this server. Keep listening!`)] };
+        const noData = { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.crownsNone"))] };
         if (statusMsg) statusMsg.edit(noData).catch(() => msg.reply(noData));
         else msg.reply(noData);
         return;
@@ -1647,9 +1638,9 @@ export async function run(msg, data) {
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(`👑 Artist Crowns — ${user.username}`)
+        .setTitle(this.t(msg, "responses.lastfm.crownsTitle", { username: user.username }))
         .setDescription(desc)
-        .setFooter({ text: `${filteredCrowns.length} crown${filteredCrowns.length !== 1 ? "s" : ""} held` });
+        .setFooter({ text: this.t(msg, "responses.lastfm.crownsFooter", { count: filteredCrowns.length, plural: filteredCrowns.length !== 1 ? "s" : "" }) });
 
       if (filteredCrowns[0]?.image) {
         embed.setThumbnail(filteredCrowns[0].image);
@@ -1664,7 +1655,7 @@ export async function run(msg, data) {
     case "whoknowstrack":
     case "wkt": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       let artistName = null;
       let trackName = null;
@@ -1695,14 +1686,14 @@ export async function run(msg, data) {
 
       if (!artistName || !trackName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ No track specified. Play a song or provide a track name (e.g. \`artist - track\`) via the token option.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.noTrackSpecified"))]
         });
       }
 
       let statusMsg;
       try {
         statusMsg = await msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🔍 Checking who knows **${trackName}** by **${artistName}** in this server...`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.whoknowsTrackChecking", { track: trackName, artist: artistName }))]
         });
       } catch { statusMsg = null; }
 
@@ -1713,14 +1704,14 @@ export async function run(msg, data) {
       try {
         listeners = await lastfm.getWhoKnowsTrack(artistName, trackName, memberIds);
       } catch (err) {
-        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to check who knows: ${err.message}`)] };
+        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
         if (statusMsg) statusMsg.edit(errEmbed).catch(() => msg.reply(errEmbed));
         else msg.reply(errEmbed);
         return;
       }
 
       if (!listeners.length) {
-        const noData = { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`👤 Nobody in this server has listened to **${trackName}** by **${artistName}** on Last.fm.`)] };
+        const noData = { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.whoknowsTrackNobody", { track: trackName, artist: artistName }))] };
         if (statusMsg) statusMsg.edit(noData).catch(() => msg.reply(noData));
         else msg.reply(noData);
         return;
@@ -1738,9 +1729,9 @@ export async function run(msg, data) {
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(`👤 Who knows ${trackName}?`)
+        .setTitle(this.t(msg, "responses.lastfm.whoknowsTrackTitle", { track: trackName }))
         .setDescription(desc)
-        .setFooter({ text: `${listeners.length} listener${listeners.length !== 1 ? "s" : ""} · ${Utils.formatNumber(totalPlays)} total plays · by ${artistName}` });
+        .setFooter({ text: this.t(msg, "responses.lastfm.whoknowsTrackFooter", { count: listeners.length, plural: listeners.length !== 1 ? "s" : "", totalPlays: Utils.formatNumber(totalPlays), artist: artistName }) });
 
       const replyPayload = { embeds: [embed] };
       if (statusMsg) statusMsg.edit(replyPayload).catch(() => msg.reply(replyPayload));
@@ -1751,7 +1742,7 @@ export async function run(msg, data) {
     case "whoknowsalbum":
     case "wka": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       let artistName = null;
       let albumName = null;
@@ -1776,14 +1767,14 @@ export async function run(msg, data) {
 
       if (!albumName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ No album specified. Play a song or provide an album name (e.g. \`artist - album\`) via the token option.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.noAlbumSpecified"))]
         });
       }
 
       let statusMsg;
       try {
         statusMsg = await msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🔍 Checking who knows **${albumName}**${artistName ? ` by **${artistName}**` : ""} in this server...`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.whoknowsAlbumChecking", { album: albumName, artistClause: artistName ? ` by **${artistName}**` : "" }))]
         });
       } catch { statusMsg = null; }
 
@@ -1794,14 +1785,14 @@ export async function run(msg, data) {
       try {
         listeners = await lastfm.getWhoKnowsAlbum(artistName || "", albumName, memberIds);
       } catch (err) {
-        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to check who knows: ${err.message}`)] };
+        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
         if (statusMsg) statusMsg.edit(errEmbed).catch(() => msg.reply(errEmbed));
         else msg.reply(errEmbed);
         return;
       }
 
       if (!listeners.length) {
-        const noData = { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`👤 Nobody in this server has listened to **${albumName}** on Last.fm.`)] };
+        const noData = { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.whoknowsAlbumNobody", { album: albumName }))] };
         if (statusMsg) statusMsg.edit(noData).catch(() => msg.reply(noData));
         else msg.reply(noData);
         return;
@@ -1819,9 +1810,9 @@ export async function run(msg, data) {
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(`👤 Who knows ${albumName}?`)
+        .setTitle(this.t(msg, "responses.lastfm.whoknowsAlbumTitle", { album: albumName }))
         .setDescription(desc)
-        .setFooter({ text: `${listeners.length} listener${listeners.length !== 1 ? "s" : ""} · ${Utils.formatNumber(totalPlays)} total plays` });
+        .setFooter({ text: this.t(msg, "responses.lastfm.whoknowsFooter", { count: listeners.length, plural: listeners.length !== 1 ? "s" : "", totalPlays: Utils.formatNumber(totalPlays) }) });
 
       const replyPayload = { embeds: [embed] };
       if (statusMsg) statusMsg.edit(replyPayload).catch(() => msg.reply(replyPayload));
@@ -1846,7 +1837,7 @@ export async function run(msg, data) {
 
       if (!artistName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ No artist specified. Play a song or provide an artist name via the token option.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.noArtistSpecified"))]
         });
       }
 
@@ -1855,13 +1846,13 @@ export async function run(msg, data) {
         tags = await lastfm.getArtistTopTags(artistName, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch artist tags: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!tags.length) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🏷️ No tags found for artist **${artistName}**.`)]
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.noArtistTags", { artist: artistName }))]
         });
       }
 
@@ -1876,7 +1867,7 @@ export async function run(msg, data) {
       return msg.reply({
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
-          .setTitle(`🏷️ Top Tags for ${artistName}`)
+          .setTitle(this.t(msg, "responses.lastfm.artistTagsTitle", { artist: artistName }))
           .setDescription(desc)]
       });
     }
@@ -1906,7 +1897,7 @@ export async function run(msg, data) {
 
       if (!albumName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ No album specified. Play a song or provide an album name (e.g. \`artist - album\`) via the token option.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.noAlbumSpecified"))]
         });
       }
 
@@ -1915,7 +1906,7 @@ export async function run(msg, data) {
         tags = await lastfm.getAlbumTopTags(artistName || "", albumName, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch album tags: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -1936,7 +1927,7 @@ export async function run(msg, data) {
       return msg.reply({
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
-          .setTitle(`🏷️ Top Tags for ${albumName}`)
+          .setTitle(this.t(msg, "responses.lastfm.artistTagsTitle", { artist: albumName }))
           .setDescription(desc)]
       });
     }
@@ -1972,7 +1963,7 @@ export async function run(msg, data) {
 
       if (!artistName || !trackName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ No track specified. Play a song or provide a track name (e.g. \`artist - track\`) via the token option.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.noTrackSpecified"))]
         });
       }
 
@@ -1981,7 +1972,7 @@ export async function run(msg, data) {
         tags = await lastfm.getTrackTopTags(artistName, trackName, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch track tags: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2002,7 +1993,7 @@ export async function run(msg, data) {
       return msg.reply({
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
-          .setTitle(`🏷️ Top Tags for ${trackName}`)
+          .setTitle(this.t(msg, "responses.lastfm.artistTagsTitle", { artist: trackName }))
           .setDescription(desc)]
       });
     }
@@ -2010,14 +2001,14 @@ export async function run(msg, data) {
     case "friends":
     case "fr": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       let friends;
       try {
         friends = await lastfm.getUserFriends(userId, 20);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch friends: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2050,7 +2041,7 @@ export async function run(msg, data) {
     case "weekly":
     case "wc": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       const tokenTextWc = data.get("token")?.value?.toLowerCase().trim() ?? "artists";
       let chartData;
@@ -2069,7 +2060,7 @@ export async function run(msg, data) {
         }
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch weekly chart: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2113,7 +2104,7 @@ export async function run(msg, data) {
         }
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch trending: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2182,7 +2173,7 @@ export async function run(msg, data) {
         }
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch geo data: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2224,7 +2215,7 @@ export async function run(msg, data) {
         albums = await lastfm.getTagTopAlbums(tagName.trim(), 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch tag albums: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2257,7 +2248,7 @@ export async function run(msg, data) {
     case "artisttracks":
     case "atr": {
       const user = await lastfm.getUser(userId);
-      if (!user) return msg.reply(notLinked(prefix));
+      if (!user) return msg.reply(notLinked(this, msg, prefix));
 
       let artistName = null;
 
@@ -2274,7 +2265,7 @@ export async function run(msg, data) {
 
       if (!artistName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ No artist specified. Play a song or provide an artist name via the token option.`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.noArtistSpecified"))]
         });
       }
 
@@ -2283,7 +2274,7 @@ export async function run(msg, data) {
         recentTracks = await lastfm.getRecentTracks(userId, 200);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to fetch recent tracks: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2333,7 +2324,7 @@ export async function run(msg, data) {
         ]);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to search: ${err.message}`)]
+          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 

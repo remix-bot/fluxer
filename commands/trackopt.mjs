@@ -94,7 +94,7 @@ function extractAlias(parts) {
 export async function run(msg, data) {
   const trackOpts = this.trackOptions;
   if (!trackOpts) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Track options feature is not available.")] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.notAvailable"))] });
   }
 
   const subCommand = data.command.name || data.commandId || "get";
@@ -104,18 +104,20 @@ export async function run(msg, data) {
 
   const current = p.queue?.getCurrent();
   if (!current && subCommand !== "list") {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ There's nothing playing at the moment!")] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.nothingPlaying"))] });
   }
 
   const userId = msg.message?.author?.id ?? msg.author?.id;
   if (!userId) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Could not identify your user.")] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses._common.noVoiceChannel"))] });
   }
+
+  const prefix = this.handler?.getPrefix?.(msg.message?.guildId) ?? "%";
 
   if (subCommand === "set") {
     const timesRaw = data.get("times")?.value;
     if (!timesRaw) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Provide start and optional end time. Usage: `%trackopt set 0:30` or `%trackopt set 0:30 3:45 alias:hidden`")] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.invalidFormat"))] });
     }
 
     const parts = timesRaw.trim().split(/\s+/);
@@ -123,44 +125,41 @@ export async function run(msg, data) {
 
     const startMs = parseTimeInput(parts[0]);
     if (startMs === null || startMs < 0) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Invalid start time format. Use `mm:ss`, `hh:mm:ss`, or seconds.")] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.invalidFormat"))] });
     }
 
     let endMs = 0;
     if (parts.length > 1) {
       endMs = parseTimeInput(parts[1]);
       if (endMs === null || endMs <= 0) {
-        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Invalid end time format. Use `mm:ss`, `hh:mm:ss`, or seconds.")] });
+        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.invalidFormat"))] });
       }
       if (endMs <= startMs) {
-        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ End time must be after start time.")] });
+        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.invalidEndAfterStart"))] });
       }
     }
 
     const trackDuration = p._getTrackDurationMs(current);
     if (trackDuration > 0) {
       if (startMs >= trackDuration) {
-        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Start time exceeds track duration (**${formatMs(trackDuration)}**).`)] });
+        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.startExceedsDuration", { duration: formatMs(trackDuration) }))] });
       }
       if (endMs > 0 && endMs > trackDuration) {
-        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ End time exceeds track duration (**${formatMs(trackDuration)}**).`)] });
+        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.endExceedsDuration", { duration: formatMs(trackDuration) }))] });
       }
     }
 
     const result = await trackOpts.set(userId, current, startMs, endMs, aliasRaw);
     if (!result) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Failed to save track option.")] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.saveFailed"))] });
     }
 
-    const aliasLabel = result.alias === DEFAULT_ALIAS ? "" : ` [${result.alias}]`;
-    let desc = `✅ Track option saved for **${current.title}**${aliasLabel}\n`;
-    desc += `▶️ Start: **${formatMs(startMs)}**`;
-    if (endMs > 0) desc += ` | ⏹️ End: **${formatMs(endMs)}**`;
-    else desc += ` | ⏹️ End: **full track**`;
+    const endLabel = endMs > 0 ? formatMs(endMs) : "full track";
+    let desc;
     if (result.alias === DEFAULT_ALIAS) {
-      desc += `\n\nThis will apply automatically whenever this track plays in a channel you're in.`;
+      desc = this.t(msg, "responses.trackopt.saved", { title: current.title, aliasLabel: "", start: formatMs(startMs), end: endLabel });
     } else {
-      desc += `\n\nUse \`%trackopt play ${result.alias}\` to apply this trim while the track is playing.`;
+      desc = this.t(msg, "responses.trackopt.savedAlias", { title: current.title, alias: result.alias, start: formatMs(startMs), end: endLabel, prefix });
     }
 
     return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] });
@@ -169,15 +168,15 @@ export async function run(msg, data) {
   if (subCommand === "get") {
     const rows = await trackOpts.getAllForTrack(userId, current);
     if (!rows || rows.length === 0) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`No custom times set for **${current.title}**.`)] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.notSet", { title: current.title }))] });
     }
 
-    let desc = `📎 Track options for **${current.title}** (${rows.length})\n\n`;
+    let desc = this.t(msg, "responses.trackopt.current", { title: current.title, count: rows.length }) + "\n\n";
     for (const row of rows) {
       const aliasLabel = row.alias === DEFAULT_ALIAS ? "default" : row.alias;
       const endStr = row.end_ms > 0 ? formatMs(row.end_ms) : "end";
       const autoTag = row.alias === DEFAULT_ALIAS ? " ← auto" : "";
-      desc += `• **${aliasLabel}** — ${formatMs(row.start_ms)} → ${endStr}${autoTag}\n`;
+      desc += this.t(msg, "responses.trackopt.currentEntry", { alias: aliasLabel, start: formatMs(row.start_ms), end: endStr, autoTag }) + "\n";
     }
 
     return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] });
@@ -186,12 +185,12 @@ export async function run(msg, data) {
   if (subCommand === "play") {
     const aliasRaw = data.get("alias")?.value;
     if (!aliasRaw) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Provide an alias name. Usage: `%trackopt play hidden`")] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.provideAlias", { prefix }))] });
     }
 
     const safeAlias = aliasRaw.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32);
     if (!safeAlias) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Invalid alias name. Use letters, numbers, hyphens, or underscores.")] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.invalidAlias"))] });
     }
 
     const result = await trackOpts.get(userId, current, safeAlias);
@@ -199,26 +198,26 @@ export async function run(msg, data) {
       const allAliases = await trackOpts.getAllForTrack(userId, current);
       if (allAliases.length > 0) {
         const names = allAliases.map(r => r.alias === DEFAULT_ALIAS ? "default" : r.alias).join(", ");
-        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ No alias **${safeAlias}** found for **${current.title}**.\nYour aliases: ${names}`)] });
+        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.aliasNotFound", { alias: safeAlias, title: current.title, names }))] });
       }
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ No alias **${safeAlias}** found for **${current.title}**.`)] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.notFound", { title: current.title }))] });
     }
 
     if (!p.connection || p._paused) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ The player must be actively playing to apply an alias.")] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.mustBePlaying"))] });
     }
 
     try {
       const applied = await p.applyTrackOption(result);
       if (!applied) {
-        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription("❌ Failed to apply alias.")] });
+        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.applyFailed", { error: "Unknown error" }))] });
       }
 
       const aliasLabel = safeAlias === DEFAULT_ALIAS ? "default" : safeAlias;
       const endStr = result.endMs > 0 ? formatMs(result.endMs) : "end";
-      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`✂️ Applied alias **${aliasLabel}** — ${formatMs(result.startMs)} → ${endStr}`)] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.trackopt.applied", { alias: aliasLabel, start: formatMs(result.startMs), end: endStr }))] });
     } catch (e) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Failed to apply alias: ${e.message}`)] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.applyFailed", { error: e.message }))] });
     }
   }
 
@@ -226,22 +225,21 @@ export async function run(msg, data) {
     const aliasRaw = data.get("alias")?.value;
     const removed = await trackOpts.remove(userId, current, aliasRaw || null);
     if (!removed) {
-      const aliasLabel = aliasRaw ? ` **${aliasRaw}**` : "";
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`No custom times found${aliasLabel} for **${current.title}**.`)] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.notFound", { title: current.title }))] });
     }
     if (aliasRaw) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🗑️ Removed alias **${aliasRaw}** for **${current.title}**.`)] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.trackopt.removedAlias", { alias: aliasRaw, title: current.title }))] });
     }
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(`🗑️ Removed all track options for **${current.title}**.`)] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.trackopt.removedAll", { title: current.title }))] });
   }
 
   if (subCommand === "list") {
     const rows = await trackOpts.list(userId);
     if (!rows || rows.length === 0) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription("📭 You have no saved track options. Use `%trackopt set <start> [end]` to add one!")] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.trackopt.listEmpty", { prefix }))] });
     }
 
-    let desc = `📋 **Your Track Options** (${rows.length})\n\n`;
+    let desc = this.t(msg, "responses.trackopt.listTitle", { count: rows.length }) + "\n\n";
     let lastTrack = "";
     for (const row of rows) {
       const title = row.track_title || row.track_identifier;
@@ -255,7 +253,7 @@ export async function run(msg, data) {
       const autoTag = row.alias === DEFAULT_ALIAS ? " ← auto" : "";
       desc += `  • ${aliasLabel}: ${formatMs(row.start_ms)} → ${endStr}${autoTag}\n`;
     }
-    desc += `\nUse \`%trackopt play <alias>\` to apply a named trim, or \`%trackopt remove [alias]\` to delete one.`;
+    desc += "\n" + this.t(msg, "responses.trackopt.listHint", { prefix });
 
     return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] });
   }

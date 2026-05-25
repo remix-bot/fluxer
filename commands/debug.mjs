@@ -121,8 +121,8 @@ export async function run(msg, data) {
           ? "Summary"
           : `Player Detail${pages[pageIdx].includes(",") ? "s" : ""}`;
         const footerText = expired
-          ? "Controls expired"
-          : `Page ${pageIdx + 1}/${totalPages} • Use ⬅️➡️ to navigate`;
+          ? this.t(msg, "responses._common.controlsExpired")
+          : `${this.t(msg, "responses.eval.pageLabel", { page: pageIdx + 1, total: totalPages })} • ${this.t(msg, "responses.eval.navigateHint")}`;
 
         const embed = new EmbedBuilder()
           .setColor(getGlobalColor())
