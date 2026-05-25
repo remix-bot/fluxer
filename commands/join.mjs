@@ -190,25 +190,7 @@ export async function run(message, data) {
   const cid = this.players.checkVoiceChannels(message);
 
   if (!cid) {
-    const userId = message?.author?.id ?? message?.message?.author?.id;
-    const guildId = getGuildId(message);
-    let isHidden = false;
-    try {
-      const cleanGuild = String(guildId ?? "").replace(/\D/g, "");
-      const guild = this.players?.commands?.client?.guilds?.get?.(cleanGuild);
-      const member = guild?.members?.get?.(userId);
-      if (member) {
-        const memberVoiceCh = member.voice?.channelId ?? member.voice_channel_id ?? member.voiceChannelId ?? null;
-        if (memberVoiceCh) isHidden = true;
-      }
-    } catch (_) {}
-    if (isHidden) {
-      const prefix = this._commands?.getPrefix?.(guildId) ?? "%";
-      const embed = new EmbedBuilder().setColor(getGlobalColor())
-          .setDescription(this.t(message, "responses.join.hiddenVoiceChannel", { prefix }));
-      return message.reply({ embeds: [embed] });
-    }
-    const prefix = this._commands?.getPrefix?.(guildId) ?? "%";
+    const prefix = this._commands?.getPrefix?.(getGuildId(message)) ?? "%";
     const embed = new EmbedBuilder().setColor(getGlobalColor())
         .setDescription(this.t(message, "responses.join.noVoiceChannel", { prefix }));
     return message.reply({ embeds: [embed] });

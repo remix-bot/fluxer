@@ -193,8 +193,8 @@
   "responses": {
     "_common": {
       "nothingPlaying": "❌ There's nothing playing at the moment!",
-      "noVoiceChannel": "⚠️ Please join a voice channel first.",
-      "noVoiceStrict": "⚠️ You need to join a voice channel to use this command.",
+      "noVoiceChannel": "⚠️ I can't find you in a voice channel. Please join one first, or if you're already in one, make sure I have **View Channel** and **Connect** permissions.",
+      "noVoiceStrict": "⚠️ I can't find you in a voice channel. Please join one, or if you're already in one, make sure I have **View Channel** and **Connect** permissions.",
       "alreadyInChannel": "⚠️ I'm already playing in {{channels}}. Join that channel or use `{{prefix}}play` to start music in your channel.",
       "notInVoice": "I'm not in a voice channel.",
       "queueEmpty": "📭 The queue is empty. Use `{{prefix}}play` to add songs!",
@@ -211,12 +211,11 @@
       "errorStreaming": "❌ Error streaming **{{title}}** — skipping.",
       "successfullyLeft": "✅ Successfully Left",
       "voiceSelectionInvalid": "Invalid voice channel. Try again or type `x`.",
-      "voiceChannelRequired": "❌ Please join a **voice channel** first before using this command!",
+      "voiceChannelRequired": "❌ I can't find you in a voice channel. Please join one, or if you're already in one, make sure I have **View Channel** and **Connect** permissions!",
       "joinPermissionError": "❌ I don't have permission to join <#{{channel}}>. Please give me the **Connect** permission in that channel.",
       "joinFailedPermissions": "❌ Failed to join voice channel — missing permissions. Please make sure I have **Connect** and **Speak** permissions.",
       "joinFailedGeneric": "❌ Failed to join voice channel. Please try again.",
-      "joinFailedNotFound": "❌ Could not find that voice channel.",
-      "hiddenVoiceChannel": "⚠️ I can't see your voice channel. Please make sure I have **View Channel** and **Connect** permissions in that channel, or move to a channel I can access."
+      "joinFailedNotFound": "❌ Could not find that voice channel."
     },
     "clear": {
       "cleared": "🗑️ Queue cleared."
@@ -272,16 +271,15 @@
       "joining": "⏳ Joining Channel...",
       "joined": "✅ Successfully joined <#{{channel}}>",
       "joinFailed": "❌ Failed to join: {{error}}",
-      "noVoiceChannel": "❌ You're not in a voice channel. Please join one first, or specify a channel: `{{prefix}}join <#channel>`",
+      "noVoiceChannel": "❌ I can't find you in a voice channel. Please join one first, or if you're already in one, make sure I have **View Channel** and **Connect** permissions. You can also specify a channel: `{{prefix}}join <#channel>`",
       "voiceChannelNotFound": "❌ Couldn't find that voice channel. Try using a mention like `<#channelid>` or the exact channel name.",
       "autoLeaveInactive": "Left channel <#{{channel}}> because of inactivity.",
       "autoLeaveInactive247": "Left channel <#{{channel}}> because of inactivity.\nIf you want me to stay in voice, use `{{prefix}}247 on` or `{{prefix}}247 auto`\nUse `{{prefix}}247` to view and manage all saved channels.",
       "joinFailedPerms": "❌ I don't have permission to join <#{{channel}}>. Please check that I have the **Connect** permission.",
-      "voiceChannelUnknown": "unknown voice channel",
-      "hiddenVoiceChannel": "⚠️ I can't see your voice channel. Please make sure I have **View Channel** and **Connect** permissions in that channel, or specify a channel: `{{prefix}}join <#channel>`"
+      "voiceChannelUnknown": "unknown voice channel"
     },
     "leave": {
-      "noVoiceChannel": "⚠️ Please join a voice channel first, or specify one: `{{prefix}}leave <#channel>`",
+      "noVoiceChannel": "⚠️ I can't find you in a voice channel. Please join one, or if you're already in one, make sure I have **View Channel** and **Connect** permissions. You can also specify a channel: `{{prefix}}leave <#channel>`",
       "notInVoice": "I'm not in a voice channel.",
       "joinChannel": "⚠️ Please join {{channel}} to use this command.",
       "multipleChannels": "⚠️ I'm playing in multiple channels! Please join one of them:\n{{channels}}",

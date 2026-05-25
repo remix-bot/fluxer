@@ -90,43 +90,6 @@ function botHasVoicePermissions(client, channelId) {
  * botHasVoicePermissions(). If the bot HAS Connect but got 401, it's a
  * stale session ("SESSION_RACE"), not a real permission error ("PERMISSION").
  */
-/**
- * Check if a user might be in a voice channel that the bot cannot see
- * (e.g. private channel where the bot lacks View Channel permission).
- *
- * On Fluxer, if the guild has voice states but none match the user,
- * AND the user is a known member, they are likely in a hidden channel.
- * The gateway may still send partial voice state data through the member
- * object even when the bot can't see the channel itself.
- *
- * @param {Object} client  - Fluxer client
- * @param {string} userId  - User ID to check
- * @param {string} guildId - Guild ID
- * @returns {boolean} true if the user appears to be in an invisible voice channel
- */
-function userMightBeInHiddenVoice(client, userId, guildId) {
-  if (!client || !userId || !guildId) return false;
-  const cleanGuild = cleanId(guildId);
-
-  try {
-    const guild = client.guilds?.get?.(cleanGuild) ?? client.guilds?.get?.(guildId);
-    if (!guild) return false;
-
-    const member = guild.members?.get?.(userId);
-    if (!member) return false;
-
-    const memberVoiceChannelId =
-      member.voice?.channelId ??
-      member.voice_channel_id ??
-      member.voiceChannelId ??
-      null;
-
-    if (memberVoiceChannelId) return true;
-  } catch (_) {}
-
-  return false;
-}
-
 function sanitizeJoinError(err, client = null, channelId = null) {
   const msg = String(err?.message ?? err ?? "");
   if (msg.includes("401") || msg.includes("Unauthorized")) {
@@ -640,12 +603,7 @@ export class PlayerManager {
           first[1].textChannel = message.channel;
           return first[1];
         }
-        const msgUserId = message?.author?.id ?? message?.message?.author?.id;
-        if (msgUserId && userMightBeInHiddenVoice(this.commands?.client, msgUserId, guildId)) {
-          message.reply(mkEmbed(this._t(message, "responses._common.hiddenVoiceChannel")));
-        } else {
-          message.reply(mkEmbed(this._t(message, "responses._common.noVoiceStrict")));
-        }
+        message.reply(mkEmbed(this._t(message, "responses._common.noVoiceStrict")));
         return null;
       }
 
@@ -682,12 +640,7 @@ export class PlayerManager {
       if (shouldJoin) {
         return this.promptVC(message);
       }
-      const msgUserId = message?.author?.id ?? message?.message?.author?.id;
-      if (msgUserId && userMightBeInHiddenVoice(this.commands?.client, msgUserId, guildId)) {
-        message.reply(mkEmbed(this._t(message, "responses._common.hiddenVoiceChannel")));
-      } else {
-        message.reply(mkEmbed(this._t(message, "responses._common.noVoiceChannel")));
-      }
+      message.reply(mkEmbed(this._t(message, "responses._common.noVoiceChannel")));
       return null;
     }
 
