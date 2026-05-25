@@ -215,7 +215,8 @@
       "joinPermissionError": "❌ I don't have permission to join <#{{channel}}>. Please give me the **Connect** permission in that channel.",
       "joinFailedPermissions": "❌ Failed to join voice channel — missing permissions. Please make sure I have **Connect** and **Speak** permissions.",
       "joinFailedGeneric": "❌ Failed to join voice channel. Please try again.",
-      "joinFailedNotFound": "❌ Could not find that voice channel."
+      "joinFailedNotFound": "❌ Could not find that voice channel.",
+      "hiddenVoiceChannel": "⚠️ I can't see your voice channel. Please make sure I have **View Channel** and **Connect** permissions in that channel, or move to a channel I can access."
     },
     "clear": {
       "cleared": "🗑️ Queue cleared."
@@ -276,7 +277,8 @@
       "autoLeaveInactive": "Left channel <#{{channel}}> because of inactivity.",
       "autoLeaveInactive247": "Left channel <#{{channel}}> because of inactivity.\nIf you want me to stay in voice, use `{{prefix}}247 on` or `{{prefix}}247 auto`\nUse `{{prefix}}247` to view and manage all saved channels.",
       "joinFailedPerms": "❌ I don't have permission to join <#{{channel}}>. Please check that I have the **Connect** permission.",
-      "voiceChannelUnknown": "unknown voice channel"
+      "voiceChannelUnknown": "unknown voice channel",
+      "hiddenVoiceChannel": "⚠️ I can't see your voice channel. Please make sure I have **View Channel** and **Connect** permissions in that channel, or specify a channel: `{{prefix}}join <#channel>`"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Please join a voice channel first, or specify one: `{{prefix}}leave <#channel>`",
