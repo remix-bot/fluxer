@@ -196,7 +196,7 @@ export async function run(message, data) {
     return message.reply({ embeds: [embed] });
   }
 
-  this.players.initPlayer(message, cid);
+  return this.players.initPlayer(message, cid);
 }
 
 export const exportDef = {

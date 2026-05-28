@@ -788,6 +788,7 @@ export class PlayerManager {
     const channel = this.commands.client?.channels?.get(cid);
 
     if (!channel) {
+      cb(null);
       return message.reply(mkEmbed(
           this._t(message, "responses.join.channelNotFound", { channel: cid })
       ));
@@ -796,10 +797,12 @@ export class PlayerManager {
     const isVoice = channel.type === 2;
 
     if (!isVoice) {
+      cb(null);
       return message.reply(mkEmbed(this._t(message, "responses._common.voiceChannelRequired")));
     }
 
     if (!botHasVoicePermissions(this.commands?.client, cid)) {
+      cb(null);
       return message.reply(mkEmbed(
           this._t(message, "responses.join.joinFailedPerms", { channel: `<#${cleanId(cid)}>` })
       ));
@@ -814,6 +817,7 @@ export class PlayerManager {
       return message.reply(mkEmbed(this._t(message, "responses.join.alreadyJoined", { channel: cid })));
     }
     if (this._pendingJoins.has(cleanChannelId)) {
+      cb(null);
       return message.reply(mkEmbed(this._t(message, "responses.join.joining")));
     }
     this._pendingJoins.add(cleanChannelId);

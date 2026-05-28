@@ -210,7 +210,7 @@ export class MySqlSettingsManager extends SettingsManager {
       this._loadAttempts = (this._loadAttempts || 0) + 1;
       const delay = Math.min(1000 * Math.pow(2, this._loadAttempts - 1), 30_000);
       logger.error("[Settings] Init error (attempt", this._loadAttempts, "retrying in", delay + "ms):", res.error);
-      return setTimeout(() => { this.load().catch(err => logger.error("[Settings] Retry load error:", err?.message ?? err)); }, delay);
+      return new Promise((resolve) => { setTimeout(() => { this.load().then(resolve).catch(resolve); }, delay); });
     }
     this._loadAttempts = 0;
     res.results.forEach((r) => {

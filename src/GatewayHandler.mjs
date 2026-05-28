@@ -765,8 +765,10 @@ export class GatewayHandler {
       remix.voiceCache.updateUser({ guildId: guildId ?? prev?.guildId, userId, channelId, isBot: isBot === true });
     } else {
       const resolvedGuildId = guildId ?? prev?.guildId;
-      remix.voiceCache.deleteHumanUser(userId, resolvedGuildId);
-      remix.voiceCache.deleteBotUser(VoiceStateCache.userKey(resolvedGuildId, userId));
+      if (resolvedGuildId) {
+        remix.voiceCache.deleteHumanUser(userId, resolvedGuildId);
+        remix.voiceCache.deleteBotUser(VoiceStateCache.userKey(resolvedGuildId, userId));
+      }
     }
 
     const isBotUser = isBot === true && userId === client.user?.id;
@@ -814,9 +816,9 @@ export class GatewayHandler {
 
       if (remix.dashboard?.enabled) {
         try {
-          const userObj = data?.member?.user;
+          let userObj = data?.member?.user;
           if (!userObj) {
-            try { await client.users.fetch(userId).catch(() => {}); } catch (_) {}
+            try { userObj = await client.users.fetch(userId).catch(() => null); } catch (_) {}
           }
           if (userObj) {
             const details = {
@@ -975,7 +977,7 @@ export class GatewayHandler {
         }
 
         const set = remix.settingsMgr.getServer(guildId);
-        const raw = set.get("stay_247");
+        const raw = set?.get("stay_247");
         if ((rekeyed || existingPlayer) && raw && raw !== "none") {
           const channels = Array.isArray(raw)
               ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15))
@@ -1181,7 +1183,6 @@ export class GatewayHandler {
             `[Rejoin] Track publication failed for channel ${cleanChannelId} (attempt ${attempt}/${maxRetries}) — ` +
             `retrying in ${backoffMs / 1000}s: ${errMsg}`
         );
-        this._rejoinInProgress.delete(cleanChannelId);
 
         await new Promise(resolve => setTimeout(resolve, backoffMs));
 
@@ -1547,7 +1548,7 @@ export class GatewayHandler {
     }
 
     remix.settingsMgr.removeServer(guildId);
-    remix._announcementChannelCache.delete(guildId);
+    remix._announcementChannelCache?.delete(guildId);
 
     if (!batchMode) logger.guild(`[GuildDelete] Cleanup complete for server ${guildId}.`);
   }

@@ -805,8 +805,8 @@ export class Remix {
   async leaveChannel(channelId, guildId, message, force = false) {
     const cleanId = String(channelId).replace(/\D/g, "");
     const cleanGuildId = String(guildId).replace(/\D/g, "");
-    const set     = this.settingsMgr.getServer(guildId);
-    const raw     = set.get("stay_247");
+    const set     = this.settingsMgr.getServer(cleanGuildId);
+    const raw     = set?.get("stay_247");
 
     const channels = (!raw || raw === "none")
         ? new Set()
@@ -897,7 +897,7 @@ export class Remix {
 
     const shared = [];
 
-    for (const guild of this.client.guilds.values()) {
+    for (const guild of this.client.guilds?.values?.() ?? []) {
       let isMember = false;
 
       if (guild.members?.has?.(user.id)) {

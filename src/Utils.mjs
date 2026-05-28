@@ -100,7 +100,6 @@ export class Utils {
   static chunk(array, size) {
     if (!Array.isArray(array)) return [];
     const chunkSize = Math.max(1, Math.floor(size));
-    if (chunkSize < 1) return [];
     const chunks = [];
     for (let i = 0; i < array.length; i += chunkSize) {
       chunks.push(array.slice(i, i + chunkSize));
