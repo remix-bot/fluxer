@@ -700,7 +700,7 @@ export class GatewayHandler {
         return;
       }
 
-      logger.guild(`[GuildDelete] Removed from server ${guildId} — cleaning up.`);
+      logger.guild(`[GuildDelete] Received GuildDelete for server ${guildId}.`);
       this._processGuildDelete(guildId);
     });
 
@@ -1517,39 +1517,19 @@ export class GatewayHandler {
   _processGuildDelete(guildId) {
     const { remix } = this;
     const cleanGuildId = String(guildId).replace(/\D/g, "");
-    const batchMode = this._deferredDeleteCount > 3;
 
-    for (const [channelId, player] of remix.players.playerMap) {
-      if (String(player._guildId ?? "").replace(/\D/g, "") !== cleanGuildId) continue;
-
-      const is247 = player._is247Enabled();
-      const roomAlive = player.connection?.room?.isConnected ?? false;
-
-      if (is247 && roomAlive) {
-        if (!batchMode) {
-          logger.guild(
-              `[GuildDelete] Preserving 24/7 player for channel ${channelId} ` +
-              `(LiveKit room still connected — guild ${cleanGuildId} likely temporarily unavailable).`
-          );
-        }
-        continue;
-      }
-
-      remix.players.playerMap.delete(channelId);
-      try { player.leave().catch(() => {}); } catch (_) {}
-      try { player.destroy();               } catch (_) {}
-      if (!batchMode) logger.guild(`[GuildDelete] Destroyed player for channel ${channelId}.`);
-    }
+    logger.guild(
+        `[GuildDelete] Received GuildDelete for server ${guildId} — ` +
+        `skipping removal (24/7 removal system disabled). ` +
+        `Settings and players are preserved. If the server truly removed the bot, ` +
+        `the GuildCreate handler will re-initialise on re-invite.`
+    );
 
     remix.voiceCache.removeGuild(cleanGuildId);
     for (const [stateKey, info] of [...this._prevVoiceState]) {
       if (String(info.guildId).replace(/\D/g, "") === cleanGuildId)
         this._prevVoiceState.delete(stateKey);
     }
-
-    remix.settingsMgr.removeServer(guildId);
     remix._announcementChannelCache?.delete(guildId);
-
-    if (!batchMode) logger.guild(`[GuildDelete] Cleanup complete for server ${guildId}.`);
   }
 }
