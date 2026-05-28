@@ -523,6 +523,16 @@ export class FluxerRevoice extends EventEmitter {
       nativeConnection,
     });
 
+    room.on(RoomEvent.ConnectionStateChanged, (cs) => {
+      if (cs === ConnectionState.CONN_RECONNECTING || cs === 2) {
+        logger.player(`[FluxerRevoice] Room reconnecting for channel ${channelId}`);
+      } else if (cs === ConnectionState.CONN_CONNECTED || cs === 1) {
+        if (connection._destroyed) return;
+        connection._connected = true;
+        logger.player(`[FluxerRevoice] Room (re)connected for channel ${channelId}`);
+      }
+    });
+
     room.on(RoomEvent.Disconnected, (reason) => {
       const isIntentional = this._intentionalDisconnects.has(String(channelId));
       const reasonLabel = isIntentional ? "intentional" : (reason ?? "unexpected");

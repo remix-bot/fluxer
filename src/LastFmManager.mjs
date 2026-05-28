@@ -91,6 +91,7 @@ export class LastFmManager {
     this._hasBotIdColumn = false;
 
     this._userCache = new Map();
+    this._userCacheMax = 5000;
 
     this._totalScrobblesCache = null;
     this._totalScrobblesCacheExpiry = 0;
@@ -263,6 +264,10 @@ export class LastFmManager {
       scrobbleEnabled: !!row.scrobble,
     };
     this._userCache.set(userId, data);
+    while (this._userCache.size > this._userCacheMax) {
+      const oldestKey = this._userCache.keys().next().value;
+      this._userCache.delete(oldestKey);
+    }
     return data;
   }
 
@@ -277,6 +282,10 @@ export class LastFmManager {
     );
     const data = { sessionKey, username: username ?? "", scrobbleEnabled: true };
     this._userCache.set(userId, data);
+    while (this._userCache.size > this._userCacheMax) {
+      const oldestKey = this._userCache.keys().next().value;
+      this._userCache.delete(oldestKey);
+    }
 
     try {
       await pool.execute(

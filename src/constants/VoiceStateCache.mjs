@@ -96,26 +96,31 @@ export class VoiceStateCache {
       locations.delete(uKey);
       locations.set(uKey, { channelId: cleanChannel, guildId: cleanGuild, userId: cleanUser });
 
+      const lruIdx = lruKeys.indexOf(uKey);
+      if (lruIdx !== -1) lruKeys.splice(lruIdx, 1);
+      lruKeys.push(uKey);
+
       while (locations.size > maxEntries) {
-        const evictKey = locations.keys().next().value;
-        if (evictKey === uKey) {
-          const evictVal = locations.get(evictKey);
-          locations.delete(evictKey);
-          locations.set(evictKey, evictVal);
-          continue;
-        }
-        const evicted = locations.get(evictKey);
-        if (evicted) {
-          const evictCKey = VoiceStateCache.channelKey(evicted.guildId, evicted.channelId);
-          const evictSet  = channelIdx.get(evictCKey);
-          if (evictSet) {
-            evictSet.delete(evicted.userId);
-            if (evictSet.size === 0) channelIdx.delete(evictCKey);
+        let evicted = false;
+        for (let i = 0; i < lruKeys.length; i++) {
+          const evictKey = lruKeys[i];
+          if (evictKey === uKey) continue;
+
+          const evictEntry = locations.get(evictKey);
+          if (evictEntry) {
+            const evictCKey = VoiceStateCache.channelKey(evictEntry.guildId, evictEntry.channelId);
+            const evictSet  = channelIdx.get(evictCKey);
+            if (evictSet) {
+              evictSet.delete(evictEntry.userId);
+              if (evictSet.size === 0) channelIdx.delete(evictCKey);
+            }
+            locations.delete(evictKey);
           }
-          locations.delete(evictKey);
+          lruKeys.splice(i, 1);
+          evicted = true;
+          break;
         }
-        const lruIdx = lruKeys.indexOf(evictKey);
-        if (lruIdx !== -1) lruKeys.splice(lruIdx, 1);
+        if (!evicted) break;
       }
     } else {
       locations.delete(uKey);

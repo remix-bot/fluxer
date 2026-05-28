@@ -140,7 +140,12 @@ export class TrackOptionsManager {
 
     const safeAlias = TrackOptionsManager.sanitizeAlias(alias);
     const cacheKey = `${userId}:${identifier}:${safeAlias}`;
-    if (this._cache.has(cacheKey)) return this._cache.get(cacheKey);
+    if (this._cache.has(cacheKey)) {
+      const cached = this._cache.get(cacheKey);
+      this._cache.delete(cacheKey);
+      this._cache.set(cacheKey, cached);
+      return cached;
+    }
 
     try {
       const rows = await this._query(

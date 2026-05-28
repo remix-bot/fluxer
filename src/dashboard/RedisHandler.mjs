@@ -96,7 +96,7 @@ export class RedisHandler {
           logger.warn("[Redis/Subscriber] Info handler error:", e.message);
         }
       });
-      setInterval(() => {
+      this._pingInterval = setInterval(() => {
         this.send(this.platform + ":ping", "" + Date.now());
       }, 10000);
     } catch (e) {
@@ -161,6 +161,8 @@ export class RedisHandler {
    */
   async destroy() {
     this._destroyed = true;
+    if (this._pingInterval) { clearInterval(this._pingInterval); this._pingInterval = null; }
+    if (this._readyTimer) { clearTimeout(this._readyTimer); this._readyTimer = null; }
     try { await this.subscriber?.quit(); } catch (_) {}
     try { await this.client?.quit(); } catch (_) {}
     logger.redis("[Redis] Connections closed gracefully");

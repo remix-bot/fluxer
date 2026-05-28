@@ -2,11 +2,14 @@
  * Logger — configurable console output for Fluxer.
  *
  * Categories (all under config.logging):
- *   enabled       — master switch; false silences everything except errors
+ *   enabled       — master switch; false silences everything except errors and warns
+ *   warn          — when enabled=false, set true to keep showing warnings (default: hidden)
  *   player        — voice connect/disconnect, stream start, volume restore
  *   inactivity    — alone-check, inactivity timer, human detection
+ *   aloneCheck    — periodic alone-check scan logs (separate from inactivity)
  *   voice247      — 24/7 rejoin, auto-save channel, intentional leave skip
  *   voiceState    — raw VOICE_STATE_UPDATE events (human join/leave detection)
+ *   voice         — checkVoiceChannels debug logs
  *   mediaplayer   — MediaPlayer publish, LiveKit room state, connection recovery
  *   commands      — command load, module load, error IDs
  *   guild         — GuildCreate / GuildDelete lifecycle
@@ -52,7 +55,8 @@ export const logger = {
     console.error(`[${ts()}] ${tag}`, ...args);
   },
   warn(tag, ...args) {
-    if (_config?.enabled === false) return;
+    if (!_config) { console.warn(`[${ts()}] ${tag}`, ...args); return; }
+    if (_config.enabled === false && _config.warn !== true) return;
     console.warn(`[${ts()}] ${tag}`, ...args);
   },
   info(tag, ...args) {
@@ -71,7 +75,7 @@ export const logger = {
   settings(...args)    { if (isEnabled("settings"))     console.log(`[${ts()}]`, ...args); },
   worker(...args)      { if (isEnabled("worker"))       console.log(`[${ts()}]`, ...args); },
   moonlink(...args)    { if (isEnabled("moonlink"))     console.log(`[${ts()}]`, ...args); },
-  aloneCheck(...args)  { if (isEnabled("inactivity"))  console.log(`[${ts()}]`, ...args); },
+  aloneCheck(...args)  { if (isEnabled("aloneCheck"))  console.log(`[${ts()}]`, ...args); },
   voice(...args)       { if (isEnabled("voice"))        console.log(`[${ts()}]`, ...args); },
   dashboard(...args)   { if (isEnabled("dashboard"))    console.log(`[${ts()}]`, ...args); },
   redis(...args)       { if (isEnabled("redis"))        console.log(`[${ts()}]`, ...args); },

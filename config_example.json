@@ -59,16 +59,6 @@
     }
   },
   "radio": [],
-  "cache": {
-    "guilds": {
-      "enabled": true,
-      "max": 5000
-    },
-    "members": {
-      "enabled": true,
-      "max": 10000
-    }
-  },
   "helpCatalog": true,
   "helpPagination": true,
   "mysql": {
@@ -120,8 +110,10 @@
     "enabled": true,
     "player":      true,
     "inactivity":  true,
+    "aloneCheck":  true,
     "voiceState":  true,
     "voice247":    true,
+    "voice":       false,
     "mediaplayer": false,
     "commands":    true,
     "guild":       true,

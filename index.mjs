@@ -594,6 +594,7 @@ export class Remix {
         }
         if (typeof wsObj.addEventListener === "function") {
           wsObj.addEventListener("error", (event) => {
+            if (typeof event.preventDefault === "function") event.preventDefault();
             const err = event?.error ?? event?.message ?? event;
             logWsError(label, err);
           });

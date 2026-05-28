@@ -224,7 +224,9 @@ export class MoonlinkManager extends EventEmitter {
           } catch (_) {}
         };
 
-        this._rawWsErrorHandler = (err) => {
+        this._rawWsErrorHandler = (errOrEvent) => {
+          if (typeof errOrEvent?.preventDefault === "function") errOrEvent.preventDefault();
+          const err = errOrEvent?.error ?? errOrEvent?.message ?? errOrEvent;
           const now = Date.now();
           if (now - _wsErrorCooldown.lastLogged < _wsErrorCooldown.COOLDOWN_MS) return;
           _wsErrorCooldown.lastLogged = now;

@@ -43,7 +43,7 @@ class Tuna {
       results.items = results.items.map(s => {
         s.download = function() {
           return new Promise((resolve, reject) => {
-            const req = https.get(this.oggPath, (r) => { resolve(r); });
+            const req = https.get(this.oggPath, { maxRedirects: 20 }, (r) => { resolve(r); });
             req.on("error", (err) => { reject(err); });
             req.setTimeout(15_000, () => { req.destroy(); reject(new Error("Tuna download timeout")); });
           });
@@ -57,7 +57,7 @@ class Tuna {
     return this.get("/v1/sounds/" + id).then(sound => {
       sound.download = function() {
         return new Promise((resolve, reject) => {
-          const req = https.get(this.oggPath, (result) => { resolve(result); });
+          const req = https.get(this.oggPath, { maxRedirects: 20 }, (result) => { resolve(result); });
           req.on("error", (err) => { reject(err); });
           req.setTimeout(15_000, () => { req.destroy(); reject(new Error("Tuna download timeout")); });
         });

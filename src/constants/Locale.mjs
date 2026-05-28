@@ -25,6 +25,8 @@ export class Locale {
     this.defaultLocale = "en";
     /** settingsMgr reference — set after construction via bind() */
     this.settingsMgr = null;
+    /** Maximum guild locale cache size */
+    this._maxResolvedCache = 5000;
   }
 
   /**
@@ -108,6 +110,12 @@ export class Locale {
 
     const data = this.locales.get(code) ?? this.locales.get(this.defaultLocale) ?? {};
     this._resolved.set(guildId, data);
+
+    while (this._resolved.size > this._maxResolvedCache) {
+      const oldestKey = this._resolved.keys().next().value;
+      this._resolved.delete(oldestKey);
+    }
+
     return data;
   }
 

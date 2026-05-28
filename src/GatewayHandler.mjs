@@ -501,7 +501,9 @@ export class GatewayHandler {
           } catch (_) {}
         };
 
-        remix._rawGatewayErrorHandler = (err) => {
+        remix._rawGatewayErrorHandler = (errOrEvent) => {
+          if (typeof errOrEvent?.preventDefault === "function") errOrEvent.preventDefault();
+          const err = errOrEvent?.error ?? errOrEvent?.message ?? errOrEvent;
           const now = Date.now();
           if (now - _wsErrorCooldown.lastLogged < _wsErrorCooldown.COOLDOWN_MS) return;
           _wsErrorCooldown.lastLogged = now;

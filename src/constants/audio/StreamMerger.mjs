@@ -69,8 +69,11 @@ class StreamMerger extends Transform {
       open.pipes.push(pipeNumber);
       open.available = true;
       const idx = open.children.findIndex(c => c === node);
-      if (idx === -1) throw new Error("Impossible case detected. Damaged node structure.");
-      open.children.splice(idx, 1);
+      if (idx === -1) {
+        logger.warn("[StreamMerger] Damaged node structure — child not found in parent on exit.");
+      } else {
+        open.children.splice(idx, 1);
+      }
     });
   }
 }

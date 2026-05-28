@@ -98,10 +98,12 @@ export class Utils {
    * @returns {T[][]} Array of chunks
    */
   static chunk(array, size) {
-    if (!Array.isArray(array) || size < 1) return [];
+    if (!Array.isArray(array)) return [];
+    const chunkSize = Math.max(1, Math.floor(size));
+    if (chunkSize < 1) return [];
     const chunks = [];
-    for (let i = 0; i < array.length; i += size) {
-      chunks.push(array.slice(i, i + size));
+    for (let i = 0; i < array.length; i += chunkSize) {
+      chunks.push(array.slice(i, i + chunkSize));
     }
     return chunks;
   }
@@ -140,15 +142,33 @@ export class Utils {
   static cleanTitle(title) {
     if (!title || typeof title !== "string") return "Unknown";
 
-    return title
-        .replace(/\s*[\(\[][^\)\]]*(?:feat|ft|featuring|remix|edit|version|prod|official|audio|video|lyrics|visualizer)[^\)\]]*[\)\]]/gi, "")
+    let cleaned = title;
+    for (let pass = 0; pass < 3; pass++) {
+      const prev = cleaned;
+      cleaned = cleaned
+          .replace(/\s*\([^()]*\)/g, (match) => {
+            const inner = match.toLowerCase();
+            if (/(?:feat|ft|featuring|remix|edit|version|prod|official|audio|video|lyrics|visualizer|deluxe|explicit|clean|radio|instrumental|acoustic|extended|mono|stereo|remaster)/.test(inner)) {
+              return "";
+            }
+            return match;
+          })
+          .replace(/\s*\[[^\[\]]*\]/g, (match) => {
+            const inner = match.toLowerCase();
+            if (/(?:feat|ft|featuring|remix|edit|version|prod|official|audio|video|lyrics|visualizer|deluxe|explicit|clean|radio|instrumental|acoustic|extended|remaster)/.test(inner)) {
+              return "";
+            }
+            return match;
+          });
+      if (cleaned === prev) break;
+    }
+
+    return cleaned
         .replace(/\s*-\s*(?:feat|ft|featuring)\.?.*/gi, "")
         .replace(/\s*\|.*$/g, "")
         .replace(/\s*【.*?】/g, "")
-        .replace(/\s*\[.*?\]/g, "")
-        .replace(/\s*\(.*?\)/g, "")
         .replace(/\s{2,}/g, " ")
-        .trim();
+        .trim() || "Unknown";
   }
 
   /**
@@ -178,7 +198,8 @@ export class Utils {
         .replace(/\*/g, "\\*")
         .replace(/_/g, "\\_")
         .replace(/~/g, "\\~")
-        .replace(/\|/g, "\\|");
+        .replace(/\|/g, "\\|")
+        .replace(/>/g, "\\>");
   }
 
   /**
@@ -188,7 +209,7 @@ export class Utils {
    */
   static formatNumber(num) {
     if (num === null || num === undefined || isNaN(num)) return "0";
-    return num.toLocaleString();
+    return num.toLocaleString("en-US");
   }
 
   /**
@@ -239,12 +260,14 @@ export class Utils {
   }
 
   /**
-   * Check if a string represents a finite number
-   * @param {string} str
+   * Check if a value represents a finite number
+   * @param {string|number} str
    * @returns {boolean}
    */
   static isNumber(str) {
     if (str === null || str === undefined || str === "") return false;
+    if (typeof str === "number") return !isNaN(str) && isFinite(str);
+    if (typeof str !== "string") return false;
     return !isNaN(str) && isFinite(str);
   }
 
