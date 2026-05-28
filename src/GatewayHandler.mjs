@@ -1401,10 +1401,11 @@ export class GatewayHandler {
         try {
           const set = remix.settingsMgr.getServer(guildId);
           if (set) {
-            remove247ChannelMode(set, channelId);
             const raw = set.get("stay_247");
             const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
             const filtered = arr.filter(id => id && id !== "none" && String(id).replace(/\D/g, "") !== channelId);
+            const remainingSet = new Set(filtered.map(id => String(id).replace(/\D/g, "")));
+            remove247ChannelMode(set, channelId, remainingSet);
             set.set("stay_247", filtered.length > 0 ? filtered : "none");
           }
         } catch (cleanupErr) {

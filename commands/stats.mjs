@@ -167,7 +167,7 @@ export async function run(message) {
   const lastfmEnabled = lastfm?.enabled ?? false;
 
   const shared = {
-    guildCount:    cachedGuildCount ?? this.client.guilds.size,
+    guildCount:    cachedGuildCount ?? this.client.guilds?.size ?? 0,
     playerCount:   getLivePlayerCount(this.players.playerMap),
     scrobbleCount: 0,
     linkedUsers:   0,

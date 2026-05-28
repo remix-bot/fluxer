@@ -58,7 +58,7 @@ export function remove247ChannelMode(set, channelId, currentChannels) {
   if (!modes || typeof modes !== "object" || Array.isArray(modes)) return;
   delete modes[channelId];
   set.set("stay_247_modes", modes);
-  if (currentChannels.size === 0) {
+  if (!currentChannels || currentChannels.size === 0) {
     set.set("stay_247_mode", "off");
   } else {
     const firstChannel = [...currentChannels][0];
