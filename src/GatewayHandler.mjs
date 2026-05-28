@@ -1,6 +1,6 @@
 import { Events, GatewayOpcodes } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
-import { logger } from "./constants/Logger.mjs";
+import { logger, _wsErrorCooldown } from "./constants/Logger.mjs";
 import { ServerSettings } from "./Settings.mjs";
 import { get247ChannelMode, remove247ChannelMode } from "./constants/Helpers247.mjs";
 import { VoiceStateCache } from "./constants/VoiceStateCache.mjs";
@@ -502,6 +502,9 @@ export class GatewayHandler {
         };
 
         remix._rawGatewayErrorHandler = (err) => {
+          const now = Date.now();
+          if (now - _wsErrorCooldown.lastLogged < _wsErrorCooldown.COOLDOWN_MS) return;
+          _wsErrorCooldown.lastLogged = now;
           logger.warn("[Gateway] Raw WS socket error (will reconnect):", err?.message ?? err);
         };
         remix._rawGatewayMessageListener = (event) => remix._rawGatewayHandler(event?.data ?? event);

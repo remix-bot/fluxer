@@ -5,7 +5,7 @@
  */
 
 import { Manager } from "moonlink.js";
-import { logger } from "./constants/Logger.mjs";
+import { logger, _wsErrorCooldown } from "./constants/Logger.mjs";
 import { EventEmitter } from "node:events";
 import { Events } from "@fluxerjs/core";
 
@@ -225,6 +225,9 @@ export class MoonlinkManager extends EventEmitter {
         };
 
         this._rawWsErrorHandler = (err) => {
+          const now = Date.now();
+          if (now - _wsErrorCooldown.lastLogged < _wsErrorCooldown.COOLDOWN_MS) return;
+          _wsErrorCooldown.lastLogged = now;
           logger.warn("[MoonlinkManager] Raw WS socket error (will reconnect):", err?.message ?? err);
         };
         this._rawWsMessageListener = (event) => this._rawWsHandler(event?.data ?? event);

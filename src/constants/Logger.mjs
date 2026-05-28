@@ -39,6 +39,14 @@ function ts() {
   return new Date().toISOString().replace("T", " ").slice(0, 19);
 }
 
+/**
+ * Shared cooldown state for WebSocket transport error logging.
+ * Prevents the same WS close event from being logged by multiple
+ * listeners (shard handler, GatewayHandler, MoonlinkManager).
+ * All three share this timestamp so only the first logs.
+ */
+export const _wsErrorCooldown = { lastLogged: 0, COOLDOWN_MS: 15_000 };
+
 export const logger = {
   error(tag, ...args) {
     console.error(`[${ts()}] ${tag}`, ...args);

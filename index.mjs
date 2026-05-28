@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import path from "path";
-import { initLogger, logger } from "./src/constants/Logger.mjs";
+import { initLogger, logger, _wsErrorCooldown } from "./src/constants/Logger.mjs";
 import { Client, Events, EmbedBuilder } from "@fluxerjs/core";
 import { get247ChannelMode, remove247ChannelMode } from "./src/constants/Helpers247.mjs";
 import { CommandHandler, CommandLoader, PrefixManager } from "./src/CommandHandler.mjs";
@@ -577,13 +577,10 @@ export class Remix {
       const wsManager = this.client?.ws;
       if (!wsManager) return;
 
-      const lastLogged = { _ts: 0 };
-      const LOG_COOLDOWN = 15_000;
-
       const logWsError = (label, err) => {
         const now = Date.now();
-        if (now - lastLogged._ts < LOG_COOLDOWN) return;
-        lastLogged._ts = now;
+        if (now - _wsErrorCooldown.lastLogged < _wsErrorCooldown.COOLDOWN_MS) return;
+        _wsErrorCooldown.lastLogged = now;
         logger.warn(`[WS] ${label} transport error (auto-recovering): ${err?.message ?? err}`);
       };
 
