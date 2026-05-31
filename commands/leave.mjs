@@ -76,7 +76,7 @@ export async function run(msg, data) {
     return msg.reply(embed(
         this.t(msg, "responses.leave.specifyChannel", {
           channels: channelList.map(c => `• ${c}`).join("\n"),
-          prefix: this._commands.getPrefix(msg.message?.guildId ?? msg.channel?.guild?.id)
+          prefix: this.handler.getPrefix(msg.message?.guildId ?? msg.channel?.guild?.id)
         })
     ));
   }
@@ -135,7 +135,7 @@ export async function run(msg, data) {
     player.destroy();
 
     if (mode === "auto") {
-      msg.reply(embed(this.t(msg, "responses.leave.leftRejoin247", { channel: targetChannelId, prefix: this._commands.getPrefix(msg.message?.guildId ?? msg.channel?.guild?.id) })));
+      msg.reply(embed(this.t(msg, "responses.leave.leftRejoin247", { channel: targetChannelId, prefix: this.handler.getPrefix(msg.message?.guildId ?? msg.channel?.guild?.id) })));
       const leave247Delay = this.config?.timers?.leave247RejoinDelay ?? 5000;
       setTimeout(() => {
         if (this._spawnPlayer) {
@@ -171,7 +171,7 @@ export async function run(msg, data) {
         }
       }
     } else {
-      msg.reply(embed(this.t(msg, "responses.leave.left247On", { prefix: this._commands.getPrefix(msg.message?.guildId ?? msg.channel?.guild?.id) })));
+      msg.reply(embed(this.t(msg, "responses.leave.left247On", { prefix: this.handler.getPrefix(msg.message?.guildId ?? msg.channel?.guild?.id) })));
 
       if (other247AutoChannels.length > 0) {
         const rejoinDelay = this.config?.timers?.leave247RejoinDelay ?? 5000;

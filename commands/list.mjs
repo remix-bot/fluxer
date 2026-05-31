@@ -24,7 +24,7 @@ export async function run(message, data) {
   const totalTracks = p.queue.size();
 
   if (!current && totalTracks === 0) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.list.empty", { prefix: this._commands.getPrefix(message.message?.guildId ?? message.channel?.guildId) }));
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.list.empty", { prefix: this.handler.getPrefix(message.message?.guildId ?? message.channel?.guildId) }));
     return message.reply({ embeds: [embed] });
   }
 

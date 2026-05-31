@@ -85,7 +85,7 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
 
     if (is247 && (mode247 === "on" || mode247 === "auto")) {
       const rejoinDelay = this.config?.timers?.rejoin247Delay ?? 3_000;
-      const prefix = this._commands.getPrefix(guildId);
+      const prefix = this.handler.getPrefix(guildId);
       const embed = new EmbedBuilder().setColor(getGlobalColor())
           .setDescription(this.t(message, "responses.join.autoLeaveInactive247", { channel: activeChannelId, prefix }));
       message.channel.send({ embeds: [embed] }).catch(() => {});
@@ -185,7 +185,7 @@ export async function run(message, data) {
   const cid = this.players.checkVoiceChannels(message);
 
   if (!cid) {
-    const prefix = this._commands.getPrefix(getGuildId(message));
+    const prefix = this.handler.getPrefix(getGuildId(message));
     const embed = new EmbedBuilder().setColor(getGlobalColor())
         .setDescription(this.t(message, "responses.join.noVoiceChannel", { prefix }));
     return message.reply({ embeds: [embed] });
