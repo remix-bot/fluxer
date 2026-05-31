@@ -60,8 +60,8 @@
     "pause": "إيقاف التشغيل مؤقتاً في قناتك الصوتية.",
     "play": "شغّل أغنية أو قائمة تشغيل من رابط أو استعلام بحث.\nيدعم يوتيوب وسبوتيفاي وساوندكلاود ودييزر وآبل ميوزيك وتايدال والمزيد.\nالبحث الافتراضي: YouTube Music. استخدم `-p <المزود>` أو بادئة مضمنة مثل `sp: blinding lights`.",
     "player": "أنشئ لوحة تحكم تشغيل تفاعلية مع تقدم مباشر.",
-    "playnext": "مثل %play لكنه يضيف النتيجة إلى أعلى قائمة الانتظار.",
-    "radio": "شغّل محطة إذاعية. استخدم `%radio list` لتصفح جميع المحطات.",
+    "playnext": "مثل $prefixplay لكنه يضيف النتيجة إلى أعلى قائمة الانتظار.",
+    "radio": "شغّل محطة إذاعية. استخدم `$prefixradio list` لتصفح جميع المحطات.",
     "reload": "إعادة تحميل الأوامر أو وحدات src أو وحدات audio. اتركه فارغاً لعرض جميع الأهداف.",
     "remove": "أزل أغنية محددة من قائمة الانتظار.",
     "resume": "استئناف التشغيل في قناتك الصوتية.",
@@ -274,7 +274,7 @@
       "description": "أضف Remix إلى خادمك مباشرة من [FluxerList](<https://fluxerlist.com/bots/remix>).\n\nانضم إلى مجتمعنا على [fluxer.gg/remix](https://fluxer.gg/remix) للحصول على الدعم والتحديثات والتعليقات المباشرة."
     },
     "join": {
-      "channelNotFound": "لم أتمكن من العثور على القناة `{{channel}}`\nاستخدم أمر المساعدة لمعرفة المزيد. (`%help join`)",
+      "channelNotFound": "لم أتمكن من العثور على القناة `{{channel}}`\nاستخدم أمر المساعدة لمعرفة المزيد. (`$prefixhelp join`)",
       "alreadyJoined": "منضم بالفعل إلى <#{{channel}}>.",
       "audioNodeConnecting": "⚠️ عقدة الصوت لا تزال تتصل — يرجى المحاولة مرة أخرى بعد بضع ثوانٍ.",
       "joining": "⏳ جارٍ الانضمام إلى القناة...",
@@ -416,9 +416,9 @@
       "stationsTitle": "📻 **المحطات الإذاعية (صفحة {{page}}/{{total}})**",
       "timedOut": "📻 انتهت مهلة اختيار الإذاعة.",
       "cancelled": "❌ تم إلغاء اختيار الإذاعة.",
-      "unknownStation": "❌ محطة غير معروفة `{{station}}`. المتاحة: {{stations}}\n\nاستخدم `%radio list` للتصفح.",
+      "unknownStation": "❌ محطة غير معروفة `{{station}}`. المتاحة: {{stations}}\n\nاستخدم `$prefixradio list` للتصفح.",
       "nowPlaying": "📻 بث مباشر _{{title}}_ لـ [{{author}}]({{url}}) في <#{{channel}}>",
-      "skipHint": "_استخدم `%skip` لإيقاف الإذاعة، أو `%radio list` لتبديل المحطات._",
+      "skipHint": "_استخدم `$prefixskip` لإيقاف الإذاعة، أو `$prefixradio list` لتبديل المحطات._",
       "prevNext": "⬅️ السابق   ➡️ التالي   ❌ إلغاء"
     },
     "reload": {
@@ -429,9 +429,9 @@
       "reloaded": "✅ `{{name}}`",
       "fileNotFound": "❌ الملف غير موجود: `{{label}}`",
       "moduleError": "❌ `{{label}}`: {{error}}",
-      "unknownTarget": "❌ هدف غير معروف `{{target}}`.\nشغّل `%reload` بدون وسائط لعرض جميع الأهداف القابلة لإعادة التحميل.",
+      "unknownTarget": "❌ هدف غير معروف `{{target}}`.\nشغّل `$prefixreload` بدون وسائط لعرض جميع الأهداف القابلة لإعادة التحميل.",
       "availableTargetsTitle": "🔄 إعادة التحميل — الأهداف المتاحة",
-      "runHint": "شغّل `%reload <هدف>` أو استخدم كلمة دفعية:",
+      "runHint": "شغّل `$prefixreload <هدف>` أو استخدم كلمة دفعية:",
       "batchKeywords": "`all` · `commands` · `src` · `audio`",
       "resultsHeader": "✅ **{{ok}}** تمت إعادة التحميل · ❌ **{{bad}}** فشل"
     },

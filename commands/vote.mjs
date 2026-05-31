@@ -96,7 +96,7 @@ function buildVotersEmbed(voters, total, page, limit, type, resourceId, expired 
 
 export async function run(msg, data) {
   const fluxerlist = this.fluxerlist;
-  const prefix = this.handler?.getPrefix?.(msg.message?.guildId) ?? "%";
+  const prefix = this.handler.getPrefix(msg.message?.guildId);
   const action = data.get("action")?.value ?? "info";
   const type = data.get("type")?.value ?? "bot";
   const resourceId = data.get("id")?.value || null;

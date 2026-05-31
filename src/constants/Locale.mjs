@@ -25,6 +25,8 @@ export class Locale {
     this.defaultLocale = "en";
     /** settingsMgr reference — set after construction via bind() */
     this.settingsMgr = null;
+    /** getPrefix callback — set by CommandHandler so prefix logic lives in one place */
+    this._getPrefixFn = null;
     /** Maximum guild locale cache size */
     this._maxResolvedCache = 5000;
   }
@@ -132,6 +134,33 @@ export class Locale {
   }
 
   /**
+   * Set the prefix resolver callback. Called once by CommandHandler at startup
+   * so that all prefix resolution goes through CommandHandler.getPrefix().
+   * @param {(guildId: string) => string} fn
+   */
+  setPrefixResolver(fn) {
+    this._getPrefixFn = fn;
+  }
+
+  /**
+   * Get the per-guild prefix. Delegates to CommandHandler.getPrefix() when
+   * available, otherwise falls back to a direct settings lookup.
+   * @param {string} guildId
+   * @returns {string}
+   */
+  _getPrefix(guildId) {
+    if (this._getPrefixFn) return this._getPrefixFn(guildId);
+    try {
+      const serverSettings = this.settingsMgr?.getServer?.(guildId);
+      if (serverSettings) {
+        const prefix = serverSettings.get("prefix");
+        if (prefix) return prefix;
+      }
+    } catch (_) {}
+    return "%";
+  }
+
+  /**
    * Look up a dotted key in a nested object.
    * @param {Object} obj
    * @param {string} key  e.g. "responses.play.noResults"
@@ -173,6 +202,11 @@ export class Locale {
         new RegExp(`\\{\\{${escaped}\\}\\}`, "g"),
         String(val ?? "")
       );
+    }
+
+    if (value.includes("$prefix")) {
+      const prefix = this._getPrefix(guildId);
+      value = value.replace(/\$prefix/gi, prefix);
     }
 
     return value;

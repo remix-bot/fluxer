@@ -362,6 +362,7 @@ export default class Player extends EventEmitter {
     this.config       = opts.config ?? {};
     this.settings     = opts.settings ?? null;
     this.settingsMgr  = opts.settingsMgr ?? null;
+    this._getPrefix   = opts.getPrefix ?? null;
     this._observedVoiceUsers = opts.observedVoiceUsers ?? null;
     this._voiceCache          = opts.voiceCache ?? null;
     this.locale       = opts.locale ?? null;
@@ -414,9 +415,9 @@ export default class Player extends EventEmitter {
    * Get the 24/7 mode for this player's channel.
    * Returns "auto", "on", or "off".
    *
-   *   %247 auto: bot stays in voice always (never leaves, auto-rejoins on disconnect + reboot)
-   *   %247 on:   bot stays in voice always (never leaves due to inactivity, rejoins on reboot)
-   *   %247 off:  bot leaves when inactive
+   *   $prefix247 auto: bot stays in voice always (never leaves, auto-rejoins on disconnect + reboot)
+   *   $prefix247 on:   bot stays in voice always (never leaves due to inactivity, rejoins on reboot)
+   *   $prefix247 off:  bot leaves when inactive
    */
   _get247Mode() {
     if (!this._guildId) return "off";
@@ -1389,13 +1390,7 @@ export default class Player extends EventEmitter {
       this._queueEndedSent = true;
       this.emit("queueEnd");
       if (!this._autoplay) {
-        const prefix = (() => {
-          try {
-            return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
-                ?? this.settings?.get?.("prefix")
-                ?? "%";
-          } catch (_) { return "%"; }
-        })();
+        const prefix = this._getPrefix?.(this._guildId) ?? "%";
         this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
       }
     }
@@ -1432,13 +1427,7 @@ export default class Player extends EventEmitter {
       this._queueEndedSent = true;
       this.emit("queueEnd");
       if (!this._autoplay) {
-        const prefix = (() => {
-          try {
-            return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
-                ?? this.settings?.get?.("prefix")
-                ?? "%";
-          } catch (_) { return "%"; }
-        })();
+        const prefix = this._getPrefix?.(this._guildId) ?? "%";
         this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
       }
     }
@@ -2131,13 +2120,7 @@ export default class Player extends EventEmitter {
 
       if (!this._wasRadio && !this._queueEndedSent && !this._autoplay) {
         this._queueEndedSent = true;
-        const prefix = (() => {
-          try {
-            return this.settingsMgr?.getServer?.(this._guildId)?.get?.("prefix")
-                ?? this.settings?.get?.("prefix")
-                ?? "%";
-          } catch (_) { return "%"; }
-        })();
+        const prefix = this._getPrefix?.(this._guildId) ?? "%";
         this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
       }
       this._wasRadio = false;

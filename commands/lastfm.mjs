@@ -139,7 +139,7 @@ function extractPeriod(data, msg) {
 
 /**
  * Resolve a Last.fm category (loved/top/recent/playlist) into playable tracks.
- * Shared between `%lastfm play <cat>` and `%play lastfm:<cat>`.
+ * Shared between `$prefixlastfm play <cat>` and `$prefixplay lastfm:<cat>`.
  *
  * @param {object} ctx     - The command `this` context (has .lastfm, .getPlayer, .handler, .t)
  * @param {object} msg     - The message object
@@ -153,7 +153,7 @@ function extractPeriod(data, msg) {
  */
 export async function playLastFmCategory(ctx, msg, userId, category, options = {}) {
   const lastfm = ctx.lastfm;
-  const prefix = ctx.handler?.getPrefix?.(msg.message?.guildId) ?? "%";
+  const prefix = ctx.handler.getPrefix(msg.message?.guildId);
   const resolveProvider = options.resolveProvider || "yt";
 
   if (!lastfm || !lastfm.enabled) return msg.reply(notConfigured(ctx, msg));
@@ -332,7 +332,7 @@ export async function run(msg, data) {
   const lastfm = this.lastfm;
   if (!lastfm || !lastfm.enabled) return msg.reply(notConfigured(this, msg));
 
-  const prefix = this.handler?.getPrefix?.(msg.message?.guildId) ?? "%";
+  const prefix = this.handler.getPrefix(msg.message?.guildId);
   const action = data.get("action")?.value ?? "profile";
   const userId = msg.message?.author?.id ?? msg.author?.id;
   const targetUserId = data.get("user")?.value ?? null;

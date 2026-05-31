@@ -5,7 +5,7 @@
  *   - Auth flow (desktop API: get token → user authorizes → get session)
  *   - Now-playing notification (track.scrobble with timestamp=0)
  *   - Full scrobble after threshold (50% of track or 4 min, whichever is less)
- *   - Fetch loved / top / recent tracks for %play lastfm loved/top/recent
+ *   - Fetch loved / top / recent tracks for $prefixplay lastfm loved/top/recent
  *   - Per-user session key storage in MySQL table `lastfm_users`
  *
  * Last.fm API docs: https:
@@ -496,7 +496,7 @@ export class LastFmManager {
   }
 
   /**
-   * Get track info (play count, tags, etc.) for the %np embed.
+   * Get track info (play count, tags, etc.) for the $prefixnp embed.
    */
   async getTrackInfo(artist, track, userId = null) {
     if (!this.enabled) return null;
@@ -571,7 +571,7 @@ export class LastFmManager {
 
   /**
    * Search Last.fm for a freeform track query and return the best match.
-   * Useful for `%play lastfm: kendrick lamar luther` where artist/title
+   * Useful for `$prefixplay lastfm: kendrick lamar luther` where artist/title
    * boundaries are ambiguous.
    *
    * @param {string} query
@@ -1400,7 +1400,7 @@ export class LastFmManager {
       const playlists = await this.getPlaylists(userId);
       const idx = +playlistId - 1;
       if (idx < 0 || idx >= playlists.length) {
-        throw new Error(`Playlist #${playlistId} not found. You have ${playlists.length} playlist(s). Use \`%lastfm playlists\` to see them.`);
+        throw new Error(`Playlist #${playlistId} not found. You have ${playlists.length} playlist(s). Use the lastfm playlists command to see them.`);
       }
       playlistUrl = playlists[idx].url;
     } else if (String(playlistId).startsWith("http")) {
@@ -1476,7 +1476,7 @@ export class LastFmManager {
   }
 
   /**
-   * Get the user's top albums (for %lastfm play albums).
+   * Get the user's top albums (for $prefixlastfm play albums).
    * @param {string} userId
    * @param {string} [period="overall"] - overall | 7day | 1month | 3month | 6month | 12month
    * @param {number} [limit=20]
@@ -1567,7 +1567,7 @@ export class LastFmManager {
         tracks = tracks.filter(t => !t.now);
         break;
       case "playlist":
-        if (!options.playlistId) throw new Error("Playlist ID required. Use `%lastfm playlists` to see your playlists, then `%lastfm play playlist <number>`.");
+        if (!options.playlistId) throw new Error("Playlist ID required. Use the lastfm playlists command to see your playlists, then use the lastfm play playlist command with a number.");
         tracks = await this.getPlaylistTracks(userId, options.playlistId, limit);
         break;
       case "albums":

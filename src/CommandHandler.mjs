@@ -412,7 +412,7 @@ export class CommandHandler extends EventEmitter {
   _cmdCooldowns = new Map();
   _cmdCooldownMs = 1500;
 
-  constructor(handler, prefix = "!") {
+  constructor(handler, prefix = "%") {
     super();
     this.messages = handler;
     this.client = handler.client;

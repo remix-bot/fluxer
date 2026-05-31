@@ -103,7 +103,7 @@
   "owners": ["user id for owner-only commands", "another user id"],
   "playerAFKTimeout": 60000,
   "Comment": "The above specifies the time in ms after which a player goes inactive; Optional.",
-  "customStatsFooter": "Text shown in the footer of the %stats embed; optional.",
+  "customStatsFooter": "Text shown in the footer of the $prefixstats embed; optional.",
   "embedColor": "0xe9196c",
   "logging": {
     "Comment": "Control which log categories appear in the console. Set 'enabled' to false to silence everything except errors. Set any category to false to silence just that group.",

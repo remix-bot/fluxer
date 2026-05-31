@@ -15,10 +15,10 @@
     "prefix": "The prefix used to trigger commands.",
     "pfp": "What profile picture the bot should use. Presets: `default | dark | light | mono | <custom url>`.",
     "locale": "The preferred language of your server.",
-    "stay_247": "24/7 saved voice channels for this server. Supports multiple channels and is managed automatically by %247 — do not edit manually.",
+    "stay_247": "24/7 saved voice channels for this server. Supports multiple channels and is managed automatically by $prefix247 — do not edit manually.",
     "stay_247_mode": "Legacy guild-wide 24/7 mode. Superseded by stay_247_modes (per-channel). Kept for backward compatibility.",
-    "stay_247_modes": "Per-channel 24/7 mode map. Format: {\"channelId\": \"on\"|\"auto\"|\"off\"}. Managed automatically by %247 — do not edit manually.",
-    "volume": "The default playback volume for this server (1-200). Saved automatically when you use %volume. Restored every time the bot joins a channel.",
+    "stay_247_modes": "Per-channel 24/7 mode map. Format: {\"channelId\": \"on\"|\"auto\"|\"off\"}. Managed automatically by $prefix247 — do not edit manually.",
+    "volume": "The default playback volume for this server (1-200). Saved automatically when you use $prefixvolume. Restored every time the bot joins a channel.",
     "announcementChannelId": "The channel where song announcements are sent. Managed automatically — do not edit manually."
   }
 }

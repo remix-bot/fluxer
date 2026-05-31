@@ -61,8 +61,8 @@
     "pause": "Ses kanalınızdaki çalmayı duraklatın.",
     "play": "Bir URL veya arama sorgusundan şarkı veya çalma listesi çalın.\nYouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal ve daha fazlasını destekler.\nVarsayılan arama: YouTube Music. `-p <sağlayıcı>` veya `sp: blinding lights` gibi satır içi önek kullanın.",
     "player": "Canlı ilerleme çubuğlu etkileşimli bir oynatıcı kontrol paneli oluşturun.",
-    "playnext": "%play ile aynıdır, ancak sonucu kuyruğun en üstüne ekler.",
-    "radio": "Bir radyo istasyonu çalın. Tüm istasyonları görüntülemek için `%radio list` kullanın.",
+    "playnext": "$prefixplay ile aynıdır, ancak sonucu kuyruğun en üstüne ekler.",
+    "radio": "Bir radyo istasyonu çalın. Tüm istasyonları görüntülemek için `$prefixradio list` kullanın.",
     "reload": "Komutları, kaynak modüllerini veya ses modüllerini yeniden yükleyin. Tüm hedefleri görmek için boş bırakın.",
     "remove": "Kuyruktan belirli bir şarkıyı kaldırın.",
     "resume": "Ses kanalınızdaki çalmayı devam ettirin.",
@@ -274,7 +274,7 @@
       "description": "Remix'i doğrudan [FluxerList](<https://fluxerlist.com/bots/remix>) üzerinden sunucunuza ekleyin.\n\nDestek, güncellemeler ve doğrudan geri bildirim için [fluxer.gg/remix](https://fluxer.gg/remix) topluluğumuza katılın."
     },
     "join": {
-      "channelNotFound": "`{{channel}}` kanalı bulunamadı\nBu komut hakkında daha fazla bilgi için yardım komutunu kullanın. (`%help join`)",
+      "channelNotFound": "`{{channel}}` kanalı bulunamadı\nBu komut hakkında daha fazla bilgi için yardım komutunu kullanın. (`$prefixhelp join`)",
       "alreadyJoined": "Zaten <#{{channel}}> kanalına katıldınız.",
       "audioNodeConnecting": "⚠️ Ses düğümü hala bağlanıyor — lütfen birkaç saniye sonra tekrar deneyin.",
       "joining": "⏳ Kanala katılıyor...",
@@ -513,9 +513,9 @@
       "stationsTitle": "📻 **Radyo İstasyonları (Sayfa {{page}}/{{total}})**",
       "timedOut": "📻 Radyo seçimi zaman aşımına uğradı.",
       "cancelled": "❌ Radyo seçimi iptal edildi.",
-      "unknownStation": "❌ Bilinmeyen istasyon `{{station}}`. Kullanılabilir: {{stations}}\n\nGörüntülemek için `%radio list` kullanın.",
+      "unknownStation": "❌ Bilinmeyen istasyon `{{station}}`. Kullanılabilir: {{stations}}\n\nGörüntülemek için `$prefixradio list` kullanın.",
       "nowPlaying": "📻 <#{{channel}}> kanalında [{{author}}]({{url}}) tarafından _{{title}}_ yayınlanıyor",
-      "skipHint": "_Radyoyu durdurmak için `%skip` veya istasyon değiştirmek için `%radio list` kullanın._",
+      "skipHint": "_Radyoyu durdurmak için `$prefixskip` veya istasyon değiştirmek için `$prefixradio list` kullanın._",
       "prevNext": "⬅️ Önceki   ➡️ Sonraki   ❌ İptal"
     },
     "reload": {
@@ -526,9 +526,9 @@
       "reloaded": "✅ `{{name}}`",
       "fileNotFound": "❌ Dosya bulunamadı: `{{label}}`",
       "moduleError": "❌ `{{label}}`: {{error}}",
-      "unknownTarget": "❌ Bilinmeyen hedef `{{target}}`.\nTüm yeniden yüklenebilir hedefleri görmek için `%reload`'u argüman olmadan çalıştırın.",
+      "unknownTarget": "❌ Bilinmeyen hedef `{{target}}`.\nTüm yeniden yüklenebilir hedefleri görmek için `$prefixreload`'u argüman olmadan çalıştırın.",
       "availableTargetsTitle": "🔄 Yeniden Yükle — Kullanılabilir Hedefler",
-      "runHint": "`%reload <hedef>` çalıştırın veya bir toplu anahtar kelime kullanın:",
+      "runHint": "`$prefixreload <hedef>` çalıştırın veya bir toplu anahtar kelime kullanın:",
       "batchKeywords": "`all` · `commands` · `src` · `audio`",
       "resultsHeader": "✅ **{{ok}}** yeniden yüklendi · ❌ **{{bad}}** başarısız"
     },

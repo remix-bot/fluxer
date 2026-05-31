@@ -161,6 +161,7 @@ export class Remix {
     commands.setPrefixManager(prefixMgr);
     commands.setLocale(this.locale);
     messages.setLocale(this.locale);
+    this.locale.setPrefixResolver((guildId) => commands.getPrefix(guildId));
 
     new HelpCommand(commands, messages, (msg) => this.getSettings(msg)).register();
 
@@ -687,6 +688,7 @@ export class Remix {
       moonlink:           this.moonlink ?? null,
       revoice:            this.revoice ?? null,
       settingsMgr:        this.settingsMgr ?? this.settings ?? null,
+      getPrefix:          (guildId) => this.handler.getPrefix(guildId),
       observedVoiceUsers: this.observedVoiceUsers ?? null,
       voiceCache:          this.voiceCache ?? null,
       locale:             this.locale ?? null,
@@ -819,7 +821,7 @@ export class Remix {
     if (channels.has(cleanId) && !force) {
       if (channelMode === "auto") {
         if (message) {
-          const prefix = (() => { try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; } })();
+          const prefix = this.handler.getPrefix(cleanGuildId);
           const guildIdForLocale = message?.channel?.channel?.guildId ?? message?.guildId ?? cleanGuildId;
           message.replyEmbed(
               this.locale.translate(guildIdForLocale, "responses.leave.autoRejoinHint", {

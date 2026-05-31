@@ -207,9 +207,7 @@ function resolveChannelName(client, channelId) {
  */
 function build247StatusPanel(set, ctx, message, t, guildId) {
   const channels = [...get247Channels(set)];
-  const prefix = (() => {
-    try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
-  })();
+  const prefix = ctx.handler.getPrefix(guildId);
   const locale = (key, data = {}) => t ? t(guildId, key, { ...data, prefix }) : key;
 
   if (channels.length === 0) {
@@ -255,7 +253,7 @@ function build247StatusPanel(set, ctx, message, t, guildId) {
 }
 
 /**
- * Build a simple embed for the %247 on/auto confirmation.
+ * Build a simple embed for the $prefix247 on/auto confirmation.
  * @param {object} set - ServerSettings
  * @param {string} channelId - Clean channel ID
  * @param {string} mode - "on" | "auto"
@@ -267,9 +265,7 @@ function build247StatusPanel(set, ctx, message, t, guildId) {
 function build247EnabledPanel(set, channelId, mode, joined, ctx, guildId, t) {
   const channels = [...get247Channels(set)];
   const modeStr = modeLabel(mode, t, guildId);
-  const prefix = (() => {
-    try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
-  })();
+  const prefix = ctx.handler.getPrefix(guildId);
   const locale = (key, data = {}) => t ? t(guildId, key, { ...data, prefix }) : key;
   const chName = resolveChannelName(ctx.client, channelId);
   const label = chName ? `**${chName}** <#${channelId}>` : `<#${channelId}>`;
@@ -302,17 +298,15 @@ function build247EnabledPanel(set, channelId, mode, joined, ctx, guildId, t) {
 }
 
 /**
- * Build a simple embed for the %247 off confirmation.
+ * Build a simple embed for the $prefix247 off confirmation.
  * @param {object} set - ServerSettings
  * @param {string} channelId - Clean channel ID
  * @param {string} guildId - Guild ID
  * @param {Function} [t] - Locale translate function
  */
-function build247DisabledPanel(set, channelId, guildId, t) {
+function build247DisabledPanel(set, channelId, guildId, t, ctx) {
   const channels = [...get247Channels(set)];
-  const prefix = (() => {
-    try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
-  })();
+  const prefix = ctx.handler.getPrefix(guildId);
   const locale = (key, data = {}) => t ? t(guildId, key, { ...data, prefix }) : key;
 
   if (channels.length === 0) {
@@ -362,11 +356,9 @@ function format247Status(set, t, guildId) {
   return `${channels.size} channels: ${parts.join(", ")}`;
 }
 
-function format247Summary(set, t, guildId) {
+function format247Summary(set, t, guildId, ctx) {
   const channels = [...get247Channels(set)];
-  const prefix = (() => {
-    try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
-  })();
+  const prefix = ctx.handler.getPrefix(guildId);
   const locale = (key, data = {}) => t ? t(guildId, key, { ...data, prefix }) : key;
 
   if (channels.length === 0) {
@@ -421,7 +413,7 @@ async function handle247(ctx, message, value) {
 
   if (!["off", "on", "auto"].includes(resolved)) {
     return message.reply(embed(
-        ctx.t(message, "responses.settings.invalid247", { value, prefix: set.get("prefix") ?? "%" })
+        ctx.t(message, "responses.settings.invalid247", { value, prefix: ctx.handler.getPrefix(guildId) })
     ));
   }
 
@@ -450,7 +442,7 @@ async function handle247(ctx, message, value) {
         player.destroy();
       }
       const t247 = ctx.locale?.translate?.bind(ctx.locale);
-    return message.reply(build247DisabledPanel(set, id, guildId, t247));
+    return message.reply(build247DisabledPanel(set, id, guildId, t247, ctx));
     }
 
     save247Channels(set, new Set());
@@ -466,9 +458,7 @@ async function handle247(ctx, message, value) {
         player.destroy();
       }
     }
-    const prefix = (() => {
-      try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
-    })();
+    const prefix = ctx.handler.getPrefix(guildId);
     const t247 = ctx.locale?.translate?.bind(ctx.locale);
     const loc = (key, data = {}) => t247 ? t247(guildId, key, { ...data, prefix }) : key;
     return message.reply(richEmbed([{
@@ -487,7 +477,7 @@ async function handle247(ctx, message, value) {
   const userChannelId = ctx.players.checkVoiceChannels(message);
   if (!userChannelId) {
     return message.reply(embed(
-        ctx.t(message, "responses.settings.noVoice247", { mode: resolved, prefix: set.get("prefix") ?? "%" })
+        ctx.t(message, "responses.settings.noVoice247", { mode: resolved, prefix: ctx.handler.getPrefix(guildId) })
     ));
   }
 
@@ -495,7 +485,7 @@ async function handle247(ctx, message, value) {
   const channels = get247Channels(set);
   if (!channels.has(id) && channels.size >= MAX_247_CHANNELS) {
     return message.reply(embed(
-        ctx.t(message, "responses.settings.max247Channels", { max: MAX_247_CHANNELS, prefix: set.get("prefix") ?? "%" })
+        ctx.t(message, "responses.settings.max247Channels", { max: MAX_247_CHANNELS, prefix: ctx.handler.getPrefix(guildId) })
     ));
   }
   channels.add(id);
@@ -518,9 +508,7 @@ async function handle247(ctx, message, value) {
     const t247 = ctx.locale?.translate?.bind(ctx.locale);
     return message.reply(build247EnabledPanel(set, id, resolved, true, ctx, guildId, t247));
   } catch (e) {
-    const prefix = (() => {
-      try { return set.get("prefix") ?? "%"; } catch (_) { return "%"; }
-    })();
+    const prefix = ctx.handler.getPrefix(guildId);
     const t247 = ctx.locale?.translate?.bind(ctx.locale);
     const loc = (key, data = {}) => t247 ? t247(guildId, key, { ...data, prefix }) : key;
     return message.reply(embed(
@@ -620,7 +608,7 @@ export const command = function() {
     for (const [alias, settingKey] of Object.entries(SHORTCUTS)) {
       const builder = new CommandBuilder()
           .setName(alias)
-          .setDescription(`Shortcut for \`${settingKey}\`. Usage: %${alias} [value]`)
+          .setDescription(`Shortcut for \`${settingKey}\`. Usage: $prefix${alias} [value]`)
           .setId(`shortcut_${alias}`)
           .setCategory("util")
           .setRequirement(e => e.addPermission("ManageGuild"))
@@ -710,19 +698,20 @@ export const command = function() {
 export async function run(message, data) {
   const set = this.getSettings(message);
   const cmd = data.commandId || "getSettings";
+  const guildId = message.channel?.guildId ?? message.message?.guildId;
 
   if (cmd?.startsWith("shortcut_")) {
     const alias      = cmd.replace("shortcut_", "");
     const settingKey = SHORTCUTS[alias];
     const raw        = (message.content ?? message.message?.content ?? "").trim();
-    const prefix     = set.get("prefix") ?? "%";
+    const prefix     = this.handler.getPrefix(guildId);
     const body       = raw.startsWith(prefix) ? raw.slice(prefix.length).trim() : raw;
     const tokens     = body.split(/\s+/).slice(1);
     return handleShortcut(this, message, settingKey, tokens);
   }
 
   const raw    = (message.content ?? message.message?.content ?? "").trim();
-  const prefix = set.get("prefix") ?? "%";
+  const prefix = this.handler.getPrefix(guildId);
   const body   = raw.startsWith(prefix) ? raw.slice(prefix.length).trim() : raw;
   const args   = body.split(/\s+/);
   const inlineShortcut = SHORTCUTS[args[1]?.toLowerCase()];
@@ -759,8 +748,10 @@ export async function run(message, data) {
       }
       const val = set.get(settingKey);
       const description = this.settingsMgr.descriptions?.[settingKey];
+      const prefix = ctx.handler.getPrefix(guildId);
+      const resolvedDesc = description ? description.replace(/\$prefix/gi, prefix) : null;
       let reply = `**${prettifySettingLabel(settingKey)}**\nValue: ${displayValue(settingKey, val)}`;
-      if (description) reply += `\n\n*${description}*`;
+      if (resolvedDesc) reply += `\n\n*${resolvedDesc}*`;
       return message.reply(embed(reply));
     }
 
@@ -803,7 +794,7 @@ export async function run(message, data) {
   }
 
   if (cmd === "helpSettings") {
-    const pfx = set.get("prefix") ?? "%";
+    const pfx = this.handler.getPrefix(guildId);
 
     if (!settingKey) {
       const keys    = Object.keys(this.settingsMgr.defaults);
@@ -817,7 +808,8 @@ export async function run(message, data) {
       ));
     }
 
-    const description = this.settingsMgr.descriptions?.[settingKey] ?? this.t(message, "responses.settings.noDescription");
+    const rawDescription = this.settingsMgr.descriptions?.[settingKey] ?? this.t(message, "responses.settings.noDescription");
+    const description = rawDescription.replace(/\$prefix/gi, pfx);
     const currentVal  = set.get(settingKey);
     const defaultVal  = this.settingsMgr.defaults?.[settingKey];
 

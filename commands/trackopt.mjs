@@ -1,7 +1,6 @@
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { logger } from "../src/constants/Logger.mjs";
 
 const DEFAULT_ALIAS = "default";
 
@@ -112,7 +111,7 @@ export async function run(msg, data) {
     return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses._common.noVoiceChannel"))] });
   }
 
-  const prefix = this.handler?.getPrefix?.(msg.message?.guildId) ?? "%";
+  const prefix = this.handler.getPrefix(msg.message?.guildId);
 
   if (subCommand === "set") {
     const timesRaw = data.get("times")?.value;

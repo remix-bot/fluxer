@@ -38,7 +38,7 @@ export async function run(message, data) {
     if (!volOption || raw === null || raw === undefined || isNaN(Number(raw))) {
         const currentDefault   = set?.get("volume") ?? 100;
         const currentPlayerVol = Math.round((p.preferredVolume ?? 1) * 100);
-        const pfx = set?.get("prefix") ?? "%";
+        const pfx = this.handler.getPrefix(message.channel?.guildId ?? message.message?.guildId);
         embed
             .setTitle(this.t(message, "responses.volumedefault.title"))
             .setDescription(

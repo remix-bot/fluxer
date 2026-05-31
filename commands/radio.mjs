@@ -137,7 +137,7 @@ async function playStation(ctx, msg, radio, editTarget = null) {
   if (current?.type === "radio" || hasRadioQueued) await p.switchRadio(radio);
   else p.playRadio(radio);
 
-  const prefix = (() => { try { return ctx.handler?.getPrefix?.(msg?.channel?.channel?.guildId ?? msg?.message?.guildId) ?? "%"; } catch (_) { return "%"; } })();
+  const prefix = ctx.handler.getPrefix(msg?.channel?.channel?.guildId ?? msg?.message?.guildId);
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
     .setTitle(`📻 ${radio.detailedName}`)

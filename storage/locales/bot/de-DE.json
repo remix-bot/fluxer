@@ -60,8 +60,8 @@
     "pause": "Pausiere die Wiedergabe in deinem Sprachkanal.",
     "play": "Spiele einen Song oder eine Playlist von einer URL oder Suchanfrage.\nUnterstützt YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal und mehr.\nStandardsuche: YouTube Music. Nutze `-p <Anbieter>` oder Inline-Präfix wie `sp: blinding lights`.",
     "player": "Erstelle ein interaktives Wiedergabe-Kontrollfeld mit Live-Fortschritt.",
-    "playnext": "Wie %play, fügt das Ergebnis aber an den Anfang der Warteschlange hinzu.",
-    "radio": "Spiele einen Radiosender. Nutze `%radio list`, um alle Sender zu durchsuchen.",
+    "playnext": "Wie $prefixplay, fügt das Ergebnis aber an den Anfang der Warteschlange hinzu.",
+    "radio": "Spiele einen Radiosender. Nutze `$prefixradio list`, um alle Sender zu durchsuchen.",
     "reload": "Lade Befehle, src-Module oder Audio-Module neu. Leer lassen, um alle Ziele anzuzeigen.",
     "remove": "Entferne einen bestimmten Song aus der Warteschlange.",
     "resume": "Setze die Wiedergabe in deinem Sprachkanal fort.",
@@ -274,7 +274,7 @@
       "description": "Füge Remix direkt über [FluxerList](<https://fluxerlist.com/bots/remix>) zu deinem Server hinzu.\n\nTritt unserer Community auf [fluxer.gg/remix](https://fluxer.gg/remix) für Support, Updates und Feedback bei."
     },
     "join": {
-      "channelNotFound": "Konnte den Kanal `{{channel}}` nicht finden.\nNutze den Hilfe-Befehl für mehr Infos. (`%help join`)",
+      "channelNotFound": "Konnte den Kanal `{{channel}}` nicht finden.\nNutze den Hilfe-Befehl für mehr Infos. (`$prefixhelp join`)",
       "alreadyJoined": "Bereits in <#{{channel}}>.",
       "audioNodeConnecting": "⚠️ Audio-Knoten verbindet noch — bitte versuche es in wenigen Sekunden erneut.",
       "joining": "⏳ Trete Kanal bei...",
@@ -416,9 +416,9 @@
       "stationsTitle": "📻 **Radiosender (Seite {{page}}/{{total}})**",
       "timedOut": "📻 Radio-Auswahl abgelaufen.",
       "cancelled": "❌ Radio-Auswahl abgebrochen.",
-      "unknownStation": "❌ Unbekannter Sender `{{station}}`. Verfügbar: {{stations}}\n\nNutze `%radio list` zum Durchsuchen.",
+      "unknownStation": "❌ Unbekannter Sender `{{station}}`. Verfügbar: {{stations}}\n\nNutze `$prefixradio list` zum Durchsuchen.",
       "nowPlaying": "📻 Streamt jetzt _{{title}}_ von [{{author}}]({{url}}) in <#{{channel}}>",
-      "skipHint": "_Nutze `%skip`, um das Radio zu stoppen, oder `%radio list`, um Sender zu wechseln._",
+      "skipHint": "_Nutze `$prefixskip`, um das Radio zu stoppen, oder `$prefixradio list`, um Sender zu wechseln._",
       "prevNext": "⬅️ Zurück   ➡️ Weiter   ❌ Abbrechen"
     },
     "reload": {
@@ -429,9 +429,9 @@
       "reloaded": "✅ `{{name}}`",
       "fileNotFound": "❌ Datei nicht gefunden: `{{label}}`",
       "moduleError": "❌ `{{label}}`: {{error}}",
-      "unknownTarget": "❌ Unbekanntes Ziel `{{target}}`.\nFühre `%reload` ohne Argumente aus, um alle neuladbaren Ziele zu sehen.",
+      "unknownTarget": "❌ Unbekanntes Ziel `{{target}}`.\nFühre `$prefixreload` ohne Argumente aus, um alle neuladbaren Ziele zu sehen.",
       "availableTargetsTitle": "🔄 Neu laden — Verfügbare Ziele",
-      "runHint": "Führe `%reload <Ziel>` aus oder nutze ein Stichwort:",
+      "runHint": "Führe `$prefixreload <Ziel>` aus oder nutze ein Stichwort:",
       "batchKeywords": "`all` · `commands` · `src` · `audio`",
       "resultsHeader": "✅ **{{ok}}** neu geladen · ❌ **{{bad}}** fehlgeschlagen"
     },

@@ -59,23 +59,19 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
     const guildId = getGuildId(message);
 
     const is247 = (() => {
-      try {
-        const raw = this.settingsMgr?.getServer?.(guildId)?.get?.("stay_247");
-        return raw && raw !== "none";
-      } catch (_) { return false; }
+      const raw = this.settingsMgr?.getServer?.(guildId)?.get?.("stay_247");
+      return raw && raw !== "none";
     })();
 
     const mode247 = (() => {
       if (!is247) return "off";
-      try {
-        const set = this.settingsMgr?.getServer?.(guildId);
-        const modes = set?.get?.("stay_247_modes");
-        const matchCh = homeChannelId || activeChannelId;
-        if (modes && typeof modes === "object" && !Array.isArray(modes) && modes[matchCh]) {
-          return modes[matchCh];
-        }
-        return set?.get?.("stay_247_mode") ?? "off";
-      } catch (_) { return "off"; }
+      const set = this.settingsMgr?.getServer?.(guildId);
+      const modes = set?.get?.("stay_247_modes");
+      const matchCh = homeChannelId || activeChannelId;
+      if (modes && typeof modes === "object" && !Array.isArray(modes) && modes[matchCh]) {
+        return modes[matchCh];
+      }
+      return set?.get?.("stay_247_mode") ?? "off";
     })();
 
     this.players.playerMap.delete(activeChannelId);
@@ -85,9 +81,7 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
 
     if (is247 && (mode247 === "on" || mode247 === "auto")) {
       const rejoinDelay = this.config?.timers?.rejoin247Delay ?? 3_000;
-      const prefix = (() => {
-        try { return this._commands?.getPrefix?.(guildId) ?? "%"; } catch (_) { return "%"; }
-      })();
+      const prefix = this._commands.getPrefix(guildId);
       const embed = new EmbedBuilder().setColor(getGlobalColor())
           .setDescription(this.t(message, "responses.join.autoLeaveInactive247", { channel: activeChannelId, prefix }));
       message.channel.send({ embeds: [embed] }).catch(() => {});
@@ -101,9 +95,6 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
         }
       }, rejoinDelay);
     } else {
-      const prefix = (() => {
-        try { return this._commands?.getPrefix?.(guildId) ?? "%"; } catch (_) { return "%"; }
-      })();
       const embed2 = new EmbedBuilder().setColor(getGlobalColor())
           .setDescription(this.t(message, "responses.join.autoLeaveInactive", { channel: activeChannelId }));
       message.channel.send({ embeds: [embed2] }).catch(() => {});
@@ -190,7 +181,7 @@ export async function run(message, data) {
   const cid = this.players.checkVoiceChannels(message);
 
   if (!cid) {
-    const prefix = this._commands?.getPrefix?.(getGuildId(message)) ?? "%";
+    const prefix = this._commands.getPrefix(getGuildId(message));
     const embed = new EmbedBuilder().setColor(getGlobalColor())
         .setDescription(this.t(message, "responses.join.noVoiceChannel", { prefix }));
     return message.reply({ embeds: [embed] });

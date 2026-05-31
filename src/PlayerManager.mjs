@@ -624,11 +624,7 @@ export class PlayerManager {
         });
       }
 
-      const prefix = (() => {
-        try {
-          return this.settings.getServer(guildId)?.get("prefix") ?? "%";
-        } catch (_) { return "%"; }
-      })();
+      const prefix = this.commands.getPrefix(guildId);
       message.reply(mkEmbed(this._t(message, "responses._common.alreadyInChannel", { channels: channelList, prefix })));
       return null;
     }
@@ -830,6 +826,7 @@ export class PlayerManager {
       moonlink:           this.playerConfig?.moonlink ?? null,
       revoice:            this.playerConfig?.revoice ?? null,
       settingsMgr:        this.settings,
+      getPrefix:          (guildId) => this.commands.getPrefix(guildId),
       observedVoiceUsers: this.observedVoiceUsers ?? null,
       voiceCache:          this.voiceCache ?? null,
       locale:             this.locale ?? null,
@@ -889,17 +886,15 @@ export class PlayerManager {
       if (homeChannelId !== activeChannelId) this.playerMap.delete(homeChannelId);
       player.destroy();
 
-      const prefix = (() => {
-        try { return this.settings.getServer(guildId)?.get("prefix") ?? "%"; } catch (_) { return "%"; }
-      })();
+      const prefix = this.commands.getPrefix(guildId);
 
       let desc;
       if (mode247 === "on") {
-        desc = this.locale?.translate(guildId, "responses.join.autoLeave247On", { channel: `<#${activeChannelId}>` })
-          ?? `Left channel <#${activeChannelId}> because of inactivity.\nI'll rejoin automatically when the bot restarts (%247 on mode).`;
+        desc = this.locale?.translate(guildId, "responses.join.autoLeave247On", { channel: `<#${activeChannelId}>`, prefix })
+          ?? `Left channel <#${activeChannelId}> because of inactivity.\nI'll rejoin automatically when the bot restarts (${prefix}247 on mode).`;
       } else if (mode247 === "auto") {
-        desc = this.locale?.translate(guildId, "responses.join.autoLeave247Auto", { channel: `<#${activeChannelId}>` })
-          ?? `Left channel <#${activeChannelId}> — reconnecting automatically (%247 auto mode)...`;
+        desc = this.locale?.translate(guildId, "responses.join.autoLeave247Auto", { channel: `<#${activeChannelId}>`, prefix })
+          ?? `Left channel <#${activeChannelId}> — reconnecting automatically (${prefix}247 auto mode)...`;
       } else {
         desc = this.locale?.translate(guildId, "responses.join.autoLeaveInactive247", { channel: `<#${activeChannelId}>`, prefix })
           ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;

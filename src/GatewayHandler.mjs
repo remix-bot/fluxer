@@ -1111,7 +1111,7 @@ export class GatewayHandler {
 
   /**
    * Rejoin a voice channel after an unexpected disconnect.
-   * Used by the %247 auto mode to automatically reconnect.
+   * Used by the $prefix247 auto mode to automatically reconnect.
    *
    * Includes deduplication (prevents concurrent rejoin for the same channel)
    * and retry with exponential backoff for transient failures like track
@@ -1332,9 +1332,9 @@ export class GatewayHandler {
   /**
    * Rejoin all 24/7 channels after boot with staggered delays.
    *
-   * Both %247 auto and %247 on channels are rejoined because:
-   *   %247 auto: always stays in voice (disconnect + reboot)
-   *   %247 on:   only on reboot, not on disconnect
+   * Both $prefix247 auto and $prefix247 on channels are rejoined because:
+   *   $prefix247 auto: always stays in voice (disconnect + reboot)
+   *   $prefix247 on:   only on reboot, not on disconnect
    *
    * Channels are rejoined one at a time with a delay between each to
    * avoid overwhelming the LiveKit server with concurrent track publications.

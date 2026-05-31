@@ -16,7 +16,7 @@ function parseInlineProvider(raw) {
 export const command = new CommandBuilder()
     .setName("playnext")
     .setId("playnext")
-    .setDescription("Same as %play but adds the result to the top of the queue.", "commands.playnext")
+    .setDescription("Same as $prefixplay but adds the result to the top of the queue.", "commands.playnext")
     .setCategory("music")
     .addExamples(
         "$prefixplaynext blinding lights",
