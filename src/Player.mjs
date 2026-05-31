@@ -415,9 +415,9 @@ export default class Player extends EventEmitter {
    * Get the 24/7 mode for this player's channel.
    * Returns "auto", "on", or "off".
    *
-   *   $prefix247 auto: bot stays in voice always (never leaves, auto-rejoins on disconnect + reboot)
-   *   $prefix247 on:   bot stays in voice always (never leaves due to inactivity, rejoins on reboot)
-   *   $prefix247 off:  bot leaves when inactive
+   *   %247 auto: bot stays in voice always (never leaves, auto-rejoins on disconnect + reboot)
+   *   %247 on:   bot stays in voice always (never leaves due to inactivity, rejoins on reboot)
+   *   %247 off:  bot leaves when inactive
    */
   _get247Mode() {
     if (!this._guildId) return "off";

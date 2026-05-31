@@ -139,7 +139,7 @@ function extractPeriod(data, msg) {
 
 /**
  * Resolve a Last.fm category (loved/top/recent/playlist) into playable tracks.
- * Shared between `$prefixlastfm play <cat>` and `$prefixplay lastfm:<cat>`.
+ * Shared between `%lastfm play <cat>` and `%play lastfm:<cat>`.
  *
  * @param {object} ctx     - The command `this` context (has .lastfm, .getPlayer, .handler, .t)
  * @param {object} msg     - The message object

@@ -1,6 +1,7 @@
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 
 const DEFAULT_ALIAS = "default";
 

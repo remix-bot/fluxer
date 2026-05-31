@@ -253,7 +253,7 @@ function build247StatusPanel(set, ctx, message, t, guildId) {
 }
 
 /**
- * Build a simple embed for the $prefix247 on/auto confirmation.
+ * Build a simple embed for the %247 on/auto confirmation.
  * @param {object} set - ServerSettings
  * @param {string} channelId - Clean channel ID
  * @param {string} mode - "on" | "auto"
@@ -298,7 +298,7 @@ function build247EnabledPanel(set, channelId, mode, joined, ctx, guildId, t) {
 }
 
 /**
- * Build a simple embed for the $prefix247 off confirmation.
+ * Build a simple embed for the %247 off confirmation.
  * @param {object} set - ServerSettings
  * @param {string} channelId - Clean channel ID
  * @param {string} guildId - Guild ID
@@ -630,7 +630,7 @@ export const command = function() {
       .addExamples(
           "$prefixsettings get",
           "$prefixsettings get prefix",
-          "$prefixsettings set prefix !",
+          "$prefixsettings set prefix %",
           "$prefixsettings set locale de-DE",
           "$prefixsettings set songAnnouncements off",
           "$prefixsettings set stay_247 auto",

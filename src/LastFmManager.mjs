@@ -5,7 +5,7 @@
  *   - Auth flow (desktop API: get token → user authorizes → get session)
  *   - Now-playing notification (track.scrobble with timestamp=0)
  *   - Full scrobble after threshold (50% of track or 4 min, whichever is less)
- *   - Fetch loved / top / recent tracks for $prefixplay lastfm loved/top/recent
+ *   - Fetch loved / top / recent tracks for %play lastfm loved/top/recent
  *   - Per-user session key storage in MySQL table `lastfm_users`
  *
  * Last.fm API docs: https:
@@ -496,7 +496,7 @@ export class LastFmManager {
   }
 
   /**
-   * Get track info (play count, tags, etc.) for the $prefixnp embed.
+   * Get track info (play count, tags, etc.) for the %np embed.
    */
   async getTrackInfo(artist, track, userId = null) {
     if (!this.enabled) return null;
@@ -571,7 +571,7 @@ export class LastFmManager {
 
   /**
    * Search Last.fm for a freeform track query and return the best match.
-   * Useful for `$prefixplay lastfm: kendrick lamar luther` where artist/title
+   * Useful for `%play lastfm: kendrick lamar luther` where artist/title
    * boundaries are ambiguous.
    *
    * @param {string} query
@@ -1476,7 +1476,7 @@ export class LastFmManager {
   }
 
   /**
-   * Get the user's top albums (for $prefixlastfm play albums).
+   * Get the user's top albums (for %lastfm play albums).
    * @param {string} userId
    * @param {string} [period="overall"] - overall | 7day | 1month | 3month | 6month | 12month
    * @param {number} [limit=20]

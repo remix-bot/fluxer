@@ -59,19 +59,23 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
     const guildId = getGuildId(message);
 
     const is247 = (() => {
-      const raw = this.settingsMgr?.getServer?.(guildId)?.get?.("stay_247");
-      return raw && raw !== "none";
+      try {
+        const raw = this.settingsMgr?.getServer?.(guildId)?.get?.("stay_247");
+        return raw && raw !== "none";
+      } catch (_) { return false; }
     })();
 
     const mode247 = (() => {
       if (!is247) return "off";
-      const set = this.settingsMgr?.getServer?.(guildId);
-      const modes = set?.get?.("stay_247_modes");
-      const matchCh = homeChannelId || activeChannelId;
-      if (modes && typeof modes === "object" && !Array.isArray(modes) && modes[matchCh]) {
-        return modes[matchCh];
-      }
-      return set?.get?.("stay_247_mode") ?? "off";
+      try {
+        const set = this.settingsMgr?.getServer?.(guildId);
+        const modes = set?.get?.("stay_247_modes");
+        const matchCh = homeChannelId || activeChannelId;
+        if (modes && typeof modes === "object" && !Array.isArray(modes) && modes[matchCh]) {
+          return modes[matchCh];
+        }
+        return set?.get?.("stay_247_mode") ?? "off";
+      } catch (_) { return "off"; }
     })();
 
     this.players.playerMap.delete(activeChannelId);
