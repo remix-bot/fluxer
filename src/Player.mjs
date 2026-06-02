@@ -2372,8 +2372,8 @@ export default class Player extends EventEmitter {
     const userIds = [];
     if (this._voiceCache) {
       const humans = this._voiceCache.getHumansInChannel(
-        String(this._guildId).replace(/\D/g, ""),
-        String(this._channelId).replace(/\D/g, "")
+          String(this._guildId).replace(/\D/g, ""),
+          String(this._channelId).replace(/\D/g, "")
       );
       userIds.push(...humans);
     }
@@ -2384,8 +2384,8 @@ export default class Player extends EventEmitter {
         const voiceStates = guild?.voice_states ?? guild?.voiceStates;
         if (voiceStates) {
           const entries = Array.isArray(voiceStates) ? voiceStates
-            : typeof voiceStates.values === "function" ? [...voiceStates.values()]
-            : Object.values(voiceStates);
+              : typeof voiceStates.values === "function" ? [...voiceStates.values()]
+                  : Object.values(voiceStates);
           for (const state of entries) {
             const ch = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
             if (ch === String(this._channelId).replace(/\D/g, "")) {
