@@ -23,13 +23,6 @@ function cleanId(value) {
   return String(value ?? "").replace(/\D/g, "");
 }
 
-/**
- * Resolve the guild ID from a player entry.
- * Uses _guildId if set (populated after join() completes), otherwise falls
- * back to the client channel cache. This is necessary because in the
- * multi-voice scenario _guildId can still be null for a freshly-joined player,
- * which caused guildPlayers to be empty and leave to report "not in voice".
- */
 function resolvePlayerGuildId(player, mapKey, client) {
   const direct = cleanId(player?._guildId);
   if (direct) return direct;
@@ -116,88 +109,42 @@ export async function run(msg, data) {
           ? new Set(raw.map(id => cleanId(id)).filter(Boolean))
           : new Set([cleanId(raw)]);
 
-  const other247AutoChannels = [...ch247].filter(id => {
-    if (id === activeChannelId || id === homeChannelId || id === targetChannelId) return false;
-    const mode = get247ChannelMode(set, id);
-    return mode === "auto";
-  });
+  const is247 = ch247.has(activeChannelId) || ch247.has(homeChannelId);
 
-  if (ch247.has(activeChannelId) || ch247.has(homeChannelId)) {
+  if (is247) {
     const matchChannel = ch247.has(homeChannelId) ? homeChannelId
         : ch247.has(activeChannelId) ? activeChannelId
         : null;
     const mode = matchChannel ? get247ChannelMode(set, matchChannel) : "off";
+    const prefix = this.handler.getPrefix(msg.message?.guildId ?? msg.channel?.guild?.id);
+
     this.markIntentionalLeave(activeChannelId);
     this.players.playerMap.delete(activeChannelId);
+    this.players._unindexPlayer(player._guildId, activeChannelId);
     if (activeChannelId !== targetChannelId) this.players.playerMap.delete(targetChannelId);
     if (homeChannelId !== activeChannelId) this.players.playerMap.delete(homeChannelId);
+
+    const pendingScrobble = this.players._pendingScrobbleTimers?.get(activeChannelId);
+    if (pendingScrobble) {
+      clearTimeout(pendingScrobble.timer);
+      this.players._pendingScrobbleTimers.delete(activeChannelId);
+    }
+
     await player.leave().catch(() => {});
     player.destroy();
 
     if (mode === "auto") {
-      msg.reply(embed(this.t(msg, "responses.leave.leftRejoin247", { channel: targetChannelId, prefix: this.handler.getPrefix(msg.message?.guildId ?? msg.channel?.guild?.id) })));
-      const leave247Delay = this.config?.timers?.leave247RejoinDelay ?? 5000;
+      msg.reply(embed(this.t(msg, "responses.leave.leftRejoin247", { channel: targetChannelId, prefix })));
+      const rejoinDelay = this.config?.timers?.leave247RejoinDelay ?? 5000;
       setTimeout(() => {
         if (this._spawnPlayer) {
           this._spawnPlayer(guildId, homeChannelId).catch(e =>
               logger.warn("[leave] 247 rejoin failed for", homeChannelId, e.message)
           );
         }
-      }, leave247Delay);
-
-      if (other247AutoChannels.length > 0) {
-        const rejoinBaseDelay = leave247Delay;
-        const rejoinStagger = this.config?.timers?.rejoin247Delay ?? 3000;
-        for (let i = 0; i < other247AutoChannels.length; i++) {
-          const otherChannelId = other247AutoChannels[i];
-          const otherPlayer = this.players.playerMap.get(otherChannelId);
-          if (!otherPlayer || otherPlayer._destroyed) {
-            if (otherPlayer) {
-              this.players.playerMap.delete(otherChannelId);
-              try { otherPlayer.destroy(); } catch (_) {}
-            }
-            const delay = rejoinBaseDelay + (i + 1) * rejoinStagger;
-            logger.recovery(
-              `[leave] Scheduling 247 auto-rejoin for collateral-disconnected channel ${otherChannelId} in ${delay}ms`
-            );
-            setTimeout(() => {
-              if (this._spawnPlayer) {
-                this._spawnPlayer(guildId, otherChannelId).catch(e =>
-                    logger.warn("[leave] 247 collateral rejoin failed for", otherChannelId, e.message)
-                );
-              }
-            }, delay);
-          }
-        }
-      }
+      }, rejoinDelay);
     } else {
-      msg.reply(embed(this.t(msg, "responses.leave.left247On", { prefix: this.handler.getPrefix(msg.message?.guildId ?? msg.channel?.guild?.id) })));
-
-      if (other247AutoChannels.length > 0) {
-        const rejoinDelay = this.config?.timers?.leave247RejoinDelay ?? 5000;
-        const rejoinStagger = this.config?.timers?.rejoin247Delay ?? 3000;
-        for (let i = 0; i < other247AutoChannels.length; i++) {
-          const otherChannelId = other247AutoChannels[i];
-          const otherPlayer = this.players.playerMap.get(otherChannelId);
-          if (!otherPlayer || otherPlayer._destroyed) {
-            if (otherPlayer) {
-              this.players.playerMap.delete(otherChannelId);
-              try { otherPlayer.destroy(); } catch (_) {}
-            }
-            const delay = rejoinDelay + (i + 1) * rejoinStagger;
-            logger.recovery(
-              `[leave] Scheduling 247 auto-rejoin for collateral-disconnected channel ${otherChannelId} in ${delay}ms`
-            );
-            setTimeout(() => {
-              if (this._spawnPlayer) {
-                this._spawnPlayer(guildId, otherChannelId).catch(e =>
-                    logger.warn("[leave] 247 collateral rejoin failed for", otherChannelId, e.message)
-                );
-              }
-            }, delay);
-          }
-        }
-      }
+      msg.reply(embed(this.t(msg, "responses.leave.left247On", { prefix })));
     }
   } else {
     await this.leaveChannel(activeChannelId, guildId, msg);

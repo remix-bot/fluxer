@@ -270,27 +270,26 @@ export class FluxerRevoice extends EventEmitter {
   }
 
   /**
-   * Send a VOICE_STATE_UPDATE leave signal to the Fluxer gateway so it
-   * knows the bot is no longer in the given channel.  Without this, the
+   * Send a channel-specific leave signal to the Fluxer gateway so it
+   * knows the bot is no longer in the given channel. Without this, the
    * gateway may think the bot is still connected and won't send a fresh
    * VOICE_SERVER_UPDATE on the next joinVoiceChannel() call, causing the
    * rejoin to hang or fail.
    *
-   * IMPORTANT: We try channel-specific leave (leaveChannel) FIRST because
-   * vm.leave(guildId) disconnects ALL voice channels in that guild, which
-   * is catastrophic for multi-voice setups where the bot is in multiple
-   * channels with 24/7 enabled.  Only fall back to guild-level leave if
-   * the channel-specific API is unavailable.
+   * IMPORTANT: Only uses channel-specific leave (vm.leaveChannel).
+   * Guild-level leave (vm.leave / vm.updateVoiceState with null channel)
+   * disconnects ALL voice channels in that guild, which is catastrophic
+   * for multi-voice setups where the bot is in multiple channels with
+   * 24/7 enabled. If vm.leaveChannel is unavailable, the gateway leave
+   * is skipped entirely rather than risk disconnecting other channels.
    *
    * @param {string} channelId — The channel ID to leave
-   * @param {string} [guildId] — The guild ID (for fallback)
+   * @param {string} [guildId] — Unused, kept for API compatibility
    */
   _leaveGateway(channelId, guildId = null) {
     try {
       const vm = getVoiceManager(this.client);
       if (!vm) return;
-
-      const guildForLeave = guildId ?? this._resolveGuildForChannel(channelId);
 
       if (typeof vm.leaveChannel === "function") {
         try {
@@ -298,35 +297,14 @@ export class FluxerRevoice extends EventEmitter {
           logger.player(`[FluxerRevoice] Sent channel-specific gateway leave via vm.leaveChannel() for channel ${channelId}`);
           return;
         } catch (e) {
-          logger.warn(`[FluxerRevoice] vm.leaveChannel() failed for channel ${channelId}: ${e?.message} — falling back`);
+          logger.warn(`[FluxerRevoice] vm.leaveChannel() failed for channel ${channelId}: ${e?.message}`);
         }
       }
 
-      if (guildForLeave && typeof vm.leave === "function") {
-        try {
-          vm.leave(guildForLeave);
-          logger.player(`[FluxerRevoice] Sent guild-level gateway leave via vm.leave() for guild ${guildForLeave} (leaveChannel unavailable — other channels may be disconnected)`);
-          return;
-        } catch (e) {
-          logger.warn(`[FluxerRevoice] vm.leave() failed for guild ${guildForLeave}: ${e?.message}`);
-        }
-      }
-
-      if (typeof vm.updateVoiceState === "function") {
-        if (guildForLeave) {
-          try {
-            vm.updateVoiceState(guildForLeave, null, { self_deaf: false, self_mute: false });
-            logger.player(`[FluxerRevoice] Sent gateway leave via updateVoiceState() for guild ${guildForLeave}`);
-            return;
-          } catch (e1) {
-            try { vm.updateVoiceState(guildForLeave, null); return; } catch (e2) {}
-          }
-        }
-        logger.warn(
-          `[FluxerRevoice] Cannot send guild-scoped leave for channel ${channelId} — ` +
-          `skipping leave signal to avoid disconnecting all guilds.`
-        );
-      }
+      logger.warn(
+        `[FluxerRevoice] No channel-specific leave API available for channel ${channelId}. ` +
+        `Skipping gateway leave to avoid disconnecting other voice channels in the guild.`
+      );
     } catch (e) {
       logger.warn(`[FluxerRevoice] Gateway leave signal failed for ${channelId}: ${e?.message}`);
     }
