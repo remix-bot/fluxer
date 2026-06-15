@@ -1,4 +1,9 @@
 /**
+ * @file VoiceStateCache.mjs — VoiceStateCache — O(1) composite-keyed LRU cache for voice state lookups with dual indexes (user→channel, channel→users)
+ * @module src.constants.VoiceStateCache
+ */
+
+/**
  * VoiceStateCache — O(1) voice-state lookups with bounded memory.
  *
  * Replaces the raw `observedVoiceUsers` / `observedVoiceBots` Maps with a
@@ -20,7 +25,11 @@
  */
 
 import { logger } from "./Logger.mjs";
+import { cleanId } from "../Utils.mjs";
 
+/**
+ * VoiceStateCache class.
+ */
 export class VoiceStateCache {
   /**
    * @param {object} [opts]
@@ -48,12 +57,12 @@ export class VoiceStateCache {
 
   /** Build composite key "guildId:userId" (both cleaned to digits only) */
   static userKey(guildId, userId) {
-    return `${String(guildId ?? "").replace(/\D/g, "")}:${String(userId ?? "").replace(/\D/g, "")}`;
+    return `${cleanId(guildId)}:${cleanId(userId)}`;
   }
 
   /** Build composite key "guildId:channelId" (both cleaned to digits only) */
   static channelKey(guildId, channelId) {
-    return `${String(guildId ?? "").replace(/\D/g, "")}:${String(channelId ?? "").replace(/\D/g, "")}`;
+    return `${cleanId(guildId)}:${cleanId(channelId)}`;
   }
 
   /**
@@ -66,9 +75,9 @@ export class VoiceStateCache {
    * @param {boolean} [params.isBot=false]
    */
   updateUser({ guildId, userId, channelId, isBot = false }) {
-    const cleanGuild   = String(guildId ?? "").replace(/\D/g, "");
-    const cleanUser    = String(userId ?? "").replace(/\D/g, "");
-    const cleanChannel = channelId ? String(channelId).replace(/\D/g, "") : null;
+    const cleanGuild   = cleanId(guildId);
+    const cleanUser    = cleanId(userId);
+    const cleanChannel = channelId ? cleanId(channelId) : null;
     if (!cleanGuild || !cleanUser) return;
 
     const locations   = isBot ? this.botLocations   : this.userLocations;
@@ -228,33 +237,48 @@ export class VoiceStateCache {
    * @param {string} guildId
    */
   removeGuild(guildId) {
-    const cleanGuild = String(guildId).replace(/\D/g, "");
+    const cleanGuild = cleanId(guildId);
     const prefix = cleanGuild + ":";
 
+
+    const userKeysToRemove = [];
     for (const [uKey, loc] of this.userLocations) {
-      if (uKey.startsWith(prefix)) {
+      if (uKey.startsWith(prefix)) userKeysToRemove.push(uKey);
+    }
+    for (const uKey of userKeysToRemove) {
+      const loc = this.userLocations.get(uKey);
+      if (loc) {
         const cKey = VoiceStateCache.channelKey(loc.guildId, loc.channelId);
         const set  = this.channelMembers.get(cKey);
         if (set) { set.delete(loc.userId); if (set.size === 0) this.channelMembers.delete(cKey); }
-        this.userLocations.delete(uKey);
       }
+      this.userLocations.delete(uKey);
     }
-    for (const [cKey, set] of this.channelMembers) {
-      if (cKey.startsWith(prefix)) this.channelMembers.delete(cKey);
+    const channelKeysToRemove = [];
+    for (const [cKey] of this.channelMembers) {
+      if (cKey.startsWith(prefix)) channelKeysToRemove.push(cKey);
     }
+    for (const cKey of channelKeysToRemove) this.channelMembers.delete(cKey);
     this._lruUserKeys = this._lruUserKeys.filter(k => !k.startsWith(prefix));
 
+    const botKeysToRemove = [];
     for (const [uKey, loc] of this.botLocations) {
-      if (uKey.startsWith(prefix)) {
+      if (uKey.startsWith(prefix)) botKeysToRemove.push(uKey);
+    }
+    for (const uKey of botKeysToRemove) {
+      const loc = this.botLocations.get(uKey);
+      if (loc) {
         const cKey = VoiceStateCache.channelKey(loc.guildId, loc.channelId);
         const set  = this.botChannelMembers.get(cKey);
         if (set) { set.delete(loc.userId); if (set.size === 0) this.botChannelMembers.delete(cKey); }
-        this.botLocations.delete(uKey);
       }
+      this.botLocations.delete(uKey);
     }
-    for (const [cKey, set] of this.botChannelMembers) {
-      if (cKey.startsWith(prefix)) this.botChannelMembers.delete(cKey);
+    const botChannelKeysToRemove = [];
+    for (const [cKey] of this.botChannelMembers) {
+      if (cKey.startsWith(prefix)) botChannelKeysToRemove.push(cKey);
     }
+    for (const cKey of botChannelKeysToRemove) this.botChannelMembers.delete(cKey);
     this._lruBotKeys = this._lruBotKeys.filter(k => !k.startsWith(prefix));
   }
 
@@ -272,7 +296,7 @@ export class VoiceStateCache {
       for (const userId of humanSet) {
         const uKey = VoiceStateCache.userKey(guildId, userId);
         const loc  = this.userLocations.get(uKey);
-        if (loc && loc.channelId === String(channelId).replace(/\D/g, "")) {
+        if (loc && loc.channelId === cleanId(channelId)) {
           this.userLocations.delete(uKey);
         }
       }
@@ -284,7 +308,7 @@ export class VoiceStateCache {
       for (const userId of botSet) {
         const uKey = VoiceStateCache.userKey(guildId, userId);
         const loc  = this.botLocations.get(uKey);
-        if (loc && loc.channelId === String(channelId).replace(/\D/g, "")) {
+        if (loc && loc.channelId === cleanId(channelId)) {
           this.botLocations.delete(uKey);
         }
       }
@@ -301,7 +325,7 @@ export class VoiceStateCache {
    * @param {boolean} [botsOnly=false]  Only purge bot entries
    */
   purgeUsersInGuild(guildId, userIds, botsOnly = false) {
-    const cleanGuild = String(guildId).replace(/\D/g, "");
+    const cleanGuild = cleanId(guildId);
 
     if (!botsOnly) {
       for (const userId of userIds) {
@@ -375,7 +399,7 @@ export class VoiceStateCache {
     if (guildId) {
       return this.userLocations.get(VoiceStateCache.userKey(guildId, userId));
     }
-    const cleanUser = String(userId).replace(/\D/g, "");
+    const cleanUser = cleanId(userId);
     for (const [uKey, loc] of this.userLocations) {
       if (loc.userId === cleanUser) return { channelId: loc.channelId, guildId: loc.guildId };
     }
@@ -422,7 +446,7 @@ export class VoiceStateCache {
     if (guildId) {
       this.updateUser({ guildId, userId, channelId: null, isBot: false });
     } else {
-      const cleanUser = String(userId).replace(/\D/g, "");
+      const cleanUser = cleanId(userId);
       for (const [uKey, loc] of this.userLocations) {
         if (loc.userId === cleanUser) {
           this.updateUser({ guildId: loc.guildId, userId: cleanUser, channelId: null, isBot: false });
@@ -458,7 +482,7 @@ export class VoiceStateCache {
     if (guildId) {
       return this.userLocations.has(VoiceStateCache.userKey(guildId, userId));
     }
-    const cleanUser = String(userId).replace(/\D/g, "");
+    const cleanUser = cleanId(userId);
     for (const [uKey, loc] of this.userLocations) {
       if (loc.userId === cleanUser) return true;
     }
@@ -504,7 +528,7 @@ export class VoiceStateCache {
     if (guildId !== undefined) {
       return this.userLocations.has(VoiceStateCache.userKey(guildId, userId));
     }
-    const cleanUser = String(userId).replace(/\D/g, "");
+    const cleanUser = cleanId(userId);
     for (const [, loc] of this.userLocations) {
       if (loc.userId === cleanUser) return true;
     }
@@ -525,7 +549,7 @@ export class VoiceStateCache {
       const loc = this.userLocations.get(VoiceStateCache.userKey(guildId, userId));
       return loc ? { channelId: loc.channelId, guildId: loc.guildId } : undefined;
     }
-    const cleanUser = String(userId).replace(/\D/g, "");
+    const cleanUser = cleanId(userId);
     for (const [, loc] of this.userLocations) {
       if (loc.userId === cleanUser) return { channelId: loc.channelId, guildId: loc.guildId };
     }
@@ -556,7 +580,7 @@ export class VoiceStateCache {
     if (guildId !== undefined) {
       this.updateUser({ guildId, userId, channelId: null, isBot: false });
     } else {
-      const cleanUser = String(userId).replace(/\D/g, "");
+      const cleanUser = cleanId(userId);
       const toRemove = [];
       for (const [uKey, loc] of this.userLocations) {
         if (loc.userId === cleanUser) toRemove.push(loc);

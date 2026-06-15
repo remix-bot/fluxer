@@ -1,9 +1,14 @@
+/**
+ * @file volumedefault.mjs — Set the default volume for the server
+ * @module commands.volumedefault
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { PermissionFlags } from "@fluxerjs/core";
+import { MAX_VOLUME } from "../src/constants/UI.mjs";
 
-const MAX_VOLUME = 200;
 
 export const command = new CommandBuilder()
     .setName("volumedefault")
@@ -16,6 +21,12 @@ export const command = new CommandBuilder()
     )
     .addAliases("vd");
 
+/**
+ * Execute the volumedefault command.
+ * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(message, data) {
     const p = await this.getPlayer(message, false, false, false);
     if (!p) return;
@@ -61,5 +72,5 @@ export async function run(message, data) {
         }
     }
 
-    message.reply({ embeds: [embed] });
+    message.reply({ embeds: [embed] }).catch(() => {});
 }

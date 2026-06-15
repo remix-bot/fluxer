@@ -1,7 +1,11 @@
+/**
+ * @file leave.mjs — Leave the current voice channel and stop playback
+ * @module commands.leave
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { logger } from "../src/constants/Logger.mjs";
-import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { getGlobalColor, cleanId } from "../src/MessageHandler.mjs";
 import { get247ChannelMode } from "../src/constants/Helpers247.mjs";
 
 export const command = new CommandBuilder()
@@ -15,13 +19,6 @@ export const command = new CommandBuilder()
         .setRequired(false)
     );
 
-function embed(desc) {
-  return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] };
-}
-
-function cleanId(value) {
-  return String(value ?? "").replace(/\D/g, "");
-}
 
 function resolvePlayerGuildId(player, mapKey, client) {
   const direct = cleanId(player?._guildId);
@@ -32,6 +29,12 @@ function resolvePlayerGuildId(player, mapKey, client) {
   return cleanId(ch?.guildId ?? ch?.guild?.id ?? ch?.server_id ?? ch?.serverId);
 }
 
+/**
+ * Execute the leave command.
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(msg, data) {
   const guildId = msg.channel?.guild?.id
       ?? msg.channel?.guildId
@@ -54,24 +57,24 @@ export async function run(msg, data) {
   if (specifiedChannel) {
     targetChannelId = cleanId(specifiedChannel);
   } else {
-    const userChannelId = this.players.checkVoiceChannels(msg);
+    const { channelId: userChannelId } = await this.players.checkVoiceChannels(msg);
     if (userChannelId) targetChannelId = cleanId(userChannelId);
   }
 
   if (!targetChannelId) {
     if (guildPlayers.length === 0) {
-      return msg.reply(embed(this.t(msg, "responses.leave.notInVoice")));
+      return msg.reply(this.t(msg, "responses.leave.notInVoice"));
     }
     const channelList = guildPlayers.map(([mapKey, p]) => {
       const id = cleanId(p._channelId ?? mapKey);
       return id ? `<#${id}>` : "`unknown`";
     });
-    return msg.reply(embed(
+    return msg.reply(
         this.t(msg, "responses.leave.specifyChannel", {
           channels: channelList.map(c => `• ${c}`).join("\n"),
           prefix: this.handler.getPrefix(msg.message?.guildId ?? msg.channel?.guild?.id)
         })
-    ));
+    );
   }
 
   const player = this.players.playerMap.get(targetChannelId)
@@ -82,21 +85,21 @@ export async function run(msg, data) {
 
   if (!player) {
     if (guildPlayers.length === 0) {
-      return msg.reply(embed(this.t(msg, "responses.leave.notInVoice")));
+      return msg.reply(this.t(msg, "responses.leave.notInVoice"));
     }
     const channelList = guildPlayers.map(([mapKey, p]) => {
       const id = cleanId(p._channelId ?? mapKey);
       return id ? `<#${id}>` : "`unknown`";
     });
-    return msg.reply(embed(
+    return msg.reply(
         this.t(msg, "responses.leave.noPlayerInChannel", {
           channel: `<#${targetChannelId}>`,
           channels: channelList.map(c => `• ${c}`).join("\n")
         })
-    ));
+    );
   }
 
-  if (!player?.connection) return msg.reply(embed(this.t(msg, "responses.leave.playerNotInit")));
+  if (!player?.connection) return msg.reply(this.t(msg, "responses.leave.playerNotInit"));
 
   const activeChannelId = cleanId(player._channelId) || targetChannelId;
   const homeChannelId = cleanId(player._home247Channel) || activeChannelId;
@@ -134,7 +137,7 @@ export async function run(msg, data) {
     player.destroy();
 
     if (mode === "auto") {
-      msg.reply(embed(this.t(msg, "responses.leave.leftRejoin247", { channel: targetChannelId, prefix })));
+      msg.reply(this.t(msg, "responses.leave.leftRejoin247", { channel: targetChannelId, prefix }));
       const rejoinDelay = this.config?.timers?.leave247RejoinDelay ?? 5000;
       setTimeout(() => {
         if (this._spawnPlayer) {
@@ -144,7 +147,7 @@ export async function run(msg, data) {
         }
       }, rejoinDelay);
     } else {
-      msg.reply(embed(this.t(msg, "responses.leave.left247On", { prefix })));
+      msg.reply(this.t(msg, "responses.leave.left247On", { prefix }));
     }
   } else {
     await this.leaveChannel(activeChannelId, guildId, msg);

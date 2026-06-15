@@ -1,3 +1,8 @@
+/**
+ * @file MessageHandler.mjs — MessageHandler — wraps Fluxer messages with reply helpers, embed builders, permission checks, and voice state utilities
+ * @module src.MessageHandler
+ */
+
 import { Client, Events, EmbedBuilder, PermissionFlags } from "@fluxerjs/core";
 import { logger } from "./constants/Logger.mjs";
 import { Utils } from "./Utils.mjs";
@@ -38,9 +43,44 @@ export function parseColor(value, fallback = 0xe9196c) {
 
 /** Global embed color — set once at startup from config */
 let _globalColor = 0xe9196c;
+/**
+ * setGlobalColor function.
+ * @param {{*}} value
+ * @returns {*}
+ */
 export function setGlobalColor(value) { _globalColor = parseColor(value); }
+/**
+ * getGlobalColor function.
+ * @returns {*}
+ */
 export function getGlobalColor()      { return _globalColor; }
 
+/**
+ * Strip non-digit characters from a value, returning a clean ID string.
+ * Re-exported from Utils.mjs for backward compatibility.
+ */
+export { cleanId } from "./Utils.mjs";
+
+/**
+ * Resolve a guild ID from various message-like shapes.
+ * @param {object} message
+ * @returns {string|null}
+ */
+export function getMessageGuildId(message) {
+  return message?.channel?.guildId ??
+    message?.channel?.guild?.id ??
+    message?.message?.guildId ??
+    message?.message?.guild?.id ??
+    message?.channel?.server_id ??
+    message?.channel?.serverId ??
+    message?.message?.server_id ??
+    message?.message?.serverId ??
+    null;
+}
+
+/**
+ * MessageHandler class.
+ */
 export class MessageHandler {
   /**
    * Fluxer.js client instance
@@ -205,7 +245,7 @@ export class MessageHandler {
   async assertPermissions(permissions, message) {
     const guild = message.guild ?? await message.client?.guilds?.resolve?.(message.guildId);
     if (guild && !guild.members?.me) {
-      try { await guild.members.fetchMe(); } catch (_) { /* fetch failed, checkPermissions will warn */ }
+      try { await guild.members.fetchMe(); } catch (_) {  }
     }
     const missing = this.checkPermissions(permissions, message.channel ?? message.channel?.channel);
     if (missing.length === 0) return true;
@@ -230,7 +270,7 @@ export class MessageHandler {
       try {
         const names = missing.map(k => REQUIRED_BOT_PERMISSIONS.get(k)?.name ?? k);
         await message.reply(this.t(message.guildId, "responses.messages.needPermsFallback", { perms: names.join("** **") }), { ping: false });
-      } catch (_) { /* completely blocked */ }
+      } catch (_) {  }
     }
     return false;
   }
@@ -543,6 +583,9 @@ export class MessageHandler {
   }
 }
 
+/**
+ * Channel class.
+ */
 export class Channel {
   /**
    * The actual underlying fluxer.js channel instance
@@ -640,6 +683,9 @@ export class Channel {
   }
 }
 
+/**
+ * Message class.
+ */
 export class Message {
   /**
    * The actual underlying message instance
@@ -733,6 +779,9 @@ export class Message {
   }
 }
 
+/**
+ * PageBuilder class.
+ */
 export class PageBuilder {
   form = "";
   maxLinesPerPage = 2;
@@ -942,7 +991,7 @@ export class RichPaginator {
       for (const emoji of allReactions) {
         try {
           await rawMsg.removeReaction(emoji);
-        } catch (_) {}
+        } catch(e) {  }
       }
     };
 
@@ -1041,7 +1090,7 @@ export class QueuePaginator {
         for (const emoji of [prev, next]) {
           try {
             await rawMsg.removeReaction(emoji);
-          } catch (_) {}
+          } catch(e) {  }
         }
       }
     };
@@ -1159,6 +1208,9 @@ function _helpBuildCategoryPages(tab, allCmds, prefix) {
   return pages;
 }
 
+/**
+ * HelpCommand class.
+ */
 export class HelpCommand {
   /**
    * @param {import("./CommandHandler.mjs").CommandHandler} commandHandler

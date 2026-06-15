@@ -1,6 +1,12 @@
+/**
+ * @file servers.mjs — List servers the bot is currently in (owner-only)
+ * @module commands.servers
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 
 export const command = new CommandBuilder()
     .setName("servers")
@@ -8,8 +14,12 @@ export const command = new CommandBuilder()
     .setRequirement(r => r.setOwnerOnly(true))
     .setCategory("util");
 
-const EMOJI_REMOVE_TIMEOUT = 60000;
 
+/**
+ * Execute the servers command.
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @returns {Promise<void>}
+ */
 export async function run(msg) {
   const guilds = [...this.client.guilds.values()];
 
@@ -86,7 +96,7 @@ export async function run(msg) {
       for (const emoji of navEmojis) {
         try {
           await replyMsg.message.removeReaction(emoji);
-        } catch (_) {}
+        } catch(e) {  }
       }
     }
   };

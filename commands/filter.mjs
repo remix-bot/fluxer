@@ -1,7 +1,15 @@
+/**
+ * @file filter command — Interactive audio filter picker with emoji-based toggling
+ * @module commands/filter
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder }   from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { Utils }          from "../src/Utils.mjs";
+import { PREV_EMOJI, NEXT_EMOJI, CANCEL_EMOJI } from "../src/constants/UI.mjs";
+
+const NAV_EMOJIS = [PREV_EMOJI, NEXT_EMOJI, CANCEL_EMOJI];
 
 const FILTERS = [
   {
@@ -160,10 +168,6 @@ const FILTERS = [
 ];
 
 const PAGE_SIZE    = 9;
-const PREV_EMOJI   = "⬅️";
-const NEXT_EMOJI   = "➡️";
-const CANCEL_EMOJI = "❌";
-const NAV_EMOJIS   = [PREV_EMOJI, NEXT_EMOJI, CANCEL_EMOJI];
 
 const SESSION_MS = 60_000;
 
@@ -195,6 +199,15 @@ export const command = new CommandBuilder()
     .setCategory("music")
     .addAliases("filters", "fx", "effect");
 
+/**
+ * Build the embed for a single page of the filter picker.
+ * @param {Function} t - Translation function
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @param {number} page - Current page index (0-based)
+ * @param {string[]} activeKeys - Currently active filter keys
+ * @param {object} [current] - The currently playing track
+ * @returns {import("@fluxerjs/core").EmbedBuilder}
+ */
 function buildPageEmbed(t, msg, page, activeKeys, current) {
   const totalPages = Math.ceil(FILTERS.length / PAGE_SIZE);
   const start      = page * PAGE_SIZE;
@@ -238,6 +251,12 @@ function buildPageEmbed(t, msg, page, activeKeys, current) {
       ;
 }
 
+/**
+ * Execute the filter command.
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(msg) {
   const player = await this.getPlayer(msg, false, false, false);
   if (!player) return;
@@ -267,14 +286,14 @@ export async function run(msg) {
       try {
         await menuMsg.message.react(emoji);
         await Utils.sleep(50);
-      } catch (_) {}
+      } catch(e) {  }
     }
   };
 
   const removePageFilterEmojis = async (p) => {
     const pageEmojis = getPageItems(p).map(f => f.emoji);
     for (const emoji of pageEmojis) {
-      try { await menuMsg.message.removeReaction(emoji); } catch (_) {}
+      try { await menuMsg.message.removeReaction(emoji); } catch(e) {  }
     }
   };
 
@@ -288,7 +307,7 @@ export async function run(msg) {
       await menuMsg.message.removeAllReactions();
     } catch (_) {
       for (const emoji of [...FILTERS.map(f => f.emoji), ...NAV_EMOJIS]) {
-        try { await menuMsg.message.removeReaction(emoji); } catch (_) {}
+        try { await menuMsg.message.removeReaction(emoji); } catch(e) {  }
       }
     }
   };

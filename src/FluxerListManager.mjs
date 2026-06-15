@@ -1,4 +1,9 @@
 /**
+ * @file FluxerListManager.mjs — FluxerListManager — FluxerList bot listing API client for vote checking and server stats
+ * @module src.FluxerListManager
+ */
+
+/**
  * FluxerListManager.mjs — FluxerList API client for voter data queries.
  *
  * Features:
@@ -7,7 +12,7 @@
  *   - In-memory response caching with configurable TTL
  *   - Graceful error handling (401/403 auth errors, network failures)
  *
- * FluxerList API docs: https:
+ * FluxerList API docs: https://fluxerlist.com/api/v1
  */
 
 import { logger } from "./constants/Logger.mjs";
@@ -18,6 +23,9 @@ import {
   buildFluxerListUrl,
 } from "./constants/API.mjs";
 
+/**
+ * FluxerListManager class.
+ */
 export class FluxerListManager {
   /**
    * @param {object} config - The `fluxerlist` section from config.json

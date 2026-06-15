@@ -1,3 +1,8 @@
+/**
+ * @file CommandHandler.mjs — CommandHandler — registers, resolves, and dispatches slash and prefix commands with option parsing and requirements
+ * @module src.CommandHandler
+ */
+
 import { pathToFileURL } from "node:url";
 import { logger } from "./constants/Logger.mjs";
 import { Utils } from "./Utils.mjs";
@@ -8,6 +13,9 @@ import { SettingsManager } from "./Settings.mjs";
 import path from "node:path";
 import * as fs from "node:fs";
 
+/**
+ * CommandBuilder class.
+ */
 export class CommandBuilder {
   constructor() {
     this.name = null;
@@ -52,6 +60,9 @@ export class CommandBuilder {
   addExamples(...examples) { this.examples.push(...examples); return this; }
 }
 
+/**
+ * CommandRequirement class.
+ */
 export class CommandRequirement {
   ownerOnly = false;
   constructor() {
@@ -69,6 +80,9 @@ export class CommandRequirement {
   setPermissionError(e) { this.permissionError = e; return this; }
 }
 
+/**
+ * Option class.
+ */
 export class Option {
   static THRESHOLD = 10;
   static COLS_PER_LINE = 5;
@@ -231,6 +245,9 @@ export class Option {
   set typeError(e) { this.tError = e; }
 }
 
+/**
+ * Flag class.
+ */
 export class Flag extends Option {
   constructor(type = "string") {
     if (type === "text") throw new Error("Flags can't be of type 'text'!");
@@ -238,6 +255,9 @@ export class Flag extends Option {
   }
 }
 
+/**
+ * PrefixManager class.
+ */
 export class PrefixManager {
   /** @type {SettingsManager} */
   settings;
@@ -250,6 +270,9 @@ export class PrefixManager {
   }
 }
 
+/**
+ * HelpHandler class.
+ */
 export class HelpHandler {
   /** @type {CommandHandler} */
   commands;
@@ -386,6 +409,9 @@ export class HelpHandler {
   }
 }
 
+/**
+ * CommandHandler class.
+ */
 export class CommandHandler extends EventEmitter {
   onPing = null;
   pingPrefix = true;
@@ -547,7 +573,7 @@ export class CommandHandler extends EventEmitter {
             try {
               const names = botPermResult.missing.map(k => REQUIRED_BOT_PERMISSIONS.get(k)?.name ?? k);
               msg.message?.reply?.("I'm missing critical permissions: **" + names.join("**, **") + "**. Ask an admin to fix this.", { ping: false });
-            } catch (__) { /* completely blocked */ }
+            } catch (__) {  }
           }
           return;
         }
@@ -775,6 +801,9 @@ export class CommandHandler extends EventEmitter {
   }
 }
 
+/**
+ * CommandLoader class.
+ */
 export class CommandLoader {
   /** @type {CommandHandler} */
   commands;

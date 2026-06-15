@@ -1,4 +1,9 @@
 /**
+ * @file FluxerRevoice.mjs — FluxerRevoice — voice connection adapter that bridges Fluxer gateway with LiveKit rooms, replacing revoice.js API calls
+ * @module src.constants.FluxerRevoice
+ */
+
+/**
  * FluxerRevoice.mjs — Revoice-compatible adapter that uses the Fluxer API
  *
  * This module provides the same interface as revoice.js's `Revoice` class
@@ -42,55 +47,51 @@ export const LKRoomEvent = Object.freeze({
   ParticipantDisconnected:"participantDisconnected",
 });
 
-/** @deprecated Use LKRoomEvent instead — kept for backward compat within this file */
-const RoomEvent = LKRoomEvent;
-
 import { logger } from "./Logger.mjs";
 
-{
-  if (!globalThis.__fluxerLiveKitLogPatchApplied) {
-    globalThis.__fluxerLiveKitLogPatchApplied = true;
+/**
+ * LiveKit log filter — intercepts LiveKit SDK noise without monkey-patching
+ * console.log or process.stdout globally.  Applied per-room by setting
+ * the room's logger to a filtered version.
+ */
+const LIVEKIT_LOG_PREFIXES = ["[voice LiveKitRtc]", "lk-rtc"];
 
-    const _originalConsoleLog = console.log;
-    console.log = function (...args) {
-      if (args.length === 1 && typeof args[0] === "string" && args[0].startsWith("{")) {
-        try {
-          const parsed = JSON.parse(args[0]);
-          if (parsed.name === "lk-rtc") return;
-        } catch (_) {
-        }
-      }
-      if (args.length >= 1 && typeof args[0] === "string" && args[0].includes("[voice LiveKitRtc]")) {
-        return;
-      }
-      _originalConsoleLog.apply(console, args);
-    };
+function isLiveKitLogMessage(...args) {
+  if (args.length === 1 && typeof args[0] === "string") {
+    if (args[0].startsWith("{")) {
+      try {
+        const parsed = JSON.parse(args[0]);
+        if (parsed.name === "lk-rtc") return true;
+      } catch (_e) {  }
+    }
+    if (LIVEKIT_LOG_PREFIXES.some(p => args[0].includes(p))) return true;
+  }
+  return false;
+}
 
-    const _originalStdoutWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = function (chunk, encoding, callback) {
-      if (typeof chunk === "string" && chunk.startsWith("{")) {
-        try {
-          if (chunk.includes('"lk-rtc"')) {
-            const parsed = JSON.parse(chunk);
-            if (parsed.name === "lk-rtc") {
-              if (typeof encoding === "function") { encoding(); }
-              else if (typeof callback === "function") { callback(); }
-              return true;
-            }
-          }
-        } catch (_) {
-        }
-      }
-      return _originalStdoutWrite(chunk, encoding, callback);
-    };
+/**
+ * Temporarily suppress LiveKit SDK log noise during room setup.
+ * Unlike the old global monkey-patch, this is scoped to a callback
+ * and restores the original console.log when done.
+ */
+function withSuppressedLiveKitLogs(fn) {
+  const origLog = console.log;
+  console.log = function (...args) {
+    if (isLiveKitLogMessage(...args)) return;
+    origLog.apply(console, args);
+  };
+  try {
+    return fn();
+  } finally {
+    console.log = origLog;
   }
 }
 
 /** Helper: returns a human-readable label for a ConnectionState value */
 function stateLabel(cs) {
-  if (cs === ConnectionState?.CONN_CONNECTED) return "CONN_CONNECTED";
-  if (cs === ConnectionState?.CONN_DISCONNECTED) return "CONN_DISCONNECTED";
-  if (cs === ConnectionState?.CONN_RECONNECTING) return "CONN_RECONNECTING";
+  if (cs === ConnectionState.CONN_CONNECTED) return "CONN_CONNECTED";
+  if (cs === ConnectionState.CONN_DISCONNECTED) return "CONN_DISCONNECTED";
+  if (cs === ConnectionState.CONN_RECONNECTING) return "CONN_RECONNECTING";
   if (cs === 1) return "CONN_CONNECTED(1)";
   if (cs === 0) return "CONN_DISCONNECTED(0)";
   if (cs === 2) return "CONN_RECONNECTING(2)";
@@ -176,6 +177,7 @@ export class FluxerVoiceConnection extends EventEmitter {
       try {
         await this.room.disconnect();
       } catch (e) {
+        logger.warn("[FluxerVoiceConnection] Room disconnect error:", e?.message);
       }
     } else if (this._nativeConn && typeof this._nativeConn.disconnect === "function") {
       try {
@@ -228,6 +230,9 @@ export class FluxerRevoice extends EventEmitter {
   /** @type {Set<string>} Channel IDs where disconnect is expected (bot-initiated) */
   _intentionalDisconnects = new Set();
 
+  /** @type {Map<string, NodeJS.Timeout>} Per-channel timeout tokens for intentional disconnect marks */
+  _intentionalDisconnectTokens = new Map();
+
   /** @type {FluxerRevoice|null} Singleton instance */
   static _instance = null;
 
@@ -245,28 +250,31 @@ export class FluxerRevoice extends EventEmitter {
 
   constructor(client) {
     super();
-    if (FluxerRevoice._instance) {
+    if (FluxerRevoice._instance && FluxerRevoice._instance !== this) {
       logger.warn(
-        `[FluxerRevoice] Duplicate instance creation detected! ` +
-        `Use FluxerRevoice.getInstance() instead of new FluxerRevoice(). ` +
-        `Stack: ${new Error().stack?.split('\n').slice(2, 5).join(' | ')}`
+        `[FluxerRevoice] Duplicate instance detected! Use FluxerRevoice.getInstance().`
       );
-    } else {
-      FluxerRevoice._instance = this;
     }
     if (!client) throw new Error("FluxerRevoice requires a Fluxer client instance");
     this.client = client;
+    if (!FluxerRevoice._instance) FluxerRevoice._instance = this;
     logger.player("[FluxerRevoice] Instance created with Fluxer client.");
   }
 
   /**
    * Mark a channel as expecting an intentional disconnect so the
-   * RoomEvent.Disconnected handler can log it correctly.
+   * LKRoomEvent.Disconnected handler can log it correctly.
    * @param {string} channelId
    */
   markIntentionalDisconnect(channelId) {
-    this._intentionalDisconnects.add(String(channelId));
-    setTimeout(() => this._intentionalDisconnects.delete(String(channelId)), 10_000);
+    const key = String(channelId);
+    this._intentionalDisconnects.add(key);
+    const prev = this._intentionalDisconnectTokens.get(key);
+    if (prev) clearTimeout(prev);
+    this._intentionalDisconnectTokens.set(key, setTimeout(() => {
+      this._intentionalDisconnects.delete(key);
+      this._intentionalDisconnectTokens.delete(key);
+    }, 10_000));
   }
 
   /**
@@ -341,7 +349,8 @@ export class FluxerRevoice extends EventEmitter {
     if (existing.room) {
       try {
         await existing.room.disconnect();
-      } catch (_) {
+      } catch (e) {
+        logger.warn("[FluxerRevoice] Stale room disconnect error:", e?.message);
       }
     } else if (existing._nativeConn && typeof existing._nativeConn.disconnect === "function") {
       try {
@@ -353,7 +362,7 @@ export class FluxerRevoice extends EventEmitter {
 
     existing._destroyed = true;
     existing._connected = false;
-    try { existing.removeAllListeners(); } catch (_) {}
+    try { existing.removeAllListeners(); } catch (e) {  }
   }
 
   /**
@@ -375,7 +384,9 @@ export class FluxerRevoice extends EventEmitter {
 
     const prevQueue = this._globalJoinQueue;
     const ourResult = prevQueue.then(() => joinOperation());
-    this._globalJoinQueue = ourResult.catch(() => {});
+    this._globalJoinQueue = ourResult.catch((err) => {
+      logger.warn("[FluxerRevoice] Previous join in queue failed:", err?.message ?? err);
+    });
     return await ourResult;
   }
 
@@ -392,7 +403,9 @@ export class FluxerRevoice extends EventEmitter {
     try {
       const ch = this.client.channels?.get?.(channelId);
       guildId = ch?.guildId ?? ch?.guild?.id ?? null;
-    } catch (_) {}
+    } catch (e) {
+      logger.debug("[FluxerRevoice] Could not resolve guild for channel:", e?.message);
+    }
 
     if (this.connections.has(channelId)) {
       const existing = this.connections.get(channelId);
@@ -444,8 +457,22 @@ export class FluxerRevoice extends EventEmitter {
       logger.player(`[FluxerRevoice] Got LiveKit room from native connection (isConnected: ${room.isConnected}, connectionState: ${stateLabel(room.connectionState)})`);
     }
 
+
+    if (room && typeof room.setLogger === "function") {
+      try {
+        room.setLogger({
+          debug: () => {},
+          info:  () => {},
+          warn:  (...args) => { if (!isLiveKitLogMessage(...args)) logger.warn("[LiveKit]", ...args); },
+          error: (...args) => logger.error("[LiveKit]", ...args),
+        });
+      } catch (_e) {  }
+    }
+
     if (!room) {
-      try { await nativeConnection.disconnect(); } catch (_) {}
+      try { await nativeConnection.disconnect(); } catch (e) {
+        logger.warn("[FluxerRevoice] Cleanup disconnect error:", e?.message);
+      }
       throw new Error(
         `Fluxer voice connection for ${channelId} does not expose a LiveKit Room. ` +
         `Music playback requires a LiveKit-based voice server.`
@@ -460,17 +487,17 @@ export class FluxerRevoice extends EventEmitter {
       const statePromise = new Promise((resolve) => {
         const handler = (cs) => {
           if (eventResolved) return;
-          if (cs === ConnectionState?.CONN_CONNECTED || cs === 1) {
+          if (cs === ConnectionState.CONN_CONNECTED || cs === 1) {
             eventResolved = true;
-            room.off(RoomEvent.ConnectionStateChanged, handler);
+            room.off(LKRoomEvent.ConnectionStateChanged, handler);
             resolve();
-          } else if (cs === ConnectionState?.CONN_DISCONNECTED || cs === 0) {
+          } else if (cs === ConnectionState.CONN_DISCONNECTED || cs === 0) {
             eventResolved = true;
-            room.off(RoomEvent.ConnectionStateChanged, handler);
+            room.off(LKRoomEvent.ConnectionStateChanged, handler);
             resolve();
           }
         };
-        room.on(RoomEvent.ConnectionStateChanged, handler);
+        room.on(LKRoomEvent.ConnectionStateChanged, handler);
       });
 
       while (!room.isConnected && (Date.now() - startTime) < maxWait) {
@@ -482,88 +509,97 @@ export class FluxerRevoice extends EventEmitter {
         if (room.isConnected) break;
 
         const cs = room.connectionState;
-        if (cs === ConnectionState?.CONN_DISCONNECTED || cs === 0) break;
+        if (cs === ConnectionState.CONN_DISCONNECTED || cs === 0) break;
       }
     }
 
     const finalConnected = room.isConnected;
     const finalCS = room.connectionState;
 
-    if (!finalConnected && (finalCS === ConnectionState?.CONN_DISCONNECTED || finalCS === 0)) {
-      try { await nativeConnection.disconnect(); } catch (_) {}
+    if (!finalConnected && (finalCS === ConnectionState.CONN_DISCONNECTED || finalCS === 0)) {
+      try { await nativeConnection.disconnect(); } catch (e) {
+        logger.warn("[FluxerRevoice] Cleanup disconnect error:", e?.message);
+      }
       throw new Error(`LiveKit room in disconnected state: ${stateLabel(finalCS)}`);
     }
 
     logger.player(`[FluxerRevoice] LiveKit room ready (isConnected: ${finalConnected}, connectionState: ${stateLabel(finalCS)})`);
 
-    const connection = new FluxerVoiceConnection(channelId, this, {
-      room,
-      nativeConnection,
-    });
 
-    room.on(RoomEvent.ConnectionStateChanged, (cs) => {
-      if (cs === ConnectionState.CONN_RECONNECTING || cs === 2) {
-        logger.player(`[FluxerRevoice] Room reconnecting for channel ${channelId}`);
-      } else if (cs === ConnectionState.CONN_CONNECTED || cs === 1) {
-        if (connection._destroyed) return;
-        connection._connected = true;
-        logger.player(`[FluxerRevoice] Room (re)connected for channel ${channelId}`);
-      }
-    });
+    const connection = withSuppressedLiveKitLogs(() => {
+      const conn = new FluxerVoiceConnection(channelId, this, {
+        room,
+        nativeConnection,
+      });
 
-    room.on(RoomEvent.Disconnected, (reason) => {
-      const isIntentional = this._intentionalDisconnects.has(String(channelId));
-      const reasonLabel = isIntentional ? "intentional" : (reason ?? "unexpected");
-      logger.player(`[FluxerRevoice] Room disconnected: ${reasonLabel}`);
-      this._intentionalDisconnects.delete(String(channelId));
-      connection._connected = false;
-      connection._destroyed = true;
-
-      this.connections.delete(channelId);
-
-      if (!isIntentional) {
-        this._leaveGateway(channelId, channelGuildId);
-
-        if (nativeConnection && typeof nativeConnection.disconnect === "function") {
-          try { nativeConnection.disconnect(); } catch (_) {}
-        }
-      }
-
-      connection.emit("disconnect");
-    });
-
-    room.on(RoomEvent.ParticipantConnected, (participant) => {
-      const userId = participant?.identity ?? participant?.sid;
-      if (userId) {
-        const uKey = `${channelId}:${userId}`;
-        this.users.set(uKey, { id: userId, connectedTo: channelId });
-        connection._users = [...this.users.values()].filter(u => u.connectedTo === channelId);
-        connection.emit("userjoin", userId);
-      }
-    });
-
-    room.on(RoomEvent.ParticipantDisconnected, (participant) => {
-      const userId = participant?.identity ?? participant?.sid;
-      if (userId) {
-        const uKey = `${channelId}:${userId}`;
-        this.users.delete(uKey);
-        connection._users = [...this.users.values()].filter(u => u.connectedTo === channelId);
-        connection.emit("userleave", userId);
-      }
-    });
-
-    this.connections.set(channelId, connection);
-
-    if (_leaveIfEmpty) {
-      connection.on("userleave", () => {
-        const remoteCount = room.remoteParticipants?.size ?? 0;
-        if (remoteCount === 0) {
-          logger.player(`[FluxerRevoice] Room empty, triggering autoleave for ${channelId}`);
-          connection.emit("autoleave");
-          this.connections.delete(channelId);
+      room.on(LKRoomEvent.ConnectionStateChanged, (cs) => {
+        if (cs === ConnectionState.CONN_RECONNECTING || cs === 2) {
+          logger.player(`[FluxerRevoice] Room reconnecting for channel ${channelId}`);
+        } else if (cs === ConnectionState.CONN_CONNECTED || cs === 1) {
+          if (conn._destroyed) return;
+          conn._connected = true;
+          logger.player(`[FluxerRevoice] Room (re)connected for channel ${channelId}`);
         }
       });
-    }
+
+      room.on(LKRoomEvent.Disconnected, (reason) => {
+        const isIntentional = this._intentionalDisconnects.has(String(channelId));
+        const reasonLabel = isIntentional ? "intentional" : (reason ?? "unexpected");
+        logger.player(`[FluxerRevoice] Room disconnected: ${reasonLabel}`);
+        this._intentionalDisconnects.delete(String(channelId));
+        conn._connected = false;
+        conn._destroyed = true;
+
+        this.connections.delete(channelId);
+
+        if (!isIntentional) {
+          this._leaveGateway(channelId, channelGuildId);
+
+          if (nativeConnection && typeof nativeConnection.disconnect === "function") {
+            try { nativeConnection.disconnect(); } catch (e) {
+              logger.warn("[FluxerRevoice] Native disconnect error:", e?.message);
+            }
+          }
+        }
+
+        conn.emit("disconnect");
+      });
+
+      room.on(LKRoomEvent.ParticipantConnected, (participant) => {
+        const userId = participant?.identity ?? participant?.sid;
+        if (userId) {
+          const uKey = `${channelId}:${userId}`;
+          this.users.set(uKey, { id: userId, connectedTo: channelId });
+          conn._users = [...this.users.values()].filter(u => u.connectedTo === channelId);
+          conn.emit("userjoin", userId);
+        }
+      });
+
+      room.on(LKRoomEvent.ParticipantDisconnected, (participant) => {
+        const userId = participant?.identity ?? participant?.sid;
+        if (userId) {
+          const uKey = `${channelId}:${userId}`;
+          this.users.delete(uKey);
+          conn._users = [...this.users.values()].filter(u => u.connectedTo === channelId);
+          conn.emit("userleave", userId);
+        }
+      });
+
+      this.connections.set(channelId, conn);
+
+      if (_leaveIfEmpty) {
+        conn.on("userleave", () => {
+          const remoteCount = room.remoteParticipants?.size ?? 0;
+          if (remoteCount === 0) {
+            logger.player(`[FluxerRevoice] Room empty, triggering autoleave for ${channelId}`);
+            conn.emit("autoleave");
+            this.connections.delete(channelId);
+          }
+        });
+      }
+
+      return conn;
+    });
 
     return connection;
   }

@@ -1,8 +1,13 @@
+/**
+ * @file volume.mjs — Set or view the playback volume
+ * @module commands.volume
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { MAX_VOLUME } from "../src/constants/UI.mjs";
 
-const MAX_VOLUME = 200;
 
 export const command = new CommandBuilder()
     .setName("volume")
@@ -15,6 +20,12 @@ export const command = new CommandBuilder()
     )
     .addAliases("v", "vol");
 
+/**
+ * Execute the volume command.
+ * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(message, data) {
   const p = await this.getPlayer(message, false, false, false);
   if (!p) return;
@@ -37,5 +48,5 @@ export async function run(message, data) {
     }
   }
 
-  message.reply({ embeds: [embed] });
+  message.reply({ embeds: [embed] }).catch(() => {});
 }

@@ -1,7 +1,14 @@
+/**
+ * @file trackopt.mjs — Manage per-track options — auto-seek start position and end-time timer
+ * @module commands.trackopt
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { Utils } from "../src/Utils.mjs";
 import { logger } from "../src/constants/Logger.mjs";
+import { ERROR_COLOR } from "../src/constants/UI.mjs";
 
 const DEFAULT_ALIAS = "default";
 
@@ -51,35 +58,6 @@ export const command = new CommandBuilder()
   )
   .addAlias("to");
 
-function parseTimeInput(str) {
-  if (!str || typeof str !== "string") return null;
-  str = str.trim();
-  if (/^\d+$/.test(str)) return parseInt(str, 10) * 1000;
-  const parts = str.split(":").map(Number);
-  if (parts.some(isNaN)) return null;
-  if (parts.length === 2) {
-    const [minutes, seconds] = parts;
-    if (seconds >= 60) return null;
-    return (minutes * 60 + seconds) * 1000;
-  }
-  if (parts.length === 3) {
-    const [hours, minutes, seconds] = parts;
-    if (minutes >= 60 || seconds >= 60) return null;
-    return (hours * 3600 + minutes * 60 + seconds) * 1000;
-  }
-  return null;
-}
-
-function formatMs(ms) {
-  if (ms == null || ms < 0) return "0:00";
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
 function extractAlias(parts) {
   for (let i = 0; i < parts.length; i++) {
     if (parts[i].toLowerCase().startsWith("alias:")) {
@@ -91,10 +69,16 @@ function extractAlias(parts) {
   return DEFAULT_ALIAS;
 }
 
+/**
+ * Execute the trackopt command.
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(msg, data) {
   const trackOpts = this.trackOptions;
   if (!trackOpts) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.notAvailable"))] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.notAvailable"))] });
   }
 
   const subCommand = data.command.name || data.commandId || "get";
@@ -104,12 +88,12 @@ export async function run(msg, data) {
 
   const current = p.queue?.getCurrent();
   if (!current && subCommand !== "list") {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.nothingPlaying"))] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.nothingPlaying"))] });
   }
 
   const userId = msg.message?.author?.id ?? msg.author?.id;
   if (!userId) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses._common.noVoiceChannel"))] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses._common.noVoiceChannel"))] });
   }
 
   const prefix = this.handler.getPrefix(msg.message?.guildId);
@@ -117,49 +101,57 @@ export async function run(msg, data) {
   if (subCommand === "set") {
     const timesRaw = data.get("times")?.value;
     if (!timesRaw) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.invalidFormat"))] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.invalidFormat"))] });
     }
 
     const parts = timesRaw.trim().split(/\s+/);
     const aliasRaw = extractAlias(parts);
 
-    const startMs = parseTimeInput(parts[0]);
-    if (startMs === null || startMs < 0) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.invalidFormat"))] });
+    const startMs = Utils.parseDuration(parts[0]);
+    if (!startMs || startMs < 0) {
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.invalidFormat"))] });
     }
 
     let endMs = 0;
     if (parts.length > 1) {
-      endMs = parseTimeInput(parts[1]);
-      if (endMs === null || endMs <= 0) {
-        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.invalidFormat"))] });
+      endMs = Utils.parseDuration(parts[1]);
+      if (!endMs || endMs <= 0) {
+        return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.invalidFormat"))] });
       }
       if (endMs <= startMs) {
-        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.invalidEndAfterStart"))] });
+        return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.invalidEndAfterStart"))] });
       }
     }
 
     const trackDuration = p._getTrackDurationMs(current);
     if (trackDuration > 0) {
       if (startMs >= trackDuration) {
-        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.startExceedsDuration", { duration: formatMs(trackDuration) }))] });
+        return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.startExceedsDuration", { duration: Utils.prettifyMS(trackDuration) }))] });
       }
       if (endMs > 0 && endMs > trackDuration) {
-        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.endExceedsDuration", { duration: formatMs(trackDuration) }))] });
+        return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.endExceedsDuration", { duration: Utils.prettifyMS(trackDuration) }))] });
       }
     }
 
     const result = await trackOpts.set(userId, current, startMs, endMs, aliasRaw);
     if (!result) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.saveFailed"))] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.saveFailed"))] });
     }
 
-    const endLabel = endMs > 0 ? formatMs(endMs) : "full track";
+    if (result.alias === DEFAULT_ALIAS && p.connection && !p._paused && startMs > 0) {
+      try {
+        await p.applyTrackOption({ startMs, endMs, alias: result.alias, userId });
+      } catch (applyErr) {
+        logger.warn("[trackopt] Auto-apply after set failed:", applyErr.message);
+      }
+    }
+
+    const endLabel = endMs > 0 ? Utils.prettifyMS(endMs) : "full track";
     let desc;
     if (result.alias === DEFAULT_ALIAS) {
-      desc = this.t(msg, "responses.trackopt.saved", { title: current.title, aliasLabel: "", start: formatMs(startMs), end: endLabel });
+      desc = this.t(msg, "responses.trackopt.saved", { title: current.title, aliasLabel: "", start: Utils.prettifyMS(startMs), end: endLabel });
     } else {
-      desc = this.t(msg, "responses.trackopt.savedAlias", { title: current.title, alias: result.alias, start: formatMs(startMs), end: endLabel, prefix });
+      desc = this.t(msg, "responses.trackopt.savedAlias", { title: current.title, alias: result.alias, start: Utils.prettifyMS(startMs), end: endLabel, prefix });
     }
 
     return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] });
@@ -168,15 +160,15 @@ export async function run(msg, data) {
   if (subCommand === "get") {
     const rows = await trackOpts.getAllForTrack(userId, current);
     if (!rows || rows.length === 0) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.notSet", { title: current.title }))] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.notSet", { title: current.title }))] });
     }
 
     let desc = this.t(msg, "responses.trackopt.current", { title: current.title, count: rows.length }) + "\n\n";
     for (const row of rows) {
       const aliasLabel = row.alias === DEFAULT_ALIAS ? "default" : row.alias;
-      const endStr = row.end_ms > 0 ? formatMs(row.end_ms) : "end";
+      const endStr = row.end_ms > 0 ? Utils.prettifyMS(row.end_ms) : "end";
       const autoTag = row.alias === DEFAULT_ALIAS ? " ← auto" : "";
-      desc += this.t(msg, "responses.trackopt.currentEntry", { alias: aliasLabel, start: formatMs(row.start_ms), end: endStr, autoTag }) + "\n";
+      desc += this.t(msg, "responses.trackopt.currentEntry", { alias: aliasLabel, start: Utils.prettifyMS(row.start_ms), end: endStr, autoTag }) + "\n";
     }
 
     return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] });
@@ -185,12 +177,12 @@ export async function run(msg, data) {
   if (subCommand === "play") {
     const aliasRaw = data.get("alias")?.value;
     if (!aliasRaw) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.provideAlias", { prefix }))] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.provideAlias", { prefix }))] });
     }
 
     const safeAlias = aliasRaw.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32);
     if (!safeAlias) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.invalidAlias"))] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.invalidAlias"))] });
     }
 
     const result = await trackOpts.get(userId, current, safeAlias);
@@ -198,26 +190,26 @@ export async function run(msg, data) {
       const allAliases = await trackOpts.getAllForTrack(userId, current);
       if (allAliases.length > 0) {
         const names = allAliases.map(r => r.alias === DEFAULT_ALIAS ? "default" : r.alias).join(", ");
-        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.aliasNotFound", { alias: safeAlias, title: current.title, names }))] });
+        return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.aliasNotFound", { alias: safeAlias, title: current.title, names }))] });
       }
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.notFound", { title: current.title }))] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.notFound", { title: current.title }))] });
     }
 
     if (!p.connection || p._paused) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.mustBePlaying"))] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.mustBePlaying"))] });
     }
 
     try {
       const applied = await p.applyTrackOption(result);
       if (!applied) {
-        return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.applyFailed", { error: "Unknown error" }))] });
+        return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.applyFailed", { error: "Unknown error" }))] });
       }
 
       const aliasLabel = safeAlias === DEFAULT_ALIAS ? "default" : safeAlias;
-      const endStr = result.endMs > 0 ? formatMs(result.endMs) : "end";
-      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.trackopt.applied", { alias: aliasLabel, start: formatMs(result.startMs), end: endStr }))] });
+      const endStr = result.endMs > 0 ? Utils.prettifyMS(result.endMs) : "end";
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.trackopt.applied", { alias: aliasLabel, start: Utils.prettifyMS(result.startMs), end: endStr }))] });
     } catch (e) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.applyFailed", { error: e.message }))] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.applyFailed", { error: e.message }))] });
     }
   }
 
@@ -225,7 +217,18 @@ export async function run(msg, data) {
     const aliasRaw = data.get("alias")?.value;
     const removed = await trackOpts.remove(userId, current, aliasRaw || null);
     if (!removed) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.trackopt.notFound", { title: current.title }))] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.notFound", { title: current.title }))] });
+    }
+    if (p._activeTrackOpt) {
+      const removeDefault = !aliasRaw || aliasRaw.toLowerCase() === DEFAULT_ALIAS;
+      const activeIsDefault = p._activeTrackOpt.alias === DEFAULT_ALIAS;
+      if (removeDefault && activeIsDefault) {
+        p._activeTrackOpt = null;
+        p._clearTrackEndTimer();
+      } else if (aliasRaw && p._activeTrackOpt.alias === aliasRaw.toLowerCase()) {
+        p._activeTrackOpt = null;
+        p._clearTrackEndTimer();
+      }
     }
     if (aliasRaw) {
       return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.trackopt.removedAlias", { alias: aliasRaw, title: current.title }))] });
@@ -244,14 +247,14 @@ export async function run(msg, data) {
     for (const row of rows) {
       const title = row.track_title || row.track_identifier;
       const aliasLabel = row.alias === DEFAULT_ALIAS ? "default" : row.alias;
-      const endStr = row.end_ms > 0 ? formatMs(row.end_ms) : "end";
+      const endStr = row.end_ms > 0 ? Utils.prettifyMS(row.end_ms) : "end";
       if (title !== lastTrack) {
         if (lastTrack) desc += "\n";
         desc += `🎵 **${title}**\n`;
         lastTrack = title;
       }
       const autoTag = row.alias === DEFAULT_ALIAS ? " ← auto" : "";
-      desc += `  • ${aliasLabel}: ${formatMs(row.start_ms)} → ${endStr}${autoTag}\n`;
+      desc += `  • ${aliasLabel}: ${Utils.prettifyMS(row.start_ms)} → ${endStr}${autoTag}\n`;
     }
     desc += "\n" + this.t(msg, "responses.trackopt.listHint", { prefix });
 

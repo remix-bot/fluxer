@@ -1,4 +1,9 @@
 /**
+ * @file LastFmManager.mjs — LastFmManager — Last.fm API integration for scrobbling, now-playing, loved tracks, top tracks, and track recommendations
+ * @module src.LastFmManager
+ */
+
+/**
  * LastFmManager.mjs — Last.fm API client for scrobbling, auth, and user data.
  *
  * Features:
@@ -8,26 +13,22 @@
  *   - Fetch loved / top / recent tracks for %play lastfm loved/top/recent
  *   - Per-user session key storage in MySQL table `lastfm_users`
  *
- * Last.fm API docs: https:
+ * Last.fm API docs: https://www.last.fm/api
  */
 
 import crypto from "node:crypto";
 import { logger } from "./constants/Logger.mjs";
+import { Utils } from "./Utils.mjs";
 
 const BASE_URL = "https://ws.audioscrobbler.com/2.0/";
 
 function normalizeTrackText(value) {
-  return String(value ?? "")
-    .normalize("NFKD")
-    .replace(/[^\w\s]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+  return Utils.normalizeText(value);
 }
 
 /**
  * Build the API signature required by Last.fm for authenticated calls.
- * See: https:
+ * See: https://www.last.fm/api/authentication
  */
 function buildSignature(params, apiSecret) {
   const sorted = Object.keys(params).sort();
@@ -70,6 +71,9 @@ async function apiCall(params, apiSecret, post = false) {
   return data;
 }
 
+/**
+ * LastFmManager class.
+ */
 export class LastFmManager {
   /**
    * @param {object} config - The `lastfm` section from config.json
@@ -1261,10 +1265,10 @@ export class LastFmManager {
   /**
    * Parse a Last.fm music URL and extract artist and track info.
    * Supports:
-   *   https:
-   *   https:
-   *   https:
-   *   https:
+   *   https://www.last.fm/music/Artist
+   *   https://www.last.fm/music/Artist/Track
+   *   https://www.last.fm/music/Artist/Album/Track
+   *   https://www.last.fm/music/Artist/_/Track
    *
    * @param {string} url
    * @returns {{ artist: string, track: string|null, album: string|null, url: string } | null}

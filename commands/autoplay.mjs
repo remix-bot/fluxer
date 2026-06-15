@@ -1,3 +1,8 @@
+/**
+ * @file autoplay command — Toggle autoplay to automatically play similar tracks when the queue ends
+ * @module commands/autoplay
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
@@ -8,6 +13,12 @@ export const command = new CommandBuilder()
   .setCategory("music")
   .addAliases("ap");
 
+/**
+ * Execute the autoplay command.
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(msg, data) {
   const p = await this.getPlayer(msg, true, true, false);
   if (!p) return;
@@ -39,8 +50,7 @@ export async function run(msg, data) {
                 const pick = similar[Math.floor(Math.random() * Math.min(3, similar.length))];
                 query = `${pick.name} ${pick.artist}`.trim();
               }
-            } catch (_) {
-            }
+            } catch(e) {  }
           }
 
           if (!query) {

@@ -1,3 +1,8 @@
+/**
+ * @file move.mjs — Move a track from one position to another in the queue
+ * @module commands.move
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 
 export const command = new CommandBuilder()
@@ -16,13 +21,19 @@ export const command = new CommandBuilder()
       .setRequired(true)
   );
 
+/**
+ * Execute the move command.
+ * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(message, data) {
   const p = await this.getPlayer(message, false, false, false);
   if (!p) return;
   const from = data.get("from")?.value;
   const to = data.get("to")?.value;
-  if (from == null || from < 1) return message.replyEmbed("Source position must be 1 or greater.");
-  if (to == null || to < 1) return message.replyEmbed("Target position must be 1 or greater.");
+  if (from == null || from < 1) return message.replyEmbed("Source position must be 1 or greater.").catch(() => {});
+  if (to == null || to < 1) return message.replyEmbed("Target position must be 1 or greater.").catch(() => {});
   const res = p.move(from, to);
-  message.replyEmbed(res);
+  message.replyEmbed(res).catch(() => {});
 }

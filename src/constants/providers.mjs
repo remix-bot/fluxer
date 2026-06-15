@@ -1,4 +1,9 @@
 /**
+ * @file providers.mjs — Music provider definitions — source names, emoji icons, choice lists, and inline provider parsing for search commands
+ * @module src.constants.providers
+ */
+
+/**
  * providers.mjs — Single source of truth for all provider data.
  *
  * PROVIDERS      — full map: { prefix, label } — used by worker.mjs for search
@@ -98,3 +103,18 @@ export const PROVIDER_CHOICES = [
   "ytrec", "sprec", "dzrec", "tdrec", "jsrec", "vkrec",
   "gtts", "tts", "ftts",
 ];
+
+/**
+ * Parse an inline provider prefix from a query string (e.g. "sp: song name").
+ * @param {string} raw
+ * @returns {{ provider: string|null, query: string }}
+ */
+export function parseInlineProvider(raw) {
+  const match = raw.match(/^([a-z]+):\s*(.+)$/i);
+  if (!match) return { provider: null, query: raw.trim() };
+  const maybeProvider = match[1].toLowerCase();
+  if (PROVIDER_CHOICES.includes(maybeProvider)) {
+    return { provider: maybeProvider, query: match[2].trim() };
+  }
+  return { provider: null, query: raw.trim() };
+}

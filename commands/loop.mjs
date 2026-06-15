@@ -1,3 +1,8 @@
+/**
+ * @file loop.mjs — Toggle loop mode for the queue or current track
+ * @module commands.loop
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
@@ -12,6 +17,12 @@ export const command = new CommandBuilder()
             .setDescription("Specifies what loop should be toggled.", "options.loop.type")
             .setRequired(true));
 
+/**
+ * Execute the loop command.
+ * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(message, data) {
   const p = await this.getPlayer(message);
   if (!p) return;
@@ -20,5 +31,5 @@ export async function run(message, data) {
     .setColor(getGlobalColor())
     .setDescription(res)
     ;
-  message.reply({ embeds: [embed] });
+  message.reply({ embeds: [embed] }).catch(() => {});
 }

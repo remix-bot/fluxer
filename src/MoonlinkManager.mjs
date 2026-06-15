@@ -1,4 +1,9 @@
 /**
+ * @file MoonlinkManager.mjs — MoonlinkManager — wraps moonlink.js for track search, session management, and voice packet forwarding to NodeLink
+ * @module src.MoonlinkManager
+ */
+
+/**
  * MoonlinkManager.mjs
  *
  * Wraps moonlink.js Manager with a custom connector for Fluxer.
@@ -9,6 +14,9 @@ import { logger, _wsErrorCooldown } from "./constants/Logger.mjs";
 import { EventEmitter } from "node:events";
 import { Events } from "@fluxerjs/core";
 
+/**
+ * MoonlinkManager class.
+ */
 export class MoonlinkManager extends EventEmitter {
   /** @type {Manager} */
   manager = null;
@@ -102,7 +110,7 @@ export class MoonlinkManager extends EventEmitter {
         if (node.sessionId) return node.sessionId;
         if (node.ws?.sessionId) return node.ws.sessionId;
       }
-    } catch (_) {}
+    } catch(e) { logger.warn("[Moonlink] getLiveSessionId:", e?.message); }
     return this.sessionId;
   }
 
@@ -205,7 +213,7 @@ export class MoonlinkManager extends EventEmitter {
               this._rawWsObj.off("message", this._rawWsMessageListener ?? this._rawWsHandler);
               this._rawWsObj.off("error",   this._rawWsErrorHandler);
             }
-          } catch (_) {}
+          } catch(e) { logger.warn("[Moonlink] Raw WS listener cleanup:", e?.message); }
         }
 
         if (wsObj === this._rawWsObj) return;
@@ -221,7 +229,7 @@ export class MoonlinkManager extends EventEmitter {
               }
               this.manager.packetUpdate(payload);
             }
-          } catch (_) {}
+          } catch(e) { logger.warn("[Moonlink] Raw WS message parse error:", e?.message); }
         };
 
         this._rawWsErrorHandler = (errOrEvent) => {
@@ -254,7 +262,7 @@ export class MoonlinkManager extends EventEmitter {
 
   async init(clientId) {
     this.setMaxListeners(50);
-    try { this.manager.setMaxListeners?.(50); } catch (_) {}
+    try { this.manager.setMaxListeners?.(50); } catch(e) { logger.warn("[Moonlink] init setMaxListeners:", e?.message); }
 
     try {
       for (const node of this.manager.nodes?.nodes?.values?.() ?? []) {
@@ -266,7 +274,7 @@ export class MoonlinkManager extends EventEmitter {
           sock.removeAllListeners("message");
         }
       }
-    } catch (_) {}
+    } catch(e) { logger.warn("[Moonlink] init socket cleanup:", e?.message); }
 
     await this.manager.init(clientId);
   }
@@ -288,6 +296,6 @@ export class MoonlinkManager extends EventEmitter {
       for (const node of this.manager.nodes?.nodes?.values?.() ?? []) {
         node.socket?.close?.();
       }
-    } catch (_) {}
+    } catch(e) { logger.warn("[Moonlink] destroy:", e?.message); }
   }
 }

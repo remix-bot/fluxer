@@ -1,10 +1,15 @@
+/**
+ * @file vote.mjs — Skip-vote system — start a vote to skip the current track
+ * @module commands.vote
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { Utils } from "../src/Utils.mjs";
 import { FLUXERLIST, buildVoteLink } from "../src/constants/API.mjs";
+import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 
-const EMOJI_REMOVE_TIMEOUT = 60_000;
 
 export const command = new CommandBuilder()
   .setName("vote")
@@ -37,7 +42,7 @@ export const command = new CommandBuilder()
 function notConfigured(prefix, t, guildId) {
   return {
     embeds: [new EmbedBuilder()
-      .setColor("#ff0000")
+      .setColor(ERROR_COLOR)
       .setDescription(t(guildId, "responses.vote.notConfigured"))]
   };
 }
@@ -45,7 +50,7 @@ function notConfigured(prefix, t, guildId) {
 function noResourceId(type, prefix, t, guildId) {
   return {
     embeds: [new EmbedBuilder()
-      .setColor("#ff0000")
+      .setColor(ERROR_COLOR)
       .setDescription(t(guildId, "responses.vote.noResourceId", { type, prefix }))]
   };
 }
@@ -94,6 +99,12 @@ function buildVotersEmbed(voters, total, page, limit, type, resourceId, expired 
   return { embeds: [embed] };
 }
 
+/**
+ * Execute the vote command.
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(msg, data) {
   const fluxerlist = this.fluxerlist;
   const prefix = this.handler.getPrefix(msg.message?.guildId);
@@ -157,7 +168,7 @@ export async function run(msg, data) {
       } catch (err) {
         return msg.reply({
           embeds: [new EmbedBuilder()
-            .setColor("#ff0000")
+            .setColor(ERROR_COLOR)
             .setDescription(this.t(msg, "responses.vote.fetchVotersFailed", { error: err.message }))]
         });
       }
@@ -179,11 +190,11 @@ export async function run(msg, data) {
 
       let currentPage = voterData.page;
 
-      const buildPage = (pageIdx, expired = false) => {
-        return buildVotersEmbed(voterData.voters, voterData.total, pageIdx, 20, resolvedType, id, expired, t, guildId);
+      const buildPage = (pageIdx, data, expired = false) => {
+        return buildVotersEmbed(data.voters, data.total, pageIdx, 20, resolvedType, id, expired, t, guildId);
       };
 
-      const replyMsg = await msg.reply(buildPage(currentPage));
+      const replyMsg = await msg.reply(buildPage(currentPage, voterData));
       if (!replyMsg?.message) return;
 
       const navEmojis = ["\u25C0\uFE0F", "\u25B6\uFE0F", "\u274C"];
@@ -196,18 +207,18 @@ export async function run(msg, data) {
           await replyMsg.message.removeAllReactions();
         } catch {
           for (const emoji of navEmojis) {
-            try { await replyMsg.message.removeReaction(emoji); } catch {}
+            try { await replyMsg.message.removeReaction(emoji); } catch(e) {  }
           }
         }
       };
 
-      let emojiTimeout;
+      let emojiTimeout = null;
       const resetTimer = () => {
         clearTimeout(emojiTimeout);
         emojiTimeout = setTimeout(async () => {
           unobserve?.();
           await clearReactions();
-          await replyMsg.edit(buildPage(currentPage, true)).catch(() => {});
+          await replyMsg.edit(buildPage(currentPage, voterData, true)).catch(() => {});
         }, EMOJI_REMOVE_TIMEOUT);
       };
 
@@ -230,10 +241,10 @@ export async function run(msg, data) {
         try {
           voterData = await fluxerlist.getVoters(resolvedType, id, { page: currentPage, limit: 20 });
         } catch {
-          /* keep previous data */
+          
         }
 
-        await replyMsg.edit(buildPage(currentPage)).catch(() => {});
+        await replyMsg.edit(buildPage(currentPage, voterData)).catch(() => {});
       });
 
       resetTimer();

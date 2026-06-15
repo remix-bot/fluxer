@@ -1,3 +1,8 @@
+/**
+ * @file Locale.mjs — Locale — i18n system loading JSON locale files with per-guild language settings and template variable interpolation
+ * @module src.constants.Locale
+ */
+
 import { readFileSync, readdirSync, existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -108,7 +113,7 @@ export class Locale {
           code = setting;
         }
       }
-    } catch (_) {}
+    } catch(e) {  }
 
     const data = this.locales.get(code) ?? this.locales.get(this.defaultLocale) ?? {};
     this._resolved.set(guildId, data);
@@ -156,8 +161,8 @@ export class Locale {
         const prefix = serverSettings.get("prefix");
         if (prefix) return prefix;
       }
-    } catch (_) {}
-    return "%";
+    } catch(e) {  }
+    return this._defaultPrefix || "!";
   }
 
   /**

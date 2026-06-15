@@ -1,11 +1,20 @@
+/**
+ * @file Dashboard.mjs — Dashboard — web dashboard backend with player status API, guild listing, and bot statistics endpoints
+ * @module src.dashboard.Dashboard
+ */
+
 import { CommandBuilder, CommandHandler, Option } from "../CommandHandler.mjs";
 import { PermissionFlags } from "@fluxerjs/core";
 import Player from "../Player.mjs";
-import { Utils } from "../Utils.mjs";
+import { Utils, cleanId } from "../Utils.mjs";
 import { DatabaseManager } from "./DatabaseManager.mjs";
 import { RedisHandler } from "./RedisHandler.mjs";
 import { logger } from "../constants/Logger.mjs";
+import { iterateVoiceStates } from "../constants/VoiceStateResolver.mjs";
 
+/**
+ * Dashboard class.
+ */
 export class Dashboard {
   enabled = false;
   expiryTime = 1000 * 60 * 60 * 6;
@@ -93,7 +102,7 @@ export class Dashboard {
                 const sharedIds = new Set(shared.map(s => s.id));
                 result = result.filter(g => sharedIds.has(g.id));
               }
-            } catch (_) {}
+            } catch(e) { logger.warn("[Dashboard] allServers accessor check:", e?.message); }
           }
           return result;
         }
@@ -200,7 +209,7 @@ export class Dashboard {
                   data: String(user.id)
                 }));
               }
-            } catch (_) { /* non-critical */ }
+            } catch (_) {  }
           }
           return { message: "Already Connected" };
         }
@@ -288,10 +297,10 @@ export class Dashboard {
 
       case "voiceState": {
         if (!user) return { channel: null };
-        const userId = String(user.id).replace(/\D/g, "");
+        const userId = cleanId(user.id);
         if (this.remix.voiceCache) {
           for (const [mapUserId, info] of this.remix.voiceCache) {
-            if (String(mapUserId).replace(/\D/g, "") === userId && info.channelId) {
+            if (cleanId(mapUserId) === userId && info.channelId) {
               const ch = this.remix.client.channels.get(info.channelId);
               return {
                 channelId: info.channelId,
@@ -305,16 +314,13 @@ export class Dashboard {
         const guildValues = guilds && typeof guilds.values === "function"
             ? [...guilds.values()] : guilds ? Object.values(guilds) : [];
         for (const guild of guildValues) {
-          if (!guild?.voice_states) continue;
-          const vs = Array.isArray(guild.voice_states) ? guild.voice_states :
-              typeof guild.voice_states.values === "function" ? [...guild.voice_states.values()] : Object.values(guild.voice_states);
-          for (const state of vs) {
-            const stateUserId = String(state?.userId ?? state?.user_id ?? "").replace(/\D/g, "");
-            if (stateUserId === userId && state.channelId) {
-              const ch = this.remix.client.channels.get(state.channelId);
+          for (const vs of iterateVoiceStates(guild)) {
+            const stateUserId = cleanId(vs.userId);
+            if (stateUserId === userId && vs.channelId) {
+              const ch = this.remix.client.channels.get(vs.channelId);
               return {
-                channelId: state.channelId,
-                channel: ch ? Dashboard.convertChannel(ch) : { id: state.channelId, name: "Unknown" },
+                channelId: vs.channelId,
+                channel: ch ? Dashboard.convertChannel(ch) : { id: vs.channelId, name: "Unknown" },
                 guildId: guild.id,
               };
             }
@@ -343,7 +349,7 @@ export class Dashboard {
                 data: String(user.id)
               }));
             }
-          } catch (_) { /* non-critical */ }
+          } catch (_) {  }
           return { message: "Left channel" };
         }
         try {
@@ -370,21 +376,21 @@ export class Dashboard {
     if (user && this.remix.handler?.owners?.includes?.(user.id)) return null;
     if (!user) return "User not provided";
 
-    const cleanUserId = String(user.id).replace(/\D/g, "");
-    const cleanChanId = String(player._channelId ?? "").replace(/\D/g, "");
+    const cleanUserId = cleanId(user.id);
+    const cleanChanId = cleanId(player._channelId);
     if (!cleanChanId) return "Player has no active channel";
 
     const observed = this.remix.voiceCache;
     if (observed) {
-      const guildId = String(player._guildId ?? "").replace(/\D/g, "");
+      const guildId = cleanId(player._guildId);
       const userLoc = observed.get(cleanUserId, guildId || undefined);
       if (userLoc) {
-        const infoChannelId = String(userLoc.channelId ?? "").replace(/\D/g, "");
+        const infoChannelId = cleanId(userLoc.channelId);
         if (infoChannelId === cleanChanId) return null;
       }
       for (const [mapUserId, info] of observed) {
-        if (String(mapUserId).replace(/\D/g, "") === cleanUserId) {
-          const infoChannelId = String(info.channelId ?? "").replace(/\D/g, "");
+        if (cleanId(mapUserId) === cleanUserId) {
+          const infoChannelId = cleanId(info.channelId);
           if (infoChannelId === cleanChanId) return null;
         }
       }
@@ -435,9 +441,9 @@ export class Dashboard {
     if (user.avatar) {
       avatarUrl = `https://fluxerusercontent.com/avatars/${user.id}/${user.avatar}.webp`;
     } else if (typeof user.displayAvatarURL === "function") {
-      try { avatarUrl = user.displayAvatarURL() ?? ""; } catch (_) {}
+      try { avatarUrl = user.displayAvatarURL() ?? ""; } catch(e) { logger.warn("[Dashboard] displayAvatarURL:", e?.message); }
     } else if (typeof user.avatarURL === "function") {
-      try { avatarUrl = user.avatarURL() ?? ""; } catch (_) {}
+      try { avatarUrl = user.avatarURL() ?? ""; } catch(e) { logger.warn("[Dashboard] avatarURL:", e?.message); }
     }
     if (!avatarUrl) {
       avatarUrl = `https://fluxerusercontent.com/embed/avatars/${parseInt(user.id?.slice(-4) ?? "0") % 5}.png`;
@@ -490,16 +496,12 @@ export class Dashboard {
     let voiceParticipants = [];
     if (isVoice) {
       const guild = channel?.guild ?? channel?.client?.guilds?.get(channel?.guildId);
-      if (guild?.voice_states) {
-        const vs = Array.isArray(guild.voice_states) ? guild.voice_states :
-            typeof guild.voice_states.values === "function" ? [...guild.voice_states.values()] : Object.values(guild.voice_states);
-        for (const state of vs) {
-          const scId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
-          const chId = String(channel?.id ?? "").replace(/\D/g, "");
-          if (scId === chId) {
-            const user = guild.members?.get?.(state?.userId ?? state?.user_id)?.user;
-            if (user && !user.bot) voiceParticipants.push(Dashboard.convertUser(user));
-          }
+      for (const vs of iterateVoiceStates(guild)) {
+        const scId = cleanId(vs.channelId);
+        const chId = cleanId(channel?.id);
+        if (scId === chId) {
+          const user = guild?.members?.get?.(vs.userId)?.user;
+          if (user && !user.bot) voiceParticipants.push(Dashboard.convertUser(user));
         }
       }
     }
@@ -582,8 +584,8 @@ export class Dashboard {
     const channelId = player._channelId;
     const channel = channelId ? player.client?.channels?.get(channelId) : null;
     const guild = channel?.guild ?? (player._guildId ? player.client?.guilds?.get(player._guildId) : null);
-    const cleanChannelId = channelId ? String(channelId).replace(/\D/g, "") : "";
-    const cleanGuildId = player._guildId ? String(player._guildId).replace(/\D/g, "") : "";
+    const cleanChannelId = channelId ? cleanId(channelId) : "";
+    const cleanGuildId = player._guildId ? cleanId(player._guildId) : "";
 
     const queue = player.queue ?? { loop: false, songLoop: false, current: null, data: [] };
 
@@ -600,16 +602,12 @@ export class Dashboard {
         const g = channel?.guild ?? channel?.client?.guilds?.get(channel?.guildId);
         const ids = [];
         const seen = new Set();
-        if (g?.voice_states) {
-          const vs = Array.isArray(g.voice_states) ? g.voice_states :
-              typeof g.voice_states.values === "function" ? [...g.voice_states.values()] : Object.values(g.voice_states);
-          for (const state of vs) {
-            const scId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
-            const chId = String(channel?.id ?? "").replace(/\D/g, "");
-            if (scId === chId) {
-              const memberId = String(state?.userId ?? state?.user_id ?? "");
-              if (memberId) { ids.push(memberId); seen.add(memberId); }
-            }
+        for (const vs of iterateVoiceStates(g)) {
+          const scId = cleanId(vs.channelId);
+          const chId = cleanId(channel?.id);
+          if (scId === chId) {
+            const memberId = vs.userId;
+            if (memberId) { ids.push(memberId); seen.add(memberId); }
           }
         }
         const vc = player._voiceCache ?? player._observedVoiceUsers;
@@ -626,8 +624,8 @@ export class Dashboard {
           } else {
             for (const [mapUserId, info] of vc) {
               if (seen.has(mapUserId)) continue;
-              const infoCh = String(info.channelId ?? "").replace(/\D/g, "");
-              const infoG  = String(info.guildId   ?? "").replace(/\D/g, "");
+              const infoCh = cleanId(info.channelId);
+              const infoG  = cleanId(info.guildId);
               if (infoCh === cleanChannelId && infoG === cleanGuildId) {
                 const botId = player.client?.user?.id;
                 if (botId && String(mapUserId) === String(botId)) continue;

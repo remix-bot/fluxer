@@ -1,3 +1,8 @@
+/**
+ * @file GatewayHandler.mjs — GatewayHandler — processes raw WebSocket events for voice state tracking, 24/7 recovery, and guild lifecycle
+ * @module src.GatewayHandler
+ */
+
 import { Events, GatewayOpcodes } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { logger, _wsErrorCooldown } from "./constants/Logger.mjs";
@@ -5,6 +10,8 @@ import { ServerSettings } from "./Settings.mjs";
 import { get247ChannelMode, remove247ChannelMode } from "./constants/Helpers247.mjs";
 import { VoiceStateCache } from "./constants/VoiceStateCache.mjs";
 import { REQUIRED_BOT_PERMISSIONS } from "./MessageHandler.mjs";
+import { cleanId } from "./Utils.mjs";
+import { iterateVoiceStates, hasHumansInChannel, getChannelsWithHumans } from "./constants/VoiceStateResolver.mjs";
 
 /**
  * GatewayHandler — manages raw WebSocket gateway events, voice-state tracking,
@@ -51,14 +58,14 @@ export class GatewayHandler {
    * Bots can be in multiple guilds so we namespace by guildId.
    */
   getObservedVoiceBotKey(userId, guildId) {
-    const cleanUserId = String(userId ?? "").replace(/\D/g, "");
-    const cleanGuildId = String(guildId ?? "").replace(/\D/g, "");
+    const cleanUserId = cleanId(userId ?? "");
+    const cleanGuildId = cleanId(guildId ?? "");
     return cleanUserId && cleanGuildId ? `${cleanGuildId}:${cleanUserId}` : cleanUserId || null;
   }
 
   getPrevVoiceStateKey(userId, guildId) {
-    const cleanUserId = String(userId ?? "").replace(/\D/g, "");
-    const cleanGuildId = String(guildId ?? "").replace(/\D/g, "");
+    const cleanUserId = cleanId(userId ?? "");
+    const cleanGuildId = cleanId(guildId ?? "");
     return cleanUserId && cleanGuildId ? `${cleanGuildId}:${cleanUserId}` : null;
   }
 
@@ -68,7 +75,7 @@ export class GatewayHandler {
       return { key: directKey, value: this._prevVoiceState.get(directKey) };
     }
 
-    const cleanUserId = String(userId ?? "").replace(/\D/g, "");
+    const cleanUserId = cleanId(userId ?? "");
     if (!cleanUserId) return { key: null, value: null };
 
     for (const [key, value] of this._prevVoiceState) {
@@ -95,7 +102,7 @@ export class GatewayHandler {
       if (guild.members && !guild.members.me) {
         await guild.members.fetchMe();
       }
-    } catch (_) { /* fetch failed — we'll still try */ }
+    } catch (_) {  }
 
     const channels = guild.channels;
     if (!channels) return;
@@ -138,7 +145,7 @@ export class GatewayHandler {
       logger.warn(`[GuildCreate] Cannot send permission warning to server ${guildId}: ${e.message}`);
       try {
         const t = this.remix.locale?.translate?.bind(this.remix.locale);
-        const guildIdStr = String(guildId).replace(/\D/g, "");
+        const guildIdStr = cleanId(guildId);
         await targetChannel.send(
             t ? t(guildIdStr, "responses.gateway.missingPermsFallback", { perms: missingNames.join("**, **") }) :
             "⚠️ I'm missing permissions I need to work properly! Missing: **" + missingNames.join("**, **") + "**. Please ask a server administrator to grant these permissions in Server Settings → Roles."
@@ -159,65 +166,46 @@ export class GatewayHandler {
 
     try {
       const vm = getVoiceManager(client);
-      if (vm?.voiceStates) {
+      if (vm?.voiceStates && vm.voiceStates.size > 0) {
+        let totalHumans = 0;
+        let totalBots = 0;
         for (const [guildId, userMap] of vm.voiceStates) {
           if (!userMap || typeof userMap.forEach !== "function") continue;
-          const cleanGuildId = String(guildId).replace(/\D/g, "");
+          const cleanGuildId = cleanId(guildId);
           if (!cleanGuildId) continue;
           userMap.forEach((channelId, userId) => {
             if (!userId || !channelId) return;
             const botId = client.user?.id;
             if (userId === botId) {
               remix.voiceCache.updateUser({ guildId: cleanGuildId, userId, channelId, isBot: true });
+              totalBots++;
             } else {
               const guild = client.guilds.get(cleanGuildId) ?? client.guilds.get(guildId);
               const member = guild?.members?.get?.(userId);
               const isBot = member?.user?.bot ?? false;
-              if (isBot) {
-                remix.voiceCache.updateUser({ guildId: cleanGuildId, userId, channelId, isBot: true });
-              } else {
-                remix.voiceCache.updateUser({ guildId: cleanGuildId, userId, channelId, isBot: false });
-              }
+              remix.voiceCache.updateUser({ guildId: cleanGuildId, userId, channelId, isBot });
+              if (isBot) totalBots++;
+              else totalHumans++;
             }
           });
         }
         logger.voiceState(
             `[Seed] Seeded from VoiceManager.voiceStates — ` +
-            `${remix.voiceCache.observedVoiceUsersSize} humans, ${remix.voiceCache.observedVoiceBotsSize} bots tracked.`
+            `${totalHumans} humans, ${totalBots} bots across ${vm.voiceStates.size} guilds. ` +
+            `Cache now: ${remix.voiceCache.observedVoiceUsersSize} humans, ${remix.voiceCache.observedVoiceBotsSize} bots.`
         );
         return;
       }
+      logger.voiceState(`[Seed] VoiceManager.voiceStates is empty (${vm?.voiceStates?.size ?? "null"} guilds). ` +
+          `This is expected if no users were in voice when the bot started. ` +
+          `VoiceStatesSync handler will populate the cache as guilds become available.`);
     } catch (e) {
       logger.voiceState(`[Seed] VoiceManager seeding failed: ${e?.message} — falling back to guild cache.`);
     }
 
     for (const [gId, guild] of client.guilds) {
-      const voiceStatesRaw =
-          guild.voice_states ??
-          guild.voiceStates ??
-          null;
-      if (!voiceStatesRaw) continue;
-
-      if (!Array.isArray(voiceStatesRaw) && typeof voiceStatesRaw === "object"
-          && typeof voiceStatesRaw.values !== "function") {
-        for (const [uid, val] of Object.entries(voiceStatesRaw)) {
-          const channelId = typeof val === "string" ? val
-              : val?.channelId ?? val?.channel_id ?? null;
-          if (!uid || !channelId) continue;
-          const isBot = val?.member?.user?.bot ?? false;
-          remix.voiceCache.updateUser({ guildId: gId, userId: uid, channelId, isBot });
-        }
-      } else {
-        const entries = Array.isArray(voiceStatesRaw)
-            ? voiceStatesRaw
-            : [...voiceStatesRaw.values()];
-        for (const state of entries) {
-          const userId    = state?.userId ?? state?.user_id ?? state?.id;
-          const channelId = state?.channelId ?? state?.channel_id;
-          if (!userId || !channelId) continue;
-          const isBot  = state?.member?.user?.bot ?? false;
-          remix.voiceCache.updateUser({ guildId: gId, userId, channelId, isBot });
-        }
+      for (const vs of iterateVoiceStates(guild)) {
+        remix.voiceCache.updateUser({ guildId: gId, userId: vs.userId, channelId: vs.channelId, isBot: vs.isBot });
       }
     }
   }
@@ -241,8 +229,8 @@ export class GatewayHandler {
     const { remix } = this;
     const client = remix.client;
 
-    const cleanGuild   = String(guildId).replace(/\D/g, "");
-    const cleanChannel = String(channelId).replace(/\D/g, "");
+    const cleanGuild   = cleanId(guildId);
+    const cleanChannel = cleanId(channelId);
     if (!cleanGuild || !cleanChannel) return 0;
 
     let humansFound = 0;
@@ -255,7 +243,7 @@ export class GatewayHandler {
         if (guildVoiceMap && typeof guildVoiceMap.forEach === "function") {
           guildVoiceMap.forEach((userChannelId, userId) => {
             if (!userId || !userChannelId) return;
-            const userChannel = String(userChannelId).replace(/\D/g, "");
+            const userChannel = cleanId(userChannelId);
             if (userChannel !== cleanChannel) return;
             if (userId === botId) {
               remix.voiceCache.updateUser({ guildId: cleanGuild, userId, channelId: cleanChannel, isBot: true });
@@ -297,59 +285,27 @@ export class GatewayHandler {
           `[Reseed] Guild ${cleanGuild} not in cache — cannot reseed voice states.`
       );
     } else {
-      const voiceStatesRaw =
-          guild.voice_states ??
-          guild.voiceStates ??
-          null;
-
-      if (voiceStatesRaw) {
-        if (!Array.isArray(voiceStatesRaw) && typeof voiceStatesRaw === "object"
-            && typeof voiceStatesRaw.values !== "function") {
-          for (const [uid, val] of Object.entries(voiceStatesRaw)) {
-            const stateChannel = typeof val === "string" ? val
-                : val?.channelId ?? val?.channel_id ?? null;
-            if (!uid || !stateChannel) continue;
-            const isBot = val?.member?.user?.bot ?? false;
-            if (isBot) continue;
-            if (String(stateChannel).replace(/\D/g, "") === cleanChannel) {
-              remix.voiceCache.updateUser({ guildId: cleanGuild, userId: uid, channelId: stateChannel, isBot: false });
-              humansFound++;
-              logger.voiceState(
-                  `[Reseed] Found human ${uid} in channel ${cleanChannel} (guild ${cleanGuild})`
-              );
-            }
-          }
-        } else {
-          const entries = Array.isArray(voiceStatesRaw)
-              ? voiceStatesRaw
-              : [...voiceStatesRaw.values()];
-          for (const state of entries) {
-            const userId       = state?.userId ?? state?.user_id ?? state?.id;
-            const stateChannel = state?.channelId ?? state?.channel_id;
-            if (!userId || !stateChannel) continue;
-            const isBot = state?.member?.user?.bot ?? false;
-            if (isBot) continue;
-            if (String(stateChannel).replace(/\D/g, "") === cleanChannel) {
-              remix.voiceCache.updateUser({ guildId: cleanGuild, userId, channelId: stateChannel, isBot: false });
-              humansFound++;
-              logger.voiceState(
-                  `[Reseed] Found human ${userId} in channel ${cleanChannel} (guild ${cleanGuild})`
-              );
-            }
-          }
-        }
-
-        if (botId) {
-          remix.voiceCache.updateUser({ guildId: cleanGuild, userId: botId, channelId: cleanChannel, isBot: true });
-        }
-
-        if (humansFound > 0) {
+      for (const vs of iterateVoiceStates(guild)) {
+        if (vs.isBot) continue;
+        if (vs.channelId === cleanChannel) {
+          remix.voiceCache.updateUser({ guildId: cleanGuild, userId: vs.userId, channelId: vs.channelId, isBot: false });
+          humansFound++;
           logger.voiceState(
-              `[Reseed] Channel ${cleanChannel} (guild ${cleanGuild}): ` +
-              `found ${humansFound} human(s), observedVoiceUsers size now ${remix.voiceCache.observedVoiceUsersSize}`
+              `[Reseed] Found human ${vs.userId} in channel ${cleanChannel} (guild ${cleanGuild})`
           );
-          return humansFound;
         }
+      }
+
+      if (botId) {
+        remix.voiceCache.updateUser({ guildId: cleanGuild, userId: botId, channelId: cleanChannel, isBot: true });
+      }
+
+      if (humansFound > 0) {
+        logger.voiceState(
+            `[Reseed] Channel ${cleanChannel} (guild ${cleanGuild}): ` +
+            `found ${humansFound} human(s), observedVoiceUsers size now ${remix.voiceCache.observedVoiceUsersSize}`
+        );
+        return humansFound;
       }
     }
 
@@ -420,7 +376,7 @@ export class GatewayHandler {
             remix._rawGatewayWsObj.off("message", remix._rawGatewayMessageListener ?? remix._rawGatewayHandler);
             remix._rawGatewayWsObj.off("error",   remix._rawGatewayErrorHandler);
           }
-        } catch (_) {}
+        } catch(e) { logger.warn("[Gateway] Failed to detach old WS listener:", e?.message); }
       }
 
       if (wsObj && wsObj !== remix._rawGatewayWsObj) {
@@ -498,7 +454,7 @@ export class GatewayHandler {
                 remix.voiceCache.updateUser({ guildId, userId, channelId: null, isBot });
               }
             }
-          } catch (_) {}
+          } catch(e) { logger.warn("[Gateway] Raw gateway handler error:", e?.message); }
         };
 
         remix._rawGatewayErrorHandler = (errOrEvent) => {
@@ -523,7 +479,7 @@ export class GatewayHandler {
         this.wsListenerAttached = true;
         logger.player("[Gateway] Raw WS listener attached to new socket.");
       }
-    } catch (_) {}
+    } catch(e) { logger.warn("[Gateway] attachRawListener failed:", e?.message); }
   }
 
   setupPresenceRotation() {
@@ -603,53 +559,21 @@ export class GatewayHandler {
 
       if (voiceStatesRaw) {
         const newUserIds = new Set();
-        if (!Array.isArray(voiceStatesRaw) && typeof voiceStatesRaw === "object"
-            && typeof voiceStatesRaw.values !== "function") {
-          for (const uid of Object.keys(voiceStatesRaw)) {
-            newUserIds.add(uid);
-          }
-        } else {
-          const entries = Array.isArray(voiceStatesRaw)
-              ? voiceStatesRaw
-              : [...voiceStatesRaw.values()];
-          for (const state of entries) {
-            const userId = state?.userId ?? state?.user_id ?? state?.id;
-            if (userId) newUserIds.add(userId);
-          }
+        for (const vs of iterateVoiceStates(guild)) {
+          newUserIds.add(vs.userId);
         }
-
         remix.voiceCache.purgeUsersInGuild(guildId, newUserIds);
       }
       if (voiceStatesRaw) {
-        if (!Array.isArray(voiceStatesRaw) && typeof voiceStatesRaw === "object"
-            && typeof voiceStatesRaw.values !== "function") {
-          for (const [uid, val] of Object.entries(voiceStatesRaw)) {
-            const channelId = typeof val === "string" ? val
-                : val?.channelId ?? val?.channel_id ?? null;
-            if (!uid || !channelId) continue;
-            const isBot = val?.member?.user?.bot ?? false;
-            remix.voiceCache.updateUser({ guildId, userId: uid, channelId, isBot });
-          }
-        } else {
-          const entries = Array.isArray(voiceStatesRaw)
-              ? voiceStatesRaw
-              : [...voiceStatesRaw.values()];
-
-          for (const state of entries) {
-            const channelId = state?.channelId ?? state?.channel_id;
-            const userId    = state?.userId    ?? state?.user_id ?? state?.id;
-            const sgid      = state?.guildId   ?? state?.guild_id ?? guildId;
-            const isBot     = state?.member?.user?.bot ?? false;
-            if (!channelId || !userId) continue;
-            remix.voiceCache.updateUser({ guildId: sgid, userId, channelId, isBot });
-          }
+        for (const vs of iterateVoiceStates(guild)) {
+          remix.voiceCache.updateUser({ guildId, userId: vs.userId, channelId: vs.channelId, isBot: vs.isBot });
         }
       }
 
       if (!remix.settingsMgr.guilds.has(guildId)) {
         logger.guild(`[GuildCreate] (Re-)joined server ${guildId} — initialising settings.`);
         try {
-          const cleanGuildId = String(guildId).replace(/\D/g, "");
+          const cleanGuildId = cleanId(guildId);
           if (!cleanGuildId) throw new Error("Invalid guildId: " + guildId);
           const res = await remix.settingsMgr.selectGuild(cleanGuildId);
           if (res?.results?.length) {
@@ -672,7 +596,7 @@ export class GatewayHandler {
         }
       }
 
-      this._checkGuildPermissions(guild, guildId);
+      this._checkGuildPermissions(guild, guildId).catch(e => logger.warn("[GuildCreate] Permission check error for", guildId, e.message));
 
     });
 
@@ -707,12 +631,16 @@ export class GatewayHandler {
     client.on(Events.VoiceStateUpdate, async (data) => {
       this._handleVoiceStateUpdate(data);
     });
+
+    client.on(Events.VoiceStatesSync, (data) => {
+      this._handleVoiceStatesSync(data);
+    });
   }
 
   /**
-   * Internal handler for VoiceStateUpdate events.
-   * Separated for readability — covers human join/leave, bot move, and bot
-   * disconnect recovery.
+   * Main voice state update dispatcher — calls focused sub-handlers.
+   * Parses the raw VOICE_STATE_UPDATE payload, computes the old channel,
+   * then delegates to specialised methods.
    */
   async _handleVoiceStateUpdate(data) {
     const { remix } = this;
@@ -721,19 +649,106 @@ export class GatewayHandler {
     const userId = data?.user_id;
     if (!userId) return;
 
-    const channelId = data?.channel_id ?? null;
-    const guildId   = data?.guild_id;
-    const isBot     = data?.member?.user?.bot ?? null;
+    const newChannelId = data?.channel_id ?? null;
+    const vsuGuildId   = data?.guild_id;
+    const isBot        = data?.member?.user?.bot ?? null;
 
-    const prevEntry    = this.findPrevVoiceStateEntry(userId, guildId);
+
+    const prevEntry    = this.findPrevVoiceStateEntry(userId, vsuGuildId);
     const prev         = prevEntry.value;
     const prevSameGuild = prev &&
-        String(prev.guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "");
+        cleanId(prev.guildId ?? "") === cleanId(vsuGuildId ?? "");
     const oldChannelId = prevSameGuild ? (prev?.channelId ?? null) : null;
-    const prevKey      = prevEntry.key;
 
+
+    this._updatePreviousStates(userId, vsuGuildId, oldChannelId, newChannelId, isBot, prevEntry, prev);
+    this._updateVoiceStateCache(userId, vsuGuildId, oldChannelId, newChannelId, isBot, prev);
+
+
+    const { player, playerGuildId, homeChannelId } = this._findAffectedPlayer(vsuGuildId, oldChannelId, newChannelId);
+
+    const isBotUser = isBot === true && userId === client.user?.id;
+
+    if (!isBotUser) {
+
+      this._handleInactivityOnVoiceChange(player, playerGuildId, homeChannelId, userId, oldChannelId, newChannelId, vsuGuildId, data);
+      return;
+    }
+
+
+    this._handleBotVoiceChange(player, playerGuildId, homeChannelId, oldChannelId, newChannelId, vsuGuildId, data);
+  }
+
+  /**
+   * Handle bulk voice state sync from GUILD_CREATE or READY.
+   * Populates VoiceStateCache with all users currently in voice channels
+   * for a guild. This is the PRIMARY way the bot learns about users who
+   * were already in voice when the bot started (before it receives any
+   * individual VOICE_STATE_UPDATE events).
+   *
+   * @param {{ guildId: string, voiceStates: Array<{user_id: string, channel_id: string|null, member?: {user?: {bot?: boolean}}}> }} data
+   */
+  _handleVoiceStatesSync(data) {
+    const { remix } = this;
+    const client = remix.client;
+    const guildId = data?.guildId;
+    if (!guildId || !Array.isArray(data?.voiceStates)) return;
+
+    const botId = client.user?.id;
+    let humansAdded = 0;
+    let botsAdded = 0;
+
+    for (const vs of data.voiceStates) {
+      const userId = vs.user_id;
+      const channelId = vs.channel_id;
+      if (!userId || !channelId) continue;
+
+      const isBot = vs.member?.user?.bot ?? (userId === botId);
+
+      remix.voiceCache.updateUser({ guildId, userId, channelId, isBot });
+      if (isBot) {
+        botsAdded++;
+      } else {
+        humansAdded++;
+      }
+    }
+
+    if (humansAdded > 0 || botsAdded > 0) {
+      logger.voiceState(
+          `[VoiceStatesSync] Guild ${guildId}: seeded ${humansAdded} humans, ${botsAdded} bots ` +
+          `(${data.voiceStates.length} total states).`
+      );
+    }
+  }
+
+  /**
+   * Update the voice state cache when users move between channels.
+   * Adds users to the cache on join, removes them on leave.
+   */
+  _updateVoiceStateCache(userId, guildId, oldChannelId, newChannelId, isBot, prev) {
+    const { remix } = this;
+
+    if (newChannelId) {
+      remix.voiceCache.updateUser({ guildId: guildId ?? prev?.guildId, userId, channelId: newChannelId, isBot: isBot === true });
+    } else {
+      const resolvedGuildId = guildId ?? prev?.guildId;
+      if (resolvedGuildId) {
+        remix.voiceCache.deleteHumanUser(userId, resolvedGuildId);
+        remix.voiceCache.deleteBotUser(VoiceStateCache.userKey(resolvedGuildId, userId));
+      }
+    }
+  }
+
+  /**
+   * Update the previous state map (LRU eviction).
+   * Maintains a bounded map of previous voice states for computing oldChannelId.
+   */
+  _updatePreviousStates(userId, guildId, oldChannelId, newChannelId, isBot, prevEntry, prev) {
+    const { remix } = this;
+    const prevKey = prevEntry.key;
     const nextKey = this.getPrevVoiceStateKey(userId, guildId ?? prev?.guildId);
-    if (channelId) {
+
+    if (newChannelId) {
       if (prevKey && prevKey !== nextKey) {
         const prevGuildPart = prevKey.split(":")[0];
         const nextGuildPart = nextKey.split(":")[0];
@@ -756,123 +771,156 @@ export class GatewayHandler {
           }
         }
       }
-      if (nextKey) this._prevVoiceState.set(nextKey, { channelId, guildId: guildId ?? prev?.guildId, isBot: isBot === true });
+      if (nextKey) this._prevVoiceState.set(nextKey, { channelId: newChannelId, guildId: guildId ?? prev?.guildId, isBot: isBot === true });
     } else {
       if (prevKey) this._prevVoiceState.delete(prevKey);
     }
+  }
 
-    if (channelId) {
-      remix.voiceCache.updateUser({ guildId: guildId ?? prev?.guildId, userId, channelId, isBot: isBot === true });
-    } else {
-      const resolvedGuildId = guildId ?? prev?.guildId;
-      if (resolvedGuildId) {
-        remix.voiceCache.deleteHumanUser(userId, resolvedGuildId);
-        remix.voiceCache.deleteBotUser(VoiceStateCache.userKey(resolvedGuildId, userId));
+  /**
+   * Find which player is affected by this voice state change.
+   * Checks both old and new channels for an existing player.
+   *
+   * @returns {{ player: object|null, playerGuildId: string|null, homeChannelId: string|null }}
+   */
+  _findAffectedPlayer(guildId, oldChannelId, newChannelId) {
+    const { remix } = this;
+
+
+    if (oldChannelId) {
+      const cleanOld = cleanId(oldChannelId);
+      const player = remix.players.playerMap.get(cleanOld);
+      if (player) {
+        return { player, playerGuildId: player._guildId, homeChannelId: player._home247Channel };
       }
     }
 
-    const isBotUser = isBot === true && userId === client.user?.id;
 
-    if (!isBotUser) {
-      const resolvedGuildId = guildId ?? prev?.guildId;
-      if (!resolvedGuildId) return;
-
-      if (channelId) {
-        try {
-          const cleanId247 = String(channelId).replace(/\D/g, "");
-          const player247  = remix.players.playerMap.get(cleanId247);
-          if (player247 && typeof player247._stopInactivityTimer === "function") {
-            logger.voiceState(`[VoiceState] Human joined 247 channel ${cleanId247}, stopping inactivity timer`);
-            player247._stopInactivityTimer();
-          }
-        } catch (_) {}
+    if (newChannelId) {
+      const cleanNew = cleanId(newChannelId);
+      const player = remix.players.playerMap.get(cleanNew);
+      if (player) {
+        return { player, playerGuildId: player._guildId, homeChannelId: player._home247Channel };
       }
+    }
 
-      if (oldChannelId && oldChannelId !== channelId) {
-        try {
-          const cleanOld = String(oldChannelId).replace(/\D/g, "");
-          const player   = remix.players.playerMap.get(cleanOld);
-          if (player && typeof player._startInactivityTimer === "function") {
-            setTimeout(() => {
-              if (!player._hasHumansInChannel()) {
-                logger.voiceState(`[VoiceState] Last human left ${cleanOld}, starting inactivity timer`);
-                player._startInactivityTimer();
-              }
-            }, this.T.aloneCheckDebounce);
-          }
-        } catch (_) {}
-      }
+    return { player: null, playerGuildId: null, homeChannelId: null };
+  }
 
-      if (channelId) {
-        try {
-          const cleanId = String(channelId).replace(/\D/g, "");
-          const player  = remix.players.playerMap.get(cleanId);
-          if (player && typeof player._stopInactivityTimer === "function") {
-            logger.voiceState(`[VoiceState] Human joined ${cleanId}, stopping inactivity timer`);
-            player._stopInactivityTimer();
-          }
-        } catch (_) {}
-      }
+  /**
+   * Manage inactivity timers when humans join/leave voice channels.
+   * Also handles dashboard updates for human voice state changes.
+   */
+  async _handleInactivityOnVoiceChange(player, playerGuildId, homeChannelId, userId, oldChannelId, newChannelId, vsuGuildId, vsu) {
+    const { remix } = this;
+    const client = remix.client;
+    const resolvedGuildId = vsuGuildId ?? playerGuildId;
+    if (!resolvedGuildId) return;
 
-      if (remix.dashboard?.enabled) {
-        try {
-          let userObj = data?.member?.user;
-          if (!userObj) {
-            try { userObj = await client.users.fetch(userId).catch(() => null); } catch (_) {}
-          }
-          if (userObj) {
-            const details = {
-              type: channelId ? "join" : "leave",
-              guildId: resolvedGuildId,
-              channelId: channelId ?? null,
-              oldChannelId: oldChannelId ?? null,
-            };
-            remix.dashboard.updateUser(details, userObj);
-          }
+    if (newChannelId) {
+      try {
+        const cleanId247 = cleanId(newChannelId);
+        const player247  = remix.players.playerMap.get(cleanId247);
+        if (player247 && typeof player247._stopInactivityTimer === "function") {
+          logger.voiceState(`[VoiceState] Human joined 247 channel ${cleanId247}, stopping inactivity timer`);
+          player247._stopInactivityTimer();
+        }
+      } catch(e) { logger.warn("[VoiceState] 247 inactivity timer stop failed:", e?.message); }
+    }
 
-          const refChannel = channelId ?? oldChannelId;
-          const cleanId_ref = refChannel ? String(refChannel).replace(/\D/g, "") : null;
-
-          if (cleanId_ref) {
-            const player = remix.players.playerMap.get(cleanId_ref);
-            if (player) {
-              const eventType = channelId ? "join" : "leave";
-              remix.dashboard.updatePlayer({
-                type: eventType,
-                data: userId,
-              }, player);
-
-              remix.dashboard.playerUpdate({
-                type: eventType,
-              }, player);
+    if (oldChannelId && oldChannelId !== newChannelId) {
+      try {
+        const cleanOld = cleanId(oldChannelId);
+        const oldPlayer = remix.players.playerMap.get(cleanOld);
+        if (oldPlayer && typeof oldPlayer._startInactivityTimer === "function") {
+          setTimeout(() => {
+            if (!oldPlayer._hasHumansInChannel()) {
+              logger.voiceState(`[VoiceState] Last human left ${cleanOld}, starting inactivity timer`);
+              oldPlayer._startInactivityTimer();
             }
-          }
-        } catch (_) {}
-      }
-
-      return;
+          }, this.T.aloneCheckDebounce);
+        }
+      } catch(e) { logger.warn("[VoiceState] Inactivity timer start failed:", e?.message); }
     }
 
-    const activeGuildPlayers = [...remix.players.playerMap.entries()].filter(([, player]) =>
-        String(player?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
+    if (newChannelId) {
+      try {
+        const cleanChId = cleanId(newChannelId);
+        const newPlayer = remix.players.playerMap.get(cleanChId);
+        if (newPlayer && typeof newPlayer._stopInactivityTimer === "function") {
+          logger.voiceState(`[VoiceState] Human joined ${cleanChId}, stopping inactivity timer`);
+          newPlayer._stopInactivityTimer();
+        }
+      } catch(e) { logger.warn("[VoiceState] Inactivity timer stop failed:", e?.message); }
+    }
+
+    if (remix.dashboard?.enabled) {
+      try {
+        let userObj = vsu?.member?.user;
+        if (!userObj) {
+          try { userObj = await client.users.fetch(userId).catch(() => null); } catch(e) { logger.warn("[VoiceState] Dashboard user fetch failed:", e?.message); }
+        }
+        if (userObj) {
+          const details = {
+            type: newChannelId ? "join" : "leave",
+            guildId: resolvedGuildId,
+            channelId: newChannelId ?? null,
+            oldChannelId: oldChannelId ?? null,
+          };
+          remix.dashboard.updateUser(details, userObj);
+        }
+
+        const refChannel = newChannelId ?? oldChannelId;
+        const cleanId_ref = refChannel ? cleanId(refChannel) : null;
+
+        if (cleanId_ref) {
+          const dashPlayer = remix.players.playerMap.get(cleanId_ref);
+          if (dashPlayer) {
+            const eventType = newChannelId ? "join" : "leave";
+            remix.dashboard.updatePlayer({
+              type: eventType,
+              data: userId,
+            }, dashPlayer);
+
+            remix.dashboard.playerUpdate({
+              type: eventType,
+            }, dashPlayer);
+          }
+        }
+      } catch(e) { logger.warn("[VoiceState] Dashboard update failed:", e?.message); }
+    }
+  }
+
+  /**
+   * Handle the bot being moved to a different channel or disconnected.
+   * Covers 24/7 re-key on move and auto-rejoin / autoleave on disconnect.
+   */
+  _handleBotVoiceChange(player, playerGuildId, homeChannelId, oldChannelId, newChannelId, vsuGuildId, vsu) {
+    const { remix } = this;
+    const client = remix.client;
+    const guildId = vsuGuildId;
+
+    const activeGuildPlayers = [...remix.players.playerMap.entries()].filter(([, p]) =>
+        cleanId(p?._guildId ?? "") === cleanId(guildId ?? "")
     );
     const multiVoiceGuild = activeGuildPlayers.length > 1;
 
-    if (channelId && guildId && oldChannelId && oldChannelId !== channelId) {
+
+    if (newChannelId && guildId && oldChannelId && oldChannelId !== newChannelId) {
       try {
-        const cleanId  = String(channelId).replace(/\D/g, "");
-        const cleanOld = String(oldChannelId).replace(/\D/g, "");
+        const cleanNew  = cleanId(newChannelId);
+        const cleanOld = cleanId(oldChannelId);
         const moveSet = remix.settingsMgr.getServer(guildId);
         const moveRaw = moveSet?.get("stay_247");
         const saved247Channels = (!moveRaw || moveRaw === "none")
             ? []
             : Array.isArray(moveRaw)
-                ? moveRaw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15)
-                : [String(moveRaw).replace(/\D/g, "")].filter(id => id.length >= 15);
+                ? moveRaw.map(id => cleanId(id)).filter(id => id.length >= 15)
+                : [cleanId(moveRaw)].filter(id => id.length >= 15);
 
         if (saved247Channels.length > 1) {
           logger.voice247(
-              `[247] Ignoring move-style bot voice update ${cleanOld} → ${cleanId} ` +
+              `[247] Ignoring move-style bot voice update ${cleanOld} → ${cleanNew} ` +
               `because guild ${guildId} already has multiple saved 24/7 channels ` +
               `[${saved247Channels.join(", ")}]`
           );
@@ -886,93 +934,93 @@ export class GatewayHandler {
             const raw = set?.get("stay_247");
             if (!raw || raw === "none") return false;
             const saved = Array.isArray(raw)
-                ? raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15)
-                : [String(raw).replace(/\D/g, "")].filter(id => id.length >= 15);
-            return saved.includes(cleanId);
+                ? raw.map(id => cleanId(id)).filter(id => id.length >= 15)
+                : [cleanId(raw)].filter(id => id.length >= 15);
+            return saved.includes(cleanNew);
           } catch (_) {
             return false;
           }
         })();
         const newChannelPendingSpawn =
-            remix.players?._pendingJoins?.has?.(cleanId) ||
+            remix.players?._pendingJoins?.has?.(cleanNew) ||
             false;
-        const targetChannel = client.channels.get(cleanId)
-            ?? client.channels.get?.(cleanId)
+        const targetChannel = client.channels.get(cleanNew)
+            ?? client.channels.get?.(cleanNew)
             ?? null;
-        const targetGuildId = String(targetChannel?.guildId ?? targetChannel?.guild?.id ?? guildId ?? "").replace(/\D/g, "");
-        const playerGuildId = String(existingPlayer?._guildId ?? "").replace(/\D/g, "");
-        const guildPlayers = [...remix.players.playerMap.entries()].filter(([, player]) =>
-            String(player?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
+        const targetGuildId = cleanId(targetChannel?.guildId ?? targetChannel?.guild?.id ?? guildId ?? "");
+        const playerGuildIdLocal = cleanId(existingPlayer?._guildId ?? "");
+        const guildPlayers = [...remix.players.playerMap.entries()].filter(([, p]) =>
+            cleanId(p?._guildId ?? "") === cleanId(guildId ?? "")
         );
         const guildIsAmbiguous = guildPlayers.length > 1;
 
         let rekeyed = false;
-        if (existingPlayer && cleanId !== cleanOld) {
+        if (existingPlayer && cleanNew !== cleanOld) {
           if (newChannelAlreadySaved || newChannelPendingSpawn) {
             logger.voice247(
-                `[247] Keeping both channels ${cleanOld} and ${cleanId} ` +
+                `[247] Keeping both channels ${cleanOld} and ${cleanNew} ` +
                 `(saved=${newChannelAlreadySaved} pending=${newChannelPendingSpawn})`
             );
             rekeyed = false;
           } else
           if (guildIsAmbiguous) {
-            const playerAtNewKey = remix.players.playerMap.get(cleanId);
+            const playerAtNewKey = remix.players.playerMap.get(cleanNew);
             if (playerAtNewKey && playerAtNewKey !== existingPlayer) {
-              existingPlayer._channelId = cleanId;
-              existingPlayer._home247Channel = cleanId;
+              existingPlayer._channelId = cleanNew;
+              existingPlayer._home247Channel = cleanNew;
               if (targetGuildId) existingPlayer._guildId = targetGuildId;
               rekeyed = false;
               logger.voice247(
-                  `[247] Updated player channel ${cleanOld} → ${cleanId} ` +
+                  `[247] Updated player channel ${cleanOld} → ${cleanNew} ` +
                   `(guild ${guildId} has ${guildPlayers.length} active players, ` +
                   `new key occupied by another player — skipped re-key)`
               );
             } else {
               remix.players.playerMap.delete(cleanOld);
-              remix.players.playerMap.set(cleanId, existingPlayer);
-              existingPlayer._channelId = cleanId;
-              existingPlayer._home247Channel = cleanId;
+              remix.players.playerMap.set(cleanNew, existingPlayer);
+              existingPlayer._channelId = cleanNew;
+              existingPlayer._home247Channel = cleanNew;
               if (targetGuildId) existingPlayer._guildId = targetGuildId;
               rekeyed = true;
               logger.voice247(
-                  `[247] Re-keyed playerMap ${cleanOld} → ${cleanId} ` +
+                  `[247] Re-keyed playerMap ${cleanOld} → ${cleanNew} ` +
                   `(guild ${guildId} has ${guildPlayers.length} active players)`
               );
             }
-          } else if (playerGuildId && targetGuildId && playerGuildId !== targetGuildId) {
+          } else if (playerGuildIdLocal && targetGuildId && playerGuildIdLocal !== targetGuildId) {
             if (!existingPlayer) {
               logger.voice247(
-                  `[247] Stale cross-guild move ${cleanOld} → ${cleanId} ` +
+                  `[247] Stale cross-guild move ${cleanOld} → ${cleanNew} ` +
                   `(no player in playerMap for old channel — updating bot state only)`
               );
             } else {
-              const vsuGuildId = String(guildId ?? "").replace(/\D/g, "");
-              if (vsuGuildId && targetGuildId === vsuGuildId) {
+              const vsuGuildIdClean = cleanId(guildId ?? "");
+              if (vsuGuildIdClean && targetGuildId === vsuGuildIdClean) {
                 existingPlayer._guildId = targetGuildId;
-                existingPlayer._channelId = cleanId;
-                existingPlayer._home247Channel = cleanId;
+                existingPlayer._channelId = cleanNew;
+                existingPlayer._home247Channel = cleanNew;
                 remix.players.playerMap.delete(cleanOld);
-                remix.players.playerMap.set(cleanId, existingPlayer);
+                remix.players.playerMap.set(cleanNew, existingPlayer);
                 rekeyed = true;
                 logger.voice247(
-                    `[247] Fixed stale guild during recovery: re-keyed ${cleanOld} → ${cleanId} ` +
-                    `(playerGuild ${playerGuildId} → ${targetGuildId})`
+                    `[247] Fixed stale guild during recovery: re-keyed ${cleanOld} → ${cleanNew} ` +
+                    `(playerGuild ${playerGuildIdLocal} → ${targetGuildId})`
                 );
               } else {
                 logger.warn(
-                    `[247] Refused cross-guild re-key ${cleanOld} → ${cleanId} ` +
-                    `(playerGuild=${playerGuildId} targetGuild=${targetGuildId})`
+                    `[247] Refused cross-guild re-key ${cleanOld} → ${cleanNew} ` +
+                    `(playerGuild=${playerGuildIdLocal} targetGuild=${targetGuildId})`
                 );
               }
             }
           } else {
             remix.players.playerMap.delete(cleanOld);
-            remix.players.playerMap.set(cleanId, existingPlayer);
-            existingPlayer._channelId = cleanId;
-            existingPlayer._home247Channel = cleanId;
+            remix.players.playerMap.set(cleanNew, existingPlayer);
+            existingPlayer._channelId = cleanNew;
+            existingPlayer._home247Channel = cleanNew;
             if (targetGuildId) existingPlayer._guildId = targetGuildId;
             rekeyed = true;
-            logger.voice247(`[247] Re-keyed playerMap ${cleanOld} → ${cleanId}`);
+            logger.voice247(`[247] Re-keyed playerMap ${cleanOld} → ${cleanNew}`);
           }
         }
 
@@ -980,50 +1028,50 @@ export class GatewayHandler {
         const raw = set?.get("stay_247");
         if ((rekeyed || existingPlayer) && raw && raw !== "none") {
           const channels = Array.isArray(raw)
-              ? new Set(raw.map(id => String(id).replace(/\D/g, "")).filter(id => id.length >= 15))
+              ? new Set(raw.map(id => cleanId(id)).filter(id => id.length >= 15))
               : new Set();
-          if (channels.has(cleanOld) && cleanOld !== cleanId && cleanId.length >= 15) {
-            if (channels.has(cleanId) || newChannelAlreadySaved || newChannelPendingSpawn) {
+          if (channels.has(cleanOld) && cleanOld !== cleanNew && cleanNew.length >= 15) {
+            if (channels.has(cleanNew) || newChannelAlreadySaved || newChannelPendingSpawn) {
               logger.voice247(
-                  `[247] Preserved stay_247 channels ${cleanOld} and ${cleanId} ` +
-                  `(saved=${channels.has(cleanId) || newChannelAlreadySaved} pending=${newChannelPendingSpawn})`
+                  `[247] Preserved stay_247 channels ${cleanOld} and ${cleanNew} ` +
+                  `(saved=${channels.has(cleanNew) || newChannelAlreadySaved} pending=${newChannelPendingSpawn})`
               );
               return;
             }
 
             const currentGuildPlayers = [...remix.players.playerMap.values()].filter(p =>
-                String(p?._guildId ?? "").replace(/\D/g, "") === String(guildId ?? "").replace(/\D/g, "")
+                cleanId(p?._guildId ?? "") === cleanId(guildId ?? "")
             );
             if (currentGuildPlayers.length > 1) {
-              if (!channels.has(cleanId)) {
-                channels.add(cleanId);
+              if (!channels.has(cleanNew)) {
+                channels.add(cleanNew);
                 set.set("stay_247", [...channels]);
                 const modes2 = set.get("stay_247_modes");
-                if (modes2 && typeof modes2 === "object" && !Array.isArray(modes2) && !modes2[cleanId]) {
-                  modes2[cleanId] = modes2[cleanOld] ?? "auto";
+                if (modes2 && typeof modes2 === "object" && !Array.isArray(modes2) && !modes2[cleanNew]) {
+                  modes2[cleanNew] = modes2[cleanOld] ?? "auto";
                   set.set("stay_247_modes", modes2);
                 }
                 logger.voice247(
-                    `[247] Added stay_247 channel ${cleanId} (kept ${cleanOld}) — guild has ${currentGuildPlayers.length} active players`
+                    `[247] Added stay_247 channel ${cleanNew} (kept ${cleanOld}) — guild has ${currentGuildPlayers.length} active players`
                 );
               }
               return;
             }
 
             channels.delete(cleanOld);
-            channels.add(cleanId);
+            channels.add(cleanNew);
             set.set("stay_247", [...channels]);
 
             const modes = set.get("stay_247_modes");
             if (modes && typeof modes === "object" && !Array.isArray(modes)) {
-              if (modes[cleanOld] && !modes[cleanId]) {
-                modes[cleanId] = modes[cleanOld];
+              if (modes[cleanOld] && !modes[cleanNew]) {
+                modes[cleanNew] = modes[cleanOld];
               }
               delete modes[cleanOld];
               set.set("stay_247_modes", modes);
             }
 
-            logger.voice247(`[247] Updated stay_247: ${cleanOld} → ${cleanId}`);
+            logger.voice247(`[247] Updated stay_247: ${cleanOld} → ${cleanNew}`);
           }
         }
       } catch (e) {
@@ -1031,10 +1079,11 @@ export class GatewayHandler {
       }
     }
 
-    if (!channelId && oldChannelId && guildId) {
+
+    if (!newChannelId && oldChannelId && guildId) {
       try {
-        const cleanOld = String(oldChannelId).replace(/\D/g, "");
-        const cleanGuild = String(guildId).replace(/\D/g, "");
+        const cleanOld = cleanId(oldChannelId);
+        const cleanGuild = cleanId(guildId);
 
         if (this._inStartupGrace) {
           const bootPlayer = remix.players.playerMap.get(cleanOld);
@@ -1064,14 +1113,14 @@ export class GatewayHandler {
             logger.voice247(
                 `[VoiceState] Bot unexpectedly disconnected from ${cleanOld} (24/7 auto) — cleaning up and scheduling rejoin.`
             );
-            const player = remix.players.playerMap.get(cleanOld);
-            if (player && !player._destroyed) {
+            const discPlayer = remix.players.playerMap.get(cleanOld);
+            if (discPlayer && !discPlayer._destroyed) {
               remix.players.playerMap.delete(cleanOld);
-              const homeChannel = String(player._home247Channel ?? "").replace(/\D/g, "");
+              const homeChannel = cleanId(discPlayer._home247Channel ?? "");
               if (homeChannel && homeChannel !== cleanOld) {
                 remix.players.playerMap.delete(homeChannel);
               }
-              try { player.destroy(); } catch (_) {}
+              try { discPlayer.destroy(); } catch(e) { logger.warn("[VoiceState] Player destroy failed:", e?.message); }
               const pendingScrobble = remix.players._pendingScrobbleTimers?.get(cleanOld);
               if (pendingScrobble) {
                 clearTimeout(pendingScrobble.timer);
@@ -1085,12 +1134,12 @@ export class GatewayHandler {
               });
             }, rejoinDelay);
           } else {
-            const player = remix.players.playerMap.get(cleanOld);
-            if (player && !player.leaving && !player._destroyed) {
+            const leavePlayer = remix.players.playerMap.get(cleanOld);
+            if (leavePlayer && !leavePlayer.leaving && !leavePlayer._destroyed) {
               logger.voiceState(
                   `[VoiceState] Bot disconnected from ${cleanOld} (24/7 mode: ${mode}) — emitting autoleave.`
               );
-              player.emit("autoleave");
+              leavePlayer.emit("autoleave");
             }
           }
         }
@@ -1110,21 +1159,68 @@ export class GatewayHandler {
   static MAX_REJOIN_RETRIES = 3;
 
   /**
+   * Shared rejoin attempt logic with exponential backoff retry.
+   * Used by both _rejoinChannel (disconnect recovery) and
+   * rejoin247Channels (boot recovery).
+   *
+   * @param {string} channelId - Clean channel ID
+   * @param {string} guildId - Clean guild ID
+   * @param {number} [maxRetries=3] Maximum retry attempts
+   * @param {number} [baseDelay=5000] Base delay for exponential backoff (ms)
+   * @param {string} [context="Rejoin"] Log context prefix
+   * @returns {Promise<object|null>} The spawned player, or null on failure
+   */
+  async _attemptRejoin(channelId, guildId, maxRetries = 3, baseDelay = 5_000, context = "Rejoin") {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const player = await this.remix._spawnPlayer(guildId, channelId);
+        this.reseedVoiceStatesForChannel(guildId, channelId);
+        logger.voice247(
+            `[${context}] Successfully rejoined channel ${channelId}` +
+            (attempt > 1 ? ` (after ${attempt - 1} retry/retries)` : '')
+        );
+        return player;
+      } catch (err) {
+        const errMsg = err?.message ?? String(err);
+        const isTrackTimeout = errMsg.includes("track publication timed out")
+            || errMsg.includes("publishToRoom failed")
+            || errMsg.includes("Failed to create MediaPlayer")
+            || errMsg.includes("internal error");
+
+        if (isTrackTimeout && attempt < maxRetries) {
+          const backoffMs = baseDelay * Math.pow(2, attempt - 1);
+          logger.warn(
+              `[${context}] Track publication failed for channel ${channelId} (attempt ${attempt}/${maxRetries}) — ` +
+              `retrying in ${backoffMs / 1000}s: ${errMsg}`
+          );
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
+          continue;
+        }
+
+        logger.warn(
+            `[${context}] Failed to rejoin channel ${channelId} (attempt ${attempt}/${maxRetries}): ${errMsg}` +
+            (attempt > 1 ? ` (after ${attempt} attempts)` : '')
+        );
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Rejoin a voice channel after an unexpected disconnect.
    * Used by the %247 auto mode to automatically reconnect.
    *
    * Includes deduplication (prevents concurrent rejoin for the same channel)
-   * and retry with exponential backoff for transient failures like track
-   * publication timeouts.
+   * and delegates retry logic to _attemptRejoin.
    *
    * @param {string} guildId
    * @param {string} channelId
-   * @param {number} [attempt=1] Current attempt number (for retry logic)
    */
-  async _rejoinChannel(guildId, channelId, attempt = 1) {
+  async _rejoinChannel(guildId, channelId) {
     const { remix } = this;
-    const cleanGuildId   = String(guildId).replace(/\D/g, "");
-    const cleanChannelId = String(channelId).replace(/\D/g, "");
+    const cleanGuildId   = cleanId(guildId);
+    const cleanChannelId = cleanId(channelId);
 
     if (this._rejoinInProgress.has(cleanChannelId)) {
       logger.voice247(`[Rejoin] Channel ${cleanChannelId} rejoin already in progress — skipping.`);
@@ -1160,40 +1256,17 @@ export class GatewayHandler {
 
     const maxRetries = GatewayHandler.MAX_REJOIN_RETRIES;
     logger.voice247(
-        `[Rejoin] Attempting to rejoin channel ${cleanChannelId} in guild ${cleanGuildId} (attempt ${attempt}/${maxRetries})...`
+        `[Rejoin] Attempting to rejoin channel ${cleanChannelId} in guild ${cleanGuildId}...`
     );
 
     try {
-      const player = await remix._spawnPlayer(cleanGuildId, cleanChannelId);
-      logger.voice247(`[Rejoin] Successfully rejoined channel ${cleanChannelId}`);
-      this._rejoinAttempts.delete(cleanChannelId);
-
-      this.reseedVoiceStatesForChannel(cleanGuildId, cleanChannelId);
-
-      return player;
-    } catch (err) {
-      const errMsg = err?.message ?? String(err);
-      const isTrackTimeout = errMsg.includes("track publication timed out")
-          || errMsg.includes("publishToRoom failed")
-          || errMsg.includes("Failed to create MediaPlayer");
-
-      if (isTrackTimeout && attempt < maxRetries) {
-        const backoffMs = 5_000 * Math.pow(2, attempt - 1);
-        logger.voice247(
-            `[Rejoin] Track publication failed for channel ${cleanChannelId} (attempt ${attempt}/${maxRetries}) — ` +
-            `retrying in ${backoffMs / 1000}s: ${errMsg}`
-        );
-
-        await new Promise(resolve => setTimeout(resolve, backoffMs));
-
-        return this._rejoinChannel(cleanGuildId, cleanChannelId, attempt + 1);
+      const player = await this._attemptRejoin(cleanChannelId, cleanGuildId, maxRetries, 5_000, "Rejoin");
+      if (player) {
+        this._rejoinAttempts.delete(cleanChannelId);
+      } else {
+        this._rejoinAttempts.delete(cleanChannelId);
       }
-
-      logger.warn(
-          `[Rejoin] Failed to rejoin channel ${cleanChannelId} (attempt ${attempt}/${maxRetries}): ${errMsg}`
-      );
-      this._rejoinAttempts.delete(cleanChannelId);
-
+      return player;
     } finally {
       this._rejoinInProgress.delete(cleanChannelId);
     }
@@ -1296,14 +1369,14 @@ export class GatewayHandler {
           return this._GuildClass;
         }
       }
-    } catch (_) {}
+    } catch(e) { logger.warn("[Gateway] _getGuildClass failed:", e?.message); }
     this._GuildClass = null;
     return null;
   }
 
   onReady() {
     this.seedVoiceStatesFromGuilds();
-    this.seedGuildsFromRest();
+    this.seedGuildsFromRest().catch(e => logger.warn("[onReady] seedGuildsFromRest error:", e.message));
     this.attachRawListener();
 
     this.setupPresenceRotation();
@@ -1349,7 +1422,7 @@ export class GatewayHandler {
 
       const rawArr = Array.isArray(raw) ? raw : [raw];
       const channels = rawArr
-          .map(id => String(id).replace(/\D/g, ""))
+          .map(id => cleanId(id))
           .filter(id => id.length >= 15 && id.length <= 22);
 
       for (const channelId of channels) {
@@ -1404,8 +1477,8 @@ export class GatewayHandler {
           if (set) {
             const raw = set.get("stay_247");
             const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
-            const filtered = arr.filter(id => id && id !== "none" && String(id).replace(/\D/g, "") !== channelId);
-            const remainingSet = new Set(filtered.map(id => String(id).replace(/\D/g, "")));
+            const filtered = arr.filter(id => id && id !== "none" && cleanId(id) !== channelId);
+            const remainingSet = new Set(filtered.map(id => cleanId(id)));
             remove247ChannelMode(set, channelId, remainingSet);
             set.set("stay_247", filtered.length > 0 ? filtered : "none");
           }
@@ -1422,7 +1495,7 @@ export class GatewayHandler {
       }
 
       const guildHasActivePlayer = [...remix.players.playerMap.values()]
-          .some(p => !p._destroyed && String(p._guildId ?? "").replace(/\D/g, "") === guildId);
+          .some(p => !p._destroyed && cleanId(p._guildId ?? "") === guildId);
       if (guildHasActivePlayer && i > 0) {
         const extraDelay = 3_000;
         logger.voice247(
@@ -1436,69 +1509,34 @@ export class GatewayHandler {
           `[BootRecovery] Rejoining channel ${channelId} in guild ${guildId} (mode: ${mode}) [${i + 1}/${channelsToRejoin.length}]`
       );
 
-      const BOOT_MAX_RETRIES = 3;
-      const BOOT_BASE_RETRY_MS = 5_000;
-      let bootRetries = 0;
+      const player = await this._attemptRejoin(channelId, guildId, 3, 5_000, "BootRecovery");
 
-      while (bootRetries < BOOT_MAX_RETRIES) {
+      if (player) {
+        logger.voice247(
+            `[BootRecovery] Successfully rejoined channel ${channelId} (mode: ${mode}) [${i + 1}/${channelsToRejoin.length}]`
+        );
+      } else {
+
         try {
-          const player = await remix._spawnPlayer(guildId, channelId);
-
-          this.reseedVoiceStatesForChannel(guildId, channelId);
-
-          logger.voice247(
-              `[BootRecovery] Successfully rejoined channel ${channelId} (mode: ${mode}) [${i + 1}/${channelsToRejoin.length}]` +
-              (bootRetries > 0 ? ` (after ${bootRetries} retry/retries)` : '')
-          );
-          break;
-        } catch (err) {
-          bootRetries++;
-          const errMsg = err?.message ?? String(err);
-          const isTrackTimeout = errMsg.includes("track publication timed out")
-              || errMsg.includes("publishToRoom failed")
-              || errMsg.includes("Failed to create MediaPlayer")
-              || errMsg.includes("internal error");
-
-          if (isTrackTimeout && bootRetries < BOOT_MAX_RETRIES) {
-            const backoffMs = BOOT_BASE_RETRY_MS * Math.pow(2, bootRetries - 1);
-            logger.warn(
-                `[BootRecovery] Track publication failed for channel ${channelId} (attempt ${bootRetries}/${BOOT_MAX_RETRIES}) — ` +
-                `retrying in ${backoffMs / 1000}s: ${errMsg}`
+          const set = remix.settingsMgr.getServer(guildId);
+          if (set) {
+            const raw = set.get("stay_247");
+            const channels = new Set(
+                (Array.isArray(raw) ? raw : [raw])
+                    .filter(id => id && id !== "none" && cleanId(id) !== channelId)
             );
-            await new Promise(resolve => setTimeout(resolve, backoffMs));
-            continue;
+            set.set("stay_247", channels.size > 0 ? [...channels] : "none");
+            remove247ChannelMode(set, channelId, channels);
+            logger.warn(
+                `[BootRecovery] Auto-removed channel ${channelId} from 24/7 ` +
+                `in guild ${guildId} after persistent track publication failure`
+            );
           }
-
-          logger.warn(
-              `[BootRecovery] Failed to rejoin channel ${channelId} (mode: ${mode}): ${errMsg}` +
-              (bootRetries > 1 ? ` (after ${bootRetries} attempts)` : '')
+        } catch (cleanupErr) {
+          logger.error(
+              `[BootRecovery] Failed to auto-remove channel ${channelId} from 24/7:`,
+              cleanupErr?.message ?? cleanupErr
           );
-
-          if (isTrackTimeout && bootRetries >= BOOT_MAX_RETRIES) {
-            try {
-              const set = remix.settingsMgr.getServer(guildId);
-              if (set) {
-                const raw = set.get("stay_247");
-                const channels = new Set(
-                    (Array.isArray(raw) ? raw : [raw])
-                        .filter(id => id && id !== "none" && String(id).replace(/\D/g, "") !== channelId)
-                );
-                set.set("stay_247", channels.size > 0 ? [...channels] : "none");
-                remove247ChannelMode(set, channelId, channels);
-                logger.warn(
-                    `[BootRecovery] Auto-removed channel ${channelId} from 24/7 ` +
-                    `in guild ${guildId} after persistent track publication failure`
-                );
-              }
-            } catch (cleanupErr) {
-              logger.error(
-                  `[BootRecovery] Failed to auto-remove channel ${channelId} from 24/7:`,
-                  cleanupErr?.message ?? cleanupErr
-              );
-            }
-          }
-
-          break;
         }
       }
     }
@@ -1516,7 +1554,7 @@ export class GatewayHandler {
    */
   _processGuildDelete(guildId) {
     const { remix } = this;
-    const cleanGuildId = String(guildId).replace(/\D/g, "");
+    const cleanGuildId = cleanId(guildId);
 
     logger.guild(
         `[GuildDelete] Received GuildDelete for server ${guildId} — ` +
@@ -1527,7 +1565,7 @@ export class GatewayHandler {
 
     remix.voiceCache.removeGuild(cleanGuildId);
     for (const [stateKey, info] of [...this._prevVoiceState]) {
-      if (String(info.guildId).replace(/\D/g, "") === cleanGuildId)
+      if (cleanId(info.guildId) === cleanGuildId)
         this._prevVoiceState.delete(stateKey);
     }
     remix._announcementChannelCache?.delete(guildId);

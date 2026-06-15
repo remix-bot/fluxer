@@ -1,3 +1,8 @@
+/**
+ * @file DatabaseManager.mjs — DatabaseManager — SQLite database manager for the web dashboard's persistent storage
+ * @module src.dashboard.DatabaseManager
+ */
+
 import { compare, genSalt, hash } from "bcryptjs";
 import { createPool } from "mysql2/promise";
 import { logger } from "../constants/Logger.mjs";

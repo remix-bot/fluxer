@@ -1,23 +1,23 @@
+/**
+ * @file join command — Make the bot join a voice channel and initialise a player
+ * @module commands/join
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { getGlobalColor, cleanId, getMessageGuildId } from "../src/MessageHandler.mjs";
 import { logger } from "../src/constants/Logger.mjs";
 import Player from "../src/Player.mjs";
 
-function getGuildId(message) {
-  return message?.channel?.guildId
-      ?? message?.channel?.guild?.id
-      ?? message?.message?.guildId
-      ?? message?.message?.guild?.id
-      ?? message?.channel?.server_id
-      ?? message?.channel?.serverId
-      ?? null;
-}
 
-function cleanId(value) {
-  return String(value ?? "").replace(/\D/g, "");
-}
-
+/**
+ * Join a voice channel, create a Player, and register event listeners.
+ * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @param {string} cid - The voice channel ID to join
+ * @param {Function} [cb] - Callback invoked with the player on success
+ * @param {Function} [ecb] - Callback invoked on error
+ * @returns {Promise<void>}
+ */
 export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
   const cleanChannelId = cleanId(cid);
   if (!this.client.channels.has(cleanChannelId)) {
@@ -54,9 +54,9 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
   });
 
   p.on("autoleave", () => {
-    const activeChannelId = String(p._channelId ?? cid).replace(/\D/g, "") || cid;
-    const homeChannelId = String(p._home247Channel ?? activeChannelId).replace(/\D/g, "") || activeChannelId;
-    const guildId = getGuildId(message);
+    const activeChannelId = cleanId(p._channelId ?? cid) || cid;
+    const homeChannelId = cleanId(p._home247Channel ?? activeChannelId) || activeChannelId;
+    const guildId = getMessageGuildId(message);
 
     const is247 = (() => {
       try {
@@ -106,13 +106,13 @@ export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
   });
 
   p.on("message", m => {
-    const guildId  = getGuildId(message);
+    const guildId  = getMessageGuildId(message);
     const raw      = this.settingsMgr?.getServer?.(guildId)?.get("songAnnouncements");
     const disabled = raw === false || raw === 0 ||
         ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
     if (disabled) return;
     const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(m);
-    message.channel.send({ embeds: [embed] });
+    message.channel.send({ embeds: [embed] }).catch(() => {});
   });
 
   this.players._pendingJoins.add(cleanChannelId);
@@ -147,6 +147,12 @@ export const command = new CommandBuilder()
             .setRequired(false)
     );
 
+/**
+ * Execute the join command.
+ * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(message, data) {
   const rawArg = data?.get?.("channel")?.value?.trim?.() ?? null;
 
@@ -160,7 +166,7 @@ export async function run(message, data) {
     } else if (idMatch) {
       resolvedId = idMatch[1];
     } else {
-      const guildId = cleanId(getGuildId(message));
+      const guildId = cleanId(getMessageGuildId(message));
       const allChannels = [
         ...(this.client?.channels?.values?.() ?? [])
       ];
@@ -182,10 +188,10 @@ export async function run(message, data) {
     return this.players.initPlayer(message, resolvedId);
   }
 
-  const cid = this.players.checkVoiceChannels(message);
+  const { channelId: cid } = await this.players.checkVoiceChannels(message);
 
   if (!cid) {
-    const prefix = this.handler.getPrefix(getGuildId(message));
+    const prefix = this.handler.getPrefix(getMessageGuildId(message));
     const embed = new EmbedBuilder().setColor(getGlobalColor())
         .setDescription(this.t(message, "responses.join.noVoiceChannel", { prefix }));
     return message.reply({ embeds: [embed] });

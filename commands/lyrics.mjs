@@ -1,8 +1,14 @@
+/**
+ * @file lyrics.mjs — Fetch and display lyrics for the current or specified song
+ * @module commands.lyrics
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { logger } from "../src/constants/Logger.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { Utils } from "../src/Utils.mjs";
+import { EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 
 export const command = new CommandBuilder()
     .setName("lyrics")
@@ -11,9 +17,13 @@ export const command = new CommandBuilder()
     .setCategory("music");
 
 const LOADING_FRAMES     = ["◐", "◓", "◑", "◒"];
-const EMOJI_REMOVE_TIMEOUT = 60_000;
 const SESSION_MS           = 180_000;
 
+/**
+ * Execute the lyrics command.
+ * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @returns {Promise<void>}
+ */
 export async function run(message) {
   const p = await this.getPlayer(message, false, false, false);
   if (!p) return;
@@ -28,7 +38,7 @@ export async function run(message) {
   const loadingMsg = await message.reply({ embeds: [
     new EmbedBuilder().setColor(getGlobalColor())
       .setDescription(`${LOADING_FRAMES[0]} ` + this.t(message, "responses.lyrics.searching", { title: Utils.truncate(current.title, 40) }))
-      
+
   ] });
 
   const loadingInterval = setInterval(() => {
@@ -36,7 +46,7 @@ export async function run(message) {
     loadingMsg.edit({ embeds: [
       new EmbedBuilder().setColor(getGlobalColor())
       .setDescription(`${LOADING_FRAMES[frame]} ` + this.t(message, "responses.lyrics.searching", { title: Utils.truncate(current.title, 40) }))
-        
+
     ] }).catch(() => {});
   }, 800);
 
@@ -54,7 +64,7 @@ export async function run(message) {
       ] });
     }
 
-    try { await loadingMsg.message.delete(); } catch {}
+    try { await loadingMsg.message.delete(); } catch(e) {  }
 
     const syncIndicator = result.synced ? this.t(message, "responses.lyrics.syncedBadge") : "";
     const displayTitle  = Utils.cleanTitle(current.title);

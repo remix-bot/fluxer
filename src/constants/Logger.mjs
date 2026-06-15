@@ -1,4 +1,9 @@
 /**
+ * @file Logger.mjs — Logger — categorized logging (info, warn, error, voice, player) with timestamp formatting and module prefixes
+ * @module src.constants.Logger
+ */
+
+/**
  * Logger — configurable console output for Fluxer.
  *
  * Categories (all under config.logging):

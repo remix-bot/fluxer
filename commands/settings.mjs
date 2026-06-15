@@ -1,6 +1,11 @@
+/**
+ * @file settings.mjs — Configure server settings — prefix, volume, 24/7 mode, DJ role, locale, and more
+ * @module commands.settings
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { getGlobalColor, cleanId, getMessageGuildId } from "../src/MessageHandler.mjs";
 import runnables from "../settings/runnables.mjs";
 
 function embed(desc, opts = {}) {
@@ -50,10 +55,6 @@ const VOLUME_MIN = 1;
 const VOLUME_MAX = 200;
 const MAX_247_CHANNELS = 10;
 
-/** Extract clean numeric channel ID from any format */
-function cleanId(raw) {
-  return String(raw).replace(/\D/g, "");
-}
 
 /**
  * Validate that a value looks like a real Fluxer ID.
@@ -62,7 +63,7 @@ function cleanId(raw) {
  * (which would be garbage like "3", "42", "move", etc.).
  */
 function isValidFluxerId(id) {
-  const cleaned = String(id).replace(/\D/g, "");
+  const cleaned = cleanId(id);
   return cleaned.length >= 15 && cleaned.length <= 22;
 }
 
@@ -81,16 +82,6 @@ function displayValue(key, value) {
   return `\`${value}\``;
 }
 
-/** Resolve guild ID from a message context */
-function getGuildId(message) {
-  return message.message?.guildId
-    ?? message.message?.guild?.id
-    ?? message.channel?.guildId
-    ?? message.channel?.guild?.id
-    ?? message.channel?.server_id
-    ?? message.channel?.serverId
-    ?? null;
-}
 
 /** Resolve guild name from a message context */
 function getGuildName(message) {
@@ -192,7 +183,7 @@ function resolveChannelName(client, channelId) {
   try {
     const ch = client?.channels?.get?.(channelId);
     if (ch?.name) return ch.name;
-  } catch (_) {}
+  } catch(e) {  }
   return null;
 }
 
@@ -406,7 +397,7 @@ function prettifySettingLabel(key, t, guildId) {
 
 async function handle247(ctx, message, value) {
   const set     = ctx.getSettings(message);
-  const guildId = getGuildId(message);
+  const guildId = getMessageGuildId(message);
   const mode    = value.toLowerCase().trim();
 
   const resolved = mode === "true" ? "auto" : mode === "false" ? "off" : mode;
@@ -420,7 +411,7 @@ async function handle247(ctx, message, value) {
   if (resolved === "off") {
     if (!guildId) return message.reply(embed(ctx.t(message, "responses.settings.noServer")));
 
-    const channelId = ctx.players.checkVoiceChannels(message);
+    const { channelId } = await ctx.players.checkVoiceChannels(message);
     const channels  = get247Channels(set);
 
     if (channelId) {
@@ -474,7 +465,7 @@ async function handle247(ctx, message, value) {
 
   if (!guildId) return message.reply(embed(ctx.t(message, "responses.settings.noServer")));
 
-  const userChannelId = ctx.players.checkVoiceChannels(message);
+  const { channelId: userChannelId } = await ctx.players.checkVoiceChannels(message);
   if (!userChannelId) {
     return message.reply(embed(
         ctx.t(message, "responses.settings.noVoice247", { mode: resolved, prefix: ctx.handler.getPrefix(guildId) })
@@ -554,7 +545,7 @@ async function applySet(ctx, message, set, key, rawValue) {
       });
     }
     set.set(key, rawValue);
-    const guildId = getGuildId(message);
+    const guildId = getMessageGuildId(message);
     if (guildId) ctx.locale.invalidateCache(guildId);
     return null;
   }
@@ -583,7 +574,7 @@ async function handleShortcut(ctx, message, settingKey, valueTokens) {
   if (valueTokens.length === 0) {
     if (settingKey === "stay_247") {
       const t247 = ctx.locale?.translate?.bind(ctx.locale);
-      return message.reply(build247StatusPanel(set, ctx, message, t247, getGuildId(message)));
+      return message.reply(build247StatusPanel(set, ctx, message, t247, getMessageGuildId(message)));
     }
     const val = set.get(settingKey);
     return message.reply(embed(`\`${settingKey}\` → ${displayValue(settingKey, val)}`));
@@ -695,6 +686,12 @@ export const command = function() {
       );
 };
 
+/**
+ * Execute the settings command.
+ * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(message, data) {
   const set = this.getSettings(message);
   const cmd = data.commandId || "getSettings";
@@ -744,11 +741,11 @@ export async function run(message, data) {
     if (settingKey) {
       if (settingKey === "stay_247") {
         const t247 = this.locale?.translate?.bind(this.locale);
-        return message.reply(build247StatusPanel(set, this, message, t247, getGuildId(message)));
+        return message.reply(build247StatusPanel(set, this, message, t247, getMessageGuildId(message)));
       }
       const val = set.get(settingKey);
       const description = this.settingsMgr.descriptions?.[settingKey];
-      const prefix = ctx.handler.getPrefix(guildId);
+      const prefix = this.handler.getPrefix(guildId);
       const resolvedDesc = description ? description.replace(/\$prefix/gi, prefix) : null;
       let reply = `**${prettifySettingLabel(settingKey)}**\nValue: ${displayValue(settingKey, val)}`;
       if (resolvedDesc) reply += `\n\n*${resolvedDesc}*`;
@@ -766,7 +763,7 @@ export async function run(message, data) {
         .filter(([k]) => k !== "stay_247_mode")
         .map(([k]) => {
           if (k === "stay_247") {
-            return `• **24/7 mode** — ${format247Status(set, this.locale?.translate?.bind(this.locale), getGuildId(message))}`;
+            return `• **24/7 mode** — ${format247Status(set, this.locale?.translate?.bind(this.locale), getMessageGuildId(message))}`;
           }
           return `• **${prettifySettingLabel(k)}** — ${displayValue(k, d[k])}`;
         });
@@ -784,7 +781,7 @@ export async function run(message, data) {
     }
     set.reset(settingKey);
     if (settingKey === "locale") {
-      const guildId = getGuildId(message);
+      const guildId = getMessageGuildId(message);
       if (guildId) this.locale.invalidateCache(guildId);
     }
     const def = set.get(settingKey);
@@ -827,7 +824,7 @@ export async function run(message, data) {
     return message.reply(embed(
         `**⚙️ Setting: \`${settingKey}\`**\n\n` +
         `${description}${extra}\n\n` +
-        `**Current value:** ${settingKey === "stay_247" ? format247Status(set, this.locale?.translate?.bind(this.locale), getGuildId(message)) : displayValue(settingKey, currentVal)}\n` +
+        `**Current value:** ${settingKey === "stay_247" ? format247Status(set, this.locale?.translate?.bind(this.locale), getMessageGuildId(message)) : displayValue(settingKey, currentVal)}\n` +
         `**Default:** ${displayValue(settingKey, defaultVal)}`,
         { title: `⚙️ ${settingKey}` }
     ));

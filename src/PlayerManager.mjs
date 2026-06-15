@@ -1,4 +1,9 @@
 /**
+ * @file PlayerManager.mjs — PlayerManager — creates, caches, and routes Player instances per voice channel across all guilds
+ * @module src.PlayerManager
+ */
+
+/**
  * PlayerManager.mjs — Manages voice channel players across servers
  *
  * Updated for moonlink.js: passes the MoonlinkManager instance into every
@@ -6,37 +11,15 @@
  */
 
 import Player from "./Player.mjs";
-import { CommandHandler } from "./CommandHandler.mjs";
-import { Message } from "./MessageHandler.mjs";
-import { SettingsManager } from "./Settings.mjs";
-import { Utils } from "./Utils.mjs";
+import { Utils, cleanId } from "./Utils.mjs";
 import { logger } from "./constants/Logger.mjs";
 import { get247ChannelMode } from "./constants/Helpers247.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
-import { getGlobalColor } from "./MessageHandler.mjs";
+import { getGlobalColor, getMessageGuildId } from "./MessageHandler.mjs";
 import { Dashboard } from "./dashboard/Dashboard.mjs";
+import { hasHumansInChannel, iterateVoiceStates } from "./constants/VoiceStateResolver.mjs";
 
-/** Helper — build a plain embed payload from a description string */
-function mkEmbed(desc) {
-  return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] };
-}
-
-function cleanId(value) {
-  return String(value ?? "").replace(/\D/g, "");
-}
-
-function getMessageGuildId(message) {
-  return message?.channel?.guildId ??
-    message?.channel?.guild?.id ??
-    message?.message?.guildId ??
-    message?.message?.guild?.id ??
-    message?.channel?.server_id ??
-    message?.channel?.serverId ??
-    message?.message?.server_id ??
-    message?.message?.serverId ??
-    null;
-}
 
 function getPlayerGuildId(player, fallbackChannel = null) {
   return cleanId(
@@ -72,7 +55,8 @@ function botHasVoicePermissions(client, channelId) {
     if (!perms) return true;
     if (perms.has(0x8)) return true;
     return perms.has(0x400) && perms.has(0x100000) && perms.has(0x200000);
-  } catch (_) {
+  } catch (e) {
+    logger.warn("[PlayerManager] botHasVoicePermissions check failed:", e?.message);
     return true;
   }
 }
@@ -113,6 +97,9 @@ function sanitizeJoinError(err, client = null, channelId = null) {
   return null;
 }
 
+/**
+ * PlayerManager class.
+ */
 export class PlayerManager {
   /** @type {SettingsManager} */
   settings;
@@ -436,122 +423,73 @@ export class PlayerManager {
   /**
    * Attempt to detect the voice channel a user is currently in.
    * @param {Message} message
-   * @returns {string|null} Voice channel ID or null
+   * @param {Object} [settings]
+   * @returns {Promise<{channelId: string|null, alreadyInVoice: boolean, hasHumans: boolean}>}
    */
-  checkVoiceChannels(message) {
-    if (!message) return null;
+  async checkVoiceChannels(message, settings) {
+    const guildId = message?.guildId ?? message?.channel?.guildId ?? getMessageGuildId(message);
+    const userId  = message?.author?.id ?? message?.member?.user?.id;
+    const cleanGuildId = cleanId(guildId);
+    if (!guildId || !userId) return { channelId: null, alreadyInVoice: false, hasHumans: false };
 
-    const userId = message.author?.id ?? message.message?.author?.id;
-    const guildId = getMessageGuildId(message);
+    const guild = this.commands?.client?.guilds?.get?.(cleanGuildId);
 
-    if (!userId) return null;
-    if (!guildId) return null;
 
-    const cleanGuild = cleanId(guildId);
-    const seedObserved = (channelId) => {
-      const cleanChannelId = cleanId(channelId);
-      if (!cleanChannelId) return null;
-      const cache = this.voiceCache ?? this.observedVoiceUsers;
-      if (cache && !cache.has(userId, cleanGuild)) {
-        cache.set(userId, { channelId: cleanChannelId, guildId: cleanGuild });
+    if (this.voiceCache) {
+      const observed = this.voiceCache.getUserLocation(cleanGuildId, userId);
+      if (observed && observed.channelId) {
+        const alreadyInVoice = this.playerMap.has(cleanId(observed.channelId));
+        const hasHumans = this.voiceCache.hasHumansInChannel(cleanGuildId, cleanId(observed.channelId));
+        return { channelId: observed.channelId, alreadyInVoice, hasHumans };
       }
-      const loc = cache?.get(userId, cleanGuild);
-      return cleanId(loc?.channelId) || cleanChannelId;
-    };
-
-    const cache = this.voiceCache ?? this.observedVoiceUsers;
-    const observed = cache?.get?.(userId, cleanGuild);
-    if (cleanId(observed?.guildId) === cleanGuild) {
-      const observedChannelId = cleanId(observed?.channelId);
-      if (observedChannelId) return observedChannelId;
     }
 
-    try {
-      const vm = getVoiceManager(this.commands.client);
-      const voiceChannelId = vm?.getVoiceChannelId?.(guildId, userId);
-      const seeded = seedObserved(voiceChannelId);
-      if (seeded) return seeded;
-    } catch (_) {}
 
-    try {
-      const vm = getVoiceManager(this.commands.client);
-      if (vm?.voiceStates) {
-        const guildVoiceMap = vm.voiceStates.get(cleanGuild) ?? vm.voiceStates.get(guildId);
-        if (guildVoiceMap && typeof guildVoiceMap.get === "function") {
-          const vmChannelId = guildVoiceMap.get(userId);
-          const seeded = seedObserved(vmChannelId);
-          if (seeded) return seeded;
+    let channelId = message?.member?.voice?.channelId ?? null;
+
+
+    if (!channelId && guild) {
+      for (const vs of iterateVoiceStates(guild)) {
+        if (vs.userId === String(userId) && !vs.isBot) {
+          channelId = vs.channelId;
+          break;
         }
       }
-    } catch (_) {}
-
-    const memberVoiceChannelId =
-      message?.member?.voice?.channelId ??
-      message?.message?.member?.voice?.channelId ??
-      null;
-    {
-      const seeded = seedObserved(memberVoiceChannelId);
-      if (seeded) return seeded;
     }
 
-    try {
-      const guild =
-        this.commands.client?.guilds?.get?.(guildId) ??
-        this.commands.client?.guilds?.get?.(cleanGuild);
-      const voiceStates = guild?.voice_states ?? guild?.voiceStates ?? null;
-      if (voiceStates) {
-        if (!Array.isArray(voiceStates) && typeof voiceStates === "object") {
-          const direct = voiceStates[userId];
-          const directChannelId =
-            typeof direct === "string"
-              ? direct
-              : direct?.channelId ?? direct?.channel_id ?? null;
-          const seeded = seedObserved(directChannelId);
-          if (seeded) return seeded;
-        }
 
-        const entries = Array.isArray(voiceStates)
-          ? voiceStates
-          : typeof voiceStates.values === "function"
-            ? voiceStates.values()
-            : Object.values(voiceStates);
-
-        for (const state of entries) {
-          const stateUserId = state?.userId ?? state?.user_id ?? state?.id;
-          const stateGuildId = cleanId(state?.guildId ?? state?.guild_id ?? guildId);
-          if (stateUserId !== userId || stateGuildId !== cleanGuild) continue;
-          const seeded = seedObserved(state?.channelId ?? state?.channel_id);
-          if (seeded) return seeded;
-        }
+    if (!channelId) {
+      try {
+        const vm = getVoiceManager(this.commands?.client);
+        channelId = vm?.getVoiceChannelId?.(guildId, userId) ?? null;
+      } catch (e) {
+        logger.warn("[PlayerManager] VoiceManager lookup failed:", e?.message);
       }
-    } catch (_) {}
+    }
 
-    const liveGuildPlayers = [...this.playerMap.entries()].filter(([channelId, player]) => {
-      const fallbackChannel =
-        this.commands.client?.channels?.get?.(channelId) ??
-        null;
-      return getPlayerGuildId(player, fallbackChannel) === cleanGuild && !player?._destroyed;
+
+    if (!channelId && this.voiceCache) {
+      const loc = this.voiceCache.getHumanUser(userId);
+      if (loc && cleanId(loc.guildId) === cleanGuildId) {
+        channelId = loc.channelId;
+      }
+    }
+
+    if (!channelId) return { channelId: null, alreadyInVoice: false, hasHumans: false };
+
+    const alreadyInVoice = this.playerMap.has(cleanId(channelId));
+
+    const hasHumansResult = hasHumansInChannel({
+      guildId: cleanGuildId,
+      channelId: cleanId(channelId),
+      client: this.commands?.client,
+      voiceCache: this.voiceCache,
+      observedVoiceUsers: this.observedVoiceUsers,
+      room: this.playerMap.get(cleanId(channelId))?.connection?.room,
+      botId: this.commands?.client?.user?.id,
     });
-    if (liveGuildPlayers.length === 1) {
-      return getPlayerChannelId(liveGuildPlayers[0][1], liveGuildPlayers[0][0]) || cleanId(liveGuildPlayers[0][0]);
-    }
-    if (liveGuildPlayers.length > 1) {
-      for (const [mapKey, player] of liveGuildPlayers) {
-        try {
-          const room = player?.connection?.room;
-          if (!room?.isConnected || !room.remoteParticipants) continue;
-          for (const [, participant] of room.remoteParticipants) {
-            const pId = participant?.identity ?? participant?.sid;
-            if (pId === userId) {
-              const found = getPlayerChannelId(player, mapKey) || cleanId(mapKey);
-              seedObserved(found);
-              return found;
-            }
-          }
-        } catch (_) {}
-      }
-    }
-    return null;
+
+    return { channelId, alreadyInVoice, hasHumans: hasHumansResult };
   }
 
   /**
@@ -566,7 +504,7 @@ export class PlayerManager {
     const guildId = getMessageGuildId(message);
     const cleanGuildId = cleanId(guildId);
 
-    const userChannelId = this.checkVoiceChannels(message);
+    const { channelId: userChannelId } = await this.checkVoiceChannels(message);
     const cleanUserChannelId = cleanId(userChannelId);
 
     if (cleanUserChannelId) {
@@ -579,7 +517,9 @@ export class PlayerManager {
           if (guildId && textChannelId) {
             this.settings.getServer(guildId)?.set("announcementChannelId", textChannelId);
           }
-        } catch (_) {}
+        } catch(e) {
+          logger.warn("[PlayerManager] Failed to save announcement channel ID:", e?.message);
+        }
         return player;
       }
       if (this._pendingJoins.has(cleanUserChannelId)) {
@@ -600,7 +540,7 @@ export class PlayerManager {
           first[1].textChannel = message.channel;
           return first[1];
         }
-        message.reply(mkEmbed(this._t(message, "responses._common.noVoiceStrict")));
+        message.reply(this._t(message, "responses._common.noVoiceStrict"));
         return null;
       }
 
@@ -614,18 +554,18 @@ export class PlayerManager {
           if (cleanGuildId && textChannelId) {
             this.settings.getServer(cleanGuildId)?.set("announcementChannelId", textChannelId);
           }
-        } catch (_) {}
+        } catch(e) {
+          logger.warn("[PlayerManager] Failed to save announcement channel ID:", e?.message);
+        }
         return match[1];
       }
 
       if (shouldJoin) {
-        return new Promise((resolve) => {
-          this.initPlayer(message, userChannelId, (p) => resolve(p));
-        });
+        return this.initPlayer(message, userChannelId);
       }
 
       const prefix = this.commands.getPrefix(guildId);
-      message.reply(mkEmbed(this._t(message, "responses._common.alreadyInChannel", { channels: channelList, prefix })));
+      message.reply(this._t(message, "responses._common.alreadyInChannel", { channels: channelList, prefix }));
       return null;
     }
 
@@ -633,14 +573,12 @@ export class PlayerManager {
       if (shouldJoin) {
         return this.promptVC(message);
       }
-      message.reply(mkEmbed(this._t(message, "responses._common.noVoiceChannel")));
+      message.reply(this._t(message, "responses._common.noVoiceChannel"));
       return null;
     }
 
     if (shouldJoin) {
-      return new Promise((resolve) => {
-        this.initPlayer(message, userChannelId, (p) => resolve(p));
-      });
+      return this.initPlayer(message, userChannelId);
     }
 
     return null;
@@ -652,9 +590,9 @@ export class PlayerManager {
    * @returns {Promise<string|false>}
    */
   async promptVC(msg) {
-    const autoDetected = this.checkVoiceChannels(msg);
+    const { channelId: autoDetected } = await this.checkVoiceChannels(msg);
     if (autoDetected) {
-      return new Promise(resolve => this.initPlayer(msg, autoDetected, (p) => resolve(p)));
+      return this.initPlayer(msg, autoDetected);
     }
 
     const guildId = getMessageGuildId(msg);
@@ -678,9 +616,9 @@ export class PlayerManager {
     }
 
     const hint = this._t(msg, "responses._common.voiceSelectionHint");
-    const selectionMsg = await msg.reply(mkEmbed(
+    const selectionMsg = await msg.reply(
         (channelSelection ? channelSelection + "\n**..or** " + hint : "Please " + hint)
-    ));
+    );
 
     return new Promise(resolve => {
       let unsubscribeReactions;
@@ -694,7 +632,7 @@ export class PlayerManager {
 
       const timeout = setTimeout(() => {
         cleanup();
-        msg.reply(mkEmbed(this._t(msg, "responses._common.voiceSelectionTimedOut")));
+        msg.reply(this._t(msg, "responses._common.voiceSelectionTimedOut"));
         resolve(false);
       }, 30_000);
 
@@ -708,7 +646,7 @@ export class PlayerManager {
               clearTimeout(timeout);
               cleanup();
               const cid = channel._id ?? channel.id;
-              this.initPlayer(msg, cid, (p) => resolve(p));
+              this.initPlayer(msg, cid).then(p => resolve(p));
             },
             promptUser
         );
@@ -719,18 +657,18 @@ export class PlayerManager {
         if (content === "x") {
           clearTimeout(timeout);
           cleanup();
-          m.reply(mkEmbed(this._t(m, "voice.join.cancelled")));
+          m.reply(this._t(m, "voice.join.cancelled"));
           resolve(false);
           return;
         }
         if (!this.commands.validateInput("voiceChannel", m.content, m)) {
-          m.reply(mkEmbed(this._t(m, "responses._common.voiceSelectionInvalid")));
+          m.reply(this._t(m, "responses._common.voiceSelectionInvalid"));
           return;
         }
         const channel = this.commands.formatInput("voiceChannel", m.content, m);
         clearTimeout(timeout);
         cleanup();
-        this.initPlayer(m, channel, (p) => resolve(p));
+        this.initPlayer(m, channel).then(p => resolve(p));
       }, promptUser);
     });
   }
@@ -757,7 +695,7 @@ export class PlayerManager {
       ? this.playerMap.get(cleanChannelId) ??
         this.getPlayerByChannelId(cleanChannelId)
       : null;
-    if (!player) return msg.reply(mkEmbed(this._t(msg, "responses._common.notInVoice")));
+    if (!player) return msg.reply(this._t(msg, "responses._common.notInVoice"));
 
     const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;
     this.playerMap.delete(activeChannelId);
@@ -771,37 +709,50 @@ export class PlayerManager {
       logger.warn("[PlayerManager] leave() error (non-fatal):", e.message);
     }
     player.destroy();
-    await msg.reply(mkEmbed(this._t(msg, "responses._common.successfullyLeft")));
+    await msg.reply(this._t(msg, "responses._common.successfullyLeft"));
+  }
+
+  /**
+   * Restore saved volume for a player from server settings.
+   * @param {Player} player
+   * @param {string} guildId
+   */
+  _restorePlayerVolume(player, guildId) {
+    const savedVol = this.settings?.getServer?.(guildId)?.get?.("volume");
+    if (savedVol !== undefined && savedVol !== null) {
+      const vol = Number(savedVol);
+      if (!isNaN(vol)) player.setVolume(vol / 100);
+    }
   }
 
   /**
    * Create and register a new Player for the given voice channel.
    * @param {Message} message
    * @param {string} cid - Voice channel ID
-   * @param {Function} [cb]
+   * @returns {Promise<Player|null>}
    */
-  initPlayer(message, cid, cb = () => {}) {
+  async initPlayer(message, cid) {
     const channel = this.commands.client?.channels?.get(cid);
 
     if (!channel) {
-      cb(null);
-      return message.reply(mkEmbed(
+      message.reply(
           this._t(message, "responses.join.channelNotFound", { channel: cid })
-      ));
+      );
+      return null;
     }
 
     const isVoice = channel.type === 2;
 
     if (!isVoice) {
-      cb(null);
-      return message.reply(mkEmbed(this._t(message, "responses._common.voiceChannelRequired")));
+      message.reply(this._t(message, "responses._common.voiceChannelRequired"));
+      return null;
     }
 
     if (!botHasVoicePermissions(this.commands?.client, cid)) {
-      cb(null);
-      return message.reply(mkEmbed(
+      message.reply(
           this._t(message, "responses.join.joinFailedPerms", { channel: `<#${cleanId(cid)}>` })
-      ));
+      );
+      return null;
     }
 
     const cleanChannelId = cleanId(cid);
@@ -809,12 +760,12 @@ export class PlayerManager {
       ?? this.getPlayerByChannelId(cleanChannelId);
     if (existing) {
       existing.textChannel = message.channel;
-      cb(existing);
-      return message.reply(mkEmbed(this._t(message, "responses.join.alreadyJoined", { channel: cid })));
+      message.reply(this._t(message, "responses.join.alreadyJoined", { channel: cid }));
+      return existing;
     }
     if (this._pendingJoins.has(cleanChannelId)) {
-      cb(null);
-      return message.reply(mkEmbed(this._t(message, "responses.join.joining")));
+      message.reply(this._t(message, "responses.join.joining"));
+      return null;
     }
     this._pendingJoins.add(cleanChannelId);
 
@@ -846,19 +797,19 @@ export class PlayerManager {
       const guildId = cleanId(player._guildId ?? ch?.guildId ?? ch?.guild?.id ?? getMessageGuildId({ channel: ch }));
 
       const raw247 = (() => {
-        try { return this.settings.getServer(guildId)?.get("stay_247"); } catch (_) { return null; }
+        try { return this.settings.getServer(guildId)?.get("stay_247"); } catch (e) { logger.warn("[PlayerManager] Failed to read 24/7 setting:", e?.message); return null; }
       })();
       const isIn247List = (() => {
         if (!raw247 || raw247 === "none") return false;
         const channels = Array.isArray(raw247)
-            ? raw247.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
-            : [String(raw247).replace(/\D/g, "")].filter(Boolean);
+            ? raw247.map(id => cleanId(id)).filter(Boolean)
+            : [cleanId(raw247)].filter(Boolean);
         return channels.includes(homeChannelId) || channels.includes(activeChannelId);
       })();
 
       const matchChannel = isIn247List
           ? (channels247list => channels247list.includes(homeChannelId) ? homeChannelId : activeChannelId)(
-              Array.isArray(raw247) ? raw247.map(id => String(id).replace(/\D/g, "")) : [String(raw247).replace(/\D/g, "")]
+              Array.isArray(raw247) ? raw247.map(id => cleanId(id)) : [cleanId(raw247)]
             )
           : null;
       const mode247 = matchChannel
@@ -900,7 +851,7 @@ export class PlayerManager {
           ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
       }
       if (typeof ch?.send === "function") {
-        ch.send(mkEmbed(desc)).catch(err => {
+        ch.send({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] }).catch(err => {
           if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
             logger.warn(`[PlayerManager] Cannot send autoleave message in channel ${ch.id} — missing permissions`);
           }
@@ -922,9 +873,11 @@ export class PlayerManager {
           const serverSettings = this.settings.getServer(guildId);
           const savedAnnChId = serverSettings?.get?.("announcementChannelId");
           if (savedAnnChId) {
-            ch = this.commands?.client?.channels?.get?.(String(savedAnnChId).replace(/\D/g, "")) ?? null;
+            ch = this.commands?.client?.channels?.get?.(cleanId(savedAnnChId)) ?? null;
           }
-        } catch (_) {}
+        } catch(e) {
+          logger.warn("[PlayerManager] Failed to resolve announcement channel:", e?.message);
+        }
       }
       if (!ch || typeof ch.send !== "function") {
         try {
@@ -932,7 +885,9 @@ export class PlayerManager {
           if (guild?.systemChannelId) {
             ch = guild.channels?.get?.(guild.systemChannelId) ?? null;
           }
-        } catch (_) {}
+        } catch(e) {
+          logger.warn("[PlayerManager] Failed to resolve system channel:", e?.message);
+        }
       }
       if (!ch || typeof ch.send !== "function") {
         try {
@@ -945,89 +900,76 @@ export class PlayerManager {
               }
             }
           }
-        } catch (_) {}
+        } catch(e) {
+          logger.warn("[PlayerManager] Failed to find fallback text channel:", e?.message);
+        }
       }
       if (!ch || typeof ch.send !== "function") return;
 
       if (!player.textChannel) player.textChannel = ch;
 
-      ch.send(typeof m === "object" && Array.isArray(m.embeds) ? m : mkEmbed(m)).catch(err => {
+      ch.send(typeof m === "object" && Array.isArray(m.embeds) ? m : { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(m)] }).catch(err => {
         if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
           logger.warn(`[PlayerManager] Cannot send player message in channel ${ch.id} — missing permissions`);
         }
       });
     });
 
-    (async () => {
-      const statusMsg = await message.reply(mkEmbed(this._t(message, "responses.join.joining")));
-      try {
-        await player.join(cid);
+    const statusMsg = await message.reply(this._t(message, "responses.join.joining"));
+    try {
+      await player.join(cid);
 
-        this.playerMap.set(cleanChannelId, player);
-        this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
-        this._pendingJoins.delete(cleanChannelId);
+      this.playerMap.set(cleanChannelId, player);
+      this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
+      this._pendingJoins.delete(cleanChannelId);
 
-        await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joined", { channel: cid })));
+      await statusMsg.edit(this._t(message, "responses.join.joined", { channel: cid }));
 
-        const guildId = cleanId(channel.guildId ?? getMessageGuildId(message));
-        if (guildId) {
-          const savedVol = this.settings.getServer(guildId)?.get("volume");
-          if (savedVol !== undefined && savedVol !== null) {
-            const vol = Number(savedVol);
-            if (!isNaN(vol)) player.setVolume(vol / 100);
+      const guildId = cleanId(channel.guildId ?? getMessageGuildId(message));
+      this._restorePlayerVolume(player, guildId);
+
+      return player;
+    } catch (err) {
+      this._pendingJoins.delete(cleanChannelId);
+
+      const errCode = sanitizeJoinError(err, this.commands?.client, cleanChannelId);
+      let errorMsg;
+      if (errCode === "SESSION_RACE") {
+        logger.warn(`[PlayerManager] Stale voice session detected for channel ${cleanChannelId}, retrying in 2s...`);
+        try {
+          await new Promise(r => setTimeout(r, 2_000));
+          if (player._revoice && player._channelId) {
+            try { player._revoice._leaveGateway(player._channelId, player._guildId ?? player._resolveGuildId()); } catch(e) { logger.warn("[PlayerManager] Failed to leave gateway during retry:", e?.message); }
+            try { player._revoice.deleteConnection(player._channelId); } catch(e) { logger.warn("[PlayerManager] Failed to delete connection during retry:", e?.message); }
           }
+          await player.join(cid);
+
+          this.playerMap.set(cleanChannelId, player);
+          this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
+          await statusMsg.edit(this._t(message, "responses.join.joined", { channel: cid }));
+
+          const retryGuildId = cleanId(channel.guildId ?? getMessageGuildId(message));
+          this._restorePlayerVolume(player, retryGuildId);
+          return player;
+        } catch (retryErr) {
+          logger.warn(`[PlayerManager] Retry also failed for channel ${cleanChannelId}: ${retryErr.message}`);
+          errorMsg = this._t(message, "responses.join.joinFailedGeneric");
         }
-
-        cb(player);
-      } catch (err) {
-        this._pendingJoins.delete(cleanChannelId);
-
-        const errCode = sanitizeJoinError(err, this.commands?.client, cleanChannelId);
-        let errorMsg;
-        if (errCode === "SESSION_RACE") {
-          logger.warn(`[PlayerManager] Stale voice session detected for channel ${cleanChannelId}, retrying in 2s...`);
-          try {
-            await new Promise(r => setTimeout(r, 2_000));
-            if (player._revoice && player._channelId) {
-              try { player._revoice._leaveGateway(player._channelId, player._guildId ?? player._resolveGuildId()); } catch (_) {}
-              try { player._revoice.deleteConnection(player._channelId); } catch (_) {}
-            }
-            await player.join(cid);
-
-            this.playerMap.set(cleanChannelId, player);
-            this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
-            await statusMsg.edit(mkEmbed(this._t(message, "responses.join.joined", { channel: cid })));
-
-            const retryGuildId = cleanId(channel.guildId ?? getMessageGuildId(message));
-            if (retryGuildId) {
-              const savedVol = this.settings.getServer(retryGuildId)?.get("volume");
-              if (savedVol !== undefined && savedVol !== null) {
-                const vol = Number(savedVol);
-                if (!isNaN(vol)) player.setVolume(vol / 100);
-              }
-            }
-            cb(player);
-            return;
-          } catch (retryErr) {
-            logger.warn(`[PlayerManager] Retry also failed for channel ${cleanChannelId}: ${retryErr.message}`);
-            errorMsg = this._t(message, "responses.join.joinFailedGeneric");
-          }
-        } else if (errCode === "PERMISSION") {
-          errorMsg = this._t(message, "responses.join.joinFailedPerms", { channel: `<#${cleanChannelId}>` });
-        } else if (errCode === "NOT_FOUND") {
-          errorMsg = this._t(message, "responses.join.joinFailedNotFound");
-        } else if (errCode === "TIMEOUT") {
-          errorMsg = this._t(message, "responses.join.joinFailed");
-        } else {
-          errorMsg = this._t(message, "responses.join.joinFailed", { error: err.message });
-        }
-        await statusMsg.edit(mkEmbed(errorMsg)).catch(() => {});
-        this.playerMap.delete(cleanChannelId);
-        this._unindexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
-        player.destroy();
-        cb(null);
+      } else if (errCode === "PERMISSION") {
+        errorMsg = this._t(message, "responses.join.joinFailedPerms", { channel: `<#${cleanChannelId}>` });
+      } else if (errCode === "NOT_FOUND") {
+        errorMsg = this._t(message, "responses.join.joinFailedNotFound");
+      } else if (errCode === "TIMEOUT") {
+        errorMsg = this._t(message, "responses.join.joinFailed");
+      } else {
+        errorMsg = this._t(message, "responses.join.joinFailed", { error: err.message });
       }
-    })();
+      await statusMsg.edit(errorMsg).catch(() => {});
+      this.playerMap.delete(cleanChannelId);
+      this._unindexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
+      player.destroy();
+      return null;
+    }
   }
 
   /**

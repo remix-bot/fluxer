@@ -1,10 +1,33 @@
+/**
+ * @file Settings.mjs — Settings — abstract base class and RemoteSettingsManager for per-server configuration backed by SQLite
+ * @module src.Settings
+ */
+
 import fs from "node:fs";
 import { logger } from "./constants/Logger.mjs";
 import mysql from "mysql2";
 import { EventEmitter } from "node:events";
 
-export { SettingsManager } from "../settings/Settings.mjs";
+/**
+ * Abstract base class for settings managers.
+ * Provides the interface that all concrete settings managers must implement.
+ */
+export class SettingsManager extends EventEmitter {
+  /** @abstract @type {Object} */
+  defaults;
+  /** @abstract */
+  update(server, key) { }
+  /** @abstract @returns {ServerSettings} */
+  getServer(id) { }
+  /** @abstract @returns {boolean} */
+  hasServer(id) { }
+  /** @abstract @returns {boolean} */
+  isOption(key) { }
+}
 
+/**
+ * ServerSettings class.
+ */
 export class ServerSettings {
   id;
   manager;
@@ -20,16 +43,20 @@ export class ServerSettings {
   reset(key) { return this.set(key, this.manager.defaults[key]); }
   getAll() { return this.data; }
   loadDefaults() { for (let key in this.manager.defaults) { this.data[key] = this.manager.defaults[key]; } }
-  deserialize(json) { for (let k in json) { if (k === "id") continue; this.data[k] = json[k]; } }
 
   checkDefaults(d) { for (let key in d) { if (this.data[key] === undefined) this.data[key] = d[key]; } }
+
+  deserialize(json) { for (let k in json) { if (k === "id") continue; this.data[k] = json[k]; } }
 
   get serializationData() { return { ...this.data, id: this.id }; }
   serialize() { return this.serializationData; }
   serializeObject() { return this.serializationData; }
 }
 
-export class RemoteSettingsManager extends EventEmitter {
+/**
+ * RemoteSettingsManager class.
+ */
+export class RemoteSettingsManager extends SettingsManager {
   guilds = new Map();
   descriptions = {};
   defaults = {};
@@ -61,11 +88,6 @@ export class RemoteSettingsManager extends EventEmitter {
    * adding it (NOT NULL DEFAULT '') and updating the primary key to (id, bot_id).
    * If the column exists but isn't in the PK (previous failed migration),
    * fix the NULL values and retry the PK update.
-   *
-   * Key detail: MySQL primary key columns CANNOT be NULL.  The previous version
-   * used DEFAULT NULL which caused ALTER TABLE ... ADD PRIMARY KEY to fail
-   * silently, leaving the PK as just (id) and producing ER_DUP_ENTRY errors
-   * when two bots tried to INSERT rows for the same guild.
    */
   async _ensureBotIdColumn() {
     if (this._hasBotIdColumn) return;
@@ -147,8 +169,6 @@ export class RemoteSettingsManager extends EventEmitter {
   /**
    * Set or update the bot ID used for database row isolation.
    * Called after login when the bot user ID becomes available.
-   * Ensures the bot_id column exists (auto-migrates if needed), then
-   * reloads guild data filtered by the bot's ID.
    * @param {string} id
    */
   async setBotId(id) {
@@ -173,34 +193,16 @@ export class RemoteSettingsManager extends EventEmitter {
     }
   }
 
-  /**
-   * Returns the SQL WHERE clause fragment for bot_id filtering.
-   * When botId is set AND the bot_id column exists in the table,
-   * includes "AND bot_id = <escaped>" in queries.
-   * Otherwise no filter is applied (backward-compatible with old schemas).
-   * @returns {string}
-   */
   _botIdWhere() {
     if (!this.botId || !this._hasBotIdColumn) return "";
     return ` AND bot_id = ${mysql.escape(String(this.botId))}`;
   }
 
-  /**
-   * Returns the bot_id column + value for INSERT statements.
-   * Only includes bot_id when both the botId is set AND the column exists.
-   * @returns {{ col: string, val: string }}
-   */
   _botIdInsert() {
     if (!this.botId || !this._hasBotIdColumn) return { col: "", val: "" };
     return { col: ", bot_id", val: `, ${mysql.escape(String(this.botId))}` };
   }
 
-  /**
-   * Fetch a single guild's settings row from the database, filtered by bot_id.
-   * Used by GatewayHandler when a guild is (re-)joined and not in the cache.
-   * @param {string} guildId
-   * @returns {Promise<{error: object|null, results: Array, fields: Array}>}
-   */
   selectGuild(guildId) {
     const escapedId = mysql.escape(String(guildId));
     return this.query(`SELECT * FROM settings WHERE id=${escapedId}${this._botIdWhere()}`);
@@ -284,7 +286,7 @@ export class RemoteSettingsManager extends EventEmitter {
   }
 
   update(server, key) {
-    if (!this.guilds.has(server.id)) { this.guilds.set(server.id, server); this.create(server.id, server); }
+    if (!this.guilds.has(server.id)) { this.guilds.set(server.id, server); this.create(server.id, server).catch(e => logger.error("[Settings] create error in update:", e.message)); }
     const s = this.guilds.get(server.id);
     s.data[key] = server.data[key];
     const existing = this._debounceTimers.get(server.id);
@@ -305,11 +307,6 @@ export class RemoteSettingsManager extends EventEmitter {
     return this.guilds.get(id);
   }
 
-  /**
-   * Drop a server from the in-memory cache without touching the DB row.
-   * This lets settings be restored automatically if the bot is re-invited.
-   * @param {string} id - Guild / server ID
-   */
   removeServer(id) {
     const timer = this._debounceTimers.get(id);
     if (timer) {

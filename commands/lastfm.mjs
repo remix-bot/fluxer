@@ -1,10 +1,15 @@
+/**
+ * @file lastfm command — Link Last.fm accounts, scrobble, view profiles, leaderboards, and more
+ * @module commands/lastfm
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { Utils } from "../src/Utils.mjs";
 import { PROVIDER_CHOICES } from "../src/constants/providers.mjs";
+import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 
-const EMOJI_REMOVE_TIMEOUT = 60_000;
 
 const VALID_PERIODS = ["7day", "1month", "3month", "6month", "12month", "overall"];
 
@@ -46,7 +51,7 @@ export const command = new CommandBuilder()
 function notConfigured(ctx, msg) {
   return {
     embeds: [new EmbedBuilder()
-      .setColor("#ff0000")
+      .setColor(ERROR_COLOR)
       .setDescription(ctx.t(msg, "responses.lastfm.notConfigured"))]
   };
 }
@@ -113,7 +118,7 @@ async function getGuildLinkedUsers(guild) {
         if (userId && !m.user?.bot) memberIds.push(String(userId));
       }
     }
-  } catch {}
+  } catch(e) {  }
   return memberIds;
 }
 
@@ -142,7 +147,8 @@ function extractPeriod(data, msg) {
  * Shared between `%lastfm play <cat>` and `%play lastfm:<cat>`.
  *
  * @param {object} ctx     - The command `this` context (has .lastfm, .getPlayer, .handler, .t)
- * @param {object} msg     - The message object
+ * @param {import("../src/MessageHandler.mjs").Message} msg     - The message object
+ * @param {string} userId   - The Discord user ID
  * @param {string} category - "loved", "top", "recent", or "playlist"
  * @param {object} [options]
  * @param {string} [options.period]           - Period for top tracks
@@ -161,7 +167,7 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   const validCategories = [...SIMPLE_CATEGORIES, "playlist"];
   if (!validCategories.includes(category)) {
     return msg.reply({
-      embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+      embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(
         `❌ Unknown category \`${category}\`. Use \`loved\`, \`top\`, \`recent\`, \`albums\`, \`artists\`, or \`playlist\`.`
       )]
     });
@@ -169,7 +175,7 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
 
   if (category === "playlist" && !options.playlistId) {
     return msg.reply({
-      embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+      embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(
         `❌ Specify a playlist number. Use \`${prefix}lastfm playlists\` to see your playlists, then \`${prefix}lastfm play playlist <number>\`.`
       )]
     });
@@ -201,7 +207,7 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   } catch (err) {
     const errMsg = err.message === "NOT_LINKED"
       ? notLinked(ctx, msg, prefix)
-      : { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(ctx.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
+      : { embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(ctx.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
     if (statusMsg) statusMsg.edit(errMsg).catch(() => msg.reply(errMsg));
     else msg.reply(errMsg);
     return;
@@ -328,6 +334,12 @@ function parsePlayArgs(msg, data) {
   return { category: "" };
 }
 
+/**
+ * Execute the lastfm command.
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(msg, data) {
   const lastfm = this.lastfm;
   if (!lastfm || !lastfm.enabled) return msg.reply(notConfigured(this, msg));
@@ -353,7 +365,7 @@ export async function run(msg, data) {
         token = await lastfm.getAuthToken();
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.tokenFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.tokenFailed", { error: err.message }))]
         });
       }
 
@@ -395,7 +407,7 @@ export async function run(msg, data) {
 
       if (!tokenValue) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.confirmUsage", { prefix }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.confirmUsage", { prefix }))]
         });
       }
 
@@ -404,7 +416,7 @@ export async function run(msg, data) {
         session = await lastfm.getSession(tokenValue);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.confirmFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.confirmFailed", { error: err.message }))]
         });
       }
 
@@ -453,7 +465,7 @@ export async function run(msg, data) {
         recentData = await lastfm.getRecentTracks(userId, 1);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -484,7 +496,7 @@ export async function run(msg, data) {
         info = await lastfm.getUserInfo(profileUserId);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -514,7 +526,7 @@ export async function run(msg, data) {
         playlists = await lastfm.getPlaylists(userId);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -546,7 +558,7 @@ export async function run(msg, data) {
 
       if (parsed.invalidCategory) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(
             `❌ \`${parsed.resolveProvider}:${parsed.invalidCategory}\` is not valid. Non-Last.fm providers only support \`top\`.\nUse \`${prefix}lastfm play ${parsed.resolveProvider}\` or \`${prefix}lastfm play ${parsed.resolveProvider}:top\` instead.\nFor other categories, use Last.fm as the resolve provider: \`${prefix}lastfm play lf:${parsed.invalidCategory}\``
           )]
         });
@@ -557,7 +569,7 @@ export async function run(msg, data) {
           ? `\n\n💡 \`${prefix}lastfm play ${parsed.resolveProvider}:<category>\` — Specify a category after the provider:`
           : "";
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription([
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription([
             `❌ Usage: \`${prefix}lastfm play <category>\``,
             ``,
             `**Categories:**`,
@@ -607,7 +619,7 @@ export async function run(msg, data) {
         tracks = await lastfm.getLovedTracks(userId, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -631,7 +643,7 @@ export async function run(msg, data) {
         tracks = await lastfm.getTopTracks(userId, period, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -652,7 +664,7 @@ export async function run(msg, data) {
         lb = await lastfm.getLeaderboard(0, 10);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -693,7 +705,7 @@ export async function run(msg, data) {
           await replyMsg.message.removeAllReactions();
         } catch {
           for (const emoji of navEmojis) {
-            try { await replyMsg.message.removeReaction(emoji); } catch {}
+            try { await replyMsg.message.removeReaction(emoji); } catch(e) {  }
           }
         }
       };
@@ -727,7 +739,7 @@ export async function run(msg, data) {
         try {
           lb = await lastfm.getLeaderboard(currentPage, 10);
         } catch {
-          /* keep previous data */
+          
         }
 
         await replyMsg.edit(buildPage(currentPage)).catch(() => {});
@@ -746,7 +758,7 @@ export async function run(msg, data) {
         tracks = await lastfm.getRecentTracks(userId, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -770,7 +782,7 @@ export async function run(msg, data) {
         artists = await lastfm.getTopArtists(userId, period, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -809,7 +821,7 @@ export async function run(msg, data) {
       const track = pLove.queue?.getCurrent();
       if (!track) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.nothingPlayingLove"))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.nothingPlayingLove"))]
         });
       }
 
@@ -823,7 +835,7 @@ export async function run(msg, data) {
         });
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.loveFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.loveFailed", { error: err.message }))]
         });
       }
     }
@@ -837,7 +849,7 @@ export async function run(msg, data) {
       const track = pUnlove.queue?.getCurrent();
       if (!track) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.nothingPlayingUnlove"))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.nothingPlayingUnlove"))]
         });
       }
 
@@ -851,7 +863,7 @@ export async function run(msg, data) {
         });
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.unloveFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.unloveFailed", { error: err.message }))]
         });
       }
     }
@@ -875,7 +887,7 @@ export async function run(msg, data) {
 
       if (!artistName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.nothingPlayingNoArtist"))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.nothingPlayingNoArtist"))]
         });
       }
 
@@ -895,7 +907,7 @@ export async function run(msg, data) {
       try {
         listeners = await lastfm.getWhoKnows(artistName, memberIds);
       } catch (err) {
-        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
+        const errEmbed = { embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
         if (statusMsg) statusMsg.edit(errEmbed).catch(() => msg.reply(errEmbed));
         else msg.reply(errEmbed);
         return;
@@ -951,7 +963,7 @@ export async function run(msg, data) {
 
       if (!artistName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(
             this.t(msg, "responses.lastfm.noArtistSpecified")
           )]
         });
@@ -962,13 +974,13 @@ export async function run(msg, data) {
         info = await lastfm.getArtistInfo(artistName, userId);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!info) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.artistNotFound", { artist: artistName }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.artistNotFound", { artist: artistName }))]
         });
       }
 
@@ -1043,7 +1055,7 @@ export async function run(msg, data) {
 
       if (!albumName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(
             this.t(msg, "responses.lastfm.noAlbumSpecified")
           )]
         });
@@ -1054,13 +1066,13 @@ export async function run(msg, data) {
         info = await lastfm.getAlbumInfo(artistName || "", albumName, userId);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!info) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.albumNotFound", { album: albumName }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.albumNotFound", { album: albumName }))]
         });
       }
 
@@ -1132,13 +1144,13 @@ export async function run(msg, data) {
               artistName = searchResult.artist;
               trackName = searchResult.name;
             }
-          } catch {}
+          } catch(e) {  }
         }
       }
 
       if (!artistName || !trackName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(
             this.t(msg, "responses.lastfm.noTrackSpecified")
           )]
         });
@@ -1149,13 +1161,13 @@ export async function run(msg, data) {
         info = await lastfm.getTrackInfo(artistName, trackName, userId);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!info) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.trackNotFound", { track: trackName, artist: artistName }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.trackNotFound", { track: trackName, artist: artistName }))]
         });
       }
 
@@ -1215,7 +1227,7 @@ export async function run(msg, data) {
       let similarTracks = [];
       try {
         similarTracks = await lastfm.getSimilarTracks(artistName, trackName, 5);
-      } catch {}
+      } catch(e) {  }
 
       if (similarTracks.length) {
         const simStr = similarTracks.map(t => {
@@ -1242,7 +1254,7 @@ export async function run(msg, data) {
         albums = await lastfm.getTopAlbums(userId, period, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -1288,7 +1300,7 @@ export async function run(msg, data) {
         tags = await lastfm.getUserTopTags(userId, 20);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -1319,7 +1331,7 @@ export async function run(msg, data) {
       const tagName = data.get("token")?.value;
       if (!tagName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(
             this.t(msg, "responses.lastfm.tagProvideName", { prefix })
           )]
         });
@@ -1337,13 +1349,13 @@ export async function run(msg, data) {
         ]);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!tagInfo) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.tagNotFound", { tag: tagName }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.tagNotFound", { tag: tagName }))]
         });
       }
 
@@ -1392,7 +1404,7 @@ export async function run(msg, data) {
 
       if (!targetUserId) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(
             this.t(msg, "responses.lastfm.compareSpecifyUser", { prefix })
           )]
         });
@@ -1401,7 +1413,7 @@ export async function run(msg, data) {
       const targetUser = await lastfm.getUser(targetUserId);
       if (!targetUser) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(
             this.t(msg, "responses.lastfm.compareUserNotLinked")
           )]
         });
@@ -1412,13 +1424,13 @@ export async function run(msg, data) {
         comparison = await lastfm.compareUsers(userId, targetUserId);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
       if (!comparison) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.compareFailed"))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.compareFailed"))]
         });
       }
 
@@ -1455,7 +1467,7 @@ export async function run(msg, data) {
       const current = extractCurrentTrack(pCover);
       if (!current || !current.name) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.coverNothingPlaying"))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.coverNothingPlaying"))]
         });
       }
 
@@ -1473,7 +1485,7 @@ export async function run(msg, data) {
             coverUrl = albumInfo.image;
             albumTitle = `${albumInfo.name} by ${albumInfo.artist}`;
           }
-        } catch {}
+        } catch(e) {  }
       }
 
       if (!coverUrl) {
@@ -1486,7 +1498,7 @@ export async function run(msg, data) {
               albumTitle = trackInfo.album.title;
             }
           }
-        } catch {}
+        } catch(e) {  }
       }
 
       if (!coverUrl) {
@@ -1509,7 +1521,7 @@ export async function run(msg, data) {
       const guild = msg.message?.guild ?? msg.message?.member?.guild;
       if (!guild) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.refreshFailed"))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.refreshFailed"))]
         });
       }
       let count = 0;
@@ -1555,7 +1567,7 @@ export async function run(msg, data) {
       try {
         affinityResults = await lastfm.getAffinity(memberIds, 10);
       } catch (err) {
-        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
+        const errEmbed = { embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
         if (statusMsg) statusMsg.edit(errEmbed).catch(() => msg.reply(errEmbed));
         else msg.reply(errEmbed);
         return;
@@ -1606,7 +1618,7 @@ export async function run(msg, data) {
       try {
         crowns = await lastfm.getCrowns(userId, memberIds);
       } catch (err) {
-        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
+        const errEmbed = { embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
         if (statusMsg) statusMsg.edit(errEmbed).catch(() => msg.reply(errEmbed));
         else msg.reply(errEmbed);
         return;
@@ -1680,13 +1692,13 @@ export async function run(msg, data) {
               artistName = searchResult.artist;
               trackName = searchResult.name;
             }
-          } catch {}
+          } catch(e) {  }
         }
       }
 
       if (!artistName || !trackName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.noTrackSpecified"))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.noTrackSpecified"))]
         });
       }
 
@@ -1704,7 +1716,7 @@ export async function run(msg, data) {
       try {
         listeners = await lastfm.getWhoKnowsTrack(artistName, trackName, memberIds);
       } catch (err) {
-        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
+        const errEmbed = { embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
         if (statusMsg) statusMsg.edit(errEmbed).catch(() => msg.reply(errEmbed));
         else msg.reply(errEmbed);
         return;
@@ -1767,7 +1779,7 @@ export async function run(msg, data) {
 
       if (!albumName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.noAlbumSpecified"))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.noAlbumSpecified"))]
         });
       }
 
@@ -1785,7 +1797,7 @@ export async function run(msg, data) {
       try {
         listeners = await lastfm.getWhoKnowsAlbum(artistName || "", albumName, memberIds);
       } catch (err) {
-        const errEmbed = { embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
+        const errEmbed = { embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))] };
         if (statusMsg) statusMsg.edit(errEmbed).catch(() => msg.reply(errEmbed));
         else msg.reply(errEmbed);
         return;
@@ -1837,7 +1849,7 @@ export async function run(msg, data) {
 
       if (!artistName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.noArtistSpecified"))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.noArtistSpecified"))]
         });
       }
 
@@ -1846,7 +1858,7 @@ export async function run(msg, data) {
         tags = await lastfm.getArtistTopTags(artistName, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -1897,7 +1909,7 @@ export async function run(msg, data) {
 
       if (!albumName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.noAlbumSpecified"))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.noAlbumSpecified"))]
         });
       }
 
@@ -1906,7 +1918,7 @@ export async function run(msg, data) {
         tags = await lastfm.getAlbumTopTags(artistName || "", albumName, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -1957,13 +1969,13 @@ export async function run(msg, data) {
               artistName = searchResult.artist;
               trackName = searchResult.name;
             }
-          } catch {}
+          } catch(e) {  }
         }
       }
 
       if (!artistName || !trackName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.noTrackSpecified"))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.noTrackSpecified"))]
         });
       }
 
@@ -1972,7 +1984,7 @@ export async function run(msg, data) {
         tags = await lastfm.getTrackTopTags(artistName, trackName, 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2008,7 +2020,7 @@ export async function run(msg, data) {
         friends = await lastfm.getUserFriends(userId, 20);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2060,7 +2072,7 @@ export async function run(msg, data) {
         }
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2104,7 +2116,7 @@ export async function run(msg, data) {
         }
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2138,7 +2150,7 @@ export async function run(msg, data) {
       const tokenTextG = data.get("token")?.value?.trim() ?? "";
       if (!tokenTextG) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Provide a query like \`artists <country>\` or \`tracks <country>\`. Example: \`${prefix}lastfm geo artists united states\`.`)]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(`❌ Provide a query like \`artists <country>\` or \`tracks <country>\`. Example: \`${prefix}lastfm geo artists united states\`.`)]
         });
       }
 
@@ -2156,7 +2168,7 @@ export async function run(msg, data) {
 
       if (!country) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Please specify a country name. Example: \`${prefix}lastfm geo artists united states\`.`)]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(`❌ Please specify a country name. Example: \`${prefix}lastfm geo artists united states\`.`)]
         });
       }
 
@@ -2173,7 +2185,7 @@ export async function run(msg, data) {
         }
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2206,7 +2218,7 @@ export async function run(msg, data) {
       const tagName = data.get("token")?.value;
       if (!tagName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Provide a tag name via the token option. Example: \`${prefix}lastfm tagalbums rock\``)]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(`❌ Provide a tag name via the token option. Example: \`${prefix}lastfm tagalbums rock\``)]
         });
       }
 
@@ -2215,7 +2227,7 @@ export async function run(msg, data) {
         albums = await lastfm.getTagTopAlbums(tagName.trim(), 15);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2265,7 +2277,7 @@ export async function run(msg, data) {
 
       if (!artistName) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.noArtistSpecified"))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.noArtistSpecified"))]
         });
       }
 
@@ -2274,7 +2286,7 @@ export async function run(msg, data) {
         recentTracks = await lastfm.getRecentTracks(userId, 200);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 
@@ -2311,7 +2323,7 @@ export async function run(msg, data) {
       const query = data.get("token")?.value;
       if (!query) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(`❌ Provide a search query via the token option. Example: \`${prefix}lastfm search radiohead\``)]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(`❌ Provide a search query via the token option. Example: \`${prefix}lastfm search radiohead\``)]
         });
       }
 
@@ -2324,7 +2336,7 @@ export async function run(msg, data) {
         ]);
       } catch (err) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor("#ff0000").setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
+          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
         });
       }
 

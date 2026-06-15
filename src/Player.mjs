@@ -1,4 +1,9 @@
 /**
+ * @file Player.mjs — Core Player class — manages voice connections, audio streaming, queue, and playback lifecycle via FluxerRevoice/LiveKit
+ * @module src.Player
+ */
+
+/**
  * Player.mjs — FluxerRevoice edition
  *
  * Track resolution  → moonlink.js Manager (search / load via NodeLink REST)
@@ -28,15 +33,12 @@ import { getGlobalColor } from "./MessageHandler.mjs";
 import { logger } from "./constants/Logger.mjs";
 import { get247ChannelMode } from "./constants/Helpers247.mjs";
 import { PROVIDER_NAMES } from "./constants/providers.mjs";
-
-/** Emit a plain embed payload so listeners can send it directly */
-function mkEmbed(desc) {
-  return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] };
-}
+import { cleanId } from "./Utils.mjs";
+import { hasHumansInChannel } from "./constants/VoiceStateResolver.mjs";
 
 
 /** NodeLink default password — centralised so it doesn't need to be hardcoded in two places. */
-const NL_DEFAULT_PASSWORD = "youshallnotpass";
+export const NL_DEFAULT_PASSWORD = "youshallnotpass";
 
 const _sanitizeCache = new Map();
 
@@ -129,7 +131,7 @@ class PlayerWorkerPool {
           cb.reject(new Error(String(data)));
           this._drain();
         }
-      } catch (_) {}
+      } catch(e) { logger.warn("[Player] Worker message handler error:", e?.message); }
     });
 
     worker.on("error", (err) => {
@@ -195,6 +197,9 @@ class PlayerWorkerPool {
   }
 }
 
+/**
+ * Queue class.
+ */
 export class Queue extends EventEmitter {
   data = [];
   current = null;
@@ -338,8 +343,16 @@ export default class Player extends EventEmitter {
   activeFilter         = null;
   activeFilterPayload  = null;
 
+  static INACTIVITY_DEFAULT_MS = 3 * 60 * 1000;
+  static TRACK_MOSTLY_FINISHED_RATIO = 0.85;
+  static TRACK_MOSTLY_FINISHED_FLOOR_MS = 15_000;
+  static RADIO_SAFETY_TIMEOUT_MS = 20 * 60 * 1000;
+  static PUBLISH_MAX_RETRIES = 3;
+  static PUBLISH_BASE_RETRY_MS = 3_000;
+  static CONNECTION_WAIT_MS = 3_000;
+
   _inactivityTimer     = null;
-  _inactivityLimit = 3 * 60 * 1000;
+  _inactivityLimit = Player.INACTIVITY_DEFAULT_MS;
   _pendingInactivityCheck = false;
 
   _isJoining           = false;
@@ -421,33 +434,26 @@ export default class Player extends EventEmitter {
    */
   _get247Mode() {
     if (!this._guildId) return "off";
+    const serverSettings = this.settingsMgr?.getServer?.(this._guildId)
+        ?? this.settings
+        ?? this.client?.settings?.getServer?.(this._guildId);
+    if (!serverSettings?.get) return "off";
 
-    const checkSettings = (set) => {
-      if (!set?.get) return "off";
-      const raw = set.get("stay_247");
-      if (!raw || raw === "none") return "off";
+    const channelId = cleanId(this._home247Channel ?? this._channelId ?? "");
+    if (!channelId) return "off";
 
+
+    const raw = serverSettings.get("stay_247");
+    if (raw && raw !== "none") {
       const channels = Array.isArray(raw)
-          ? raw.map(id => String(id).replace(/\D/g, "")).filter(Boolean)
-          : [String(raw).replace(/\D/g, "")];
+        ? raw.map(id => cleanId(id)).filter(Boolean)
+        : [cleanId(raw)].filter(Boolean);
+      if (!channels.includes(channelId)) return "off";
+    } else {
+      return "off";
+    }
 
-      const homeChannel    = this._home247Channel
-          ? String(this._home247Channel).replace(/\D/g, "")
-          : null;
-      const currentChannel = String(this._channelId ?? "").replace(/\D/g, "");
-
-      const matchChannel = channels.includes(homeChannel) ? homeChannel
-          : channels.includes(currentChannel) ? currentChannel
-              : null;
-      if (!matchChannel) return "off";
-
-      return get247ChannelMode(set, matchChannel);
-    };
-
-    if (this.settingsMgr?.getServer) return checkSettings(this.settingsMgr.getServer(this._guildId));
-    if (this.settings?.get)          return checkSettings(this.settings);
-    if (this.client?.settings?.getServer) return checkSettings(this.client.settings.getServer(this._guildId));
-    return "off";
+    return get247ChannelMode(serverSettings, channelId);
   }
 
   /**
@@ -457,7 +463,7 @@ export default class Player extends EventEmitter {
    * @returns {string|null}
    */
   _resolveGuildId() {
-    const cleanGuild = String(this._guildId ?? "").replace(/\D/g, "");
+    const cleanGuild = cleanId(this._guildId ?? "");
     if (cleanGuild) return cleanGuild;
 
     try {
@@ -465,9 +471,9 @@ export default class Player extends EventEmitter {
       if (channelId) {
         const ch = this.client?.channels?.get?.(channelId);
         const fromChannel = ch?.guildId ?? ch?.guild?.id ?? null;
-        if (fromChannel) return String(fromChannel).replace(/\D/g, "");
+        if (fromChannel) return cleanId(fromChannel);
       }
-    } catch (_) {}
+    } catch(e) { logger.warn("[Player] Guild resolution failed:", e?.message); }
 
     return null;
   }
@@ -498,67 +504,15 @@ export default class Player extends EventEmitter {
   }
 
   _hasHumansInChannel() {
-    if (!this._channelId || !this._guildId) return false;
-    const cleanChan  = String(this._channelId).replace(/\D/g, "");
-    const cleanGuild = String(this._guildId).replace(/\D/g, "");
-
-    if (this._voiceCache && this._voiceCache.hasHumansInChannel(cleanGuild, cleanChan)) {
-      return true;
-    }
-
-    try {
-      const voiceUsers = this._observedVoiceUsers;
-      if (voiceUsers && typeof voiceUsers.iterateHumanUsers === "function") {
-        for (const [, info] of voiceUsers.iterateHumanUsers()) {
-          if (
-              String(info.guildId   ?? "").replace(/\D/g, "") === cleanGuild &&
-              String(info.channelId ?? "").replace(/\D/g, "") === cleanChan
-          ) return true;
-        }
-      } else if (voiceUsers) {
-        for (const [, info] of voiceUsers) {
-          if (
-              String(info.guildId   ?? "").replace(/\D/g, "") === cleanGuild &&
-              String(info.channelId ?? "").replace(/\D/g, "") === cleanChan
-          ) return true;
-        }
-      }
-    } catch (_) {}
-    try {
-      const guild = this.client?.guilds?.get?.(this._guildId);
-      const voiceStates = guild?.voice_states;
-      if (voiceStates) {
-        const entries = Array.isArray(voiceStates)
-            ? voiceStates
-            : typeof voiceStates.values === "function"
-                ? voiceStates.values()
-                : Object.values(voiceStates);
-        for (const state of entries) {
-          const stateChannelId = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
-          if (stateChannelId === cleanChan) {
-            const userId = String(state?.userId ?? state?.user_id ?? "");
-            const member = guild?.members?.get?.(userId);
-            const isBot = member?.user?.bot ?? false;
-            if (!isBot) return true;
-          }
-        }
-      }
-    } catch (_) {}
-
-    try {
-      const room = this.connection?.room;
-      if (room?.isConnected && room.remoteParticipants) {
-        const botId = this.client?.user?.id;
-        for (const [, participant] of room.remoteParticipants) {
-          const pId = participant?.identity || participant?.sid;
-          if (pId && pId !== botId) {
-            return true;
-          }
-        }
-      }
-    } catch (_) {}
-
-    return false;
+    return hasHumansInChannel({
+      guildId:   cleanId(this._guildId ?? ""),
+      channelId: cleanId(this._channelId ?? ""),
+      client:    this.client,
+      voiceCache: this._voiceCache,
+      observedVoiceUsers: this._observedVoiceUsers,
+      room:      this.connection?.room,
+      botId:     this.client?.user?.id,
+    });
   }
 
   _startInactivityTimer() {
@@ -633,10 +587,10 @@ export default class Player extends EventEmitter {
       logger.mediaplayer("[Player] Existing MediaPlayer unhealthy, cleaning up...");
       try {
         if (this._mediaPlayer.fProc) {
-          try { this._mediaPlayer.fProc.removeAllListeners(); } catch (_) {}
+          try { this._mediaPlayer.fProc.removeAllListeners(); } catch(e) {  }
         }
         await this._mediaPlayer.stop();
-      } catch (_) {}
+      } catch(e) { logger.warn("[Player] MediaPlayer stop error:", e?.message); }
       this._mediaPlayer = null;
     }
 
@@ -647,8 +601,8 @@ export default class Player extends EventEmitter {
 
     if (this._destroyed) return false;
 
-    const MAX_PUBLISH_RETRIES = 3;
-    const BASE_RETRY_DELAY_MS = 3_000;
+    const MAX_PUBLISH_RETRIES = Player.PUBLISH_MAX_RETRIES;
+    const BASE_RETRY_DELAY_MS = Player.PUBLISH_BASE_RETRY_MS;
 
     for (let attempt = 1; attempt <= MAX_PUBLISH_RETRIES; attempt++) {
       try {
@@ -685,7 +639,7 @@ export default class Player extends EventEmitter {
             || msg.includes("publishToRoom failed")
             || msg.includes("internal error");
 
-        try { this._mediaPlayer?.stop?.(); } catch (_) {}
+        try { this._mediaPlayer?.stop?.(); } catch(e) { logger.warn("[Player] MediaPlayer stop during retry:", e?.message); }
         this._mediaPlayer = null;
 
         if (isTransient && attempt < MAX_PUBLISH_RETRIES) {
@@ -720,7 +674,7 @@ export default class Player extends EventEmitter {
     if (this._mediaPlayer) {
       try {
         if (this._mediaPlayer.fProc) {
-          try { this._mediaPlayer.fProc.removeAllListeners(); } catch (_) {}
+          try { this._mediaPlayer.fProc.removeAllListeners(); } catch(e) {  }
         }
 
         await this._mediaPlayer.stop();
@@ -730,9 +684,9 @@ export default class Player extends EventEmitter {
 
       try {
         if (this._mediaPlayer?.fProc && !this._mediaPlayer.ffmpegFinished) {
-          try { this._mediaPlayer.fProc.kill("SIGKILL"); } catch (_) {}
+          try { this._mediaPlayer.fProc.kill("SIGKILL"); } catch(e) { logger.warn("[Player] FFmpeg SIGKILL error:", e?.message); }
         }
-      } catch (_) {}
+      } catch(e) { logger.warn("[Player] Stop MediaPlayer error:", e?.message); }
 
       this._mediaPlayer = null;
     }
@@ -828,15 +782,15 @@ export default class Player extends EventEmitter {
     const elapsedMs = Math.max(0, Date.now() - this.startedPlaying);
     const remainingMs = Math.max(0, totalMs - elapsedMs);
 
-    return elapsedMs / totalMs >= 0.85 || remainingMs <= 15_000;
+    return elapsedMs / totalMs >= Player.TRACK_MOSTLY_FINISHED_RATIO || remainingMs <= Player.TRACK_MOSTLY_FINISHED_FLOOR_MS;
   }
 
   async _streamViaRevoice(url, inputOptions = []) {
     if (this._streamingStopped) return;
-
     this._streamingStopped = false;
-    let audioStream = null;
+
     const currentTrack = this.queue.getCurrent();
+    let audioStream = null;
 
     try {
       audioStream = await this._fetchStream(url);
@@ -845,115 +799,96 @@ export default class Player extends EventEmitter {
       const cleanup = () => {
         if (audioStream) {
           try {
-            if (typeof audioStream.unpipe  === "function") audioStream.unpipe();
+            if (typeof audioStream.unpipe === "function") audioStream.unpipe();
             if (typeof audioStream.destroy === "function") audioStream.destroy();
-          } catch (_) {}
+          } catch (e) {  }
         }
         this._currentPassthrough = null;
       };
 
-      await new Promise((resolve, reject) => {
+      const isGracefulExit = () =>
+        this._streamingStopped || this._skipping || this._seeking || this.leaving;
+
+
+      const streamError = new Promise((_, reject) => {
         audioStream.on("error", (e) => {
-          cleanup();
-          if (this._streamingStopped || this._skipping || this._seeking) return resolve();
+          if (isGracefulExit()) return;
           const graceful = ["aborted", "ECONNRESET", "ERR_STREAM_DESTROYED", "ENOTFOUND", "ETIMEDOUT", "ECONNREFUSED"];
           if (graceful.some(g => e.code === g || e.message?.includes(g))) {
-            if (this._didTrackMostlyFinish(currentTrack)) return resolve();
+            if (this._didTrackMostlyFinish(currentTrack)) return;
             return reject(new Error(`Stream ended early for ${currentTrack?.title || "track"}: ${e.message ?? e.code ?? "stream aborted"}`));
           }
           reject(e);
         });
+      });
 
-        if (!this._mediaPlayer) { cleanup(); return resolve(); }
+      if (!this._mediaPlayer) { cleanup(); return; }
 
-        this._mediaPlayer.removeAllListeners("finish");
-        this._mediaPlayer.removeAllListeners("error");
+      this._mediaPlayer.removeAllListeners("finish");
+      this._mediaPlayer.removeAllListeners("error");
 
-        const onFfmpegError = (err) => {
-          const ffMsg = err?.message ?? String(err);
 
-          const isGracefulKill =
-              ffMsg.includes("aborted") ||
-              ffMsg.includes("Input stream error") ||
-              ffMsg.includes("SIGKILL") ||
-              ffMsg.includes("killed with signal");
-
-          if (isGracefulKill) {
-            if (this._didTrackMostlyFinish(currentTrack)) {
-              logger.player("[Player] FFmpeg stream ended near track completion");
+      try {
+        const playResult = this._mediaPlayer.playStream(audioStream, inputOptions);
+        if (playResult && typeof playResult.catch === "function") {
+          playResult.catch((e) => {
+            if (isIgnorableMediaStateError(e) || isGracefulExit()) {
+              logger.mediaplayer("[Player] Suppressed async playStream InvalidState rejection");
               cleanup();
-              return resolve();
+              return;
             }
             cleanup();
-            if (this._streamingStopped || this._skipping || this._seeking) return resolve();
-            return reject(new Error(`FFmpeg stream ended early: ${ffMsg}`));
-          }
-
-          logger.error("[Player] FFmpeg error:", ffMsg);
-          cleanup();
-          if (this._streamingStopped || this._skipping || this._seeking) return resolve();
-          reject(new Error(`FFmpeg: ${ffMsg}`));
-        };
-
-        try {
-          const playResult = this._mediaPlayer.playStream(audioStream, inputOptions);
-          if (playResult && typeof playResult.catch === "function") {
-            playResult.catch((e) => {
-              if (isIgnorableMediaStateError(e) || this._streamingStopped || this._skipping || this._seeking || this.leaving) {
-                logger.mediaplayer("[Player] Suppressed async playStream InvalidState rejection");
-                cleanup();
-                resolve();
-                return;
-              }
-              cleanup();
-              reject(e);
-            });
-          }
-          if (this._mediaPlayer.fProc) {
-            this._mediaPlayer.fProc.once("error", onFfmpegError);
-          }
-        } catch (e) {
-          cleanup();
-          if (isIgnorableMediaStateError(e)) {
-            logger.mediaplayer("[Player] Suppressed InvalidState during stream start");
-            return resolve();
-          }
-          return reject(e);
+            throw e;
+          });
         }
+      } catch (e) {
+        cleanup();
+        if (isIgnorableMediaStateError(e)) {
+          logger.mediaplayer("[Player] Suppressed InvalidState during stream start");
+          return;
+        }
+        throw e;
+      }
 
-        const trackDuration = this._getTrackDurationMs(currentTrack);
-        const safetyMs = (trackDuration > 0 && currentTrack?.type !== "radio")
-            ? trackDuration + 15_000
-            : 20 * 60 * 1000;
 
+      const trackDuration = this._getTrackDurationMs(currentTrack);
+      const safetyMs = (trackDuration > 0 && currentTrack?.type !== "radio")
+        ? trackDuration + Player.TRACK_MOSTLY_FINISHED_FLOOR_MS
+        : Player.RADIO_SAFETY_TIMEOUT_MS;
+
+      await new Promise((resolve) => {
         const safetyTimer = setTimeout(() => {
-          logger.warn(`[Player] Stream safety timeout hit (${Math.round(safetyMs/1000)}s) — advancing queue`);
+          logger.warn(`[Player] Stream safety timeout hit (${Math.round(safetyMs / 1000)}s) — advancing queue`);
           cleanup();
           resolve();
         }, safetyMs);
 
-        this._mediaPlayer.once("finish", () => {
+        const onFinish = () => {
           clearTimeout(safetyTimer);
-          if (this._mediaPlayer?.fProc) this._mediaPlayer.fProc.removeListener("error", onFfmpegError);
           cleanup();
           resolve();
-        });
-        this._mediaPlayer.once("error", (e) => {
+        };
+
+        const onError = (e) => {
           clearTimeout(safetyTimer);
-          if (this._mediaPlayer?.fProc) this._mediaPlayer.fProc.removeListener("error", onFfmpegError);
           cleanup();
           if (isIgnorableMediaStateError(e)) {
             logger.mediaplayer("[Player] Suppressed InvalidState during playback");
             return resolve();
           }
           if (this._streamingStopped) return resolve();
-          reject(e);
-        });
+
+          logger.warn("[Player] MediaPlayer error during stream:", e?.message);
+          resolve();
+        };
+
+        this._mediaPlayer.once("finish", onFinish);
+        this._mediaPlayer.once("error", onError);
       });
 
     } catch (e) {
       if (audioStream && !audioStream.destroyed) {
-        try { audioStream.destroy(); } catch (_) {}
+        try { audioStream.destroy(); } catch (e2) {  }
       }
       this._currentPassthrough = null;
       if (isIgnorableMediaStateError(e)) {
@@ -1008,15 +943,15 @@ export default class Player extends EventEmitter {
         return;
       }
       logger.player(`[Player] Dead connection detected for ${channelId}, cleaning up`);
-      try { this.connection.removeAllListeners(); } catch (_) {}
+      try { this.connection.removeAllListeners(); } catch(e) { logger.warn("[Player] Connection cleanup error:", e?.message); }
 
       if (this._revoice && this._channelId) {
-        try { this._revoice.markIntentionalDisconnect(this._channelId); } catch (_) {}
-        try { this._revoice._leaveGateway(this._channelId, this._guildId ?? this._resolveGuildId()); } catch (_) {}
-        try { this._revoice.deleteConnection(this._channelId); } catch (_) {}
+        try { this._revoice.markIntentionalDisconnect(this._channelId); } catch(e) { logger.warn("[Player] Mark intentional disconnect error:", e?.message); }
+        try { this._revoice._leaveGateway(this._channelId, this._guildId ?? this._resolveGuildId()); } catch(e) { logger.warn("[Player] Leave gateway error:", e?.message); }
+        try { this._revoice.deleteConnection(this._channelId); } catch(e) { logger.warn("[Player] Delete connection error:", e?.message); }
       }
 
-      try { await this.connection.disconnect(); } catch (_) {}
+      try { await this.connection.disconnect(); } catch(e) { logger.warn("[Player] Connection disconnect error:", e?.message); }
       this.connection   = null;
       this._mediaPlayer = null;
     }
@@ -1028,17 +963,17 @@ export default class Player extends EventEmitter {
 
       if (this.connection) {
         logger.mediaplayer("[Player] Cleaning up existing connection before join");
-        try { this.connection.removeAllListeners(); } catch (_) {}
+        try { this.connection.removeAllListeners(); } catch(e) { logger.warn("[Player] Connection cleanup error:", e?.message); }
 
         if (this._revoice && this._channelId) {
-          try { this._revoice.markIntentionalDisconnect(this._channelId); } catch (_) {}
-          try { this._revoice._leaveGateway(this._channelId, this._guildId ?? this._resolveGuildId()); } catch (_) {}
-          try { this._revoice.deleteConnection(this._channelId); } catch (_) {}
+          try { this._revoice.markIntentionalDisconnect(this._channelId); } catch(e) { logger.warn("[Player] Mark intentional disconnect error:", e?.message); }
+          try { this._revoice._leaveGateway(this._channelId, this._guildId ?? this._resolveGuildId()); } catch(e) { logger.warn("[Player] Leave gateway error:", e?.message); }
+          try { this._revoice.deleteConnection(this._channelId); } catch(e) { logger.warn("[Player] Delete connection error:", e?.message); }
         }
 
         try {
           await this.connection.disconnect();
-        } catch (_) {}
+        } catch(e) { logger.warn("[Player] Connection disconnect error:", e?.message); }
 
         await Utils.sleep(500);
         this.connection   = null;
@@ -1077,7 +1012,7 @@ export default class Player extends EventEmitter {
             const cleanup = () => {
               clearTimeout(timeout);
               clearInterval(poll);
-              try { room.off(LKRoomEvent.ConnectionStateChanged, onStateChange); } catch (_) {}
+              try { room.off(LKRoomEvent.ConnectionStateChanged, onStateChange); } catch(e) { logger.warn("[Player] Room listener cleanup error:", e?.message); }
             };
 
             const timeout = setTimeout(() => {
@@ -1094,7 +1029,7 @@ export default class Player extends EventEmitter {
                 settled   = true;
                 resolve();
               }
-            }, 3_000);
+            }, Player.CONNECTION_WAIT_MS);
 
             const onStateChange = (cs) => {
               if (settled) return;
@@ -1148,7 +1083,7 @@ export default class Player extends EventEmitter {
 
       connection.on("error", (err) => {
         if (this.connection !== connection) {
-          try { connection.removeAllListeners(); } catch (_) {}
+          try { connection.removeAllListeners(); } catch(e) { logger.warn("[Player] Stale connection cleanup error:", e?.message); }
           return;
         }
         logger.error("[Player] Voice error:", err?.message ?? err);
@@ -1167,7 +1102,7 @@ export default class Player extends EventEmitter {
 
       connection.on("disconnect", () => {
         if (this.connection !== connection) {
-          try { connection.removeAllListeners(); } catch (_) {}
+          try { connection.removeAllListeners(); } catch(e) { logger.warn("[Player] Stale connection cleanup error:", e?.message); }
           return;
         }
         if (!this.leaving && !this._destroyed) {
@@ -1182,7 +1117,7 @@ export default class Player extends EventEmitter {
                 .finally(() => this.emit("autoleave"));
           }
         } else {
-          try { connection.removeAllListeners(); } catch (_) {}
+          try { connection.removeAllListeners(); } catch(e) { logger.warn("[Player] Connection cleanup on leave error:", e?.message); }
         }
       });
 
@@ -1235,7 +1170,7 @@ export default class Player extends EventEmitter {
       }
 
       if (this.connection) {
-        try { this.connection.disconnect(); } catch (_) {}
+        try { this.connection.disconnect(); } catch(e) { logger.warn("[Player] Connection disconnect on join failure:", e?.message); }
         this.connection = null;
       }
       throw e;
@@ -1255,7 +1190,7 @@ export default class Player extends EventEmitter {
       this._activeTrackOpt = null;
 
       if (this._mediaPlayer) {
-        this._mediaPlayer.destroy();
+        try { this._mediaPlayer.destroy(); } catch(e) { /* MediaPlayer may not have destroy() */ }
         this._mediaPlayer = null;
       }
 
@@ -1267,7 +1202,7 @@ export default class Player extends EventEmitter {
           } else if (this._revoice.connections) {
             this._revoice.connections.delete(channelId);
           }
-        } catch (_) {}
+        } catch(e) { logger.warn("[Player] Delete connection on leave error:", e?.message); }
       }
 
       await this.connection.leave();
@@ -1301,7 +1236,7 @@ export default class Player extends EventEmitter {
 
     try {
       if (this._moonlink && this._onMoonlinkReady) {
-        try { this._moonlink.off("ready", this._onMoonlinkReady); } catch (_) {}
+        try { this._moonlink.off("ready", this._onMoonlinkReady); } catch(e) { logger.warn("[Player] Moonlink cleanup error:", e?.message); }
         this._onMoonlinkReady = null;
       }
       this.leaving          = true;
@@ -1315,7 +1250,7 @@ export default class Player extends EventEmitter {
       this.searches.clear();
 
       if (this._workerPool) {
-        try { this._workerPool.terminate(); } catch (_) {}
+        try { this._workerPool.terminate(); } catch(e) { logger.warn("[Player] Worker pool terminate error:", e?.message); }
         this._workerPool = null;
       }
 
@@ -1323,11 +1258,11 @@ export default class Player extends EventEmitter {
       this.connection   = null;
       this._mediaPlayer = null;
       if (this._revoice && this._channelId) {
-        try { this._revoice.markIntentionalDisconnect(this._channelId); } catch (_) {}
+        try { this._revoice.markIntentionalDisconnect(this._channelId); } catch(e) { logger.warn("[Player] Mark intentional disconnect on destroy:", e?.message); }
       }
       this._stopMediaPlayer().catch(() => {}).then(() => {
         if (connToDestroy) {
-          try { connToDestroy.removeAllListeners?.(); } catch (_) {}
+          try { connToDestroy.removeAllListeners?.(); } catch(e) {  }
           const disconnectPromise = connToDestroy.disconnect?.();
           if (disconnectPromise instanceof Promise) {
             disconnectPromise.catch((err) => {
@@ -1391,7 +1326,7 @@ export default class Player extends EventEmitter {
       this.emit("queueEnd");
       if (!this._autoplay) {
         const prefix = this._getPrefix?.(this._guildId) ?? "%";
-        this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
+        this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.queueEnded", { prefix }))], system: true });
       }
     }
 
@@ -1428,7 +1363,7 @@ export default class Player extends EventEmitter {
       this.emit("queueEnd");
       if (!this._autoplay) {
         const prefix = this._getPrefix?.(this._guildId) ?? "%";
-        this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
+        this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.queueEnded", { prefix }))], system: true });
       }
     }
 
@@ -1903,12 +1838,12 @@ export default class Player extends EventEmitter {
     if (!s) return;
 
     if (s.type === "radio") {
-      this.emit("message", mkEmbed(this._t("responses.radio.nowPlaying", {
+      this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses.radio.nowPlaying", {
         title:  Utils.escapeMarkdown(s.title),
         author: s.author?.name || "Unknown",
         url:    s.author?.url || "",
         channel: this._channelId || "",
-      })));
+      }))] });
       return;
     }
     const author = s.artists
@@ -1916,12 +1851,12 @@ export default class Player extends EventEmitter {
         : s.author?.url
             ? `[${s.author.name}](${s.author.url})`
             : s.author?.name || "Unknown";
-    this.emit("message", mkEmbed(this._t("responses.play.nowPlaying", {
+    this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses.play.nowPlaying", {
       title:   Utils.escapeMarkdown(s.title),
       url:     s.spotifyUrl || s.url,
       author:  author,
       channel: this._channelId || "",
-    })));
+    }))] });
   }
 
   _workerPool = null;
@@ -2090,17 +2025,17 @@ export default class Player extends EventEmitter {
       try {
         if (typeof this._currentPassthrough.unpipe  === "function") this._currentPassthrough.unpipe();
         if (typeof this._currentPassthrough.destroy === "function") this._currentPassthrough.destroy();
-      } catch (_) {}
+      } catch(e) { logger.warn("[Player] Passthrough cleanup error:", e?.message); }
       this._currentPassthrough = null;
     }
 
     if (this._mediaPlayer) {
       try {
         if (this._mediaPlayer.fProc) {
-          try { this._mediaPlayer.fProc.removeAllListeners(); } catch (_) {}
+          try { this._mediaPlayer.fProc.removeAllListeners(); } catch(e) {  }
         }
         await this._mediaPlayer.stop();
-      } catch (_) {}
+      } catch(e) { logger.warn("[Player] MediaPlayer stop on next track:", e?.message); }
     }
 
     this._streamingStopped = false;
@@ -2121,7 +2056,7 @@ export default class Player extends EventEmitter {
       if (!this._wasRadio && !this._queueEndedSent && !this._autoplay) {
         this._queueEndedSent = true;
         const prefix = this._getPrefix?.(this._guildId) ?? "%";
-        this.emit("message", { ...mkEmbed(this._t("responses._common.queueEnded", { prefix })), system: true });
+        this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.queueEnded", { prefix }))], system: true });
       }
       this._wasRadio = false;
       return;
@@ -2156,7 +2091,7 @@ export default class Player extends EventEmitter {
     const hasValidPlayer = await this._ensureMediaPlayer();
     if (!hasValidPlayer) {
       logger.error("[Player] Failed to create healthy MediaPlayer — cannot play.");
-      this.emit("message", mkEmbed(this._t("responses._common.voiceConnectionLost")));
+      this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.voiceConnectionLost"))] });
 
       if (!this._is247Enabled()) {
         this._startInactivityTimer();
@@ -2214,7 +2149,7 @@ export default class Player extends EventEmitter {
 
     if (!streamUrl || !Utils.isValidUrl(streamUrl)) {
       logger.error("[Player] No valid stream URL for:", songData.title);
-      this.emit("message", mkEmbed(this._t("responses._common.couldNotGetStream", { title: songData.title })));
+      this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.couldNotGetStream", { title: songData.title }))] });
       this._streamingStopped = true;
       this.emit("stopplay");
       if (!this._is247Enabled()) {
@@ -2235,7 +2170,7 @@ export default class Player extends EventEmitter {
 
     if (trackOptMatch) {
       this._activeTrackOpt = trackOptMatch;
-      if (trackOptMatch.startMs > 0 && songData.encoded && streamUrl.includes("/v4/loadstream")) {
+      if (trackOptMatch.startMs > 0 && streamUrl.includes("/v4/loadstream")) {
         startOffsetMs = trackOptMatch.startMs;
         streamUrl = streamUrl.replace(/position=\d+/, `position=${startOffsetMs}`);
         logger.player(`[Player] TrackOptions: starting from ${startOffsetMs}ms via loadstream position param`);
@@ -2277,7 +2212,7 @@ export default class Player extends EventEmitter {
       this._streamingStopped = true;
       if (!this._skipping && !this.leaving && !this._paused) {
         if (songData.type !== "radio") {
-          this.emit("message", mkEmbed(this._t("responses._common.errorStreaming", { title: songData.title })));
+          this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.errorStreaming", { title: songData.title }))] });
         }
       }
     }
@@ -2300,7 +2235,8 @@ export default class Player extends EventEmitter {
           this._lastPlayedTrack = this.queue.getCurrent() ?? songData;
           if (!this.queue.songLoop) this.queue.current = null;
           this._streamingStopped = false;
-          return this._doPlayNext();
+          this._playingNext = false;
+          return this.playNext();
         }
       }
     }
@@ -2319,9 +2255,25 @@ export default class Player extends EventEmitter {
     this._trackEndRemainingMs = null;
     this._skipping = true;
     this._stopMediaPlayer().then(() => {
-      this._doPlayNext();
+      this._playingNext = false;
+      if (!this.queue.isEmpty() && !this.leaving) {
+        this.playNext().catch(e => logger.error("[Player] TrackEnd playNext error:", e.message));
+      } else {
+        this.emit("stopplay");
+        if (!this._is247Enabled()) {
+          this._startInactivityTimer();
+        }
+      }
     }).catch(() => {
-      this._doPlayNext();
+      this._playingNext = false;
+      if (!this.queue.isEmpty() && !this.leaving) {
+        this.playNext().catch(e => logger.error("[Player] TrackEnd playNext error:", e.message));
+      } else {
+        this.emit("stopplay");
+        if (!this._is247Enabled()) {
+          this._startInactivityTimer();
+        }
+      }
     });
   }
 
@@ -2372,8 +2324,8 @@ export default class Player extends EventEmitter {
     const userIds = [];
     if (this._voiceCache) {
       const humans = this._voiceCache.getHumansInChannel(
-          String(this._guildId).replace(/\D/g, ""),
-          String(this._channelId).replace(/\D/g, "")
+          cleanId(this._guildId),
+          cleanId(this._channelId)
       );
       userIds.push(...humans);
     }
@@ -2387,15 +2339,15 @@ export default class Player extends EventEmitter {
               : typeof voiceStates.values === "function" ? [...voiceStates.values()]
                   : Object.values(voiceStates);
           for (const state of entries) {
-            const ch = String(state?.channelId ?? state?.channel_id ?? "").replace(/\D/g, "");
-            if (ch === String(this._channelId).replace(/\D/g, "")) {
+            const ch = cleanId(state?.channelId ?? state?.channel_id ?? "");
+            if (ch === cleanId(this._channelId)) {
               const uid = state?.userId ?? state?.user_id;
               const member = guild?.members?.get?.(uid);
               if (uid && !member?.user?.bot) userIds.push(uid);
             }
           }
         }
-      } catch (_) {}
+      } catch(e) { logger.warn("[Player] Voice state lookup error:", e?.message); }
     }
 
     if (userIds.length === 0) return null;
@@ -2406,6 +2358,11 @@ export default class Player extends EventEmitter {
 
   async _applyTrackOptionsSeek(match) {
     if (!match || match.startMs <= 0) return;
+    const current = this.queue.getCurrent();
+    if (!current?.encoded || !this.connection || this.leaving) {
+      logger.warn(`[Player] TrackOptions: cannot seek (encoded=${!!current?.encoded} connection=${!!this.connection} leaving=${this.leaving})`);
+      return;
+    }
     let seeked = false;
     for (let attempt = 0; attempt < 10; attempt++) {
       await Utils.sleep(500);
@@ -2421,7 +2378,15 @@ export default class Player extends EventEmitter {
       }
     }
     if (!seeked) {
-      logger.warn(`[Player] TrackOptions: auto-seek to ${match.startMs}ms failed after all retries`);
+      logger.warn(`[Player] TrackOptions: auto-seek to ${match.startMs}ms failed after all retries, trying _replayWithFilters`);
+      try {
+        await this._replayWithFilters(match.startMs);
+        this.startedPlaying = Date.now() - match.startMs;
+        this._recalcTrackEndTimer();
+        logger.player(`[Player] TrackOptions: fallback replay from ${match.startMs}ms succeeded`);
+      } catch (e) {
+        logger.warn(`[Player] TrackOptions: fallback replay also failed:`, e.message);
+      }
     }
   }
 

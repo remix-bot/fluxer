@@ -1,3 +1,8 @@
+/**
+ * @file skip.mjs — Skip the currently playing song
+ * @module commands.skip
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
@@ -8,6 +13,11 @@ export const command = new CommandBuilder()
     .addAliases("s")
     .setCategory("music");
 
+/**
+ * Execute the skip command.
+ * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @returns {Promise<void>}
+ */
 export async function run(message) {
   const p = await this.getPlayer(message);
   if (!p) return;
@@ -30,5 +40,5 @@ export async function run(message) {
     .setColor(getGlobalColor())
     .setDescription(desc)
     ;
-  message.reply({ embeds: [embed] });
+  message.reply({ embeds: [embed] }).catch(() => {});
 }

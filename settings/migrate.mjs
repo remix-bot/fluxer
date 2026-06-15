@@ -1,4 +1,9 @@
-import { SettingsManager, RemoteSettingsManager } from "../src/Settings.mjs";
+/**
+ * @file migrate.mjs — Migration script — migrates settings and 24/7 channel data between Redis and SQLite backends
+ * @module settings.migrate
+ */
+
+import { RemoteSettingsManager } from "../src/Settings.mjs";
 import fs from "node:fs";
 import { logger } from "../src/constants/Logger.mjs";
 

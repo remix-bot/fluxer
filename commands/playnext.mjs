@@ -1,17 +1,13 @@
+/**
+ * @file playnext.mjs — Add a song to the top of the queue (play next)
+ * @module commands.playnext
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { PROVIDER_CHOICES } from "../src/constants/providers.mjs";
+import { PROVIDER_CHOICES, parseInlineProvider } from "../src/constants/providers.mjs";
 
-function parseInlineProvider(raw) {
-  const match = raw.match(/^([a-z]+):\s*(.+)$/i);
-  if (!match) return { provider: null, query: raw.trim() };
-  const maybeProvider = match[1].toLowerCase();
-  if (PROVIDER_CHOICES.includes(maybeProvider)) {
-    return { provider: maybeProvider, query: match[2].trim() };
-  }
-  return { provider: null, query: raw.trim() };
-}
 
 export const command = new CommandBuilder()
     .setName("playnext")
@@ -37,6 +33,12 @@ export const command = new CommandBuilder()
         , true)
     .addAlias("pn");
 
+/**
+ * Execute the playnext command.
+ * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(message, data) {
   const p = await this.getPlayer(message, true, true, true);
   if (!p) return;
@@ -50,7 +52,13 @@ export async function run(message, data) {
     .setColor(getGlobalColor())
     .setDescription(this.t(message, "responses.playnext.searching"))
     ;
-  const statusMsg = await message.reply({ embeds: [searchEmbed] });
+
+  let statusMsg;
+  try {
+    statusMsg = await message.reply({ embeds: [searchEmbed] });
+  } catch (_e) {
+    return;
+  }
 
   const messages = p.playFirst(query, provider);
   messages.on("message", d => {

@@ -1,9 +1,17 @@
+/**
+ * @file TrackOptionsManager.mjs — TrackOptionsManager — SQLite-backed per-track options storage for auto-seek and end-time timers
+ * @module src.TrackOptionsManager
+ */
+
 import mysql from "mysql2";
 import { logger } from "./constants/Logger.mjs";
 
 const DEFAULT_ALIAS = "default";
 const MAX_ALIAS_LEN = 32;
 
+/**
+ * TrackOptionsManager class.
+ */
 export class TrackOptionsManager {
   db = null;
   botId = null;
@@ -194,9 +202,11 @@ export class TrackOptionsManager {
         this._cache.delete(`${userId}:${identifier}:${safeAlias}`);
       } else {
         sql = `DELETE FROM track_options WHERE user_id = ${mysql.escape(userId)} AND track_identifier = ${mysql.escape(identifier)}${this._botIdWhere()}`;
+        const keysToDelete = [];
         for (const key of this._cache.keys()) {
-          if (key.startsWith(`${userId}:${identifier}:`)) this._cache.delete(key);
+          if (key.startsWith(`${userId}:${identifier}:`)) keysToDelete.push(key);
         }
+        for (const key of keysToDelete) this._cache.delete(key);
       }
       const result = await this._query(sql);
       return result.affectedRows > 0;

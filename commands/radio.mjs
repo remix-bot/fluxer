@@ -1,17 +1,13 @@
+/**
+ * @file radio.mjs — Play a radio stream or search for radio stations
+ * @module commands.radio
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { NUMBER_EMOJIS, CANCEL_EMOJI, PREV_EMOJI, NEXT_EMOJI } from "../src/constants/UI.mjs";
 
-const NUMBER_EMOJIS = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣"];
-const CANCEL_EMOJI  = "❌";
-const PREV_EMOJI    = "⬅️";
-const NEXT_EMOJI    = "➡️";
-
-function mkEmbed(desc, title) {
-  const b = new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc);
-  if (title) b.setTitle(title);
-  return { embeds: [b] };
-}
 
 export const command = function() {
   if (!this.config.radio?.length) return null;
@@ -27,9 +23,15 @@ export const command = function() {
       );
 };
 
+/**
+ * Execute the radio command.
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(msg, data) {
   const radios = this.config.radio;
-  if (!radios?.length) return msg.reply(mkEmbed(this.t(msg, "responses.radio.noStations")));
+  if (!radios?.length) return msg.reply(this.t(msg, "responses.radio.noStations"));
 
   const input = (data.get("station")?.value ?? "").trim().toLowerCase();
 
@@ -49,7 +51,7 @@ export async function run(msg, data) {
       });
       desc += `⬅️ Previous   ➡️ Next   ❌ Cancel`;
 
-      return { payload: mkEmbed(desc), pickable };
+      return { payload: { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] }, pickable };
     };
 
     let { payload, pickable } = buildPage();
@@ -67,7 +69,7 @@ export async function run(msg, data) {
         await rawMsg.removeAllReactions();
       } catch (_) {
         for (const emoji of baseEmojis) {
-          try { await rawMsg.removeReaction(emoji); } catch (_) {}
+          try { await rawMsg.removeReaction(emoji); } catch(e) {  }
         }
       }
     };
@@ -77,7 +79,7 @@ export async function run(msg, data) {
       settled = true;
       unobserve();
       clearReactions().catch(() => {});
-      listMsg.edit(mkEmbed(this.t(msg, "responses.radio.timedOut"))).catch(() => {});
+      listMsg.edit(this.t(msg, "responses.radio.timedOut")).catch(() => {});
     }, 60_000);
 
     const normalize = (s) => s.replace(/\uFE0F/g, "");
@@ -91,7 +93,7 @@ export async function run(msg, data) {
         clearTimeout(timeout);
         unobserve();
         await clearReactions();
-        listMsg.edit(mkEmbed(this.t(msg, "responses.radio.cancelled"))).catch(() => {});
+        listMsg.edit(this.t(msg, "responses.radio.cancelled")).catch(() => {});
         return;
       }
       if (emoji === normalize(NEXT_EMOJI)) page = (page + 1) % totalPages;
@@ -120,7 +122,7 @@ export async function run(msg, data) {
     const radio = radios.find(r => r.name.toLowerCase() === input);
     if (!radio) {
       const names = radios.map(r => `\`${r.name}\``).join(", ");
-      return msg.reply(mkEmbed(this.t(msg, "responses.radio.unknownStation", { station: input, stations: names })));
+      return msg.reply(this.t(msg, "responses.radio.unknownStation", { station: input, stations: names }));
     }
     return playStation(this, msg, radio);
   }

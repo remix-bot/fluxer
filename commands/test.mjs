@@ -1,3 +1,8 @@
+/**
+ * @file test.mjs — Test/debug command for voice channel user detection
+ * @module commands.test
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
@@ -7,6 +12,12 @@ export const command = new CommandBuilder()
   .setDescription("Shows how many people are in each voice channel.")
   .setRequirement(r => r.setOwnerOnly(true));
 
+/**
+ * Execute the test command.
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(msg, data) {
   const guild = msg.channel?.channel?.guild ?? msg.message?.guild;
   if (!guild) {
@@ -56,7 +67,7 @@ export async function run(msg, data) {
     try {
       const fetched = await this.client.channels.fetch(channelId);
       if (fetched?.name) return fetched.name;
-    } catch (_) {}
+    } catch(e) {  }
     return `Unknown (${channelId})`;
   };
 
@@ -73,5 +84,5 @@ export async function run(msg, data) {
     .setTitle(this.t(msg, "responses.test.title"))
     .setDescription(desc.trim().slice(0, 4096))
     ;
-  msg.reply({ embeds: [embed] });
+  msg.reply({ embeds: [embed] }).catch(() => {});
 }

@@ -1,4 +1,9 @@
 /**
+ * @file API.mjs — API constants — FluxerList API endpoints, authentication headers, pagination defaults, and cache TTL values
+ * @module src.constants.API
+ */
+
+/**
  * API.mjs — Single source of truth for all external API constants.
  *
  * FLUXERLIST        — FluxerList vote-tracking API configuration & endpoints
@@ -90,25 +95,14 @@ export function buildFluxerListUrl(endpoint, resourceId, queryParams = {}) {
 }
 
 /**
- * Build the vote link for a resource on FluxerList.
+ * Build the vote/profile link for a resource on FluxerList.
+ * Both vote and profile links share the same URL pattern.
  *
  * @param {"server"|"bot"} type - Resource type
  * @param {string} resourceId - The server or bot ID or slug
- * @returns {string} URL to the vote page on FluxerList
+ * @returns {string} URL to the resource page on FluxerList
  */
 export function buildVoteLink(type, resourceId) {
-  const path = type === "server" ? "servers" : "bots";
-  return `${FLUXERLIST.SITE_URL}/${path}/${resourceId}`;
-}
-
-/**
- * Build the profile link for a resource on FluxerList.
- *
- * @param {"server"|"bot"} type - Resource type
- * @param {string} resourceId - The server or bot ID or slug
- * @returns {string} URL to the profile page on FluxerList
- */
-export function buildProfileLink(type, resourceId) {
   const path = type === "server" ? "servers" : "bots";
   return `${FLUXERLIST.SITE_URL}/${path}/${resourceId}`;
 }

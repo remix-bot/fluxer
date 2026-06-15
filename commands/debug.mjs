@@ -1,12 +1,24 @@
+/**
+ * @file debug command — Owner-only debug utilities for voice connections, ghost detection, and forced rejoins
+ * @module commands/debug
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { cleanId } from "../src/Utils.mjs";
 import { getVoiceManager } from "@fluxerjs/voice";
+import { ERROR_COLOR, WARN_COLOR, SUCCESS_COLOR, DANGER_COLOR } from "../src/constants/UI.mjs";
+import { EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 
-const EMOJI_REMOVE_TIMEOUT = 60_000;
 const REJOIN_DELAY_MS = 2_000;
 const INTENTIONAL_LEAVE_TTL = 30_000;
 
+/**
+ * Return a human-readable label for a voice room's connection state.
+ * @param {object} room - The voice room instance
+ * @returns {string}
+ */
 function roomStateLabel(room) {
   if (!room) return "none";
   const cs = room.connectionState;
@@ -20,6 +32,12 @@ function roomStateLabel(room) {
   return String(cs);
 }
 
+/**
+ * Detect whether a player has a "ghost" connection — the player object exists
+ * but the underlying voice room is disconnected, reconnecting, or absent.
+ * @param {import("../src/Player.mjs").default} player
+ * @returns {boolean}
+ */
 function isGhostConnection(player) {
   const conn = player.connection;
   if (!conn) return false;
@@ -41,22 +59,28 @@ function isGhostConnection(player) {
   return false;
 }
 
+/**
+ * Retrieve the bot's voice state from the gateway cache for a given guild.
+ * @param {object} client - The Discord client instance
+ * @param {string} guildId - The guild ID to look up
+ * @returns {{ userId: string, channelId: string } | null}
+ */
 function getBotGatewayVoiceState(client, guildId) {
   const botId = client.user?.id;
   if (!botId || !guildId) return null;
   try {
     const vm = getVoiceManager(client);
     if (vm?.voiceStates) {
-      const cleanGuild = String(guildId).replace(/\D/g, "");
+      const cleanGuild = cleanId(guildId);
       const guildVoiceMap = vm.voiceStates.get(cleanGuild) ?? vm.voiceStates.get(guildId);
       if (guildVoiceMap && typeof guildVoiceMap.get === "function") {
         const channelId = guildVoiceMap.get(botId);
-        if (channelId) return { userId: botId, channelId: String(channelId).replace(/\D/g, "") };
+        if (channelId) return { userId: botId, channelId: cleanId(channelId) };
       }
     }
-  } catch (_) {}
+  } catch(e) {  }
   try {
-    const cleanGuild = String(guildId).replace(/\D/g, "");
+    const cleanGuild = cleanId(guildId);
     const guild = client.guilds.get(cleanGuild) ?? client.guilds.get(guildId);
     const voiceStates = guild?.voice_states ?? guild?.voiceStates ?? null;
     if (!voiceStates) return null;
@@ -73,13 +97,18 @@ function getBotGatewayVoiceState(client, guildId) {
       const uid = state?.user_id ?? state?.userId ?? state?.id;
       if (uid === botId) {
         const chId = state?.channel_id ?? state?.channelId ?? null;
-        if (chId) return { userId: botId, channelId: String(chId).replace(/\D/g, "") };
+        if (chId) return { userId: botId, channelId: cleanId(chId) };
       }
     }
-  } catch (_) {}
-  return null;
+  } catch(e) {  }
 }
 
+/**
+ * Check whether the gateway voice state is stale compared to the player's expected channel.
+ * @param {object} client - The Discord client instance
+ * @param {import("../src/Player.mjs").default} player
+ * @returns {boolean}
+ */
 function isStaleGatewayPresence(client, player) {
   const guildId = player._guildId ?? player._resolveGuildId?.();
   if (!guildId) return false;
@@ -87,7 +116,7 @@ function isStaleGatewayPresence(client, player) {
   const gatewayState = getBotGatewayVoiceState(client, guildId);
   if (!gatewayState) return false;
 
-  const playerChannel = String(player._channelId ?? player._home247Channel ?? "").replace(/\D/g, "");
+  const playerChannel = cleanId(player._channelId ?? player._home247Channel);
   const gatewayChannel = gatewayState.channelId;
 
   if (!playerChannel) return true;
@@ -96,13 +125,19 @@ function isStaleGatewayPresence(client, player) {
   return false;
 }
 
+/**
+ * Destroy a player's stale connection and respawn a fresh player, restoring queue and playback.
+ * @param {object} ctx - The bot context (this)
+ * @param {import("../src/Player.mjs").default} player
+ * @returns {Promise<{ success: boolean, reason?: string, channelId?: string, roomConnected?: boolean, roomState?: string, resumedPlayback?: boolean }>}
+ */
 async function forceRejoinPlayer(ctx, player) {
   const channelId = player._channelId ?? player._home247Channel;
   const guildId = player._guildId ?? player._resolveGuildId?.();
   if (!channelId || !guildId) return { success: false, reason: "no channel or guild id" };
 
-  const cleanChannelId = String(channelId).replace(/\D/g, "");
-  const cleanGuildId = String(guildId).replace(/\D/g, "");
+  const cleanChannelId = cleanId(channelId);
+  const cleanGuildId = cleanId(guildId);
 
   const currentTrack = player.queue?.getCurrent();
   const queueTracks = player.queue?.data ? [...player.queue.data] : [];
@@ -118,7 +153,7 @@ async function forceRejoinPlayer(ctx, player) {
 
     const altIds = [player._channelId, player._home247Channel]
         .filter(Boolean)
-        .map(id => String(id).replace(/\D/g, ""))
+        .map(id => cleanId(id))
         .filter(id => id !== cleanChannelId);
     for (const altId of altIds) {
       ctx.players.playerMap.delete(altId);
@@ -135,16 +170,16 @@ async function forceRejoinPlayer(ctx, player) {
 
     const revoiceConn = ctx.revoice?.connections?.get(cleanChannelId);
     if (revoiceConn) {
-      try { await ctx.revoice._destroyStaleConnection(cleanChannelId, revoiceConn); } catch (_) {}
+      try { await ctx.revoice._destroyStaleConnection(cleanChannelId, revoiceConn); } catch(e) {  }
     } else if (player.connection) {
-      try { player.connection.removeAllListeners(); } catch (_) {}
-      try { ctx.revoice?._leaveGateway?.(cleanChannelId, cleanGuildId); } catch (_) {}
-      try { ctx.revoice?.deleteConnection?.(cleanChannelId); } catch (_) {}
-      try { await player.connection.disconnect(); } catch (_) {}
+      try { player.connection.removeAllListeners(); } catch(e) {  }
+      try { ctx.revoice?._leaveGateway?.(cleanChannelId, cleanGuildId); } catch(e) {  }
+      try { ctx.revoice?.deleteConnection?.(cleanChannelId); } catch(e) {  }
+      try { await player.connection.disconnect(); } catch(e) {  }
     }
 
-    try { await player.leave(); } catch (_) {}
-    try { player.destroy(); } catch (_) {}
+    try { await player.leave(); } catch(e) {  }
+    try { player.destroy(); } catch(e) {  }
 
     await new Promise(r => setTimeout(r, REJOIN_DELAY_MS));
 
@@ -160,7 +195,7 @@ async function forceRejoinPlayer(ctx, player) {
         newPlayer.queue.current = null;
         await newPlayer.playNext();
         if (wasPaused) newPlayer.pause();
-      } catch (_) {}
+      } catch(e) {  }
     }
 
     if (wasAutoplay) newPlayer._autoplay = true;
@@ -189,6 +224,12 @@ export const command = new CommandBuilder()
             .addChoices("voice", "voice-rejoin", "247-rejoin")
             .setRequired(true));
 
+/**
+ * Execute the debug command.
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(msg, data) {
   switch (data.get("target").value) {
     case "247-rejoin": {
@@ -197,7 +238,7 @@ export async function run(msg, data) {
 
       if (channels247.length === 0) {
         const embed = new EmbedBuilder()
-            .setColor(0xFFAA00)
+            .setColor(WARN_COLOR)
             .setTitle("Debug — 24/7 Rejoin")
             .setDescription("No 24/7 channels found in the player map.")
         ;
@@ -214,7 +255,7 @@ export async function run(msg, data) {
         const [cid, player] = channels247[i];
         const channel = this.client.channels.get(cid);
         const gId = player._guildId ?? channel?.guildId;
-        const guild = gId ? this.client.guilds.get(String(gId).replace(/\D/g, "")) : null;
+        const guild = gId ? this.client.guilds.get(cleanId(gId)) : null;
         const label = `${guild?.name ?? "unknown"} / #${channel?.name ?? cid}`;
         const ghost = isGhostConnection(player) ? " 👻GHOST" : "";
         const roomLabel = player.connection?.room ? roomStateLabel(player.connection.room) : "none";
@@ -223,7 +264,7 @@ export async function run(msg, data) {
       }
 
       const statusEmbed = new EmbedBuilder()
-          .setColor(0xFFAA00)
+          .setColor(WARN_COLOR)
           .setTitle("Debug — 24/7 Rejoin")
           .setDescription(statusLines.join("\n").slice(0, 4096))
       ;
@@ -235,7 +276,7 @@ export async function run(msg, data) {
         const [cid, player] = channels247[i];
         const channel = this.client.channels.get(cid);
         const gId = player._guildId ?? channel?.guildId;
-        const guild = gId ? this.client.guilds.get(String(gId).replace(/\D/g, "")) : null;
+        const guild = gId ? this.client.guilds.get(cleanId(gId)) : null;
         const label = `${guild?.name ?? "unknown"} / #${channel?.name ?? cid}`;
 
         const result = await forceRejoinPlayer(this, player);
@@ -274,7 +315,7 @@ export async function run(msg, data) {
         resultLines.push("", `⚠️ **${failedCount}** channel(s) could not be restored.`);
       }
 
-      const finalColor = failedCount === 0 ? 0x00CC66 : 0xFF4444;
+      const finalColor = failedCount === 0 ? SUCCESS_COLOR : DANGER_COLOR;
       const finalEmbed = new EmbedBuilder()
           .setColor(finalColor)
           .setTitle("Debug — 24/7 Rejoin")
@@ -296,7 +337,7 @@ export async function run(msg, data) {
             ? `\n\n💡 No ghosts auto-detected, but 24/7 channels with dead WebSockets may still report as "connected".\nUse \`%debug 247-rejoin\` to force-rejoin all 24/7 channels.`
             : "";
         const embed = new EmbedBuilder()
-            .setColor(0x00CC66)
+            .setColor(SUCCESS_COLOR)
             .setTitle("Debug — Voice Rejoin")
             .setDescription(`No ghost connections found. All voice connections appear healthy.${hintLine}`)
         ;
@@ -313,7 +354,7 @@ export async function run(msg, data) {
         const [cid, player] = ghostEntries[i];
         const channel = this.client.channels.get(cid);
         const gId = player._guildId ?? channel?.guildId;
-        const guild = gId ? this.client.guilds.get(String(gId).replace(/\D/g, "")) : null;
+        const guild = gId ? this.client.guilds.get(cleanId(gId)) : null;
         const label = `${guild?.name ?? "unknown"} / #${channel?.name ?? cid}`;
         const is247 = player._home247Channel ? "yes" : "no";
         const hasTrack = player.queue?.getCurrent() ? "yes" : "no";
@@ -321,7 +362,7 @@ export async function run(msg, data) {
       }
 
       const statusEmbed = new EmbedBuilder()
-          .setColor(0xFFAA00)
+          .setColor(WARN_COLOR)
           .setTitle("Debug — Voice Rejoin")
           .setDescription(statusLines.join("\n").slice(0, 4096))
       ;
@@ -333,7 +374,7 @@ export async function run(msg, data) {
         const [cid, player] = ghostEntries[i];
         const channel = this.client.channels.get(cid);
         const gId = player._guildId ?? channel?.guildId;
-        const guild = gId ? this.client.guilds.get(String(gId).replace(/\D/g, "")) : null;
+        const guild = gId ? this.client.guilds.get(cleanId(gId)) : null;
         const label = `${guild?.name ?? "unknown"} / #${channel?.name ?? cid}`;
 
         const result = await forceRejoinPlayer(this, player);
@@ -372,7 +413,7 @@ export async function run(msg, data) {
         resultLines.push("", `⚠️ **${failedCount}** connection(s) could not be restored.`);
       }
 
-      const finalColor = failedCount === 0 ? 0x00CC66 : 0xFF4444;
+      const finalColor = failedCount === 0 ? SUCCESS_COLOR : DANGER_COLOR;
       const finalEmbed = new EmbedBuilder()
           .setColor(finalColor)
           .setTitle("Debug — Voice Rejoin")
@@ -388,7 +429,7 @@ export async function run(msg, data) {
       const servers = [...this.players.playerMap.entries()].map(([cid, s]) => {
         const channel = this.client.channels.get(cid);
         const guildId = s._guildId ?? channel?.guildId ?? channel?.guild_id;
-        const guild   = guildId ? this.client.guilds.get(String(guildId).replace(/\D/g, "")) : null;
+        const guild   = guildId ? this.client.guilds.get(cleanId(guildId)) : null;
         const conn = s.connection;
         const room = conn?.room;
         const ghost = isGhostConnection(s);
@@ -520,7 +561,7 @@ export async function run(msg, data) {
       }
 
       if (pages.length === 1) {
-        const embedColor = ghostConnections.length > 0 ? 0xFF4444 : getGlobalColor();
+        const embedColor = ghostConnections.length > 0 ? DANGER_COLOR : getGlobalColor();
         const embed = new EmbedBuilder()
             .setColor(embedColor)
             .setTitle(this.t(msg, "responses.debug.voiceTitle") + (ghostConnections.length > 0 ? ` — ${ghostConnections.length} Ghost(s) Detected!` : ""))
@@ -540,7 +581,7 @@ export async function run(msg, data) {
             ? this.t(msg, "responses._common.controlsExpired")
             : `${this.t(msg, "responses.eval.pageLabel", { page: pageIdx + 1, total: totalPages })} • ${this.t(msg, "responses.eval.navigateHint")}`;
 
-        const embedColor = (pageIdx === 0 && ghostConnections.length > 0) ? 0xFF4444 : getGlobalColor();
+        const embedColor = (pageIdx === 0 && ghostConnections.length > 0) ? DANGER_COLOR : getGlobalColor();
         const titleSuffix = (pageIdx === 0 && ghostConnections.length > 0) ? ` — ${ghostConnections.length} Ghost(s) Detected!` : "";
 
         const embed = new EmbedBuilder()
@@ -565,7 +606,7 @@ export async function run(msg, data) {
           await replyMsg.message.removeAllReactions();
         } catch {
           for (const emoji of navEmojis) {
-            try { await replyMsg.message.removeReaction(emoji); } catch {}
+            try { await replyMsg.message.removeReaction(emoji); } catch(e) {  }
           }
         }
       };

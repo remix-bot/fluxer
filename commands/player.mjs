@@ -1,7 +1,13 @@
+/**
+ * @file player.mjs — Interactive player control panel with playback buttons and now-playing display
+ * @module commands.player
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { Utils } from "../src/Utils.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 
 export const command = new CommandBuilder()
     .setName("player")
@@ -38,8 +44,12 @@ const PROGRESS = {
   end: "▕"
 };
 
-const EMOJI_REMOVE_TIMEOUT = 60000;
 
+/**
+ * Execute the player command.
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @returns {Promise<void>}
+ */
 export async function run(msg) {
   const player = await this.getPlayer(msg, false, false, false);
   if (!player) return;
@@ -68,17 +78,8 @@ export async function run(msg) {
           ? (current.duration.seconds ?? 0) * 1000
           : current.duration;
 
-      const progress = Math.min(elapsed / totalMs, 1);
-      const barLength = 20;
-      const filled = Math.floor(progress * barLength);
-      const position = Math.min(Math.max(filled, 0), barLength - 1);
-      const emptyCount = Math.max(barLength - position - 1, 0);
-
-      progressBar = PROGRESS.start +
-          PROGRESS.filled.repeat(position) +
-          (isPlaying ? PROGRESS.indicator : PROGRESS.filled) +
-          PROGRESS.empty.repeat(emptyCount) +
-          PROGRESS.end;
+      const bar = Utils.progressBar(elapsed, totalMs, 20, PROGRESS.filled, PROGRESS.empty, isPlaying ? PROGRESS.indicator : PROGRESS.filled);
+      progressBar = PROGRESS.start + bar + PROGRESS.end;
 
       const elapsedStr = Utils.prettifyMS(elapsed);
       const totalStr = Utils.prettifyMS(totalMs);
@@ -147,7 +148,7 @@ export async function run(msg) {
       try {
         await message.message.react(control.emoji);
         await Utils.sleep(50);
-      } catch (_) {}
+      } catch(e) {  }
     }
   }
 
@@ -167,7 +168,7 @@ export async function run(msg) {
       for (const emoji of controlEmojis) {
         try {
           await message.message.removeReaction(emoji);
-        } catch (_) {}
+        } catch(e) {  }
       }
     }
   };
@@ -190,7 +191,7 @@ export async function run(msg) {
       for (const emoji of ["⬅️", "➡️", "❌"]) {
         try {
           await lyricsMsg.message.removeReaction(emoji);
-        } catch (_) {}
+        } catch(e) {  }
       }
     }
   };
@@ -233,9 +234,9 @@ export async function run(msg) {
     const closedEmbed = buildEmbed({
       message: this.t(msg, "responses.player.sessionClosed", { reason: reason !== "timeout" ? ` • ${reason}` : "" })
     });
-    closedEmbed.color  = getGlobalColor();
-    closedEmbed.footer = { text: this.t(msg, "responses._common.sessionEnded") };
-    closedEmbed.title  = this.t(msg, "responses.player.inactiveTitle");
+    closedEmbed.setColor(getGlobalColor());
+    closedEmbed.setFooter({ text: this.t(msg, "responses._common.sessionEnded") });
+    closedEmbed.setTitle(this.t(msg, "responses.player.inactiveTitle"));
 
     await message.edit({
       embeds: [closedEmbed],
@@ -301,7 +302,7 @@ export async function run(msg) {
           if (player.paused) {
             reply = player.resume();
           } else if (!player.queue.getCurrent() && !player.queue.isEmpty()) {
-            player.playNext();
+            player.playNext().catch(() => {});
             reply = this.t(msg, "responses.player.startingPlayback");
           } else {
             reply = this.t(msg, "responses.player.alreadyPlaying");
@@ -360,7 +361,7 @@ export async function run(msg) {
           shouldUpdate = true;
           try {
             const { run: runFilter } = await import("./filter.mjs");
-            runFilter.call(this, msg);
+            await runFilter.call(this, msg);
           } catch (err) {
             reply = this.t(msg, "responses.player.filterError", { error: Utils.truncate(err.message, 50) });
           }

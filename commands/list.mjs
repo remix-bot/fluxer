@@ -1,3 +1,8 @@
+/**
+ * @file list.mjs — Display the current song queue with pagination
+ * @module commands.list
+ */
+
 import { CommandBuilder }  from "../src/CommandHandler.mjs";
 import { QueuePaginator, getGlobalColor }  from "../src/MessageHandler.mjs";
 import { EmbedBuilder }    from "@fluxerjs/core";
@@ -16,6 +21,12 @@ export const command = new CommandBuilder()
             .setRequired(false)
     );
 
+/**
+ * Execute the list command.
+ * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(message, data) {
   const p = await this.getPlayer(message);
   if (!p) return;
@@ -85,5 +96,6 @@ export async function run(message, data) {
 
   new QueuePaginator(message, this.messages, this.client)
       .setTimeout(SESSION_MS)
-      .send(buildEmbed, totalPages, startPage);
+      .send(buildEmbed, totalPages, startPage)
+      .catch(() => {});
 }

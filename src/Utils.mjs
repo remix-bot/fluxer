@@ -1,7 +1,27 @@
 /**
- * Utils.mjs — Utility functions for the music bot
- * @module Utils
+ * @file Utils.mjs — Utility class with static helpers — text normalization, markdown escaping, duration parsing, and string truncation
+ * @module src.Utils
  */
+
+/**
+ * Utils.mjs — Music bot utility functions
+ * @module Utils
+ *
+ * Internal helpers delegate to @fluxerjs/util where available
+ * (escapeMarkdown, truncate) with additional null-safety guards.
+ */
+
+import { escapeMarkdown as _escapeMarkdown, truncate as _truncate } from "@fluxerjs/util";
+
+/**
+ * Strip non-digit characters from a value, returning a clean ID string.
+ * Replaces the inline `String(x).replace(/\D/g, "")` pattern used 97+ times.
+ * @param {string|number} value
+ * @returns {string}
+ */
+export function cleanId(value) {
+  return String(value ?? "").replace(/\D/g, "");
+}
 
 /**
  * @class Utils
@@ -14,8 +34,6 @@ export class Utils {
    * Format milliseconds to human-readable time string (H:MM:SS or M:SS)
    * @param {number} milliseconds - Duration in milliseconds
    * @returns {string} Formatted time string
-   * @example Utils.prettifyMS(125000)
-   * @example Utils.prettifyMS(3661000)
    */
   static prettifyMS(milliseconds) {
     if (!milliseconds || milliseconds < 0 || !isFinite(milliseconds)) {
@@ -35,12 +53,17 @@ export class Utils {
   }
 
   /**
-   * Parse duration string (H:MM:SS or M:SS) to milliseconds
+   * Parse duration string (H:MM:SS or M:SS or raw seconds) to milliseconds.
    * @param {string} str - Duration string
    * @returns {number} Milliseconds, 0 if invalid
    */
   static parseDuration(str) {
     if (!str || typeof str !== "string") return 0;
+    str = str.trim();
+
+    if (/^\d+$/.test(str)) {
+      return parseInt(str, 10) * 1000;
+    }
 
     const parts = str.split(":").map((s) => parseInt(s.trim(), 10)).reverse();
     if (parts.some(isNaN) || parts.some(n => n < 0)) return 0;
@@ -77,45 +100,6 @@ export class Utils {
       [array[i], array[j]] = [array[j], array[i]];
     }
     return array;
-  }
-
-  /**
-   * Get random element from array
-   * @template T
-   * @param {T[]} array - Source array
-   * @returns {T | undefined} Random element or undefined if empty
-   */
-  static randomElement(array) {
-    if (!Array.isArray(array) || array.length === 0) return undefined;
-    return array[Math.floor(Math.random() * array.length)];
-  }
-
-  /**
-   * Chunk array into smaller arrays
-   * @template T
-   * @param {T[]} array - Array to chunk
-   * @param {number} size - Chunk size (minimum 1)
-   * @returns {T[][]} Array of chunks
-   */
-  static chunk(array, size) {
-    if (!Array.isArray(array)) return [];
-    const chunkSize = Math.max(1, Math.floor(size));
-    const chunks = [];
-    for (let i = 0; i < array.length; i += chunkSize) {
-      chunks.push(array.slice(i, i + chunkSize));
-    }
-    return chunks;
-  }
-
-  /**
-   * Remove duplicates from array (primitive values only)
-   * @template T
-   * @param {T[]} array - Array with potential duplicates
-   * @returns {T[]} New array without duplicates
-   */
-  static unique(array) {
-    if (!Array.isArray(array)) return [];
-    return [...new Set(array)];
   }
 
   /**
@@ -171,34 +155,14 @@ export class Utils {
   }
 
   /**
-   * Sanitize string for safe filename
-   * @param {string} str - Input string
-   * @param {number} [maxLen=50] - Maximum length
-   * @returns {string} Safe filename
-   */
-  static sanitizeFilename(str, maxLen = 50) {
-    if (!str || typeof str !== "string") return "unknown";
-    return str
-        .replace(/[^a-z0-9\u4e00-\u9fa5]/gi, "_")
-        .replace(/_{2,}/g, "_")
-        .substring(0, maxLen)
-        .replace(/^_+|_+$/g, "");
-  }
-
-  /**
+   * Escape markdown formatting characters.
+   * Delegates to @fluxerjs/util escapeMarkdown.
    * @param {string} text - Raw text
    * @returns {string} Escaped text
    */
   static escapeMarkdown(text) {
     if (!text || typeof text !== "string") return "";
-    return text
-        .replace(/\\/g, "\\\\")
-        .replace(/`/g, "\\`")
-        .replace(/\*/g, "\\*")
-        .replace(/_/g, "\\_")
-        .replace(/~/g, "\\~")
-        .replace(/\|/g, "\\|")
-        .replace(/>/g, "\\>");
+    return _escapeMarkdown(text);
   }
 
   /**
@@ -209,23 +173,6 @@ export class Utils {
   static formatNumber(num) {
     if (num === null || num === undefined || isNaN(num)) return "0";
     return num.toLocaleString("en-US");
-  }
-
-  /**
-   * Format bytes to human readable (KB, MB, GB)
-   * @param {number} bytes - Bytes to format
-   * @param {number} [decimals=2] - Decimal places
-   * @returns {string} Human readable size
-   */
-  static formatBytes(bytes, decimals = 2) {
-    if (bytes === 0) return "0 Bytes";
-    if (!bytes || bytes < 0 || !isFinite(bytes)) return "Unknown";
-
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB"];
-    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
-
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
   }
 
   /**
@@ -244,18 +191,6 @@ export class Utils {
     }
 
     return (timestamp + random).substring(0, targetLen);
-  }
-
-  /**
-   * Generate UUID v4 (RFC4122 compliant)
-   * @returns {string} UUID string
-   */
-  static uuid() {
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-      const r = (Math.random() * 16) | 0;
-      const v = c === "x" ? r : (r & 0x3) | 0x8;
-      return v.toString(16);
-    });
   }
 
   /**
@@ -299,56 +234,12 @@ export class Utils {
   }
 
   /**
-   * Safe JSON parse with fallback
-   * @template T
-   * @param {string} str - JSON string
-   * @param {T} [fallback=null] - Fallback value on error
-   * @returns {T | null} Parsed object or fallback
-   */
-  static safeJsonParse(str, fallback = null) {
-    if (!str || typeof str !== "string") return fallback;
-    try {
-      return JSON.parse(str);
-    } catch {
-      return fallback;
-    }
-  }
-
-  /**
    * Sleep/delay promise
    * @param {number} ms - Milliseconds to sleep
    * @returns {Promise<void>}
    */
   static sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
-  }
-
-  /**
-   * Retry an async operation with exponential backoff
-   * @template T
-   * @param {() => Promise<T>} fn - Function to retry
-   * @param {number} [attempts=3] - Max retry attempts
-   * @param {number} [delay=1000] - Initial delay in ms
-   * @param {number} [backoff=2] - Backoff multiplier
-   * @returns {Promise<T>}
-   */
-  static async retry(fn, attempts = 3, delay = 1000, backoff = 2) {
-    if (typeof fn !== "function") {
-      throw new TypeError("First argument must be a function");
-    }
-
-    let lastError;
-    for (let i = 0; i < attempts; i++) {
-      try {
-        return await fn();
-      } catch (err) {
-        lastError = err;
-        if (i < attempts - 1) {
-          await this.sleep(delay * Math.pow(backoff, i));
-        }
-      }
-    }
-    throw lastError;
   }
 
   /**
@@ -365,53 +256,6 @@ export class Utils {
       timerId = setTimeout(() => reject(new Error(message)), ms);
     });
     return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timerId));
-  }
-
-  /**
-   * Deep clone an object (JSON method - not suitable for circular refs)
-   * @template T
-   * @param {T} obj - Object to clone
-   * @returns {T} Cloned object
-   */
-  static deepClone(obj) {
-    if (obj === null || typeof obj !== "object") return obj;
-    try {
-      return JSON.parse(JSON.stringify(obj));
-    } catch {
-      return obj;
-    }
-  }
-
-  /**
-   * Pick specific keys from object
-   * @template T, K
-   * @param {T} obj - Source object
-   * @param {K[]} keys - Keys to pick
-   * @returns {Pick<T, K>} New object with picked keys
-   */
-  static pick(obj, keys) {
-    if (!obj || typeof obj !== "object") return {};
-    const result = {};
-    for (const key of keys) {
-      if (key in obj) result[key] = obj[key];
-    }
-    return result;
-  }
-
-  /**
-   * Omit specific keys from object
-   * @template T, K
-   * @param {T} obj - Source object
-   * @param {K[]} keys - Keys to omit
-   * @returns {Omit<T, K>} New object without omitted keys
-   */
-  static omit(obj, keys) {
-    if (!obj || typeof obj !== "object") return {};
-    const result = { ...obj };
-    for (const key of keys) {
-      delete result[key];
-    }
-    return result;
   }
 
   /**
@@ -497,5 +341,23 @@ export class Utils {
     const seconds = parseFloat(match[3] || 0);
 
     return (hours * 3600 + minutes * 60 + seconds) * 1000;
+  }
+
+  /**
+   * Normalize text for fuzzy matching: NFKD, strip non-word chars, collapse whitespace, lowercase.
+   * Replaces the duplicated normalizeMatchText / normalizeTrackText functions.
+   * @param {string} value - Raw text to normalize
+   * @param {boolean} [cleanFirst=false] - Run cleanTitle() first (for worker.mjs title matching)
+   * @returns {string} Normalized text
+   */
+  static normalizeText(value, cleanFirst = false) {
+    let text = String(value ?? "");
+    if (cleanFirst) text = this.cleanTitle(text);
+    return text
+        .normalize("NFKD")
+        .replace(/[^\w\s]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
   }
 }

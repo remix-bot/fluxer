@@ -1,3 +1,8 @@
+/**
+ * @file RedisHandler.mjs — RedisHandler — Redis pub/sub handler for cross-process dashboard state synchronization
+ * @module src.dashboard.RedisHandler
+ */
+
 import { createClient } from "redis";
 import { logger } from "../constants/Logger.mjs";
 
@@ -13,6 +18,9 @@ const DEFAULT_RETRY_STRATEGY = (options) => {
   return Math.min(options.attempt * 500, 5_000);
 };
 
+/**
+ * RedisHandler class.
+ */
 export class RedisHandler {
   platform = "fluxer";
 
@@ -163,8 +171,8 @@ export class RedisHandler {
     this._destroyed = true;
     if (this._pingInterval) { clearInterval(this._pingInterval); this._pingInterval = null; }
     if (this._readyTimer) { clearTimeout(this._readyTimer); this._readyTimer = null; }
-    try { await this.subscriber?.quit(); } catch (_) {}
-    try { await this.client?.quit(); } catch (_) {}
+    try { await this.subscriber?.quit(); } catch(e) { logger.warn("[Redis/Subscriber] Quit error:", e?.message); }
+    try { await this.client?.quit(); } catch(e) { logger.warn("[Redis/Main] Quit error:", e?.message); }
     logger.redis("[Redis] Connections closed gracefully");
   }
 }

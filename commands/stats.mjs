@@ -1,7 +1,13 @@
+/**
+ * @file stats.mjs — Display bot statistics — uptime, servers, users, and memory usage
+ * @module commands.stats
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { Utils } from "../src/Utils.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 
 export const command = new CommandBuilder()
     .setName("stats")
@@ -162,6 +168,11 @@ function buildEmbed(t, msg, { guildCount, userCount, playerCount, scrobbleCount,
   return builder;
 }
 
+/**
+ * Execute the stats command.
+ * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @returns {Promise<void>}
+ */
 export async function run(message) {
   const lastfm        = this.lastfm;
   const lastfmEnabled = lastfm?.enabled ?? false;
@@ -199,5 +210,5 @@ export async function run(message) {
 
   await msg.edit({
     embeds: [buildEmbed((...a) => this.t(...a), message, { ...shared, guildCount, userCount: users, scrobbleCount, linkedUsers, ping, loading: false })]
-  }).catch((err) => console.error("[stats] editEmbed failed:", err));
+  }).catch((err) => logger.error("[stats] editEmbed failed:", err));
 }

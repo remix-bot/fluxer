@@ -1,3 +1,8 @@
+/**
+ * @file probe.mjs — Health probe — monitors NodeLink and LiveKit endpoint availability
+ * @module src.probe
+ */
+
 import ffprobe from "ffprobe-static";
 import { spawn } from "node:child_process";
 
@@ -19,7 +24,7 @@ export default function probe(file) {
     const cleanup = () => {
       settled = true;
       clearTimeout(timeoutHandle);
-      try { proc.kill(); } catch (_) {}
+      try { proc.kill(); } catch(e) {  }
     };
 
     const timeoutHandle = setTimeout(() => {

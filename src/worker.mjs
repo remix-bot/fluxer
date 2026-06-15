@@ -1,4 +1,9 @@
 /**
+ * @file worker.mjs — Worker thread module — handles track search jobs via NodeLink REST API with provider fallback chains
+ * @module src.worker
+ */
+
+/**
  * worker.mjs — NodeLink REST edition (moonlink.js session-aware)
  */
 
@@ -6,14 +11,15 @@ import { workerData, parentPort } from "worker_threads";
 import { EventEmitter } from "events";
 import http  from "http";
 import https from "https";
-import { Utils } from "./Utils.mjs";
+import { Utils, cleanId } from "./Utils.mjs";
 import { PROVIDERS } from "./constants/providers.mjs";
 import { logger } from "./constants/Logger.mjs";
+import { NL_DEFAULT_PASSWORD } from "./Player.mjs";
 
 const nl           = workerData?.data?.nodelink ?? {};
 const NL_HOST      = nl.host      ?? "localhost";
 const NL_PORT      = nl.port      ?? 3000;
-const NL_DEFAULT_PASSWORD = "youshallnotpass";
+
 const NL_PASSWORD  = nl.password  ?? NL_DEFAULT_PASSWORD;
 const NL_SESSION_ID = nl.sessionId ?? null;
 const NL_GUILD_ID  = workerData?.data?.guildId ?? null;
@@ -148,12 +154,7 @@ function trackToVideo(track) {
 }
 
 function normalizeMatchText(value) {
-  return Utils.cleanTitle(String(value ?? ""))
-    .normalize("NFKD")
-    .replace(/[^\w\s]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+  return Utils.normalizeText(value, true);
 }
 
 function tokenizeMatchText(value) {

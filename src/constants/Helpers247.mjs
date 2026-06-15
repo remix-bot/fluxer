@@ -1,4 +1,9 @@
 /**
+ * @file Helpers247.mjs — Helpers247 — per-channel 24/7 mode management (on/auto/off) with guild-wide backward compatibility
+ * @module src.constants.Helpers247
+ */
+
+/**
  * Shared 24/7 mode helpers.
  *
  * The per-channel mode map (`stay_247_modes`) stores each channel's 24/7 mode

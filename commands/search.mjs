@@ -1,19 +1,13 @@
+/**
+ * @file search.mjs — Search for songs with interactive selection menu
+ * @module commands.search
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { Message, getGlobalColor } from "../src/MessageHandler.mjs";
 import { EmbedBuilder }   from "@fluxerjs/core";
-import { PROVIDER_CHOICES, PROVIDER_NAMES } from "../src/constants/providers.mjs";
-
-const NUMBER_EMOJIS = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣"];
-const CANCEL_EMOJI  = "❌";
-
-function parseInlineProvider(raw) {
-  const match = raw.match(/^([a-z]+):\s*(.+)$/i);
-  if (!match) return { provider: null, query: raw.trim() };
-  const maybeProvider = match[1].toLowerCase();
-  if (PROVIDER_CHOICES.includes(maybeProvider))
-    return { provider: maybeProvider, query: match[2].trim() };
-  return { provider: null, query: raw.trim() };
-}
+import { PROVIDER_CHOICES, PROVIDER_NAMES, parseInlineProvider } from "../src/constants/providers.mjs";
+import { NUMBER_EMOJIS, CANCEL_EMOJI } from "../src/constants/UI.mjs";
 
 export const command = new CommandBuilder()
     .setName("search")
@@ -41,6 +35,12 @@ export const command = new CommandBuilder()
             .setRequired(true)
     );
 
+/**
+ * Execute the search command.
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(msg, data) {
   const p = await this.getPlayer(msg, true, true, true);
   if (!p) return;
@@ -115,7 +115,7 @@ export async function run(msg, data) {
   const clearReactions = async () => {
     try {
       await rawMsg.removeAllReactions();
-    } catch (_) {}
+    } catch(e) {  }
   };
 
   const wrapped  = new Message(rawMsg, this.messages);

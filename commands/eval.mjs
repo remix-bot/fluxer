@@ -1,9 +1,14 @@
+/**
+ * @file eval command — Owner-only JavaScript code evaluation with sensitive-data redaction
+ * @module commands/eval
+ */
+
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { inspect } from "node:util";
+import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 
-const EMOJI_REMOVE_TIMEOUT = 60000;
 
 /**
  * Matches any key that *contains* one of these strings (case-insensitive).
@@ -27,6 +32,13 @@ const RESTRICTED = [
 
 const SCAN_DEPTH = 6;
 
+/**
+ * Check whether an object contains sensitive keys at any nesting level.
+ * @param {object} obj - The object to scan
+ * @param {number} [level=0] - Current recursion depth
+ * @param {WeakSet} [visited=new WeakSet()] - Visited object tracker
+ * @returns {boolean}
+ */
 function hasSensitive(obj, level = 0, visited = new WeakSet()) {
   if (level >= SCAN_DEPTH || typeof obj !== "object" || obj === null) return false;
   if (visited.has(obj)) return false;
@@ -38,6 +50,13 @@ function hasSensitive(obj, level = 0, visited = new WeakSet()) {
   return false;
 }
 
+/**
+ * Recursively redact sensitive keys from an object, replacing values with "[REDACTED]".
+ * @param {object} obj - The object to scrub
+ * @param {number} [level=0] - Current recursion depth
+ * @param {WeakSet} [visited=new WeakSet()] - Visited object tracker
+ * @returns {object} The scrubbed object (or the original if no changes were needed)
+ */
 function removeSensitive(obj, level = 0, visited = new WeakSet()) {
   if (level >= SCAN_DEPTH || typeof obj !== "object" || obj === null) return obj;
   if (visited.has(obj)) return "[Circular]";
@@ -64,6 +83,11 @@ function removeSensitive(obj, level = 0, visited = new WeakSet()) {
   return modified ? newObj : obj;
 }
 
+/**
+ * Await a value if it is a Promise, then redact sensitive data and format for display.
+ * @param {*} value - The value to clean and format
+ * @returns {Promise<string>} Formatted, safe string representation
+ */
 async function clean(value) {
   if (value instanceof Promise) value = await value;
 
@@ -85,6 +109,11 @@ async function clean(value) {
       .replace(/@/g, "@\u200b") || "undefined";
 }
 
+/**
+ * Determine whether a code string is a single expression (no semicolons, blocks, or declarations).
+ * @param {string} code - The code to inspect
+ * @returns {boolean}
+ */
 function isSingleExpression(code) {
   const trimmed = code.trim();
 
@@ -144,6 +173,12 @@ export const command = new CommandBuilder()
             .setRequired(true)
     );
 
+/**
+ * Execute the eval command.
+ * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @returns {Promise<void>}
+ */
 export async function run(msg, data) {
   const expression = data.get("expression").value;
 
@@ -183,7 +218,7 @@ export async function run(msg, data) {
     else footerText += " " + this.t(msg, "responses.eval.deleteHint");
 
     const embed = new EmbedBuilder()
-        .setColor(isError ? "#ff0000" : getGlobalColor())
+        .setColor(isError ? ERROR_COLOR : getGlobalColor())
         .setTitle(title)
         .setDescription(desc)
         .setFooter({ text: footerText })
@@ -210,7 +245,7 @@ export async function run(msg, data) {
       for (const emoji of navEmojis) {
         try {
           await replyMsg.message.removeReaction(emoji);
-        } catch (_) {}
+        } catch(e) {  }
       }
     }
   };
