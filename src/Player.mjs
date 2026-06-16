@@ -1195,6 +1195,12 @@ export default class Player extends EventEmitter {
       }
 
       const channelId = this._channelId;
+      if (this._revoice && channelId && typeof this._revoice.markIntentionalDisconnect === "function") {
+        this._revoice.markIntentionalDisconnect(channelId);
+      }
+
+      await this.connection.leave();
+
       if (this._revoice && channelId) {
         try {
           if (typeof this._revoice.deleteConnection === "function") {
@@ -1204,8 +1210,6 @@ export default class Player extends EventEmitter {
           }
         } catch(e) { logger.warn("[Player] Delete connection on leave error:", e?.message); }
       }
-
-      await this.connection.leave();
 
       this.queue.reset();
       this.connection  = null;

@@ -179,7 +179,8 @@ export class FluxerVoiceConnection extends EventEmitter {
       } catch (e) {
         logger.warn("[FluxerVoiceConnection] Room disconnect error:", e?.message);
       }
-    } else if (this._nativeConn && typeof this._nativeConn.disconnect === "function") {
+    }
+    if (this._nativeConn && typeof this._nativeConn.disconnect === "function") {
       try {
         await this._nativeConn.disconnect();
       } catch (e) {
@@ -275,6 +276,12 @@ export class FluxerRevoice extends EventEmitter {
       this._intentionalDisconnects.delete(key);
       this._intentionalDisconnectTokens.delete(key);
     }, 10_000));
+    const cleanChannelId = key.replace(/\D/g, "");
+    if (this.client?._remix?.intentionalLeaves && !this.client._remix.intentionalLeaves.has(cleanChannelId)) {
+      this.client._remix.intentionalLeaves.set(cleanChannelId, setTimeout(() => {
+        this.client._remix.intentionalLeaves.delete(cleanChannelId);
+      }, 10_000));
+    }
   }
 
   /**
@@ -352,7 +359,8 @@ export class FluxerRevoice extends EventEmitter {
       } catch (e) {
         logger.warn("[FluxerRevoice] Stale room disconnect error:", e?.message);
       }
-    } else if (existing._nativeConn && typeof existing._nativeConn.disconnect === "function") {
+    }
+    if (existing._nativeConn && typeof existing._nativeConn.disconnect === "function") {
       try {
         await existing._nativeConn.disconnect();
       } catch (e) {
@@ -546,7 +554,6 @@ export class FluxerRevoice extends EventEmitter {
         const isIntentional = this._intentionalDisconnects.has(String(channelId));
         const reasonLabel = isIntentional ? "intentional" : (reason ?? "unexpected");
         logger.player(`[FluxerRevoice] Room disconnected: ${reasonLabel}`);
-        this._intentionalDisconnects.delete(String(channelId));
         conn._connected = false;
         conn._destroyed = true;
 
@@ -562,7 +569,9 @@ export class FluxerRevoice extends EventEmitter {
           }
         }
 
-        conn.emit("disconnect");
+        if (conn.listenerCount("disconnect") > 0) {
+          conn.emit("disconnect");
+        }
       });
 
       room.on(LKRoomEvent.ParticipantConnected, (participant) => {

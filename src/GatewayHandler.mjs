@@ -1105,6 +1105,10 @@ export class GatewayHandler {
           logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — intentional leave.`);
         } else if (remix.revoice?._intentionalDisconnects?.has?.(cleanOld)) {
           logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — intentional (revoice).`);
+        } else if (this._isGuildMoveInProgress(cleanGuild, cleanOld)) {
+          logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — guild move in progress, skipping.`);
+        } else if (this._bootRecoveryActive) {
+          logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — boot recovery active, skipping.`);
         } else {
           const set = remix.settingsMgr.getServer(guildId);
           const mode = set ? get247ChannelMode(set, cleanOld) : "off";
@@ -1154,6 +1158,9 @@ export class GatewayHandler {
 
   /** @type {Map<string, number>} Channel IDs with retry attempt counts */
   _rejoinAttempts = new Map();
+
+  /** @type {boolean} Whether boot recovery (rejoin247Channels) is currently running */
+  _bootRecoveryActive = false;
 
   /** @type {number} Maximum number of rejoin retry attempts */
   static MAX_REJOIN_RETRIES = 3;
@@ -1245,6 +1252,12 @@ export class GatewayHandler {
       return;
     }
 
+    if (remix.revoice?._intentionalDisconnects?.has?.(cleanChannelId)) {
+      logger.voice247(`[Rejoin] Channel ${cleanChannelId} was intentionally left (revoice) — skipping.`);
+      this._rejoinAttempts.delete(cleanChannelId);
+      return;
+    }
+
     const channel = remix.client?.channels?.get?.(cleanChannelId);
     if (!channel) {
       logger.voice247(`[Rejoin] Channel ${cleanChannelId} no longer exists — skipping.`);
@@ -1270,6 +1283,48 @@ export class GatewayHandler {
     } finally {
       this._rejoinInProgress.delete(cleanChannelId);
     }
+  }
+
+  /**
+   * Check whether a guild-move operation is currently in progress for the
+   * given guild and old channel.  During a move, Fluxer sends two
+   * VoiceStateUpdate events (leave old + join new) in rapid succession;
+   * the "leave" should NOT be treated as an unexpected disconnect.
+   *
+   * @param {string} guildId       The guild ID to check
+   * @param {string} oldChannelId  The channel the bot appears to have left
+   * @returns {boolean} True if a move is in progress and the disconnect should be ignored
+   */
+  _isGuildMoveInProgress(guildId, oldChannelId) {
+    const { remix } = this;
+    const cleanGuild = cleanId(guildId);
+    const cleanOld = cleanId(oldChannelId);
+    if (!cleanGuild || !cleanOld) return false;
+
+    const activePlayers = [...remix.players.playerMap.values()].filter(
+        p => !p._destroyed && cleanId(p._guildId ?? "") === cleanGuild
+    );
+
+    for (const player of activePlayers) {
+      const playerChannel = cleanId(player._channelId ?? "");
+      if (playerChannel && playerChannel !== cleanOld) {
+        return true;
+      }
+    }
+
+    if (remix.players._pendingJoins) {
+      for (const pendingId of remix.players._pendingJoins) {
+        const cleanPending = cleanId(pendingId);
+        if (cleanPending && cleanPending !== cleanOld) {
+          const pendingChannel = remix.client?.channels?.get?.(cleanPending);
+          if (pendingChannel && cleanId(pendingChannel.guildId ?? "") === cleanGuild) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -1413,6 +1468,7 @@ export class GatewayHandler {
    * avoid overwhelming the LiveKit server with concurrent track publications.
    */
   async rejoin247Channels() {
+    this._bootRecoveryActive = true;
     const { remix } = this;
     const channelsToRejoin = [];
 
@@ -1544,6 +1600,8 @@ export class GatewayHandler {
     logger.voice247(
         `[BootRecovery] Boot recovery complete. ${channelsToRejoin.length} channel(s) processed.`
     );
+
+    setTimeout(() => { this._bootRecoveryActive = false; }, 15_000);
   }
 
   /**

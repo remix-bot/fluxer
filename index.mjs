@@ -301,6 +301,7 @@ export class Remix {
     });
 
     this.revoice = FluxerRevoice.getInstance(client);
+    client._remix = this;
 
     this.playerContext = {
       client:   this.client,
