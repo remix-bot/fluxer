@@ -6,6 +6,7 @@
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 import { inspect } from "node:util";
 import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 
@@ -245,7 +246,7 @@ export async function run(msg, data) {
       for (const emoji of navEmojis) {
         try {
           await replyMsg.message.removeReaction(emoji);
-        } catch(e) {  }
+        } catch(e) { logger.warn("[Eval] Error:", e?.message); }
       }
     }
   };

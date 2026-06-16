@@ -6,6 +6,7 @@
 import { readFileSync, readdirSync, existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { logger } from "./Logger.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOCALES_DIR = path.resolve(__dirname, "../../storage/locales/bot");
@@ -53,7 +54,7 @@ export class Locale {
     this._resolved.clear();
 
     if (!existsSync(LOCALES_DIR)) {
-      console.warn(`[Locale] Locales directory not found: ${LOCALES_DIR}`);
+      logger.warn("[Locale] Locales directory not found:", LOCALES_DIR);
       return;
     }
 
@@ -61,7 +62,7 @@ export class Locale {
     try {
       files = readdirSync(LOCALES_DIR).filter(f => f.endsWith(".json"));
     } catch (e) {
-      console.warn(`[Locale] Failed to read locales directory: ${e.message}`);
+      logger.warn("[Locale] Failed to read locales directory:", e.message);
       return;
     }
 
@@ -72,13 +73,11 @@ export class Locale {
         const data = JSON.parse(readFileSync(filePath, "utf8"));
         this.locales.set(code, data);
       } catch (e) {
-        console.warn(`[Locale] Failed to load ${file}: ${e.message}`);
+        logger.warn("[Locale] Failed to load " + file + ":", e.message);
       }
     }
 
-    console.log(
-      `[Locale] Loaded ${this.locales.size} locale(s): ${[...this.locales.keys()].join(", ")}`
-    );
+    logger.info("[Locale] Loaded " + this.locales.size + " locale(s): " + [...this.locales.keys()].join(", "));
   }
 
   /**
@@ -113,7 +112,7 @@ export class Locale {
           code = setting;
         }
       }
-    } catch(e) {  }
+    } catch(e) { logger.warn("[Locale] Error:", e?.message); }
 
     const data = this.locales.get(code) ?? this.locales.get(this.defaultLocale) ?? {};
     this._resolved.set(guildId, data);
@@ -161,7 +160,7 @@ export class Locale {
         const prefix = serverSettings.get("prefix");
         if (prefix) return prefix;
       }
-    } catch(e) {  }
+    } catch(e) { logger.warn("[Locale] Error:", e?.message); }
     return this._defaultPrefix || "!";
   }
 

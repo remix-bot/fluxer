@@ -216,8 +216,9 @@ export class Utils {
     try {
       new URL(str);
       return true;
-    } catch {
-      return false;
+    } catch (e) {
+        logger.warn("[Utils] Error:", e?.message);
+        return false;
     }
   }
 

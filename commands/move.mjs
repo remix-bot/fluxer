@@ -24,7 +24,7 @@ export const command = new CommandBuilder()
 /**
  * Execute the move command.
  * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @param {Map<string, {value: *}>} data - Slash-command options map
  * @returns {Promise<void>}
  */
 export async function run(message, data) {
@@ -32,8 +32,8 @@ export async function run(message, data) {
   if (!p) return;
   const from = data.get("from")?.value;
   const to = data.get("to")?.value;
-  if (from == null || from < 1) return message.replyEmbed("Source position must be 1 or greater.").catch(() => {});
-  if (to == null || to < 1) return message.replyEmbed("Target position must be 1 or greater.").catch(() => {});
+  if (from === null || from === undefined || from < 1) return message.replyEmbed("Source position must be 1 or greater.").catch(() => {});
+  if (to === null || to === undefined || to < 1) return message.replyEmbed("Target position must be 1 or greater.").catch(() => {});
   const res = p.move(from, to);
   message.replyEmbed(res).catch(() => {});
 }

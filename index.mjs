@@ -188,7 +188,7 @@ export class Remix {
     commands.owners = config.owners ?? [];
 
     this.moonlink = null;
-    let moonlinkInitialised = false;
+    const moonlinkInitialised = false;
 
     this.voiceCache = new VoiceStateCache({ maxUsers: 50_000, maxBots: 10_000 });
 
@@ -376,7 +376,7 @@ export class Remix {
                   }
                 }
               }
-            } catch(e) {  }
+            } catch(e) { logger.warn("[AloneCheck] Voice state check error:", e?.message); }
           }
 
           if (!hasHuman) {
@@ -386,7 +386,7 @@ export class Remix {
                 hasHuman = true;
                 logger.aloneCheck(`[AloneCheck] Found ${room.remoteParticipants.size} LiveKit remote participant(s) in ${channelId}`);
               }
-            } catch(e) {  }
+            } catch(e) { logger.warn("[AloneCheck] LiveKit check error:", e?.message); }
           }
 
           logger.aloneCheck(`[AloneCheck] channel=${channelId} guild=${guildId} hasHuman=${hasHuman} paused=${player._paused}`);
@@ -409,7 +409,6 @@ export class Remix {
       }
     }, ALONE_CHECK_INTERVAL);
 
-    const self = this;
     this.players.checkVoiceChannels = async function (message) {
       const userId  = message?.author?.id   ?? message?.message?.author?.id;
       const guildId =
@@ -570,7 +569,7 @@ export class Remix {
     }))
         .then(results => {
           const succeeded = results.filter(r => r.status === "fulfilled").length;
-          const failed = results.filter(r => r.status === "rejected").length;
+          const failed = results.length - succeeded;
           logger.commands(`Modules loaded (${succeeded} succeeded, ${failed} failed).`);
         });
 
@@ -791,7 +790,7 @@ export class Remix {
           }
         });
       } catch(e) {
-        
+        logger.warn("[Player] Song announcement error:", e?.message);
       }
     });
 
@@ -821,7 +820,7 @@ export class Remix {
         this.players._pendingJoins.delete(cleanChannelId);
       }
       this.players.playerMap.delete(cleanChannelId);
-      try { player.destroy(); } catch(e) {  }
+      try { player.destroy(); } catch(e) { logger.warn("[_spawnPlayer] Cleanup destroy error:", e?.message); }
       logger.warn(`[_spawnPlayer] Failed to spawn player for channel ${cleanChannelId}:`, err.message);
       throw err;
     }
@@ -939,7 +938,7 @@ export class Remix {
         try {
           const member = await guild.members.fetch(user.id).catch(() => null);
           if (member) isMember = true;
-        } catch (_) {  }
+        } catch (_) { logger.warn("[AloneCheck] Member fetch error for", user.id); }
       }
 
       if (!isMember) continue;

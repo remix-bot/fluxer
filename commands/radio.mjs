@@ -6,6 +6,7 @@
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 import { NUMBER_EMOJIS, CANCEL_EMOJI, PREV_EMOJI, NEXT_EMOJI } from "../src/constants/UI.mjs";
 
 
@@ -26,7 +27,7 @@ export const command = function() {
 /**
  * Execute the radio command.
  * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @param {Map<string, {value: *}>} data - Slash-command options map
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {
@@ -69,7 +70,7 @@ export async function run(msg, data) {
         await rawMsg.removeAllReactions();
       } catch (_) {
         for (const emoji of baseEmojis) {
-          try { await rawMsg.removeReaction(emoji); } catch(e) {  }
+          try { await rawMsg.removeReaction(emoji); } catch(e) { logger.warn("[Radio] Error:", e?.message); }
         }
       }
     };

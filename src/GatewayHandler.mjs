@@ -102,7 +102,7 @@ export class GatewayHandler {
       if (guild.members && !guild.members.me) {
         await guild.members.fetchMe();
       }
-    } catch (_) {  }
+    } catch (_) { logger.warn("[GatewayHandler] fetchMe failed"); }
 
     const channels = guild.channels;
     if (!channels) return;

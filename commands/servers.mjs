@@ -7,6 +7,7 @@ import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 
 export const command = new CommandBuilder()
     .setName("servers")
@@ -96,7 +97,7 @@ export async function run(msg) {
       for (const emoji of navEmojis) {
         try {
           await replyMsg.message.removeReaction(emoji);
-        } catch(e) {  }
+        } catch(e) { logger.warn("[Servers] Error:", e?.message); }
       }
     }
   };

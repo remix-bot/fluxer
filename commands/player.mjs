@@ -8,6 +8,7 @@ import { Utils } from "../src/Utils.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 
 export const command = new CommandBuilder()
     .setName("player")
@@ -148,7 +149,7 @@ export async function run(msg) {
       try {
         await message.message.react(control.emoji);
         await Utils.sleep(50);
-      } catch(e) {  }
+      } catch(e) { logger.warn("[Player] Error:", e?.message); }
     }
   }
 
@@ -168,7 +169,7 @@ export async function run(msg) {
       for (const emoji of controlEmojis) {
         try {
           await message.message.removeReaction(emoji);
-        } catch(e) {  }
+        } catch(e) { logger.warn("[Player] Error:", e?.message); }
       }
     }
   };
@@ -191,7 +192,7 @@ export async function run(msg) {
       for (const emoji of ["⬅️", "➡️", "❌"]) {
         try {
           await lyricsMsg.message.removeReaction(emoji);
-        } catch(e) {  }
+        } catch(e) { logger.warn("[Player] Error:", e?.message); }
       }
     }
   };

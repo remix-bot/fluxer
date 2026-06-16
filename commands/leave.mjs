@@ -32,7 +32,7 @@ function resolvePlayerGuildId(player, mapKey, client) {
 /**
  * Execute the leave command.
  * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @param {Map<string, {value: *}>} data - Slash-command options map
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {

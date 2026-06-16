@@ -8,6 +8,7 @@ import { EmbedBuilder }   from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { Utils }          from "../src/Utils.mjs";
 import { PREV_EMOJI, NEXT_EMOJI, CANCEL_EMOJI } from "../src/constants/UI.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 
 const NAV_EMOJIS = [PREV_EMOJI, NEXT_EMOJI, CANCEL_EMOJI];
 
@@ -286,14 +287,14 @@ export async function run(msg) {
       try {
         await menuMsg.message.react(emoji);
         await Utils.sleep(50);
-      } catch(e) {  }
+      } catch(e) { logger.warn("[Filter] Error:", e?.message); }
     }
   };
 
   const removePageFilterEmojis = async (p) => {
     const pageEmojis = getPageItems(p).map(f => f.emoji);
     for (const emoji of pageEmojis) {
-      try { await menuMsg.message.removeReaction(emoji); } catch(e) {  }
+      try { await menuMsg.message.removeReaction(emoji); } catch(e) { logger.warn("[Filter] Error:", e?.message); }
     }
   };
 
@@ -307,7 +308,7 @@ export async function run(msg) {
       await menuMsg.message.removeAllReactions();
     } catch (_) {
       for (const emoji of [...FILTERS.map(f => f.emoji), ...NAV_EMOJIS]) {
-        try { await menuMsg.message.removeReaction(emoji); } catch(e) {  }
+        try { await menuMsg.message.removeReaction(emoji); } catch(e) { logger.warn("[Filter] Error:", e?.message); }
       }
     }
   };

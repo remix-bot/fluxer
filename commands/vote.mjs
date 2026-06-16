@@ -9,6 +9,7 @@ import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { Utils } from "../src/Utils.mjs";
 import { FLUXERLIST, buildVoteLink } from "../src/constants/API.mjs";
 import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 
 
 export const command = new CommandBuilder()
@@ -102,7 +103,7 @@ function buildVotersEmbed(voters, total, page, limit, type, resourceId, expired 
 /**
  * Execute the vote command.
  * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @param {Map<string, {value: *}>} data - Slash-command options map
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {
@@ -207,7 +208,7 @@ export async function run(msg, data) {
           await replyMsg.message.removeAllReactions();
         } catch {
           for (const emoji of navEmojis) {
-            try { await replyMsg.message.removeReaction(emoji); } catch(e) {  }
+            try { await replyMsg.message.removeReaction(emoji); } catch(e) { logger.warn("[Vote] Error:", e?.message); }
           }
         }
       };
@@ -240,10 +241,11 @@ export async function run(msg, data) {
 
         try {
           voterData = await fluxerlist.getVoters(resolvedType, id, { page: currentPage, limit: 20 });
-        } catch {
-          
+        } catch (e) {
+          logger.warn("[Vote] Re-fetch failed for page " + currentPage + ":", e?.message);
         }
 
+        if (!voterData) return;
         await replyMsg.edit(buildPage(currentPage, voterData)).catch(() => {});
       });
 

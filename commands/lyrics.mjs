@@ -64,7 +64,7 @@ export async function run(message) {
       ] });
     }
 
-    try { await loadingMsg.message.delete(); } catch(e) {  }
+    try { await loadingMsg.message.delete(); } catch(e) { logger.warn("[Lyrics] Error:", e?.message); }
 
     const syncIndicator = result.synced ? this.t(message, "responses.lyrics.syncedBadge") : "";
     const displayTitle  = Utils.cleanTitle(current.title);
@@ -193,7 +193,6 @@ export async function run(message) {
       if (current.thumbnail) closedEmbed.setThumbnail(current.thumbnail);
       msg.edit({ embeds: [closedEmbed] }).catch(() => {});
     }, SESSION_MS);
-
   } catch (err) {
     clearInterval(loadingInterval);
     logger.error("[Lyrics Command] Error:", err);

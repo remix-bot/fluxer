@@ -6,6 +6,7 @@
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 
 export const command = new CommandBuilder()
   .setName("autoplay")
@@ -50,7 +51,7 @@ export async function run(msg, data) {
                 const pick = similar[Math.floor(Math.random() * Math.min(3, similar.length))];
                 query = `${pick.name} ${pick.artist}`.trim();
               }
-            } catch(e) {  }
+            } catch(e) { logger.warn("[Autoplay] Error:", e?.message); }
           }
 
           if (!query) {

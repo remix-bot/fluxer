@@ -107,8 +107,9 @@ export class TrackOptionsManager {
       try {
         const u = new URL(track.url);
         return `${u.hostname}${u.pathname}`.replace(/\/+$/, "").toLowerCase().trim();
-      } catch {
-        return track.url.toLowerCase().trim();
+      } catch (e) {
+          logger.warn("[TrackOptions] Error:", e?.message);
+          return track.url.toLowerCase().trim();
       }
     }
     const artist = track.artist || track.author?.name || "";

@@ -17,14 +17,14 @@ export const command = new CommandBuilder()
 /**
  * Execute the remove command.
  * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @param {Map<string, {value: *}>} data - Slash-command options map
  * @returns {Promise<void>}
  */
 export async function run(message, data) {
   const p = await this.getPlayer(message, false, false, false);
   if (!p) return;
   const index = data.get("index")?.value;
-  if (index == null || index < 1) return message.replyEmbed("Queue position must be 1 or greater.").catch(() => {});
+  if (index === null || index === undefined || index < 1) return message.replyEmbed("Queue position must be 1 or greater.").catch(() => {});
   const res = p.remove(index - 1);
   message.replyEmbed(res).catch(() => {});
 }

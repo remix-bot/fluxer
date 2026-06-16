@@ -125,7 +125,7 @@ async function showResults(msg, results, label) {
 /**
  * Execute the reload command.
  * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @param {Map<string, {value: *}>} data - Slash-command options map
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {

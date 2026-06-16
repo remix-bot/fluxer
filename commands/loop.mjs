@@ -20,7 +20,7 @@ export const command = new CommandBuilder()
 /**
  * Execute the loop command.
  * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @param {Map<string, {value: *}>} data - Slash-command options map
  * @returns {Promise<void>}
  */
 export async function run(message, data) {

@@ -233,7 +233,8 @@ export class LastFmManager {
 
     try {
       await pool.execute("ALTER TABLE \`lastfm_users\` ADD COLUMN \`scrobble_count\` BIGINT NOT NULL DEFAULT 0 AFTER \`scrobble\`");
-    } catch {
+    } catch (e) {
+      logger.warn("[LastFm] Migration warning:", e?.message);
     }
 
     await pool.execute(`
@@ -296,7 +297,8 @@ export class LastFmManager {
         `UPDATE lastfm_stats SET linked_users = linked_users + 1 WHERE id = 1${f.where} AND NOT EXISTS (SELECT 1 FROM (SELECT 1 FROM lastfm_users WHERE user_id = ?${f.where} AND linked_at < NOW()) AS tmp)`,
         [...f.params, String(userId), ...f.params]
       );
-    } catch {
+    } catch (e) {
+      logger.warn("[LastFm] Migration warning:", e?.message);
     }
 
     return data;
@@ -520,8 +522,9 @@ export class LastFmManager {
     try {
       const data = await apiCall(params, this.apiSecret);
       return data.track;
-    } catch {
-      return null;
+    } catch (e) {
+        logger.warn("[LastFm] Error:", e?.message);
+        return null;
     }
   }
 
@@ -729,9 +732,7 @@ export class LastFmManager {
         url:    t.url ?? "",
         match:  parseFloat(t.match ?? 0),
       })).filter(t => t.match > 0.1);
-    } catch {
-      return [];
-    }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -776,8 +777,9 @@ export class LastFmManager {
         })),
         userplaycount: a.stats?.userplaycount ? Number(a.stats.userplaycount) : null,
       };
-    } catch {
-      return null;
+    } catch (e) {
+        logger.warn("[LastFm] Error:", e?.message);
+        return null;
     }
   }
 
@@ -822,8 +824,9 @@ export class LastFmManager {
         })),
         userplaycount: a.userplaycount ? Number(a.userplaycount) : null,
       };
-    } catch {
-      return null;
+    } catch (e) {
+        logger.warn("[LastFm] Error:", e?.message);
+        return null;
     }
   }
 
@@ -854,9 +857,7 @@ export class LastFmManager {
         playcount:  Number(t.playcount ?? 0),
         image:      t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
       }));
-    } catch {
-      return [];
-    }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -886,9 +887,7 @@ export class LastFmManager {
         playcount: Number(a.playcount ?? 0),
         image:     a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch {
-      return [];
-    }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -917,9 +916,7 @@ export class LastFmManager {
         image:   a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
         match:   parseFloat(a.match ?? 0),
       }));
-    } catch {
-      return [];
-    }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -950,9 +947,7 @@ export class LastFmManager {
         url:   t.url ?? "",
         count: Number(t.count ?? 0),
       }));
-    } catch {
-      return [];
-    }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -983,8 +978,9 @@ export class LastFmManager {
         count:   Number(t.taggings?.total ?? t.total ?? 0),
         summary: t.wiki?.summary ?? "",
       };
-    } catch {
-      return null;
+    } catch (e) {
+        logger.warn("[LastFm] Error:", e?.message);
+        return null;
     }
   }
 
@@ -1015,9 +1011,7 @@ export class LastFmManager {
         playcount:  Number(t.playcount ?? 0),
         image:      t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
       }));
-    } catch {
-      return [];
-    }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -1046,9 +1040,7 @@ export class LastFmManager {
         playcount: Number(a.playcount ?? 0),
         image:     a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch {
-      return [];
-    }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -1082,8 +1074,9 @@ export class LastFmManager {
               username:  user.username,
               playcount,
             };
-          } catch {
-            return {
+          } catch (e) {
+              logger.warn("[LastFm] Error:", e?.message);
+              return {
               userId:    uid,
               username:  user.username,
               playcount: 0,
@@ -1151,8 +1144,9 @@ export class LastFmManager {
         commonArtists,
         matchPercentage,
       };
-    } catch {
-      return null;
+    } catch (e) {
+        logger.warn("[LastFm] Error:", e?.message);
+        return null;
     }
   }
 
@@ -1181,9 +1175,7 @@ export class LastFmManager {
         from: Number(c.from ?? 0),
         to:   Number(c.to ?? 0),
       }));
-    } catch {
-      return [];
-    }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -1219,9 +1211,7 @@ export class LastFmManager {
         image:   a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
         listeners: Number(a.listeners ?? 0),
       }));
-    } catch {
-      return [];
-    }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -1257,9 +1247,7 @@ export class LastFmManager {
         url:       a.url ?? "",
         image:     a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch {
-      return [];
-    }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -1296,8 +1284,9 @@ export class LastFmManager {
       }
 
       return { artist, track, album, url };
-    } catch {
-      return null;
+    } catch (e) {
+        logger.warn("[LastFm] Error:", e?.message);
+        return null;
     }
   }
 
@@ -1311,8 +1300,9 @@ export class LastFmManager {
     try {
       const u = new URL(str);
       return /^(?:www\.)?last\.fm$/i.test(u.hostname) && /^\/music\//.test(u.pathname);
-    } catch {
-      return false;
+    } catch (e) {
+        logger.warn("[LastFm] Error:", e?.message);
+        return false;
     }
   }
 
@@ -1604,9 +1594,7 @@ export class LastFmManager {
                   query: `${t.name} ${t.artist ?? ar.name}`,
                   image: t.image ?? ar.image ?? "",
                 }));
-              } catch {
-                return [];
-              }
+              } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
             })
           );
           for (const r of artistResults) {
@@ -1716,8 +1704,9 @@ export class LastFmManager {
         [...f.params]
       );
       return Number(rows[0]?.linked_users ?? 0);
-    } catch {
-      return 0;
+    } catch (e) {
+        logger.warn("[LastFm] Error:", e?.message);
+        return 0;
     }
   }
 
@@ -1776,8 +1765,9 @@ export class LastFmManager {
         [String(playcount), String(userId), ...f.params]
       );
       return playcount;
-    } catch {
-      return 0;
+    } catch (e) {
+        logger.warn("[LastFm] Error:", e?.message);
+        return 0;
     }
   }
 
@@ -1805,7 +1795,7 @@ export class LastFmManager {
         realname: f.realname ?? "",
         country: f.country ?? "",
       }));
-    } catch { return []; }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -1834,7 +1824,7 @@ export class LastFmManager {
         playcount: Number(a.playcount ?? 0),
         image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch { return []; }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -1864,7 +1854,7 @@ export class LastFmManager {
         playcount: Number(t.playcount ?? 0),
         image: t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
       }));
-    } catch { return []; }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -1894,7 +1884,7 @@ export class LastFmManager {
         playcount: Number(a.playcount ?? 0),
         image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch { return []; }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -1917,7 +1907,7 @@ export class LastFmManager {
         url: t.url ?? "",
         count: Number(t.count ?? 0),
       }));
-    } catch { return []; }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -1942,7 +1932,7 @@ export class LastFmManager {
         url: t.url ?? "",
         count: Number(t.count ?? 0),
       }));
-    } catch { return []; }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -1967,7 +1957,7 @@ export class LastFmManager {
         url: t.url ?? "",
         count: Number(t.count ?? 0),
       }));
-    } catch { return []; }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -1992,7 +1982,7 @@ export class LastFmManager {
         playcount: Number(a.playcount ?? 0),
         image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch { return []; }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -2016,7 +2006,7 @@ export class LastFmManager {
         listeners: Number(a.listeners ?? 0),
         image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch { return []; }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -2041,7 +2031,7 @@ export class LastFmManager {
         listeners: Number(t.listeners ?? 0),
         image: t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
       }));
-    } catch { return []; }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -2065,7 +2055,7 @@ export class LastFmManager {
         playcount: Number(t.playcount ?? 0),
         image: t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
       }));
-    } catch { return []; }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -2088,7 +2078,7 @@ export class LastFmManager {
         playcount: Number(a.playcount ?? 0),
         image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch { return []; }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   /**
@@ -2121,8 +2111,9 @@ export class LastFmManager {
               username: user.username,
               playcount,
             };
-          } catch {
-            return {
+          } catch (e) {
+              logger.warn("[LastFm] Error:", e?.message);
+              return {
               userId: uid,
               username: user.username,
               playcount: 0,
@@ -2172,8 +2163,9 @@ export class LastFmManager {
               username: user.username,
               playcount,
             };
-          } catch {
-            return {
+          } catch (e) {
+              logger.warn("[LastFm] Error:", e?.message);
+              return {
               userId: uid,
               username: user.username,
               playcount: 0,
@@ -2216,8 +2208,9 @@ export class LastFmManager {
           try {
             const artists = await this.getTopArtists(uid, "overall", 50);
             return { uid, username: user.username, artists };
-          } catch {
-            return null;
+          } catch (e) {
+              logger.warn("[LastFm] Error:", e?.message);
+              return null;
           }
         })
       );
@@ -2295,7 +2288,7 @@ export class LastFmManager {
 
       crowns.sort((a, b) => b.userPlaycount - a.userPlaycount);
       return crowns;
-    } catch { return []; }
+    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
   _assertEnabled() {

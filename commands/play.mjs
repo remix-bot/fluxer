@@ -6,6 +6,7 @@
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 import { PROVIDER_CHOICES, parseInlineProvider } from "../src/constants/providers.mjs";
 import { playLastFmCategory } from "./lastfm.mjs";
 import { ERROR_COLOR } from "../src/constants/UI.mjs";
@@ -44,8 +45,9 @@ function parseLastFmUrl(url) {
     }
 
     return { artist, track, album, url };
-  } catch {
-    return null;
+  } catch (e) {
+      logger.warn("[Play] Error:", e?.message);
+      return null;
   }
 }
 
@@ -59,8 +61,9 @@ function isLastFmUrl(str) {
   try {
     const u = new URL(str);
     return /^(?:www\.)?last\.fm$/i.test(u.hostname) && /^\/music\//.test(u.pathname);
-  } catch {
-    return false;
+  } catch (e) {
+      logger.warn("[Play] Error:", e?.message);
+      return false;
   }
 }
 
@@ -179,7 +182,7 @@ export const command = new CommandBuilder()
 /**
  * Execute the play command.
  * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @param {Map<string, {value: *}>} data - Slash-command options map
  * @returns {Promise<void>}
  */
 export async function run(message, data) {
@@ -207,7 +210,7 @@ export async function run(message, data) {
         .setColor(getGlobalColor())
         .setDescription(this.t(message, "responses.play.searching"));
       let statusMsg = null;
-      try { statusMsg = await message.reply({ embeds: [searchEmbed] }); } catch(e) {  }
+      try { statusMsg = await message.reply({ embeds: [searchEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
 
       const playQuery = `${parsed.track} ${parsed.artist}`.trim();
       const messages = p.play(playQuery, false, provider === "lastfm" || provider === "lf" ? "yt" : provider, lastfmTrackMeta);
@@ -227,7 +230,7 @@ export async function run(message, data) {
         .setColor(getGlobalColor())
         .setDescription(this.t(message, "responses.play.searching"));
       let statusMsg = null;
-      try { statusMsg = await message.reply({ embeds: [searchEmbed] }); } catch(e) {  }
+      try { statusMsg = await message.reply({ embeds: [searchEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
 
       const playQuery = parsed.artist;
       const messages = p.play(playQuery, false, provider === "lastfm" || provider === "lf" ? "yt" : provider);
@@ -298,11 +301,11 @@ export async function run(message, data) {
                 `🔍 Searching Last.fm for **${query}**...`
               )]
             });
-          } catch(e) {  }
+          } catch(e) { logger.warn("[Play] Error:", e?.message); }
 
           try {
             searchResult = await lastfm.searchTrack(query);
-          } catch(e) {  }
+          } catch(e) { logger.warn("[Play] Error:", e?.message); }
 
           if (!searchResult) {
             const noResult = { embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(
@@ -361,6 +364,7 @@ export async function run(message, data) {
   try {
     statusMsg = await message.reply({ embeds: [searchEmbed] });
   } catch (err) {
+    logger.warn("[Play] Error:", err?.message);
   }
 
   const playQuery = lastfmTrackMeta

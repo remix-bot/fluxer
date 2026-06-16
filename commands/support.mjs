@@ -15,8 +15,8 @@ export const command = new CommandBuilder()
 
 /**
  * run function.
- * @param {{*}} msg
- * @returns {*}
+ * @param {object} msg
+ * @returns {void}
  */
 export function run(msg) {
   const embed = new EmbedBuilder()

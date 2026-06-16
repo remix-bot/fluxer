@@ -42,7 +42,7 @@ export class Dashboard {
         case "fetchPlayers":
           return [...this.remix.players.playerMap.values()]
               .filter(p => !p._destroyed)
-              .map(p => { try { return Dashboard.convertPlayer(p); } catch(_) { return null; } })
+              .map(p => { try { return Dashboard.convertPlayer(p); } catch(e) { logger.warn("[Dashboard] convertPlayer error:", e?.message); return null; } })
               .filter(Boolean);
 
         case "user": {
@@ -209,7 +209,7 @@ export class Dashboard {
                   data: String(user.id)
                 }));
               }
-            } catch (_) {  }
+            } catch (_) { logger.warn("[Dashboard] Error:", _.message); }
           }
           return { message: "Already Connected" };
         }
@@ -349,7 +349,7 @@ export class Dashboard {
                 data: String(user.id)
               }));
             }
-          } catch (_) {  }
+          } catch (_) { logger.warn("[Dashboard] Error:", _.message); }
           return { message: "Left channel" };
         }
         try {
@@ -465,7 +465,7 @@ export class Dashboard {
     if (!vid) return null;
     const durationMs =
         typeof vid.duration === "number" ? vid.duration :
-            typeof vid.duration === "object" && vid.duration?.seconds != null ? vid.duration.seconds * 1000 :
+            typeof vid.duration === "object" && vid.duration?.seconds !== null ? vid.duration.seconds * 1000 :
                 0;
     return {
       title: vid.title,
@@ -542,7 +542,7 @@ export class Dashboard {
     if (guild.icon) {
       iconUrl = `https://fluxerusercontent.com/icons/${guild.id}/${guild.icon}.webp`;
     } else if (typeof guild.iconURL === "function") {
-      try { iconUrl = guild.iconURL() ?? null; } catch (_) { iconUrl = null; }
+      try { iconUrl = guild.iconURL() ?? null; } catch (e) { logger.warn("[Dashboard] iconURL error:", e?.message); iconUrl = null; }
     }
 
     return {
@@ -566,7 +566,7 @@ export class Dashboard {
     if (guild.icon) {
       iconUrl = `https://fluxerusercontent.com/icons/${guild.id}/${guild.icon}.webp`;
     } else if (typeof guild.iconURL === "function") {
-      try { iconUrl = guild.iconURL() ?? null; } catch (_) { iconUrl = null; }
+      try { iconUrl = guild.iconURL() ?? null; } catch (e) { logger.warn("[Dashboard] iconURL error:", e?.message); iconUrl = null; }
     }
     return {
       name: guild.name,
@@ -625,7 +625,7 @@ export class Dashboard {
             for (const [mapUserId, info] of vc) {
               if (seen.has(mapUserId)) continue;
               const infoCh = cleanId(info.channelId);
-              const infoG  = cleanId(info.guildId);
+              const infoG = cleanId(info.guildId);
               if (infoCh === cleanChannelId && infoG === cleanGuildId) {
                 const botId = player.client?.user?.id;
                 if (botId && String(mapUserId) === String(botId)) continue;
@@ -800,7 +800,7 @@ export class Dashboard {
 
     let res;
     try {
-      res = await this.db.execute("SELECT * FROM login_codes WHERE user=? AND (verified IS NULL OR verified != true)", [user]);
+      res = await this.db.execute("SELECT * FROM login_codes WHERE user=? AND (verified IS NULL OR verified !== true)", [user]);
     } catch (e) {
       const id = Utils.uid();
       logger.dashboard("[Dashboard] MySQL error, id:", id, e);

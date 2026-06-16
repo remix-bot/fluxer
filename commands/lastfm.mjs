@@ -7,6 +7,7 @@ import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { Utils } from "../src/Utils.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 import { PROVIDER_CHOICES } from "../src/constants/providers.mjs";
 import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 
@@ -118,7 +119,7 @@ async function getGuildLinkedUsers(guild) {
         if (userId && !m.user?.bot) memberIds.push(String(userId));
       }
     }
-  } catch(e) {  }
+  } catch(e) { logger.warn("[LastFm] Error:", e?.message); }
   return memberIds;
 }
 
@@ -199,7 +200,7 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
         `${categoryEmoji} Fetching your ${categoryLabel} tracks from Last.fm${resolveLabel}...`
       )]
     });
-  } catch { statusMsg = null; }
+  } catch (e) { logger.warn("[LastfmCmd] Error:", e?.message); statusMsg = null; }
 
   let result;
   try {
@@ -382,8 +383,7 @@ export async function run(msg, data) {
           ]
         });
         sent = true;
-      } catch {
-      }
+      } catch(e) { logger.warn("[LastFm] Error:", e?.message); }
 
       const replyEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
@@ -705,7 +705,7 @@ export async function run(msg, data) {
           await replyMsg.message.removeAllReactions();
         } catch {
           for (const emoji of navEmojis) {
-            try { await replyMsg.message.removeReaction(emoji); } catch(e) {  }
+            try { await replyMsg.message.removeReaction(emoji); } catch(e) { logger.warn("[LastFm] Error:", e?.message); }
           }
         }
       };
@@ -738,9 +738,7 @@ export async function run(msg, data) {
 
         try {
           lb = await lastfm.getLeaderboard(currentPage, 10);
-        } catch {
-          
-        }
+        } catch(e) { logger.warn("[LastFm] Error:", e?.message); }
 
         await replyMsg.edit(buildPage(currentPage)).catch(() => {});
       });
@@ -898,7 +896,7 @@ export async function run(msg, data) {
             this.t(msg, "responses.lastfm.whoknowsChecking", { artist: artistName })
           )]
         });
-      } catch { statusMsg = null; }
+      } catch (e) { logger.warn("[LastfmCmd] Error:", e?.message); statusMsg = null; }
 
       const guild = msg.message?.guild ?? msg.message?.member?.guild;
       const memberIds = await getGuildLinkedUsers(guild);
@@ -1144,7 +1142,7 @@ export async function run(msg, data) {
               artistName = searchResult.artist;
               trackName = searchResult.name;
             }
-          } catch(e) {  }
+          } catch(e) { logger.warn("[LastFm] Error:", e?.message); }
         }
       }
 
@@ -1227,7 +1225,7 @@ export async function run(msg, data) {
       let similarTracks = [];
       try {
         similarTracks = await lastfm.getSimilarTracks(artistName, trackName, 5);
-      } catch(e) {  }
+      } catch(e) { logger.warn("[LastFm] Error:", e?.message); }
 
       if (similarTracks.length) {
         const simStr = similarTracks.map(t => {
@@ -1485,7 +1483,7 @@ export async function run(msg, data) {
             coverUrl = albumInfo.image;
             albumTitle = `${albumInfo.name} by ${albumInfo.artist}`;
           }
-        } catch(e) {  }
+        } catch(e) { logger.warn("[LastFm] Error:", e?.message); }
       }
 
       if (!coverUrl) {
@@ -1498,7 +1496,7 @@ export async function run(msg, data) {
               albumTitle = trackInfo.album.title;
             }
           }
-        } catch(e) {  }
+        } catch(e) { logger.warn("[LastFm] Error:", e?.message); }
       }
 
       if (!coverUrl) {
@@ -1561,7 +1559,7 @@ export async function run(msg, data) {
         statusMsg = await msg.reply({
           embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.affinityChecking"))]
         });
-      } catch { statusMsg = null; }
+      } catch (e) { logger.warn("[LastfmCmd] Error:", e?.message); statusMsg = null; }
 
       let affinityResults;
       try {
@@ -1612,7 +1610,7 @@ export async function run(msg, data) {
         statusMsg = await msg.reply({
           embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.crownsChecking"))]
         });
-      } catch { statusMsg = null; }
+      } catch (e) { logger.warn("[LastfmCmd] Error:", e?.message); statusMsg = null; }
 
       let crowns;
       try {
@@ -1692,7 +1690,7 @@ export async function run(msg, data) {
               artistName = searchResult.artist;
               trackName = searchResult.name;
             }
-          } catch(e) {  }
+          } catch(e) { logger.warn("[LastFm] Error:", e?.message); }
         }
       }
 
@@ -1707,7 +1705,7 @@ export async function run(msg, data) {
         statusMsg = await msg.reply({
           embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.whoknowsTrackChecking", { track: trackName, artist: artistName }))]
         });
-      } catch { statusMsg = null; }
+      } catch (e) { logger.warn("[LastfmCmd] Error:", e?.message); statusMsg = null; }
 
       const guild = msg.message?.guild ?? msg.message?.member?.guild;
       const memberIds = await getGuildLinkedUsers(guild);
@@ -1788,7 +1786,7 @@ export async function run(msg, data) {
         statusMsg = await msg.reply({
           embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.whoknowsAlbumChecking", { album: albumName, artistClause: artistName ? ` by **${artistName}**` : "" }))]
         });
-      } catch { statusMsg = null; }
+      } catch (e) { logger.warn("[LastfmCmd] Error:", e?.message); statusMsg = null; }
 
       const guild = msg.message?.guild ?? msg.message?.member?.guild;
       const memberIds = await getGuildLinkedUsers(guild);
@@ -1969,7 +1967,7 @@ export async function run(msg, data) {
               artistName = searchResult.artist;
               trackName = searchResult.name;
             }
-          } catch(e) {  }
+          } catch(e) { logger.warn("[LastFm] Error:", e?.message); }
         }
       }
 

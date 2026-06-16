@@ -176,8 +176,6 @@ export class Option {
         const results = this.channelRegex.exec(i) ?? this.idRegex.exec(i);
         const guildId = msg?.channel?.guildId ?? msg?.guildId;
 
-        if (guildId === "eval") return (results) ? results.groups["id"] : i;
-
         const voiceTypes = [2, 13];
         const byName = msg?.guild?.channels?.find(c => c.name === i && voiceTypes.includes(c.type));
         const cObj = results
@@ -573,7 +571,7 @@ export class CommandHandler extends EventEmitter {
             try {
               const names = botPermResult.missing.map(k => REQUIRED_BOT_PERMISSIONS.get(k)?.name ?? k);
               msg.message?.reply?.("I'm missing critical permissions: **" + names.join("**, **") + "**. Ask an admin to fix this.", { ping: false });
-            } catch (__) {  }
+            } catch (__) { logger.warn("[CommandHandler] Fallback perm reply failed"); }
           }
           return;
         }
@@ -639,7 +637,8 @@ export class CommandHandler extends EventEmitter {
           const data = collectArguments(argIndex, value, [value]);
           if (!data) { const twGuildId = msg.channel?.channel?.guildId ?? msg.message?.guildId; return this.replyHandler(this._textWrapErrorMsg(twGuildId, args.slice(argIndex).join(" "), args[argIndex].charAt(0)), msg); }
           argIndex += data.index - argIndex;
-          value = data.args.join(" ").slice(1, data.args.join(" ").length - 1);
+          const _joined = data.args.join(" ");
+          value = _joined.slice(1, _joined.length - 1);
         }
         argIndex++;
         i--;

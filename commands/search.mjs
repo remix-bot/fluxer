@@ -8,6 +8,7 @@ import { Message, getGlobalColor } from "../src/MessageHandler.mjs";
 import { EmbedBuilder }   from "@fluxerjs/core";
 import { PROVIDER_CHOICES, PROVIDER_NAMES, parseInlineProvider } from "../src/constants/providers.mjs";
 import { NUMBER_EMOJIS, CANCEL_EMOJI } from "../src/constants/UI.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 
 export const command = new CommandBuilder()
     .setName("search")
@@ -38,7 +39,7 @@ export const command = new CommandBuilder()
 /**
  * Execute the search command.
  * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @param {Map<string, {value: *}>} data - Slash-command options map
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {
@@ -115,7 +116,7 @@ export async function run(msg, data) {
   const clearReactions = async () => {
     try {
       await rawMsg.removeAllReactions();
-    } catch(e) {  }
+    } catch(e) { logger.warn("[Search] Error:", e?.message); }
   };
 
   const wrapped  = new Message(rawMsg, this.messages);

@@ -17,8 +17,7 @@
  * that occurs when a Fluxer bot token is sent to an incompatible API.
  */
 
-import Revoicejs from "revoice.js";
-const { MediaPlayer } = Revoicejs;
+import { MediaPlayer } from "revoice.js";
 
 import { ConnectionState, LKRoomEvent } from "./constants/FluxerRevoice.mjs";
 import { getVoiceManager } from "@fluxerjs/voice";
@@ -33,7 +32,6 @@ import { getGlobalColor } from "./MessageHandler.mjs";
 import { logger } from "./constants/Logger.mjs";
 import { get247ChannelMode } from "./constants/Helpers247.mjs";
 import { PROVIDER_NAMES } from "./constants/providers.mjs";
-import { cleanId } from "./Utils.mjs";
 import { hasHumansInChannel } from "./constants/VoiceStateResolver.mjs";
 
 
@@ -587,7 +585,7 @@ export default class Player extends EventEmitter {
       logger.mediaplayer("[Player] Existing MediaPlayer unhealthy, cleaning up...");
       try {
         if (this._mediaPlayer.fProc) {
-          try { this._mediaPlayer.fProc.removeAllListeners(); } catch(e) {  }
+          try { this._mediaPlayer.fProc.removeAllListeners(); } catch(e) { logger.warn("[Player] Error removing listeners:", e?.message); }
         }
         await this._mediaPlayer.stop();
       } catch(e) { logger.warn("[Player] MediaPlayer stop error:", e?.message); }
@@ -674,7 +672,7 @@ export default class Player extends EventEmitter {
     if (this._mediaPlayer) {
       try {
         if (this._mediaPlayer.fProc) {
-          try { this._mediaPlayer.fProc.removeAllListeners(); } catch(e) {  }
+          try { this._mediaPlayer.fProc.removeAllListeners(); } catch(e) { logger.warn("[Player] Error removing listeners:", e?.message); }
         }
 
         await this._mediaPlayer.stop();
@@ -720,7 +718,7 @@ export default class Player extends EventEmitter {
             if (_redirects >= 5) return reject(new Error("Too many redirects"));
             const redirectUrl = new URL(loc);
             if (redirectUrl.host !== urlObj.host) {
-              delete options.headers?.Authorization;
+              if (options.headers) delete options.headers.Authorization;
             }
             return fetchUrl(loc, _redirects + 1);
           }
@@ -801,7 +799,7 @@ export default class Player extends EventEmitter {
           try {
             if (typeof audioStream.unpipe === "function") audioStream.unpipe();
             if (typeof audioStream.destroy === "function") audioStream.destroy();
-          } catch (e) {  }
+          } catch (e) { logger.warn("[Player] Error:", e?.message); }
         }
         this._currentPassthrough = null;
       };
@@ -885,10 +883,9 @@ export default class Player extends EventEmitter {
         this._mediaPlayer.once("finish", onFinish);
         this._mediaPlayer.once("error", onError);
       });
-
     } catch (e) {
       if (audioStream && !audioStream.destroyed) {
-        try { audioStream.destroy(); } catch (e2) {  }
+        try { audioStream.destroy(); } catch (e2) { logger.warn("[Player] Error destroying stream:", e2?.message); }
       }
       this._currentPassthrough = null;
       if (isIgnorableMediaStateError(e)) {
@@ -1266,7 +1263,7 @@ export default class Player extends EventEmitter {
       }
       this._stopMediaPlayer().catch(() => {}).then(() => {
         if (connToDestroy) {
-          try { connToDestroy.removeAllListeners?.(); } catch(e) {  }
+          try { connToDestroy.removeAllListeners?.(); } catch(e) { logger.warn("[Player] Error removing listeners:", e?.message); }
           const disconnectPromise = connToDestroy.disconnect?.();
           if (disconnectPromise instanceof Promise) {
             disconnectPromise.catch((err) => {
@@ -1779,8 +1776,9 @@ export default class Player extends EventEmitter {
           msg: `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n${current.description || ""}\n\n🎵 Now playing: ${data?.title || "Unknown"}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`,
           image: current.thumbnail
         };
-      } catch {
-        return {
+      } catch (e) {
+          logger.warn("[Player] Error:", e?.message);
+          return {
           msg: `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`,
           image: current.thumbnail
         };
@@ -2036,7 +2034,7 @@ export default class Player extends EventEmitter {
     if (this._mediaPlayer) {
       try {
         if (this._mediaPlayer.fProc) {
-          try { this._mediaPlayer.fProc.removeAllListeners(); } catch(e) {  }
+          try { this._mediaPlayer.fProc.removeAllListeners(); } catch(e) { logger.warn("[Player] Error removing listeners:", e?.message); }
         }
         await this._mediaPlayer.stop();
       } catch(e) { logger.warn("[Player] MediaPlayer stop on next track:", e?.message); }

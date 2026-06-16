@@ -6,6 +6,7 @@
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 
 export const command = new CommandBuilder()
   .setName("test")
@@ -15,7 +16,7 @@ export const command = new CommandBuilder()
 /**
  * Execute the test command.
  * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @param {Map<string, {value: *}>} data - Slash-command options map
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {
@@ -67,7 +68,7 @@ export async function run(msg, data) {
     try {
       const fetched = await this.client.channels.fetch(channelId);
       if (fetched?.name) return fetched.name;
-    } catch(e) {  }
+    } catch(e) { logger.warn("[Test] Error:", e?.message); }
     return `Unknown (${channelId})`;
   };
 

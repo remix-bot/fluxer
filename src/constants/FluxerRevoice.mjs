@@ -62,7 +62,7 @@ function isLiveKitLogMessage(...args) {
       try {
         const parsed = JSON.parse(args[0]);
         if (parsed.name === "lk-rtc") return true;
-      } catch (_e) {  }
+      } catch (_e) { logger.warn("[FluxerRevoice] Error parsing livekit args"); }
     }
     if (LIVEKIT_LOG_PREFIXES.some(p => args[0].includes(p))) return true;
   }
@@ -370,7 +370,7 @@ export class FluxerRevoice extends EventEmitter {
 
     existing._destroyed = true;
     existing._connected = false;
-    try { existing.removeAllListeners(); } catch (e) {  }
+    try { existing.removeAllListeners(); } catch (e) { logger.warn("[FluxerRevoice] Error removing listeners:", e?.message); }
   }
 
   /**
@@ -474,7 +474,7 @@ export class FluxerRevoice extends EventEmitter {
           warn:  (...args) => { if (!isLiveKitLogMessage(...args)) logger.warn("[LiveKit]", ...args); },
           error: (...args) => logger.error("[LiveKit]", ...args),
         });
-      } catch (_e) {  }
+      } catch (_e) { logger.warn("[FluxerRevoice] Error creating LiveKit logger adapter"); }
     }
 
     if (!room) {

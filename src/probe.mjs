@@ -24,7 +24,7 @@ export default function probe(file) {
     const cleanup = () => {
       settled = true;
       clearTimeout(timeoutHandle);
-      try { proc.kill(); } catch(e) {  }
+      try { proc.kill(); } catch(e) { /* process already exited */ }
     };
 
     const timeoutHandle = setTimeout(() => {

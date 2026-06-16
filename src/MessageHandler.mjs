@@ -245,7 +245,7 @@ export class MessageHandler {
   async assertPermissions(permissions, message) {
     const guild = message.guild ?? await message.client?.guilds?.resolve?.(message.guildId);
     if (guild && !guild.members?.me) {
-      try { await guild.members.fetchMe(); } catch (_) {  }
+      try { await guild.members.fetchMe(); } catch (_) { logger.warn("[MessageHandler] fetchMe failed"); }
     }
     const missing = this.checkPermissions(permissions, message.channel ?? message.channel?.channel);
     if (missing.length === 0) return true;
@@ -270,7 +270,7 @@ export class MessageHandler {
       try {
         const names = missing.map(k => REQUIRED_BOT_PERMISSIONS.get(k)?.name ?? k);
         await message.reply(this.t(message.guildId, "responses.messages.needPermsFallback", { perms: names.join("** **") }), { ping: false });
-      } catch (_) {  }
+      } catch (_) { logger.warn("[MessageHandler] Fallback permission reply failed"); }
     }
     return false;
   }
@@ -991,7 +991,7 @@ export class RichPaginator {
       for (const emoji of allReactions) {
         try {
           await rawMsg.removeReaction(emoji);
-        } catch(e) {  }
+        } catch(e) { logger.warn("[MessageHandler] Error:", e?.message); }
       }
     };
 
@@ -1090,7 +1090,7 @@ export class QueuePaginator {
         for (const emoji of [prev, next]) {
           try {
             await rawMsg.removeReaction(emoji);
-          } catch(e) {  }
+          } catch(e) { logger.warn("[MessageHandler] Error:", e?.message); }
         }
       }
     };

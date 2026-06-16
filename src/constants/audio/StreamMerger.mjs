@@ -1,3 +1,13 @@
+/**
+ * @file StreamMerger.mjs — StreamMerger — Transform stream that mixes multiple audio inputs through FFmpeg amix filter
+ * @module src.constants.audio.StreamMerger
+ */
+
+/**
+ * StreamMerger extends Transform to mix multiple audio streams into one
+ * using FFmpeg’s amix filter. Supports dynamic stream addition with
+ * a tree-based node structure for managing merge slots.
+ */
 import { logger } from "../Logger.mjs";
 import ffmpeg from "ffmpeg-static";
 import { Transform } from "node:stream";
@@ -26,7 +36,14 @@ class StreamMerger extends Transform {
     this.ffmpeg.stdout.on("data", (chunk) => { this.push(chunk); });
   }
   spawnFfmpeg() {
-    const args = "-i pipe:3 -re -i pipe:4 -vn -fflags nobuffer -filter_complex amix=inputs=2:duration=longest pipe:1".split(" ");
+    const args = [
+      "-i", "pipe:3",
+      "-re", "-i", "pipe:4",
+      "-vn",
+      "-fflags", "nobuffer",
+      "-filter_complex", "amix=inputs=2:duration=longest",
+      "pipe:1",
+    ];
     return spawn(this.ffmpegPath, args, {
       windowsHide: true,
       stdio: ["pipe", "pipe", "pipe", "pipe", "pipe"]
@@ -60,6 +77,7 @@ class StreamMerger extends Transform {
     open.children.push(node);
     s.pipe(p.stdio[3]);
     p.stderr.on("data", (c) => { logger.mediaplayer("[ffmpeg]", c.toString().trim()); });
+    /** Write initial silence to prime the ffmpeg stdin pipe (required for amix to detect the input). */
     p.stdio[4].write(Buffer.alloc(1024, 0));
     p.stdout.pipe(open.process.stdio[open.pipes[0]]);
     const pipeNumber = open.pipes[0];

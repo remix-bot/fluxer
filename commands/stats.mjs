@@ -52,8 +52,9 @@ async function fetchGuildMemberCount(guild) {
       }, "0");
     }
     return total;
-  } catch {
-    return guild.memberCount ?? guild.members?.size ?? 0;
+  } catch (e) {
+      logger.warn("[Stats] Error:", e?.message);
+      return guild.memberCount ?? guild.members?.size ?? 0;
   }
 }
 

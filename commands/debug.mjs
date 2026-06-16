@@ -6,7 +6,8 @@
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { cleanId } from "../src/Utils.mjs";
+import { cleanId } from "../src/MessageHandler.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { ERROR_COLOR, WARN_COLOR, SUCCESS_COLOR, DANGER_COLOR } from "../src/constants/UI.mjs";
 import { EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
@@ -78,7 +79,7 @@ function getBotGatewayVoiceState(client, guildId) {
         if (channelId) return { userId: botId, channelId: cleanId(channelId) };
       }
     }
-  } catch(e) {  }
+  } catch(e) { logger.warn("[Debug] Error:", e?.message); }
   try {
     const cleanGuild = cleanId(guildId);
     const guild = client.guilds.get(cleanGuild) ?? client.guilds.get(guildId);
@@ -100,7 +101,7 @@ function getBotGatewayVoiceState(client, guildId) {
         if (chId) return { userId: botId, channelId: cleanId(chId) };
       }
     }
-  } catch(e) {  }
+  } catch(e) { logger.warn("[Debug] Error:", e?.message); }
 }
 
 /**
@@ -170,16 +171,16 @@ async function forceRejoinPlayer(ctx, player) {
 
     const revoiceConn = ctx.revoice?.connections?.get(cleanChannelId);
     if (revoiceConn) {
-      try { await ctx.revoice._destroyStaleConnection(cleanChannelId, revoiceConn); } catch(e) {  }
+      try { await ctx.revoice._destroyStaleConnection(cleanChannelId, revoiceConn); } catch(e) { logger.warn("[Debug] Error:", e?.message); }
     } else if (player.connection) {
-      try { player.connection.removeAllListeners(); } catch(e) {  }
-      try { ctx.revoice?._leaveGateway?.(cleanChannelId, cleanGuildId); } catch(e) {  }
-      try { ctx.revoice?.deleteConnection?.(cleanChannelId); } catch(e) {  }
-      try { await player.connection.disconnect(); } catch(e) {  }
+      try { player.connection.removeAllListeners(); } catch(e) { logger.warn("[Debug] Error:", e?.message); }
+      try { ctx.revoice?._leaveGateway?.(cleanChannelId, cleanGuildId); } catch(e) { logger.warn("[Debug] Error:", e?.message); }
+      try { ctx.revoice?.deleteConnection?.(cleanChannelId); } catch(e) { logger.warn("[Debug] Error:", e?.message); }
+      try { await player.connection.disconnect(); } catch(e) { logger.warn("[Debug] Error:", e?.message); }
     }
 
-    try { await player.leave(); } catch(e) {  }
-    try { player.destroy(); } catch(e) {  }
+    try { await player.leave(); } catch(e) { logger.warn("[Debug] Error:", e?.message); }
+    try { player.destroy(); } catch(e) { logger.warn("[Debug] Error:", e?.message); }
 
     await new Promise(r => setTimeout(r, REJOIN_DELAY_MS));
 
@@ -195,7 +196,7 @@ async function forceRejoinPlayer(ctx, player) {
         newPlayer.queue.current = null;
         await newPlayer.playNext();
         if (wasPaused) newPlayer.pause();
-      } catch(e) {  }
+      } catch(e) { logger.warn("[Debug] Error:", e?.message); }
     }
 
     if (wasAutoplay) newPlayer._autoplay = true;
@@ -579,7 +580,7 @@ export async function run(msg, data) {
             : `Player Detail${pages[pageIdx].includes(",") ? "s" : ""}`;
         const footerText = expired
             ? this.t(msg, "responses._common.controlsExpired")
-            : `${this.t(msg, "responses.eval.pageLabel", { page: pageIdx + 1, total: totalPages })} • ${this.t(msg, "responses.eval.navigateHint")}`;
+            : `${this.t(msg, "responses.debug.pageLabel", { page: pageIdx + 1, total: totalPages })} • ${this.t(msg, "responses.eval.navigateHint")}`;
 
         const embedColor = (pageIdx === 0 && ghostConnections.length > 0) ? DANGER_COLOR : getGlobalColor();
         const titleSuffix = (pageIdx === 0 && ghostConnections.length > 0) ? ` — ${ghostConnections.length} Ghost(s) Detected!` : "";
@@ -606,7 +607,7 @@ export async function run(msg, data) {
           await replyMsg.message.removeAllReactions();
         } catch {
           for (const emoji of navEmojis) {
-            try { await replyMsg.message.removeReaction(emoji); } catch(e) {  }
+            try { await replyMsg.message.removeReaction(emoji); } catch(e) { logger.warn("[Debug] Error:", e?.message); }
           }
         }
       };

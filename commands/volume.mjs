@@ -23,7 +23,7 @@ export const command = new CommandBuilder()
 /**
  * Execute the volume command.
  * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @param {Map<string, {value: *}>} data - Slash-command options map
  * @returns {Promise<void>}
  */
 export async function run(message, data) {
@@ -35,7 +35,7 @@ export async function run(message, data) {
 
   const embed = new EmbedBuilder().setColor(getGlobalColor());
 
-  if (!volOption || raw == null || isNaN(Number(raw))) {
+  if (!volOption || raw === null || raw === undefined || isNaN(Number(raw))) {
     const current = Math.round((p.preferredVolume ?? 1) * 100);
     embed.setDescription(this.t(message, "responses.volume.current", { volume: current }));
   } else {

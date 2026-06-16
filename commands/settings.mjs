@@ -6,6 +6,7 @@
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor, cleanId, getMessageGuildId } from "../src/MessageHandler.mjs";
+import { logger } from "../src/constants/Logger.mjs";
 import runnables from "../settings/runnables.mjs";
 
 function embed(desc, opts = {}) {
@@ -15,9 +16,11 @@ function embed(desc, opts = {}) {
   return { embeds: [b] };
 }
 
-/** Build a rich embed with fields for the 24/7 status panel.
- *  Instead, we build the base embed with EmbedBuilder, call .toJSON()
- *  to get the raw object, then attach a `fields` array directly.
+/**
+ * Build a rich embed with fields for the 24/7 status panel.
+ * Instead of using the standard addField API, we build the base embed with
+ * EmbedBuilder, call .toJSON() to get the raw object, then attach a `fields`
+ * array directly.
  */
 function richEmbed(fields, opts = {}) {
   const b = new EmbedBuilder().setColor(getGlobalColor());
@@ -183,7 +186,7 @@ function resolveChannelName(client, channelId) {
   try {
     const ch = client?.channels?.get?.(channelId);
     if (ch?.name) return ch.name;
-  } catch(e) {  }
+  } catch(e) { logger.warn("[Settings] Error:", e?.message); }
   return null;
 }
 
@@ -689,7 +692,7 @@ export const command = function() {
 /**
  * Execute the settings command.
  * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>>} data - Slash-command options map
+ * @param {Map<string, {value: *}>} data - Slash-command options map
  * @returns {Promise<void>}
  */
 export async function run(message, data) {
