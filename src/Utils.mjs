@@ -12,6 +12,7 @@
  */
 
 import { escapeMarkdown as _escapeMarkdown, truncate as _truncate } from "@fluxerjs/util";
+import { logger } from "./constants/Logger.mjs";
 
 /**
  * Strip non-digit characters from a value, returning a clean ID string.

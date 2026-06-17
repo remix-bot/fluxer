@@ -409,7 +409,7 @@ export class Remix {
       }
     }, ALONE_CHECK_INTERVAL);
 
-    this.players.checkVoiceChannels = async function (message) {
+    this.players.checkVoiceChannels = async (message) => {
       const userId  = message?.author?.id   ?? message?.message?.author?.id;
       const guildId =
           message?.channel?.guildId ??
@@ -436,20 +436,20 @@ export class Remix {
         const cId = cleanId(channelId);
         return {
           channelId: cId,
-          alreadyInVoice: self.players.playerMap.has(cId),
-          hasHumans: self.voiceCache.hasHumansInChannel(cleanGuild, cId),
+          alreadyInVoice: this.players.playerMap.has(cId),
+          hasHumans: this.voiceCache.hasHumansInChannel(cleanGuild, cId),
         };
       };
 
       const seedCache = (channelId) => {
-        if (!self.voiceCache.hasHumanUser(userId, cleanGuild)) {
-          self.voiceCache.updateUser({ guildId: cleanGuild, userId, channelId, isBot: false });
+        if (!this.voiceCache.hasHumanUser(userId, cleanGuild)) {
+          this.voiceCache.updateUser({ guildId: cleanGuild, userId, channelId, isBot: false });
         }
       };
 
       logger.voice(`[checkVC] userId=${userId} guildId=${guildId} cleanGuild=${cleanGuild}`);
 
-      const observed = self.voiceCache.getUserLocation(cleanGuild, userId);
+      const observed = this.voiceCache.getUserLocation(cleanGuild, userId);
       if (observed && observed.channelId) {
         logger.voice(`[checkVC] HIT voiceCache → ${observed.channelId}`);
         return makeResult(observed.channelId);
@@ -487,7 +487,7 @@ export class Remix {
       } catch (e) { logger.voice(`[checkVC] guild error: ${e.message}`); }
 
       try {
-        const loc = self.voiceCache.getHumanUser(userId, cleanGuild);
+        const loc = this.voiceCache.getHumanUser(userId, cleanGuild);
         if (loc && loc.channelId) {
           logger.voice(`[checkVC] HIT voiceCache scan → ${loc.channelId}`);
           return makeResult(loc.channelId);

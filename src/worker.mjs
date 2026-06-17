@@ -14,7 +14,8 @@ import https from "https";
 import { Utils, cleanId } from "./Utils.mjs";
 import { PROVIDERS } from "./constants/providers.mjs";
 import { logger } from "./constants/Logger.mjs";
-import { NL_DEFAULT_PASSWORD } from "./Player.mjs";
+
+const NL_DEFAULT_PASSWORD = "youshallnotpass";
 
 const nl           = workerData?.data?.nodelink ?? {};
 const NL_HOST      = nl.host      ?? "localhost";
