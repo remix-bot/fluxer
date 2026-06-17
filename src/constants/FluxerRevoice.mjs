@@ -20,9 +20,11 @@
  *     3. Gateway sends VOICE_SERVER_UPDATE with { endpoint, token }
  *     4. The endpoint/token are LiveKit credentials
  *
- * This adapter wraps @fluxerjs/voice's `joinVoiceChannel()` and returns
+ * This adapter wraps @fluxerjs/voice's VoiceManager.join() and returns
  * a `FluxerVoiceConnection` that is API-compatible with revoice.js's
  * `VoiceConnection`, so Player.mjs and MediaPlayer work unchanged.
+ *
+ * Reference: https://fluxer.js.org/v/latest/guides/voice
  *
  * IMPORTANT: @livekit/rtc-node (Node.js SDK) does NOT have `room.state`.
  *   ✅ room.isConnected      — boolean getter (true when connected)
@@ -32,7 +34,7 @@
  */
 
 import { EventEmitter } from "node:events";
-import { joinVoiceChannel, getVoiceManager } from "@fluxerjs/voice";
+import { getVoiceManager } from "@fluxerjs/voice";
 
 export const ConnectionState = Object.freeze({
   CONN_DISCONNECTED: 0,
@@ -288,7 +290,7 @@ export class FluxerRevoice extends EventEmitter {
    * Send a channel-specific leave signal to the Fluxer gateway so it
    * knows the bot is no longer in the given channel. Without this, the
    * gateway may think the bot is still connected and won't send a fresh
-   * VOICE_SERVER_UPDATE on the next joinVoiceChannel() call, causing the
+   * VOICE_SERVER_UPDATE on the next VoiceManager.join() call, causing the
    * rejoin to hang or fail.
    *
    * IMPORTANT: Only uses channel-specific leave (vm.leaveChannel).
@@ -445,9 +447,14 @@ export class FluxerRevoice extends EventEmitter {
 
     const channelGuildId = guildId ?? channel?.guildId ?? channel?.guild?.id ?? null;
 
+    const vm = getVoiceManager(this.client);
+    if (!vm) {
+      throw new Error(`Fluxer voice join failed for ${channelId}: VoiceManager not available — call getVoiceManager(client) before login`);
+    }
+
     let nativeConnection;
     try {
-      nativeConnection = await joinVoiceChannel(this.client, channel);
+      nativeConnection = await vm.join(channel);
     } catch (e) {
       throw new Error(`Fluxer voice join failed for ${channelId}: ${e.message}`);
     }
@@ -551,6 +558,7 @@ export class FluxerRevoice extends EventEmitter {
       });
 
       room.on(LKRoomEvent.Disconnected, (reason) => {
+        if (conn._destroyed) return;
         const isIntentional = this._intentionalDisconnects.has(String(channelId));
         const reasonLabel = isIntentional ? "intentional" : (reason ?? "unexpected");
         logger.player(`[FluxerRevoice] Room disconnected: ${reasonLabel}`);
@@ -593,6 +601,33 @@ export class FluxerRevoice extends EventEmitter {
           conn.emit("userleave", userId);
         }
       });
+
+      /**
+       * Handle the VoiceManager's serverLeave event, which fires when
+       * the Fluxer/LiveKit server terminates the session server-side.
+       * Without this handler the bot never learns the session is dead,
+       * leading to "validate request timed out" on the next join attempt.
+       *
+       * Reference: https://fluxer.js.org/v/latest/guides/voice
+       *   "If using LiveKit, the server may emit serverLeave.
+       *    Listen and reconnect if needed."
+       */
+      if (nativeConnection && typeof nativeConnection.on === "function") {
+        nativeConnection.on("serverLeave", () => {
+          if (conn._destroyed) return;
+          logger.player(`[FluxerRevoice] serverLeave received for channel ${channelId} — cleaning up`);
+          conn._connected = false;
+          conn._destroyed = true;
+          this.connections.delete(channelId);
+          this._leaveGateway(channelId, channelGuildId);
+          if (room) {
+            try { room.disconnect().catch(() => {}); } catch (_) { /** already gone */ }
+          }
+          if (conn.listenerCount("disconnect") > 0) {
+            conn.emit("disconnect");
+          }
+        });
+      }
 
       this.connections.set(channelId, conn);
 

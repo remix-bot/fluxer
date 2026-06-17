@@ -231,12 +231,6 @@ export class LastFmManager {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
-    try {
-      await pool.execute("ALTER TABLE \`lastfm_users\` ADD COLUMN \`scrobble_count\` BIGINT NOT NULL DEFAULT 0 AFTER \`scrobble\`");
-    } catch (e) {
-      logger.warn("[LastFm] Migration warning:", e?.message);
-    }
-
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS \`lastfm_stats\` (
         \`id\`              TINYINT(1)  NOT NULL PRIMARY KEY DEFAULT 1,
@@ -298,7 +292,7 @@ export class LastFmManager {
         [...f.params, String(userId), ...f.params]
       );
     } catch (e) {
-      logger.warn("[LastFm] Migration warning:", e?.message);
+      logger.warn("[LastFm] Stats update warning:", e?.message);
     }
 
     return data;

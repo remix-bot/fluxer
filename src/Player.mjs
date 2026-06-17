@@ -17,11 +17,14 @@
  * that occurs when a Fluxer bot token is sent to an incompatible API.
  */
 
-import { MediaPlayer } from "revoice.js";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { MediaPlayer } = require("revoice.js");
 
 import { ConnectionState, LKRoomEvent } from "./constants/FluxerRevoice.mjs";
 import { getVoiceManager } from "@fluxerjs/voice";
-import { Utils } from "./Utils.mjs";
+import { Utils, cleanId } from "./Utils.mjs";
 import { EventEmitter } from "node:events";
 import meta from "./probe.mjs";
 import { Worker } from "node:worker_threads";

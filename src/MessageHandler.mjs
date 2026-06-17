@@ -572,14 +572,19 @@ export class MessageHandler {
   }
 
   /**
+   * Join a voice channel using the documented VoiceManager.join() API.
+   * Reference: https://fluxer.js.org/v/latest/guides/voice
+   *
    * @param {string} channelId
    * @returns {Promise<import("@fluxerjs/voice").VoiceConnectionLike>}
    */
   async joinChannel(channelId) {
-    const { joinVoiceChannel } = await import("@fluxerjs/voice");
+    const { getVoiceManager } = await import("@fluxerjs/voice");
     const channel = await this.client.channels.fetch(channelId);
     if (!channel || !("guildId" in channel)) throw new Error("Cannot join a non-guild voice channel.");
-    return joinVoiceChannel(this.client, channel);
+    const vm = getVoiceManager(this.client);
+    if (!vm) throw new Error("VoiceManager not available.");
+    return vm.join(channel);
   }
 }
 

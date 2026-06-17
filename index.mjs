@@ -188,7 +188,7 @@ export class Remix {
     commands.owners = config.owners ?? [];
 
     this.moonlink = null;
-    const moonlinkInitialised = false;
+    let moonlinkInitialised = false;
 
     this.voiceCache = new VoiceStateCache({ maxUsers: 50_000, maxBots: 10_000 });
 
