@@ -1107,15 +1107,19 @@ export default class Player extends EventEmitter {
         }
         if (!this.leaving && !this._destroyed) {
           const mode = this._get247Mode();
+
+          this.connection = null;
+          this._paused = true;
+          this._stopInactivityTimer();
+
           if (mode === "auto" || mode === "on") {
-            logger.mediaplayer(`[Player] Unexpected disconnect detected (24/7 ${mode}) — stopping media player, GatewayHandler will schedule rejoin`);
-            this._stopMediaPlayer().catch(() => {});
+            logger.mediaplayer(`[Player] Unexpected disconnect detected (24/7 ${mode}) — stopping media player; autoleave handlers will keep player alive for rejoin`);
           } else {
             logger.mediaplayer("[Player] Unexpected disconnect detected");
-            this._stopMediaPlayer()
-                .catch(() => {})
-                .finally(() => this.emit("autoleave"));
           }
+          this._stopMediaPlayer()
+              .catch(() => {})
+              .finally(() => this.emit("autoleave"));
         } else {
           try { connection.removeAllListeners(); } catch(e) { logger.warn("[Player] Connection cleanup on leave error:", e?.message); }
         }
