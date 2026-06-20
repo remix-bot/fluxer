@@ -1252,36 +1252,14 @@ export class LastFmManager {
    *   https://www.last.fm/music/Artist/Album/Track
    *   https://www.last.fm/music/Artist/_/Track
    *
+   * Delegates to the module-level {@link parseLastFmUrl} so the same logic
+   * is reused by `commands/play.mjs` and the instance API.
+   *
    * @param {string} url
    * @returns {{ artist: string, track: string|null, album: string|null, url: string } | null}
    */
   parseLastFmUrl(url) {
-    try {
-      const u = new URL(url);
-      if (!/^(?:www\.)?last\.fm$/i.test(u.hostname)) return null;
-
-      const match = u.pathname.match(/^\/music\/([^/]+)(?:\/([^/]+))?(?:\/([^/]+))?/);
-      if (!match) return null;
-
-      const artist = decodeURIComponent(match[1].replace(/\+/g, " "));
-      const segment2 = match[2] ? decodeURIComponent(match[2].replace(/\+/g, " ")) : null;
-      const segment3 = match[3] ? decodeURIComponent(match[3].replace(/\+/g, " ")) : null;
-
-      let track = null;
-      let album = null;
-
-      if (segment3) {
-        album = segment2 === "_" ? null : segment2;
-        track = segment3;
-      } else if (segment2 && segment2 !== "_") {
-        track = segment2;
-      }
-
-      return { artist, track, album, url };
-    } catch (e) {
-        logger.warn("[LastFm] Error:", e?.message);
-        return null;
-    }
+    return parseLastFmUrl(url);
   }
 
   /**
@@ -1290,14 +1268,7 @@ export class LastFmManager {
    * @returns {boolean}
    */
   isLastFmUrl(str) {
-    if (!str || typeof str !== "string") return false;
-    try {
-      const u = new URL(str);
-      return /^(?:www\.)?last\.fm$/i.test(u.hostname) && /^\/music\//.test(u.pathname);
-    } catch (e) {
-        logger.warn("[LastFm] Error:", e?.message);
-        return false;
-    }
+    return isLastFmUrl(str);
   }
 
   /**
@@ -1417,9 +1388,6 @@ export class LastFmManager {
       let artist = "Unknown";
       if (parts.length >= 1) {
         artist = parts[0].replace(/\+/g, " ");
-      }
-      if (parts.length >= 3 && parts[1] === "_") {
-      } else if (parts.length >= 2) {
       }
 
       if (name && name !== "Unknown") {
@@ -2300,8 +2268,8 @@ export class LastFmManager {
       pool.execute(
         `UPDATE lastfm_users SET scrobble_count = scrobble_count + 1 WHERE user_id = ?${f.where}`,
         [String(userId), ...f.params]
-      ).catch(() => {});
-    }).catch(() => {});
+      ).catch(e => { logger.warn("[LastFm] scrobble_count increment failed:", e?.message); });
+    }).catch(e => { logger.warn("[LastFm] scrobble_count pool acquire failed:", e?.message); });
   }
 
   _buildPlayQuery(artist, title) {
@@ -2360,5 +2328,60 @@ export class LastFmManager {
 
     const thresholdMs = Math.min(durationMs * this.scrobbleThreshold, this.scrobbleMinMs);
     return playedMs >= thresholdMs;
+  }
+}
+
+/**
+ * Parse a Last.fm music URL and extract artist and track info.
+ * Supports:
+ *   https://www.last.fm/music/Artist
+ *   https://www.last.fm/music/Artist/Track
+ *   https://www.last.fm/music/Artist/Album/Track
+ *   https://www.last.fm/music/Artist/_/Track
+ *
+ * @param {string} url
+ * @returns {{ artist: string, track: string|null, album: string|null, url: string } | null}
+ */
+export function parseLastFmUrl(url) {
+  try {
+    const u = new URL(url);
+    if (!/^(?:www\.)?last\.fm$/i.test(u.hostname)) return null;
+
+    const match = u.pathname.match(/^\/music\/([^/]+)(?:\/([^/]+))?(?:\/([^/]+))?/);
+    if (!match) return null;
+
+    const artist = decodeURIComponent(match[1].replace(/\+/g, " "));
+    const segment2 = match[2] ? decodeURIComponent(match[2].replace(/\+/g, " ")) : null;
+    const segment3 = match[3] ? decodeURIComponent(match[3].replace(/\+/g, " ")) : null;
+
+    let track = null;
+    let album = null;
+
+    if (segment3) {
+      album = segment2 === "_" ? null : segment2;
+      track = segment3;
+    } else if (segment2 && segment2 !== "_") {
+      track = segment2;
+    }
+
+    return { artist, track, album, url };
+  } catch (e) {
+    logger.warn("[LastFm] parseLastFmUrl error:", e?.message);
+    return null;
+  }
+}
+
+/**
+ * Check if a string is a Last.fm music URL.
+ * @param {string} str
+ * @returns {boolean}
+ */
+export function isLastFmUrl(str) {
+  if (!str || typeof str !== "string") return false;
+  try {
+    const u = new URL(str);
+    return /^(?:www\.)?last\.fm$/i.test(u.hostname) && /^\/music\//.test(u.pathname);
+  } catch (e) {
+    return false;
   }
 }

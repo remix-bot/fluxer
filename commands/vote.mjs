@@ -40,7 +40,7 @@ export const command = new CommandBuilder()
       .setRequired(false)
   );
 
-function notConfigured(prefix, t, guildId) {
+function notConfigured(t, guildId) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(ERROR_COLOR)
@@ -156,7 +156,7 @@ export async function run(msg, data) {
 
     case "check":
     case "voters": {
-      if (!fluxerlist || !fluxerlist.enabled) return msg.reply(notConfigured(prefix, t, guildId));
+      if (!fluxerlist || !fluxerlist.enabled) return msg.reply(notConfigured(t, guildId));
 
       const resolvedType = type || "bot";
       const id = resourceId || (resolvedType === "server" ? fluxerlist.serverId : fluxerlist.botId);

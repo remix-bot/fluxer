@@ -11,7 +11,7 @@ import { workerData, parentPort } from "worker_threads";
 import { EventEmitter } from "events";
 import http  from "http";
 import https from "https";
-import { Utils, cleanId } from "./Utils.mjs";
+import { Utils } from "./Utils.mjs";
 import { PROVIDERS } from "./constants/providers.mjs";
 import { logger } from "./constants/Logger.mjs";
 
@@ -471,7 +471,8 @@ class YTUtils extends EventEmitter {
         let data;
         try {
           data = await loadTracks(id, this._nlGet ?? nlGet);
-        } catch (_) {
+        } catch (e) {
+          logger.worker("[Worker] getResults loadTracks failed:", e?.message);
           continue;
         }
         tracks = extractTracks(data);

@@ -5,6 +5,7 @@
 
 import ffprobe from "ffprobe-static";
 import { spawn } from "node:child_process";
+import { logger } from "./constants/Logger.mjs";
 
 const PROBE_TIMEOUT_MS = 15_000;
 
@@ -24,7 +25,9 @@ export default function probe(file) {
     const cleanup = () => {
       settled = true;
       clearTimeout(timeoutHandle);
-      try { proc.kill(); } catch(e) { /* process already exited */ }
+      if (proc.exitCode === null && !proc.killed) {
+        try { proc.kill(); } catch(e) { logger.warn("[probe] kill error:", e?.message); }
+      }
     };
 
     const timeoutHandle = setTimeout(() => {

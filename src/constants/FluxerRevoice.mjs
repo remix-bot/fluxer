@@ -35,6 +35,7 @@
 
 import { EventEmitter } from "node:events";
 import { getVoiceManager } from "@fluxerjs/voice";
+import { cleanId } from "../Utils.mjs";
 
 export const ConnectionState = Object.freeze({
   CONN_DISCONNECTED: 0,
@@ -64,7 +65,7 @@ function isLiveKitLogMessage(...args) {
       try {
         const parsed = JSON.parse(args[0]);
         if (parsed.name === "lk-rtc") return true;
-      } catch (_e) { logger.warn("[FluxerRevoice] Error parsing livekit args"); }
+      } catch (e) { logger.warn("[FluxerRevoice] Error parsing livekit args:", e?.message); }
     }
     if (LIVEKIT_LOG_PREFIXES.some(p => args[0].includes(p))) return true;
   }
@@ -278,7 +279,7 @@ export class FluxerRevoice extends EventEmitter {
       this._intentionalDisconnects.delete(key);
       this._intentionalDisconnectTokens.delete(key);
     }, 10_000));
-    const cleanChannelId = key.replace(/\D/g, "");
+    const cleanChannelId = cleanId(key);
     if (this.client?._remix?.intentionalLeaves && !this.client._remix.intentionalLeaves.has(cleanChannelId)) {
       this.client._remix.intentionalLeaves.set(cleanChannelId, setTimeout(() => {
         this.client._remix.intentionalLeaves.delete(cleanChannelId);
@@ -481,7 +482,7 @@ export class FluxerRevoice extends EventEmitter {
           warn:  (...args) => { if (!isLiveKitLogMessage(...args)) logger.warn("[LiveKit]", ...args); },
           error: (...args) => logger.error("[LiveKit]", ...args),
         });
-      } catch (_e) { logger.warn("[FluxerRevoice] Error creating LiveKit logger adapter"); }
+      } catch (e) { logger.warn("[FluxerRevoice] Error creating LiveKit logger adapter:", e?.message); }
     }
 
     if (!room) {

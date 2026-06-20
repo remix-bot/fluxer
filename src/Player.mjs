@@ -613,7 +613,7 @@ export default class Player extends EventEmitter {
         if (mp.source && typeof mp.source.captureFrame === "function") {
           const _orig = mp.source.captureFrame.bind(mp.source);
           mp.source.captureFrame = async (frame) => {
-            if (this._streamingStopped || this._skipping || this._seeking || this.leaving || this._destroyed) {
+            if (this._streamingStopped || this._skipping || this._seeking || this._replayingSeek || this.leaving || this._destroyed) {
               return;
             }
             try {
@@ -989,7 +989,7 @@ export default class Player extends EventEmitter {
       const connection = await this._revoice.join(channelId, false);
       this.connection = connection;
       this._channelId = channelId;
-      this._guildId   = channel.guildId;
+      this._guildId   = cleanId(channel.guildId);
       this.leaving    = false;
 
       const room = connection.room;
@@ -1190,7 +1190,9 @@ export default class Player extends EventEmitter {
       this._activeTrackOpt = null;
 
       if (this._mediaPlayer) {
-        try { this._mediaPlayer.destroy(); } catch(e) { /* MediaPlayer may not have destroy() */ }
+        if (typeof this._mediaPlayer.destroy === "function") {
+          try { this._mediaPlayer.destroy(); } catch(e) { logger.warn("[Player] MediaPlayer destroy error on leave:", e?.message); }
+        }
         this._mediaPlayer = null;
       }
 
@@ -1221,10 +1223,12 @@ export default class Player extends EventEmitter {
         this.removeListener("queueEnd", this._autoplayHandler);
         this._autoplayHandler = null;
       }
-      this.leaving     = false;
     } catch (e) {
       logger.error("[Player] leave error:", e.message);
       return false;
+    } finally {
+      this.leaving       = false;
+      this._replayingSeek = false;
     }
     this.emit("leave");
     return true;
@@ -1451,10 +1455,9 @@ export default class Player extends EventEmitter {
         this._replayWithFilters(ms).catch((e) => {
           logger.warn("[Player] Seek replay failed (non-fatal):", e.message);
         });
+      } else {
+        this._seeking = false;
       }
-
-      await Utils.sleep(500);
-      this._seeking = false;
 
       return true;
     } catch (e) {
@@ -1517,7 +1520,6 @@ export default class Player extends EventEmitter {
         this._replayWithFilters(positionMs).catch((e) => {
           logger.warn("[Player] Filter replay failed (non-fatal):", e.message);
         });
-        setTimeout(() => { this._seeking = false; }, 500);
       }
 
       return { ok: true };
@@ -1536,56 +1538,59 @@ export default class Player extends EventEmitter {
     if (!current?.encoded || !this.connection || this.leaving) return;
 
     this._replayingSeek = true;
-    this._streamingStopped = true;
-    await this._stopMediaPlayer().catch(() => {});
-    this._streamingStopped = false;
-
-    const hasPlayer = await this._ensureMediaPlayer();
-    if (!hasPlayer) {
-      logger.warn("[Player] _replayWithFilters: could not recreate MediaPlayer");
-      return;
-    }
-
-    if (this.preferredVolume !== 1) {
-      this._mediaPlayer.setVolume(this.preferredVolume);
-    }
-
-    const nlBase = `http://${this._nl.host}:${this._nl.port}`;
-    let streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(current.encoded)}&position=${positionMs}&volume=100`;
-
-    if (this.activeFilterPayload) {
-      streamUrl += `&filters=${encodeURIComponent(JSON.stringify(this.activeFilterPayload))}`;
-    }
-
     try {
-      await this._streamUrl(streamUrl);
-    } catch (e) {
-      logger.warn("[Player] _replayWithFilters stream error:", e.message);
-    }
+      this._streamingStopped = true;
+      await this._stopMediaPlayer().catch(() => {});
+      this._streamingStopped = false;
 
-    this._replayingSeek = false;
+      const hasPlayer = await this._ensureMediaPlayer();
+      if (!hasPlayer) {
+        logger.warn("[Player] _replayWithFilters: could not recreate MediaPlayer");
+        return;
+      }
 
-    if (!this.leaving && !this._skipping && !this._seeking && !this._paused) {
-      const current = this.queue.getCurrent();
-      if (current?.type === "radio") {
-        logger.player("[Player] Radio stream ended after replay");
-        this._lastPlayedTrack = current;
-        this.queue.current = null;
-        this._streamingStopped = true;
-        this.emit("stopplay");
-        if (!this._is247Enabled()) {
-          this._startInactivityTimer();
+      if (this.preferredVolume !== 1) {
+        this._mediaPlayer.setVolume(this.preferredVolume);
+      }
+
+      const nlBase = `http://${this._nl.host}:${this._nl.port}`;
+      let streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(current.encoded)}&position=${positionMs}&volume=100`;
+
+      if (this.activeFilterPayload) {
+        streamUrl += `&filters=${encodeURIComponent(JSON.stringify(this.activeFilterPayload))}`;
+      }
+
+      try {
+        await this._streamUrl(streamUrl);
+      } catch (e) {
+        logger.warn("[Player] _replayWithFilters stream error:", e.message);
+      }
+
+      if (!this.leaving && !this._skipping && !this._paused) {
+        const replayCurrent = this.queue.getCurrent();
+        if (replayCurrent?.type === "radio") {
+          logger.player("[Player] Radio stream ended after replay");
+          this._lastPlayedTrack = replayCurrent;
+          this.queue.current = null;
+          this._streamingStopped = true;
+          this.emit("stopplay");
+          if (!this._is247Enabled()) {
+            this._startInactivityTimer();
+          }
+        } else {
+          this._lastPlayedTrack = replayCurrent;
+          if (!this.queue.songLoop) this.queue.current = null;
+          this._streamingStopped = false;
+          this._clearTrackEndTimer();
+          this._activeTrackOpt = null;
+          this.playNext().catch(e => logger.error("[Player] post-replay playNext error:", e.message));
         }
       } else {
-        this._lastPlayedTrack = current;
-        if (!this.queue.songLoop) this.queue.current = null;
         this._streamingStopped = false;
-        this._clearTrackEndTimer();
-        this._activeTrackOpt = null;
-        this.playNext().catch(e => logger.error("[Player] post-replay playNext error:", e.message));
       }
-    } else {
-      this._streamingStopped = false;
+    } finally {
+      this._replayingSeek = false;
+      this._seeking = false;
     }
   }
 
@@ -2246,7 +2251,7 @@ export default class Player extends EventEmitter {
       }
     }
     this._skipping = false;
-    if (this._seeking) this._seeking = false;
+    this._seeking = false;
   }
 
   _trackEndTimer = null;

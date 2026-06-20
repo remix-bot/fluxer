@@ -102,16 +102,14 @@ export class GatewayHandler {
       if (guild.members && !guild.members.me) {
         await guild.members.fetchMe();
       }
-    } catch (_) { logger.warn("[GatewayHandler] fetchMe failed"); }
+    } catch (e) { logger.warn("[GatewayHandler] fetchMe failed:", e?.message); }
 
     const channels = guild.channels;
     if (!channels) return;
 
     let targetChannel = null;
     if (guild.systemChannelId) {
-      targetChannel = channels.get?.(guild.systemChannelId)
-          ?? channels.cache?.get?.(guild.systemChannelId)
-          ?? null;
+      targetChannel = channels.get?.(guild.systemChannelId) ?? null;
     }
     if (!targetChannel) {
       for (const ch of (channels.values?.() ?? [])) {
@@ -150,8 +148,8 @@ export class GatewayHandler {
             t ? t(guildIdStr, "responses.gateway.missingPermsFallback", { perms: missingNames.join("**, **") }) :
             "⚠️ I'm missing permissions I need to work properly! Missing: **" + missingNames.join("**, **") + "**. Please ask a server administrator to grant these permissions in Server Settings → Roles."
         );
-      } catch (_) {
-        logger.warn(`[GuildCreate] Cannot send ANY notification to server ${guildId} — bot is missing SendMessages permission.`);
+      } catch (e) {
+        logger.warn(`[GuildCreate] Cannot send ANY notification to server ${guildId} — bot is missing SendMessages permission:`, e?.message);
       }
     }
   }

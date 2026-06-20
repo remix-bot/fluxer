@@ -209,7 +209,7 @@ export class Dashboard {
                   data: String(user.id)
                 }));
               }
-            } catch (_) { logger.warn("[Dashboard] Error:", _.message); }
+            } catch (e) { logger.warn("[Dashboard] Error:", e?.message); }
           }
           return { message: "Already Connected" };
         }
@@ -349,7 +349,7 @@ export class Dashboard {
                 data: String(user.id)
               }));
             }
-          } catch (_) { logger.warn("[Dashboard] Error:", _.message); }
+          } catch (e) { logger.warn("[Dashboard] Error:", e?.message); }
           return { message: "Left channel" };
         }
         try {

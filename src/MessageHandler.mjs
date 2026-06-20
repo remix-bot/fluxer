@@ -245,7 +245,7 @@ export class MessageHandler {
   async assertPermissions(permissions, message) {
     const guild = message.guild ?? await message.client?.guilds?.resolve?.(message.guildId);
     if (guild && !guild.members?.me) {
-      try { await guild.members.fetchMe(); } catch (_) { logger.warn("[MessageHandler] fetchMe failed"); }
+      try { await guild.members.fetchMe(); } catch (e) { logger.warn("[MessageHandler] fetchMe failed:", e?.message); }
     }
     const missing = this.checkPermissions(permissions, message.channel ?? message.channel?.channel);
     if (missing.length === 0) return true;
@@ -270,7 +270,7 @@ export class MessageHandler {
       try {
         const names = missing.map(k => REQUIRED_BOT_PERMISSIONS.get(k)?.name ?? k);
         await message.reply(this.t(message.guildId, "responses.messages.needPermsFallback", { perms: names.join("** **") }), { ping: false });
-      } catch (_) { logger.warn("[MessageHandler] Fallback permission reply failed"); }
+      } catch (e) { logger.warn("[MessageHandler] Fallback permission reply failed:", e?.message); }
     }
     return false;
   }
@@ -400,7 +400,7 @@ export class MessageHandler {
     return builder;
   }
 
-  #createEmbed(text, message, options = {}) {
+  #createEmbed(text, options = {}) {
     return {
       content: options.content ?? undefined,
       embeds: [this.#embedify(text, options)],
@@ -417,7 +417,7 @@ export class MessageHandler {
     if (!(await this.assertPermissions(["SendMessages", "EmbedLinks"], replyingTo))) return null;
     let opts;
     if (typeof message === "string") {
-      opts = this.#createEmbed(message, replyingTo);
+      opts = this.#createEmbed(message);
     } else {
       opts = { ...message };
     }
@@ -443,7 +443,7 @@ export class MessageHandler {
       ...options
     };
     const content = (typeof message === "object") ? message.embedText : message;
-    let payload = this.#createEmbed(content, replyingTo, options.embed);
+    let payload = this.#createEmbed(content, options.embed);
     if (typeof message === "object") {
       const { embedText, ...rest } = message;
       payload = { ...payload, ...rest };
@@ -463,7 +463,7 @@ export class MessageHandler {
     }
     let opts;
     if (typeof message === "string") {
-      opts = this.#createEmbed(message, channel);
+      opts = this.#createEmbed(message);
     } else {
       opts = message;
     }
@@ -484,7 +484,7 @@ export class MessageHandler {
       return new Message(await channel.send(content), this);
     }
     const text = (typeof content === "object") ? content.embedText : content;
-    const payload = this.#createEmbed(text, channel, embedOptions);
+    const payload = this.#createEmbed(text, embedOptions);
     if (typeof content === "object") {
       const { embedText, ...rest } = content;
       Object.assign(payload, rest);
@@ -1091,7 +1091,7 @@ export class QueuePaginator {
     const clearReactions = async () => {
       try {
         await rawMsg.removeAllReactions();
-      } catch (_) {
+      } catch (e) {
         for (const emoji of [prev, next]) {
           try {
             await rawMsg.removeReaction(emoji);

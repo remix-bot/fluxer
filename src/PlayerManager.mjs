@@ -14,7 +14,7 @@ import Player from "./Player.mjs";
 import { Utils, cleanId } from "./Utils.mjs";
 import { logger } from "./constants/Logger.mjs";
 import { get247ChannelMode } from "./constants/Helpers247.mjs";
-import { EmbedBuilder } from "@fluxerjs/core";
+import { EmbedBuilder, PermissionFlags } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { getGlobalColor, getMessageGuildId } from "./MessageHandler.mjs";
 import { Dashboard } from "./dashboard/Dashboard.mjs";
@@ -53,8 +53,10 @@ function botHasVoicePermissions(client, channelId) {
     if (!me) return true;
     const perms = me.permissionsIn?.(channel);
     if (!perms) return true;
-    if (perms.has(0x8)) return true;
-    return perms.has(0x400) && perms.has(0x100000) && perms.has(0x200000);
+    if (perms.has(PermissionFlags.Administrator)) return true;
+    return perms.has(PermissionFlags.Connect)
+        && perms.has(PermissionFlags.Speak)
+        && perms.has(PermissionFlags.UseVAD);
   } catch (e) {
     logger.warn("[PlayerManager] botHasVoicePermissions check failed:", e?.message);
     return true;

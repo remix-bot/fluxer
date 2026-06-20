@@ -9,63 +9,8 @@ import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { logger } from "../src/constants/Logger.mjs";
 import { PROVIDER_CHOICES, parseInlineProvider } from "../src/constants/providers.mjs";
 import { playLastFmCategory } from "./lastfm.mjs";
+import { parseLastFmUrl, isLastFmUrl } from "../src/LastFmManager.mjs";
 import { ERROR_COLOR } from "../src/constants/UI.mjs";
-
-/**
- * Parse a Last.fm music URL and extract artist and track info.
- * Supports:
- *   https://www.last.fm/music/Artist
- *   https://www.last.fm/music/Artist/Track
- *   https://www.last.fm/music/Artist/Album/Track
- *   https://www.last.fm/music/Artist/_/Track
- *
- * @param {string} url
- * @returns {{ artist: string, track: string|null, album: string|null, url: string } | null}
- */
-function parseLastFmUrl(url) {
-  try {
-    const u = new URL(url);
-    if (!/^(?:www\.)?last\.fm$/i.test(u.hostname)) return null;
-
-    const match = u.pathname.match(/^\/music\/([^/]+)(?:\/([^/]+))?(?:\/([^/]+))?/);
-    if (!match) return null;
-
-    const artist = decodeURIComponent(match[1].replace(/\+/g, " "));
-    const segment2 = match[2] ? decodeURIComponent(match[2].replace(/\+/g, " ")) : null;
-    const segment3 = match[3] ? decodeURIComponent(match[3].replace(/\+/g, " ")) : null;
-
-    let track = null;
-    let album = null;
-
-    if (segment3) {
-      album = segment2 === "_" ? null : segment2;
-      track = segment3;
-    } else if (segment2 && segment2 !== "_") {
-      track = segment2;
-    }
-
-    return { artist, track, album, url };
-  } catch (e) {
-      logger.warn("[Play] Error:", e?.message);
-      return null;
-  }
-}
-
-/**
- * Check if a string is a Last.fm music URL.
- * @param {string} str
- * @returns {boolean}
- */
-function isLastFmUrl(str) {
-  if (!str || typeof str !== "string") return false;
-  try {
-    const u = new URL(str);
-    return /^(?:www\.)?last\.fm$/i.test(u.hostname) && /^\/music\//.test(u.pathname);
-  } catch (e) {
-      logger.warn("[Play] Error:", e?.message);
-      return false;
-  }
-}
 
 const LASTFM_PLAY_CATEGORIES = ["loved", "top", "recent", "albums"];
 

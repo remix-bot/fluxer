@@ -531,8 +531,8 @@ export class Remix {
     try {
       this.comHash     = childProcess.execSync("git rev-parse --short HEAD", { cwd: __dirname, timeout: 3000 }).toString().trim();
       this.comHashLong = childProcess.execSync("git rev-parse HEAD",         { cwd: __dirname, timeout: 3000 }).toString().trim();
-    } catch {
-      logger.warn("[Git] comhash error");
+    } catch (e) {
+      logger.warn("[Git] comhash error:", e?.message);
       this.comHash     = "Newest";
       this.comHashLong = null;
     }
@@ -938,17 +938,18 @@ export class Remix {
         try {
           const member = await guild.members.fetch(user.id).catch(() => null);
           if (member) isMember = true;
-        } catch (_) { logger.warn("[AloneCheck] Member fetch error for", user.id); }
+        } catch (e) { logger.warn(`[getSharedServers] Member fetch error for ${user.id}:`, e?.message); }
       }
 
       if (!isMember) continue;
 
-      const allChannels = guild.channels?.cache
-        ? [...guild.channels.cache.values()].map(c => Dashboard.convertChannel(c)).filter(c => !c.isCategory)
+      const guildChannels = guild.channels
+        ? [...guild.channels.values()]
         : [];
-      const channelIds = guild.channels?.cache
-        ? [...guild.channels.cache.keys()]
-        : [];
+      const allChannels = guildChannels
+        .map(c => Dashboard.convertChannel(c))
+        .filter(c => !c.isCategory);
+      const channelIds = guildChannels.map(c => c.id);
 
       shared.push({
         name:   guild.name,

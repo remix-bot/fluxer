@@ -91,6 +91,7 @@ export async function run(msg, data) {
             }
           }
         } catch (err) {
+          logger.warn("[Autoplay] Handler error:", err?.message);
           if (!p.queue?.getCurrent() && p.queue?.isEmpty() && !p._is247Enabled()) {
             p._startInactivityTimer();
           }

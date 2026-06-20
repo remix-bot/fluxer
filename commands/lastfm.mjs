@@ -248,7 +248,8 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
       if (!p.queue.getCurrent()) {
         p.playNext();
       }
-    } catch {
+    } catch (e) {
+      logger.warn("[LastfmCmd] Track resolve failed:", e?.message);
       failed++;
     }
   }

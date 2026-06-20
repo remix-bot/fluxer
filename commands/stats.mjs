@@ -126,7 +126,8 @@ async function getGuildCount(client) {
     cachedGuildCount    = total;
     guildCacheExpiresAt = Date.now() + CACHE_TTL_MS;
     return total;
-  } catch {
+  } catch (e) {
+    logger.warn("[Stats] REST guild count fetch failed:", e?.message);
     if (typeof client.guilds?.size === "number") return client.guilds.size;
     return Object.keys(client.guilds ?? {}).length;
   }
