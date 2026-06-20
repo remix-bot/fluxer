@@ -853,7 +853,7 @@ export class PlayerManager {
           ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
       }
       if (typeof ch?.send === "function") {
-        ch.send({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] }).catch(err => {
+        ch.send({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)], allowedMentions: { parse: [] } }).catch(err => {
           if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
             logger.warn(`[PlayerManager] Cannot send autoleave message in channel ${ch.id} — missing permissions`);
           }
@@ -910,7 +910,10 @@ export class PlayerManager {
 
       if (!player.textChannel) player.textChannel = ch;
 
-      ch.send(typeof m === "object" && Array.isArray(m.embeds) ? m : { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(m)] }).catch(err => {
+      const payload = typeof m === "object" && Array.isArray(m.embeds)
+        ? { ...m, allowedMentions: { parse: [] } }
+        : { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(m)], allowedMentions: { parse: [] } };
+      ch.send(payload).catch(err => {
         if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
           logger.warn(`[PlayerManager] Cannot send player message in channel ${ch.id} — missing permissions`);
         }

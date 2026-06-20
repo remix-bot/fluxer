@@ -822,19 +822,23 @@ export class CommandLoader {
     this.commands.on("run", (data) => {
       if (!this.runnables.has(data.command.uid)) return;
       const runFc = this.runnables.get(data.command.uid);
+      const sendErrorReply = (id) => {
+        Promise.resolve(data.message.reply("An error occurred. Error id: `#" + id + "`"))
+          .catch(err => logger.warn("[CommandHandler] Failed to send error-reply; error id #" + id + ":", err?.message));
+      };
       try {
         const result = runFc.call(this.context, data.message, data);
         if (result && typeof result.catch === "function") {
           result.catch(e => {
             const id = Utils.uid();
             logger.error("Error running command; error id #" + id, e);
-            data.message.reply("An error occurred. Error id: `#" + id + "`");
+            sendErrorReply(id);
           });
         }
       } catch (e) {
         const id = Utils.uid();
         logger.error("Error running command; error id #" + id, e);
-        data.message.reply("An error occurred. Error id: `#" + id + "`");
+        sendErrorReply(id);
       }
     });
   }

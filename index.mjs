@@ -784,7 +784,10 @@ export class Remix {
 
         if (!player.textChannel) player.textChannel = ch;
 
-        ch.send(typeof m === "object" && Array.isArray(m.embeds) ? m : { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(m)] }).catch(err => {
+        const payload = typeof m === "object" && Array.isArray(m.embeds)
+          ? { ...m, allowedMentions: { parse: [] } }
+          : { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(m)], allowedMentions: { parse: [] } };
+        ch.send(payload).catch(err => {
           if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
             logger.warn(`[_spawnPlayer] Cannot send announcement in channel ${ch.id} — missing permissions`);
           }

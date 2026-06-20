@@ -138,16 +138,17 @@ export class GatewayHandler {
 
     try {
       const permEmbed = remix.messages.buildPermissionEmbed(result.missing, guildId);
-      await targetChannel.send({ embeds: [permEmbed] });
+      await targetChannel.send({ embeds: [permEmbed], allowedMentions: { parse: [] } });
     } catch (e) {
       logger.warn(`[GuildCreate] Cannot send permission warning to server ${guildId}: ${e.message}`);
       try {
         const t = this.remix.locale?.translate?.bind(this.remix.locale);
         const guildIdStr = cleanId(guildId);
-        await targetChannel.send(
-            t ? t(guildIdStr, "responses.gateway.missingPermsFallback", { perms: missingNames.join("**, **") }) :
-            "⚠️ I'm missing permissions I need to work properly! Missing: **" + missingNames.join("**, **") + "**. Please ask a server administrator to grant these permissions in Server Settings → Roles."
-        );
+        await targetChannel.send({
+          content: t ? t(guildIdStr, "responses.gateway.missingPermsFallback", { perms: missingNames.join("**, **") }) :
+            "⚠️ I'm missing permissions I need to work properly! Missing: **" + missingNames.join("**, **") + "**. Please ask a server administrator to grant these permissions in Server Settings → Roles.",
+          allowedMentions: { parse: [] },
+        });
       } catch (e) {
         logger.warn(`[GuildCreate] Cannot send ANY notification to server ${guildId} — bot is missing SendMessages permission:`, e?.message);
       }
