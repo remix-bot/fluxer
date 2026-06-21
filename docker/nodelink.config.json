@@ -1,0 +1,25 @@
+{
+  "server": {
+    "port": 3000,
+    "password": "youshallnotpass"
+  },
+  "sources": {
+    "youtube": true,
+    "ytmusic": true,
+    "soundcloud": true,
+    "deezer": true,
+    "spotify": true,
+    "http": true
+  },
+  "search": {
+    "defaultSource": "ytmusic",
+    "fallback": true
+  },
+  "audio": {
+    "normalization": true
+  },
+  "cache": {
+    "enabled": true,
+    "maxSize": 536870912
+  }
+}

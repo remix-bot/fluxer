@@ -144,7 +144,95 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 
 If you prefer to host Remix yourself, please note: **You must make it clear that your bot is an instance of Remix.** Change the bot's name and give credit in the bot's profile (e.g., *"Powered by [Remix](https://github.com/remix-bot/fluxer)"*).
 
-### Prerequisites
+### Quick Start with Docker (Recommended)
+
+The fastest way to self-host Remix is with Docker. Everything — the bot, MySQL, Redis, and NodeLink — runs in containers with a single command. All Docker files live in the `docker/` folder.
+
+1. **Clone and configure:**
+   ```bash
+   git clone https://github.com/remix-bot/fluxer.git
+   cd fluxer/docker
+   cp .env.example .env
+   cp config_example.json config.json
+   ```
+
+2. **Edit `.env`** — set your bot token and MySQL passwords.
+
+3. **Edit `config.json`** — fill in your bot token, Fluxer OAuth2 credentials (if using the dashboard), and any other settings. The Docker config already points MySQL/Redis/NodeLink at the correct service hostnames.
+
+4. **Start everything:**
+   ```bash
+   docker compose up -d
+   ```
+
+5. **Check logs:**
+   ```bash
+   docker compose logs -f bot
+   ```
+
+That's it. The bot will start, connect to MySQL (auto-creates the settings table), connect to NodeLink, and log in to Fluxer.
+
+#### Docker file structure
+
+```
+docker/
+├── Dockerfile              # Multi-stage build (Node 22 + FFmpeg + tini)
+├── docker-entrypoint.sh    # Config validation on first boot
+├── docker-compose.yml      # bot + MySQL + Redis + NodeLink
+├── config_example.json     # Docker-friendly config template
+├── .env.example            # Secrets template
+├── nodelink.config.json    # NodeLink audio node config
+├── config.json             # You create this (gitignored)
+└── .env                    # You create this (gitignored)
+```
+
+#### Docker services
+
+| Service | Container | Port | Purpose |
+| :--- | :--- | :--- | :--- |
+| `bot` | remix-bot | 8080 → 80 | The Remix bot + web dashboard |
+| `mysql` | remix-mysql | — | Per-guild settings storage |
+| `redis` | remix-redis | — | Dashboard sessions + pub/sub (optional) |
+| `nodelink` | remix-nodelink | 3000 | Lavalink-compatible audio node |
+
+#### Useful Docker commands
+
+```bash
+# Run from the docker/ folder
+cd docker
+
+# Start all services
+docker compose up -d
+
+# View live bot logs
+docker compose logs -f bot
+
+# Restart the bot
+docker compose restart bot
+
+# Stop everything
+docker compose down
+
+# Stop and delete data volumes (full reset)
+docker compose down -v
+
+# Rebuild after code changes
+docker compose up -d --build bot
+```
+
+#### Using `CONFIG_JSON` env var instead of a mounted file
+
+If you prefer to keep your config in an environment variable (useful for CI/CD or secret managers), set `CONFIG_JSON` in your `.env`:
+
+```bash
+CONFIG_JSON={"token":"YOUR_TOKEN","mysql":{"host":"mysql","port":3306,"user":"remix","password":"remix_pw","database":"remix"},"nodelink":{"host":"nodelink","port":3000,"password":"youshallnotpass"}}
+```
+
+The entrypoint will write it to `/app/config.json` on first boot if no config file is mounted.
+
+### Manual Installation (Without Docker)
+
+#### Prerequisites
 
 - **Node.js** >= 22.0.0 (required by moonlink.js v5)
 - **MySQL** 8.0+ with JSON column support
@@ -354,6 +442,13 @@ fluxer/
 │   ├── migrate.mjs              # Legacy-to-remote settings migration script
 │   ├── runnables.mjs            # Runnable task definitions
 │   └── README.md                # Settings system documentation
+├── docker/                      # Docker self-hosting (Dockerfile, compose, configs)
+│   ├── Dockerfile               # Multi-stage build (Node 22 + FFmpeg + tini)
+│   ├── docker-entrypoint.sh     # Config validation on first boot
+│   ├── docker-compose.yml       # bot + MySQL + Redis + NodeLink
+│   ├── config_example.json      # Docker-friendly config template
+│   ├── .env.example             # Secrets template
+│   └── nodelink.config.json     # NodeLink audio node config
 └── storage/
     ├── defaults.json            # Default per-guild settings template
     ├── modules.json             # Plugin module registry

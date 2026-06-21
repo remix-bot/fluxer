@@ -1,0 +1,75 @@
+services:
+  bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: remix-bot
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./config.json:/app/config.json
+      - ../storage:/app/storage
+    environment:
+      - TZ=${TZ:-UTC}
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    networks:
+      - remix-net
+
+  mysql:
+    image: mysql:8.0
+    container_name: remix-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-remix_root_pw}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-remix}
+      MYSQL_USER: ${MYSQL_USER:-remix}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-remix_pw}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-remix_root_pw}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - remix-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: remix-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - remix-net
+
+  nodelink:
+    image: node:22-bookworm-slim
+    container_name: remix-nodelink
+    restart: unless-stopped
+    working_dir: /nodelink
+    command: sh -c "if [ ! -f package.json ]; then npm init -y && npm install @performanc/nodelink; fi; node node_modules/@performanc/nodelink/index.js || node index.js"
+    environment:
+      - TZ=${TZ:-UTC}
+    volumes:
+      - nodelink_data:/nodelink
+      - ./nodelink.config.json:/nodelink/config.json:ro
+    ports:
+      - "${NODELINK_PORT:-3000}:3000"
+    networks:
+      - remix-net
+
+volumes:
+  mysql_data:
+  nodelink_data:
+
+networks:
+  remix-net:
+    driver: bridge

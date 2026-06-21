@@ -1,0 +1,74 @@
+{
+  "token": "YOUR_BOT_TOKEN_HERE",
+  "prefix": "%",
+  "embedColor": "0xe9196c",
+  "owners": [],
+  "mysql": {
+    "host": "mysql",
+    "port": 3306,
+    "user": "remix",
+    "password": "remix_pw",
+    "database": "remix"
+  },
+  "nodelink": {
+    "host": "nodelink",
+    "port": 3000,
+    "password": "youshallnotpass",
+    "requestTimeout": 60000
+  },
+  "spotify": {
+    "clientId": "",
+    "clientSecret": ""
+  },
+  "lastfm": {
+    "apiKey": "",
+    "apiSecret": "",
+    "scrobbleThreshold": 0.5,
+    "scrobbleMinMs": 240000
+  },
+  "dashboard": {
+    "enabled": false,
+    "redis": {
+      "url": "redis://redis:6379"
+    },
+    "fluxer": {
+      "id": "",
+      "secret": "",
+      "redirectUri": ""
+    }
+  },
+  "webPort": 80,
+  "logging": {
+    "enabled": true,
+    "warn": true,
+    "player": true,
+    "inactivity": false,
+    "aloneCheck": false,
+    "voice247": true,
+    "voiceState": false,
+    "voice": false,
+    "mediaplayer": false,
+    "commands": true,
+    "guild": true,
+    "recovery": true,
+    "settings": true,
+    "worker": false,
+    "moonlink": true,
+    "dashboard": false,
+    "redis": false
+  },
+  "timers": {
+    "inactivityTimeout": 180000,
+    "aloneCheckInterval": 30000,
+    "aloneCheckDebounce": 500,
+    "rejoin247Delay": 3000,
+    "leave247RejoinDelay": 5000,
+    "intentionalLeaveTTL": 10000
+  },
+  "presenceInterval": 30000,
+  "presenceContents": [],
+  "fluxer.js": {
+    "timeout": 15000,
+    "retries": 3
+  }
+}
