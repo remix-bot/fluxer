@@ -567,6 +567,59 @@ export default class Player extends EventEmitter {
     }
   }
 
+  /**
+   * Schedule a rejoin after a 24/7 channel's voice connection drops.
+   * Delegates to the GatewayHandler's rejoin logic via the bot context.
+   * This is the fallback path when the gateway doesn't send a VOICE_STATE_UPDATE
+   * for the bot (because FluxerRevoice already called vm.leaveChannel()).
+   *
+   * @param {string} channelId - Clean channel ID
+   * @param {string} guildId - Clean guild ID
+   * @param {string} mode - 24/7 mode ("auto" or "on")
+   */
+  _schedule247Rejoin(channelId, guildId, mode) {
+    const ctx = this.client?._remix;
+    if (!ctx) {
+      logger.warn(`[Player] Cannot schedule 24/7 rejoin for ${channelId} — no bot context`);
+      return;
+    }
+
+    if (ctx.players?._pendingJoins?.has?.(channelId)) {
+      logger.voice247(`[Player] 24/7 rejoin skipped for ${channelId} — join already pending`);
+      return;
+    }
+
+    if (ctx.players?.playerMap?.has(channelId)) {
+      const existing = ctx.players.playerMap.get(channelId);
+      if (existing && !existing._destroyed && existing !== this) {
+        logger.voice247(`[Player] 24/7 rejoin skipped for ${channelId} — another player already exists`);
+        return;
+      }
+    }
+
+    const rejoinDelay = ctx.config?.timers?.rejoin247Delay ?? 3_000;
+    logger.voice247(`[Player] Scheduling 24/7 ${mode} rejoin for channel ${channelId} (guild ${guildId}) in ${rejoinDelay / 1000}s`);
+
+    setTimeout(() => {
+      if (this._destroyed) {
+        logger.voice247(`[Player] 24/7 rejoin cancelled — player destroyed`);
+        return;
+      }
+      if (ctx.intentionalLeaves?.has(channelId)) {
+        logger.voice247(`[Player] 24/7 rejoin cancelled — intentional leave registered`);
+        return;
+      }
+      if (ctx.revoice?._intentionalDisconnects?.has?.(channelId)) {
+        logger.voice247(`[Player] 24/7 rejoin cancelled — intentional disconnect registered`);
+        return;
+      }
+
+      ctx.gatewayHandler?._rejoinChannel?.(guildId, channelId).catch(err => {
+        logger.warn(`[Player] 24/7 rejoin failed for channel ${channelId}:`, err?.message);
+      });
+    }, rejoinDelay);
+  }
+
   async _ensureMediaPlayer() {
     if (this._destroyed) return false;
     if (!this.connection) return false;
@@ -1107,19 +1160,29 @@ export default class Player extends EventEmitter {
         }
         if (!this.leaving && !this._destroyed) {
           const mode = this._get247Mode();
+          const channelId = cleanId(this._channelId ?? this._home247Channel ?? "");
+          const guildId = cleanId(this._guildId ?? this._resolveGuildId?.() ?? "");
 
           this.connection = null;
           this._paused = true;
           this._stopInactivityTimer();
 
           if (mode === "auto" || mode === "on") {
-            logger.mediaplayer(`[Player] Unexpected disconnect detected (24/7 ${mode}) — stopping media player; autoleave handlers will keep player alive for rejoin`);
+            logger.mediaplayer(`[Player] Unexpected disconnect detected (24/7 ${mode}) — stopping media player; scheduling rejoin for channel ${channelId}`);
+            this._stopMediaPlayer()
+                .catch(() => {})
+                .finally(() => {
+                  this.emit("autoleave");
+                  if (channelId && guildId) {
+                    this._schedule247Rejoin(channelId, guildId, mode);
+                  }
+                });
           } else {
             logger.mediaplayer("[Player] Unexpected disconnect detected");
+            this._stopMediaPlayer()
+                .catch(() => {})
+                .finally(() => this.emit("autoleave"));
           }
-          this._stopMediaPlayer()
-              .catch(() => {})
-              .finally(() => this.emit("autoleave"));
         } else {
           try { connection.removeAllListeners(); } catch(e) { logger.warn("[Player] Connection cleanup on leave error:", e?.message); }
         }
