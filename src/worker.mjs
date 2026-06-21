@@ -225,8 +225,16 @@ class YTUtils extends EventEmitter {
   }
 
   _buildRequestContext(query, trackMeta = null) {
-    const requestedTitle  = trackMeta?.name ?? trackMeta?.title ?? query;
-    const requestedArtist = trackMeta?.artist ?? "";
+    let requestedTitle  = trackMeta?.name ?? trackMeta?.title ?? query;
+    let requestedArtist = trackMeta?.artist ?? "";
+
+    if (!trackMeta) {
+      const dashMatch = String(query).match(/^(.+?)\s+[-–—]\s+(.+)$/);
+      if (dashMatch) {
+        requestedArtist = dashMatch[1].trim();
+        requestedTitle  = dashMatch[2].trim();
+      }
+    }
 
     return {
       normalizedTitle:  normalizeMatchText(requestedTitle),
