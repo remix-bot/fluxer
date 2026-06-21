@@ -346,15 +346,15 @@ export async function run(msg, data) {
 
   switch (target) {
     case "247-rejoin": {
-      return await runBatchRejoin(msg, "247-rejoin", "24/7 Rejoin", "24/7 channel(s)", p => !!p._home247Channel);
+      return await runBatchRejoin.call(this, msg, "247-rejoin", "24/7 Rejoin", "24/7 channel(s)", p => !!p._home247Channel);
     }
 
     case "voice-rejoin": {
-      return await runBatchRejoin(msg, "voice-rejoin", "Voice Rejoin", "ghost connection(s)", isGhostConnection, true);
+      return await runBatchRejoin.call(this, msg, "voice-rejoin", "Voice Rejoin", "ghost connection(s)", isGhostConnection, true);
     }
 
     case "voice": {
-      return await runVoiceDiagnostic(msg);
+      return await runVoiceDiagnostic.call(this, msg);
     }
 
     default: {
