@@ -51,6 +51,23 @@ export class GatewayHandler {
     this._inStartupGrace = true;
     /** @type {number} Counter for deferred deletions (used for batch summary log) */
     this._deferredDeleteCount = 0;
+
+    /** @type {number} Timestamp of the last Events.Ready fire (initial + reconnects). 0 = never. */
+    this._lastReadyAt = 0;
+    /** @type {number} Window after a Ready event during which voice disconnects are treated as WS-induced (ms). */
+    this._wsReconnectGraceMs = 30_000;
+  }
+
+  /**
+   * Check whether a voice disconnect was likely caused by a recent WS reconnect
+   * rather than a user-initiated leave. Uses the time since the last Events.Ready
+   * fire as the signal — if the bot just re-identified, any voice session
+   * invalidation is almost certainly WS-induced.
+   * @returns {boolean}
+   */
+  isWsReconnectRecent() {
+    if (!this._lastReadyAt) return false;
+    return Date.now() - this._lastReadyAt < this._wsReconnectGraceMs;
   }
 
   /**
@@ -1111,10 +1128,14 @@ export class GatewayHandler {
         } else {
           const set = remix.settingsMgr.getServer(guildId);
           const mode = set ? get247ChannelMode(set, cleanOld) : "off";
+          const wsInduced = this.isWsReconnectRecent();
 
-          if (mode === "auto") {
+          if (mode === "auto" || wsInduced) {
+            const reason = wsInduced && mode !== "auto"
+                ? `WS reconnect detected (${Math.round((Date.now() - this._lastReadyAt) / 1000)}s ago) — treating as transient, scheduling rejoin`
+                : `24/7 auto mode — cleaning up and scheduling rejoin`;
             logger.voice247(
-                `[VoiceState] Bot unexpectedly disconnected from ${cleanOld} (24/7 auto) — cleaning up and scheduling rejoin.`
+                `[VoiceState] Bot unexpectedly disconnected from ${cleanOld} — ${reason}.`
             );
             const discPlayer = remix.players.playerMap.get(cleanOld);
             if (discPlayer && !discPlayer._destroyed) {
@@ -1429,6 +1450,7 @@ export class GatewayHandler {
   }
 
   onReady() {
+    this._lastReadyAt = Date.now();
     this.seedVoiceStatesFromGuilds();
     this.seedGuildsFromRest().catch(e => logger.warn("[onReady] seedGuildsFromRest error:", e.message));
     this.attachRawListener();

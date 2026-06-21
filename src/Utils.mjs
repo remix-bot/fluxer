@@ -218,8 +218,7 @@ export class Utils {
       new URL(str);
       return true;
     } catch (e) {
-        logger.warn("[Utils] Error:", e?.message);
-        return false;
+      return false;
     }
   }
 
