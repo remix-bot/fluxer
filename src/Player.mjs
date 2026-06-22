@@ -958,11 +958,11 @@ export default class Player extends EventEmitter {
         url.includes("/v4/trackstream") ||
         url.includes("/v4/loadstream");
 
-    if (!isNodeLink) return this._streamViaRevoice(url);
+    if (!isNodeLink) return this._streamViaRevoice(url, ["-re"]);
 
     if (url.includes("/v4/loadstream")) {
       logger.player(`[Player] NodeLink loadStream PCM active`);
-      const pcmInputOpts = ["-f", "s16le", "-ar", "48000", "-ac", "2"];
+      const pcmInputOpts = ["-re", "-f", "s16le", "-ar", "48000", "-ac", "2"];
       return await this._streamViaRevoice(url, pcmInputOpts);
     }
 
@@ -975,7 +975,7 @@ export default class Player extends EventEmitter {
       });
       if (!json?.url) throw new Error(`NodeLink gave no URL: ${JSON.stringify(json)}`);
       logger.player(`[Player] NodeLink resolved stream URL`);
-      return this._streamViaRevoice(json.url);
+      return this._streamViaRevoice(json.url, ["-re"]);
     } catch (err) {
       logger.error("[Player] NodeLink resolve error:", err.message);
       throw new Error(sanitizeError(err.message, this._nl));
