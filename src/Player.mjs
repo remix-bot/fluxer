@@ -966,6 +966,37 @@ export default class Player extends EventEmitter {
       return await this._streamViaRevoice(url, pcmInputOpts);
     }
 
+    if (url.includes("/v4/trackstream")) {
+      try {
+        const json = await this._request(url, {
+          headers: {
+            ...(this._nl.sessionId ? { "Session-Id": this._nl.sessionId } : {}),
+            ...(this._guildId      ? { "Guild-Id":   this._guildId      } : {}),
+          }
+        });
+        if (!json?.url) throw new Error(`NodeLink gave no URL: ${JSON.stringify(json)}`);
+        logger.player(`[Player] NodeLink resolved stream URL`);
+        try {
+          return await this._streamViaRevoice(json.url, ["-re"]);
+        } catch (streamErr) {
+          const errMsg = String(streamErr?.message ?? streamErr ?? "");
+          if (errMsg.includes("403") || errMsg.includes("Forbidden")) {
+            logger.warn(`[Player] trackstream URL returned 403 — falling back to loadstream`);
+            return await this._fallbackToLoadstream(url);
+          }
+          throw streamErr;
+        }
+      } catch (err) {
+        const errMsg = String(err?.message ?? err ?? "");
+        if (errMsg.includes("403") || errMsg.includes("Forbidden")) {
+          logger.warn(`[Player] trackstream resolve failed with 403 — falling back to loadstream`);
+          return await this._fallbackToLoadstream(url);
+        }
+        logger.error("[Player] NodeLink resolve error:", errMsg);
+        throw new Error(sanitizeError(errMsg, this._nl));
+      }
+    }
+
     try {
       const json = await this._request(url, {
         headers: {
@@ -980,6 +1011,27 @@ export default class Player extends EventEmitter {
       logger.error("[Player] NodeLink resolve error:", err.message);
       throw new Error(sanitizeError(err.message, this._nl));
     }
+  }
+
+  /**
+   * Fall back from trackstream to loadstream when YouTube blocks the direct URL.
+   * Extracts the encodedTrack from the trackstream URL and builds a loadstream URL.
+   * @param {string} trackstreamUrl
+   */
+  async _fallbackToLoadstream(trackstreamUrl) {
+    const match = trackstreamUrl.match(/encodedTrack=([^&]+)/);
+    if (!match) {
+      throw new Error("Cannot fall back to loadstream — no encodedTrack in trackstream URL");
+    }
+    const encodedTrack = decodeURIComponent(match[1]);
+    const nlBase = `http://${this._nl.host}:${this._nl.port}`;
+    let loadstreamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(encodedTrack)}&position=0&volume=100`;
+    if (this.activeFilterPayload) {
+      loadstreamUrl += `&filters=${encodeURIComponent(JSON.stringify(this.activeFilterPayload))}`;
+    }
+    logger.player(`[Player] Falling back to loadstream (NodeLink will fetch with fallback sources)`);
+    const pcmInputOpts = ["-re", "-f", "s16le", "-ar", "48000", "-ac", "2"];
+    return await this._streamViaRevoice(loadstreamUrl, pcmInputOpts);
   }
 
   async join(channelId) {
