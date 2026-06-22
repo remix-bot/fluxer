@@ -59,6 +59,22 @@ import { logger } from "./Logger.mjs";
  */
 const LIVEKIT_LOG_PREFIXES = ["[voice LiveKitRtc]", "lk-rtc"];
 
+const LIVEKIT_NOISY_PATTERNS = [
+  "Room reconnecting",
+  "Room reconnected",
+  "Room disconnected",
+  "emitting disconnect",
+  "emitting reconnecting",
+  "emitting reconnected",
+  "Connect callback received",
+  "signal reconnecting",
+  "signal reconnected",
+  "resume requested",
+  "restart requested",
+];
+
+let _liveKitLogInstalled = false;
+
 function isLiveKitLogMessage(...args) {
   if (args.length === 1 && typeof args[0] === "string") {
     if (args[0].startsWith("{")) {
@@ -68,8 +84,30 @@ function isLiveKitLogMessage(...args) {
       } catch (e) { logger.warn("[FluxerRevoice] Error parsing livekit args:", e?.message); }
     }
     if (LIVEKIT_LOG_PREFIXES.some(p => args[0].includes(p))) return true;
+    if (LIVEKIT_NOISY_PATTERNS.some(p => args[0].includes(p))) return true;
   }
   return false;
+}
+
+/**
+ * Install a permanent console.log/info filter that suppresses LiveKit SDK noise.
+ * Called once on FluxerRevoice construction. Unlike withSuppressedLiveKitLogs
+ * (which is scoped to a callback), this persists for the lifetime of the process.
+ */
+function installLiveKitLogFilter() {
+  if (_liveKitLogInstalled) return;
+  _liveKitLogInstalled = true;
+
+  const origLog = console.log;
+  const origInfo = console.info;
+
+  const filtered = function (...args) {
+    if (isLiveKitLogMessage(...args)) return;
+    return origLog.apply(console, args);
+  };
+
+  console.log = filtered;
+  console.info = filtered;
 }
 
 /**
@@ -262,6 +300,7 @@ export class FluxerRevoice extends EventEmitter {
     if (!client) throw new Error("FluxerRevoice requires a Fluxer client instance");
     this.client = client;
     if (!FluxerRevoice._instance) FluxerRevoice._instance = this;
+    installLiveKitLogFilter();
     logger.player("[FluxerRevoice] Instance created with Fluxer client.");
   }
 
