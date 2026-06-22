@@ -2202,11 +2202,14 @@ export default class Player extends EventEmitter {
       streamUrl = songData.url;
     } else if (songData.encoded) {
       const nlBase = `http://${this._nl.host}:${this._nl.port}`;
-      const positionMs = 0;
-      streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(songData.encoded)}&position=${positionMs}&volume=100`;
+      const guildParam = this._guildId ? `&guildId=${this._guildId}` : "";
+      const hasFilters = !!this.activeFilterPayload;
 
-      if (this.activeFilterPayload) {
+      if (hasFilters) {
+        streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(songData.encoded)}&position=0&volume=100`;
         streamUrl += `&filters=${encodeURIComponent(JSON.stringify(this.activeFilterPayload))}`;
+      } else {
+        streamUrl = `${nlBase}/v4/trackstream?encodedTrack=${encodeURIComponent(songData.encoded)}${guildParam}`;
       }
     } else if (songData.url && Utils.isValidUrl(songData.url)) {
       streamUrl = songData.url;
@@ -2251,10 +2254,20 @@ export default class Player extends EventEmitter {
 
     if (trackOptMatch) {
       this._activeTrackOpt = trackOptMatch;
-      if (trackOptMatch.startMs > 0 && streamUrl.includes("/v4/loadstream")) {
-        startOffsetMs = trackOptMatch.startMs;
-        streamUrl = streamUrl.replace(/position=\d+/, `position=${startOffsetMs}`);
-        logger.player(`[Player] TrackOptions: starting from ${startOffsetMs}ms via loadstream position param`);
+      if (trackOptMatch.startMs > 0) {
+        if (streamUrl.includes("/v4/loadstream")) {
+          startOffsetMs = trackOptMatch.startMs;
+          streamUrl = streamUrl.replace(/position=\d+/, `position=${startOffsetMs}`);
+          logger.player(`[Player] TrackOptions: starting from ${startOffsetMs}ms via loadstream position param`);
+        } else if (streamUrl.includes("/v4/trackstream")) {
+          const nlBase = `http://${this._nl.host}:${this._nl.port}`;
+          startOffsetMs = trackOptMatch.startMs;
+          streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(songData.encoded)}&position=${startOffsetMs}&volume=100`;
+          if (this.activeFilterPayload) {
+            streamUrl += `&filters=${encodeURIComponent(JSON.stringify(this.activeFilterPayload))}`;
+          }
+          logger.player(`[Player] TrackOptions: falling back to loadstream for seek from ${startOffsetMs}ms`);
+        }
       }
     }
 
