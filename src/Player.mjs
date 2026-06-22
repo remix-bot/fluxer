@@ -1602,7 +1602,11 @@ export default class Player extends EventEmitter {
    */
   async _replayWithFilters(positionMs = 0) {
     const current = this.queue.getCurrent();
-    if (!current?.encoded || !this.connection || this.leaving) return;
+    if (!current?.encoded || !this.connection || this.leaving) {
+      this._replayingSeek = false;
+      this._seeking = false;
+      return;
+    }
 
     this._replayingSeek = true;
     try {
@@ -2295,6 +2299,11 @@ export default class Player extends EventEmitter {
     }
 
     this._clearTrackEndTimer();
+
+    if (this._seeking && !this._replayingSeek) {
+      logger.warn("[Player] _seeking flag was stuck true after stream end — resetting to allow auto-advance");
+      this._seeking = false;
+    }
 
     if (!this.leaving && !this._skipping && !this._seeking) {
       if (songData.type === "radio") {
