@@ -91,7 +91,7 @@ export class Remix {
 
     const timers = config.timers ?? {};
     this.T = {
-      aloneCheckInterval:  timers.aloneCheckInterval  ?? 30_000,
+      aloneCheckInterval:  timers.aloneCheckInterval  ?? 60_000,
       aloneCheckDebounce:  timers.aloneCheckDebounce  ?? 500,
       rejoin247Delay:      timers.rejoin247Delay       ?? 3_000,
       leave247RejoinDelay: timers.leave247RejoinDelay  ?? 5_000,
@@ -324,29 +324,25 @@ export class Remix {
 
     const ALONE_CHECK_INTERVAL = this.T.aloneCheckInterval;
     setInterval(() => {
+      if (this.players.playerMap.size === 0) return;
+
       for (const [mapKey, player] of this.players.playerMap) {
         let channelId;
         try {
+          if (player._destroyed || player._isJoining) continue;
+
           const guildId = player._guildId;
           if (!guildId) continue;
-
-          if (player._isJoining) continue;
 
           channelId   = player._channelId ?? mapKey;
           const cleanChanId = cleanId(channelId);
           if (!cleanChanId) continue;
 
           const cleanGuildId = cleanId(guildId);
-          const channelGuildId = cleanId(
-              this.client?.channels?.get?.(channelId)?.guildId ??
-              this.client?.channels?.get?.(channelId)?.guild_id
-          );
-          if (channelGuildId && channelGuildId !== cleanGuildId) {
-            logger.warn(`[AloneCheck] Skipping inconsistent player state channel=${channelId} playerGuild=${guildId} channelGuild=${channelGuildId}`);
-            continue;
-          }
 
           if (player._is247Enabled()) continue;
+
+          if (!player.connection) continue;
 
           let hasHuman = this.voiceCache.hasHumansInChannel(cleanGuildId, cleanChanId);
 
@@ -368,9 +364,6 @@ export class Remix {
                     const isBot = member?.user?.bot ?? state?.member?.user?.bot ?? false;
                     if (!isBot) {
                       hasHuman = true;
-                      if (stateUserId) {
-                        this.voiceCache.updateUser({ guildId: cleanGuildId, userId: stateUserId, channelId: cleanChanId, isBot: false });
-                      }
                       break;
                     }
                   }
@@ -384,19 +377,14 @@ export class Remix {
               const room = player.connection?.room;
               if (room?.isConnected && room.remoteParticipants && room.remoteParticipants.size > 0) {
                 hasHuman = true;
-                logger.aloneCheck(`[AloneCheck] Found ${room.remoteParticipants.size} LiveKit remote participant(s) in ${channelId}`);
               }
             } catch(e) { logger.warn("[AloneCheck] LiveKit check error:", e?.message); }
           }
 
-          logger.aloneCheck(`[AloneCheck] channel=${channelId} guild=${guildId} hasHuman=${hasHuman} paused=${player._paused}`);
-
           if (!hasHuman && !player._paused) {
             if (player.queue?.getCurrent() || !player.queue?.isEmpty()) {
-              logger.aloneCheck(`[AloneCheck] Bot alone in ${channelId} (guild ${guildId}) with songs in queue — starting inactivity timer.`);
               player._startInactivityTimer?.();
             } else {
-              logger.aloneCheck(`[AloneCheck] Bot alone in ${channelId} (guild ${guildId}), leaving.`);
               player._stopInactivityTimer?.();
               player.emit("autoleave");
             }
