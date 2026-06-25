@@ -910,6 +910,8 @@ export default class Player extends EventEmitter {
         ? trackDuration + Player.TRACK_MOSTLY_FINISHED_FLOOR_MS
         : Player.RADIO_SAFETY_TIMEOUT_MS;
 
+      const streamStartedAt = Date.now();
+
       await new Promise((resolve) => {
         const safetyTimer = setTimeout(() => {
           logger.warn(`[Player] Stream safety timeout hit (${Math.round(safetyMs / 1000)}s) — advancing queue`);
@@ -932,7 +934,15 @@ export default class Player extends EventEmitter {
           }
           if (this._streamingStopped) return resolve();
 
-          logger.warn("[Player] MediaPlayer error during stream:", e?.message);
+          const elapsedMs = Date.now() - streamStartedAt;
+          const isEarlyError = elapsedMs < 3000 && !this._didTrackMostlyFinish(currentTrack);
+
+          if (isEarlyError) {
+            logger.warn(`[Player] Stream errored after ${elapsedMs}ms (likely bad URL or 403 on audio data):`, e?.message);
+            this._lastStreamError = { message: e?.message ?? String(e), at: Date.now(), elapsedMs };
+          } else {
+            logger.warn("[Player] MediaPlayer error during stream:", e?.message);
+          }
           resolve();
         };
 
@@ -2368,6 +2378,32 @@ export default class Player extends EventEmitter {
     if (this._seeking && !this._replayingSeek) {
       logger.warn("[Player] _seeking flag was stuck true after stream end — resetting to allow auto-advance");
       this._seeking = false;
+    }
+
+    const hadEarlyStreamError = this._lastStreamError && (Date.now() - this._lastStreamError.at < 10_000);
+    if (hadEarlyStreamError) {
+      const errInfo = this._lastStreamError;
+      this._lastStreamError = null;
+      logger.warn(`[Player] Track "${songData.title}" ended after ${errInfo.elapsedMs}ms due to stream error — not advancing, reporting error`);
+
+      if (!this._skipping && !this.leaving && !this._paused && songData.type !== "radio") {
+        this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.errorStreaming", { title: songData.title }))] });
+      }
+
+      this._lastPlayedTrack = this.queue.getCurrent() ?? songData;
+      if (!this.queue.songLoop) this.queue.current = null;
+      this._streamingStopped = true;
+      this._playingNext = false;
+
+      if (this.queue.isEmpty()) {
+        this.emit("stopplay");
+        if (!this._is247Enabled()) {
+          this._startInactivityTimer();
+        }
+      } else {
+        return this.playNext();
+      }
+      return;
     }
 
     if (!this.leaving && !this._skipping && !this._seeking) {
