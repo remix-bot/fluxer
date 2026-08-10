@@ -130,22 +130,22 @@ export class MessageHandler {
   }
 
   setupEvents() {
-    const reactionUpdate = (reaction, user) => {
-      const messageId = reaction.message?.id ?? reaction.messageId;
-      const emoji = reaction.emoji?.name ?? reaction.emoji?.id ?? reaction.emoji;
-      const event = { user_id: user.id, emoji_id: emoji };
+    const reactionUpdate = (payload) => {
+      const { userId, messageId, emoji } = payload;
+      const emojiId = emoji?.name ?? emoji?.id ?? emoji;
+      const event = { user_id: userId, emoji_id: emojiId };
 
       if (!this.observedReactions.has(messageId)) return;
       if (event.user_id === this.client.user?.id) return;
       const observer = this.observedReactions.get(messageId);
       if (!observer.reactions.includes(event.emoji_id)) return;
-      if (observer.user && observer.user !== user.id) return;
+      if (observer.user && observer.user !== event.user_id) return;
 
-      const wrappedMsg = reaction.message ? new Message(reaction.message, this) : null;
+      const wrappedMsg = observer.msg ? new Message(observer.msg, this) : null;
       observer.cb(event, wrappedMsg);
     };
-    this.client.on(Events.MessageReactionAdd, (reaction, user) => reactionUpdate(reaction, user));
-    this.client.on(Events.MessageReactionRemove, (reaction, user) => reactionUpdate(reaction, user));
+    this.client.on(Events.MessageReactionAdd, (payload) => reactionUpdate(payload));
+    this.client.on(Events.MessageReactionRemove, (payload) => reactionUpdate(payload));
   }
 
   /**
@@ -311,10 +311,9 @@ export class MessageHandler {
   async getOrFetch(id, channelId) {
     const cached = this.get(id);
     if (cached) return cached;
-    const channel = await this.client.channels.fetch(channelId);
-    const raw = typeof channel.fetchMessage === "function"
-        ? await channel.fetchMessage(id)
-        : await channel.messages?.fetch?.(id);
+    const channel = await this.client.channels.fetch(channelId).catch(() => null);
+    if (!channel) return null;
+    const raw = await channel.messages?.fetch?.(id);
     return raw ? new Message(raw, this) : null;
   }
 
@@ -335,14 +334,16 @@ export class MessageHandler {
   async getOrFetchChannel(id) {
     const c = this.getChannel(id);
     if (c?.channel) return c;
-    return new Channel(await this.client.channels.fetch(id), this);
+    const raw = await this.client.channels.fetch(id).catch(() => undefined);
+    return new Channel(raw, this);
   }
 
   observeReactions(msg, reactions, cb, user) {
     this.observedReactions.set(msg.id, {
       reactions: reactions,
       user: (user) ? user.id : null,
-      cb
+      cb,
+      msg,
     });
     return msg.id;
   }
@@ -580,8 +581,9 @@ export class MessageHandler {
    */
   async joinChannel(channelId) {
     const { getVoiceManager } = await import("@fluxerjs/voice");
-    const channel = await this.client.channels.fetch(channelId);
-    if (!channel || !("guildId" in channel)) throw new Error("Cannot join a non-guild voice channel.");
+    const channel = await this.client.channels.fetch(channelId).catch(() => null);
+    if (!channel) throw new Error("Voice channel not found.");
+    if (!("guildId" in channel)) throw new Error("Cannot join a non-guild voice channel.");
     const vm = getVoiceManager(this.client);
     if (!vm) throw new Error("VoiceManager not available.");
     return vm.join(channel);

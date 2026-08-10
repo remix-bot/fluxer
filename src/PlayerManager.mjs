@@ -56,7 +56,7 @@ function botHasVoicePermissions(client, channelId) {
     if (perms.has(PermissionFlags.Administrator)) return true;
     return perms.has(PermissionFlags.Connect)
         && perms.has(PermissionFlags.Speak)
-        && perms.has(PermissionFlags.UseVAD);
+        && perms.has(PermissionFlags.UseVad);
   } catch (e) {
     logger.warn("[PlayerManager] botHasVoicePermissions check failed:", e?.message);
     return true;

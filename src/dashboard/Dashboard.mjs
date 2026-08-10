@@ -59,7 +59,7 @@ export class Dashboard {
 
         case "server": {
           try {
-            const guild = await this.remix.client.guilds.fetch(data.key);
+            const guild = await this.remix.client.guilds.fetch(data.key).catch(() => null);
             if (!guild) return { error: "Server not found" };
             const member = await guild.members.fetch(data.accessor).catch(() => null);
             const channels = await guild.fetchChannels();
@@ -161,8 +161,8 @@ export class Dashboard {
         try {
           const chMgr = this.remix.client.channels;
           if (typeof chMgr.fetch === "function") {
-            voiceChannel = await chMgr.fetch(params.data.channel);
-            if (params.data.text) textChannel = await chMgr.fetch(params.data.text);
+            voiceChannel = await chMgr.fetch(params.data.channel).catch(() => null);
+            if (params.data.text) textChannel = await chMgr.fetch(params.data.text).catch(() => null);
           } else {
             voiceChannel = chMgr.get(params.data.channel);
             if (params.data.text) textChannel = chMgr.get(params.data.text);

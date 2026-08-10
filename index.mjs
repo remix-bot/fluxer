@@ -101,6 +101,7 @@ export class Remix {
     const client = new Client({
       suppressIntentWarning: true,
       waitForGuilds: true,
+      cache: { guilds: 0, channels: 0, users: 0, members: 0 },
       ...config["fluxer.js"],
       intents: 1 << 7,
       presence: (() => {
