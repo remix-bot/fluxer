@@ -33,6 +33,10 @@ export class ServerSettings {
   manager;
   data = {};
 
+  /**
+   * @param {string} id Guild ID these settings belong to
+   * @param {SettingsManager} mgr Owning settings manager, used for defaults and persistence
+   */
   constructor(id, mgr) {
     this.id = id;
     this.manager = mgr;
@@ -71,6 +75,11 @@ export class RemoteSettingsManager extends SettingsManager {
   _loadPromise = null;
   _debounceTimers = new Map();
 
+  /**
+   * @param {Object} config MySQL connection config passed to mysql2's createPool
+   * @param {string} defaultsPath Filesystem path to the JSON file with default guild settings
+   * @param {string|null} [botId=null] Bot user ID for multi-bot row isolation, or null for single-bot mode
+   */
   constructor(config, defaultsPath, botId = null) {
     super();
     this.botId = botId;

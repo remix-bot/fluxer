@@ -18,6 +18,9 @@ class StreamMerger extends Transform {
   ffmpeg = null;
   streamTree = [];
 
+  /**
+   * @param {import("node:stream").TransformOptions} streamOptions Options forwarded to the underlying Transform stream
+   */
   constructor(streamOptions) {
     super(streamOptions);
   }
@@ -77,7 +80,7 @@ class StreamMerger extends Transform {
     open.children.push(node);
     s.pipe(p.stdio[3]);
     p.stderr.on("data", (c) => { logger.mediaplayer("[ffmpeg]", c.toString().trim()); });
-    /** Write initial silence to prime the ffmpeg stdin pipe (required for amix to detect the input). */
+    /* Write initial silence to prime the ffmpeg stdin pipe (required for amix to detect the input). */
     p.stdio[4].write(Buffer.alloc(1024, 0));
     p.stdout.pipe(open.process.stdio[open.pipes[0]]);
     const pipeNumber = open.pipes[0];

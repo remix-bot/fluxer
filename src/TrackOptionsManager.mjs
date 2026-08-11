@@ -21,6 +21,9 @@ export class TrackOptionsManager {
   _cache = new Map();
   _cacheMaxSize = 2000;
 
+  /**
+   * @param {Object} mysqlConfig MySQL connection config passed to mysql2's createPool
+   */
   constructor(mysqlConfig) {
     this.db = mysql.createPool({ connectionLimit: 10, ...mysqlConfig });
     this.db.on("error", (err) => {

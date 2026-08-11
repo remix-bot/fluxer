@@ -90,6 +90,11 @@ function isIgnorableMediaStateError(err) {
 }
 
 class PlayerWorkerPool {
+  /**
+   * @param {number} size Number of worker threads to spawn in the pool
+   * @param {string} workerPath Filesystem path to the worker script (see src/worker.mjs)
+   * @param {Object} [nlConfig={}] NodeLink connection config passed to each worker on init
+   */
   constructor(size, workerPath, nlConfig = {}) {
     this._size       = size;
     this._workerPath = workerPath;
@@ -368,6 +373,13 @@ export default class Player extends EventEmitter {
     requestTimeout: 60_000,
   };
 
+  /**
+   * @param {string} token Bot token (kept for revoice.js API compatibility; unused by FluxerRevoice)
+   * @param {Object} [opts={}] Player configuration, merged over DEFAULT_OPTS
+   * @param {import("@fluxerjs/core").Client} [opts.client] Fluxer client instance
+   * @param {string} [opts.channelId] Voice channel ID to bind this player to
+   * @param {string} [opts.guildId] Guild ID the voice channel belongs to
+   */
   constructor(token, opts = {}) {
     super();
 

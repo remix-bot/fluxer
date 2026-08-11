@@ -113,6 +113,9 @@ export class Option {
   /** @type {Function} */
   dynamicDefault;
 
+  /**
+   * @param {string} [type="string"] Option value type — "string", "number", "boolean", "channel", "user", or "text"
+   */
   constructor(type = "string") {
     this.name = null;
     this.description = null;
@@ -247,6 +250,9 @@ export class Option {
  * Flag class.
  */
 export class Flag extends Option {
+  /**
+   * @param {string} [type="string"] Flag value type — anything Option supports except "text"
+   */
   constructor(type = "string") {
     if (type === "text") throw new Error("Flags can't be of type 'text'!");
     super(type);
@@ -261,6 +267,10 @@ export class PrefixManager {
   settings;
   /** @type {string|null} Prefix from config.json — used as fallback when DB has no value */
   configPrefix;
+  /**
+   * @param {SettingsManager} settings Settings manager used to look up per-guild prefixes
+   * @param {string|null} [configPrefix=null] Fallback prefix from config.json when no DB value exists
+   */
   constructor(settings, configPrefix = null) { this.settings = settings; this.configPrefix = configPrefix; }
   getPrefix(guildId) {
     const serverPrefix = this.settings.getServer(guildId).get("prefix");
@@ -294,6 +304,9 @@ export class HelpHandler {
 
   customHelpHandler = null;
 
+  /**
+   * @param {CommandBuilder[]} commands Loaded command list to generate help pages from
+   */
   constructor(commands) { this.commands = commands; }
 
   static capitalise(string) {
@@ -436,6 +449,10 @@ export class CommandHandler extends EventEmitter {
   _cmdCooldowns = new Map();
   _cmdCooldownMs = 1500;
 
+  /**
+   * @param {MessageHandler} handler MessageHandler instance to listen for incoming messages on
+   * @param {string} [prefix="%"] Default command prefix used when no per-guild prefix is set
+   */
   constructor(handler, prefix = "%") {
     super();
     this.messages = handler;
@@ -812,6 +829,10 @@ export class CommandLoader {
   runnables = new Map();
   context;
 
+  /**
+   * @param {Map<string, CommandBuilder>} commands Map that loaded commands will be registered into
+   * @param {Object} context Shared context object (client, settings, locale, etc.) passed to command factories
+   */
   constructor(commands, context) {
     this.commands = commands;
     this.context = context;

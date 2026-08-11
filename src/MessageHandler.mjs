@@ -702,6 +702,10 @@ export class Message {
   /** @type {MessageHandler} */
   handler;
 
+  /**
+   * @param {import("@fluxerjs/core").Message} message Underlying raw Fluxer.js message instance
+   * @param {MessageHandler} handler Owning MessageHandler, used for replies, pagination, and reaction observers
+   */
   constructor(message, handler) {
     this.message = message;
     this.handler = handler;

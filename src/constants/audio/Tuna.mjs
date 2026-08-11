@@ -12,6 +12,10 @@ const { https } = pkg;
 
 class Tuna {
   apiKey = null;
+  /**
+   * @param {Object} auth Auth config
+   * @param {string} auth.key Voicemod Tuna API key
+   */
   constructor(auth) {
     this.apiKey = auth.key;
   }

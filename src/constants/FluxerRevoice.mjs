@@ -175,6 +175,12 @@ export class FluxerVoiceConnection extends EventEmitter {
     this._users = Array.isArray(val) ? val : [];
   }
 
+  /**
+   * @param {string} channelId Voice channel ID this connection is bound to
+   * @param {FluxerRevoice} voice Parent FluxerRevoice instance that owns the join queue and users map
+   * @param {Object} [opts={}] Connection options
+   * @param {any} [opts.room] LiveKit Room instance, if already available at construction time
+   */
   constructor(channelId, voice, opts = {}) {
     super();
     this.channelId = channelId;
@@ -290,6 +296,9 @@ export class FluxerRevoice extends EventEmitter {
     return FluxerRevoice._instance;
   }
 
+  /**
+   * @param {import("@fluxerjs/core").Client} client Fluxer client used to resolve channels/guilds and send gateway leave signals
+   */
   constructor(client) {
     super();
     if (FluxerRevoice._instance && FluxerRevoice._instance !== this) {
@@ -642,7 +651,7 @@ export class FluxerRevoice extends EventEmitter {
         }
       });
 
-      /**
+      /*
        * Handle the VoiceManager's serverLeave event, which fires when
        * the Fluxer/LiveKit server terminates the session server-side.
        * Without this handler the bot never learns the session is dead,
@@ -661,7 +670,7 @@ export class FluxerRevoice extends EventEmitter {
           this.connections.delete(channelId);
           this._leaveGateway(channelId, channelGuildId);
           if (room) {
-            try { room.disconnect().catch(() => {}); } catch (_) { /** already gone */ }
+            try { room.disconnect().catch(() => {}); } catch (_) { /* already gone */ }
           }
           if (conn.listenerCount("disconnect") > 0) {
             conn.emit("disconnect");
