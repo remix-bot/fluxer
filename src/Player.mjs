@@ -924,20 +924,23 @@ export default class Player extends EventEmitter {
 
       const streamStartedAt = Date.now();
 
-      await new Promise((resolve) => {
-        const safetyTimer = setTimeout(() => {
+      let safetyTimer;
+      let onFinish, onError;
+
+      const playbackSettled = new Promise((resolve) => {
+        safetyTimer = setTimeout(() => {
           logger.warn(`[Player] Stream safety timeout hit (${Math.round(safetyMs / 1000)}s) — advancing queue`);
           cleanup();
           resolve();
         }, safetyMs);
 
-        const onFinish = () => {
+        onFinish = () => {
           clearTimeout(safetyTimer);
           cleanup();
           resolve();
         };
 
-        const onError = (e) => {
+        onError = (e) => {
           clearTimeout(safetyTimer);
           cleanup();
           if (isIgnorableMediaStateError(e)) {
@@ -961,6 +964,19 @@ export default class Player extends EventEmitter {
         this._mediaPlayer.once("finish", onFinish);
         this._mediaPlayer.once("error", onError);
       });
+
+      // Race the buffered-HTTP-stream error watcher against normal playback
+      // completion so a real network/stream failure (e.g. connection reset
+      // mid-download) is reported and advances the queue with an error
+      // message, instead of becoming an orphaned unhandled rejection while
+      // playback hangs waiting on events that will never fire.
+      try {
+        await Promise.race([streamError, playbackSettled]);
+      } finally {
+        clearTimeout(safetyTimer);
+        this._mediaPlayer?.off("finish", onFinish);
+        this._mediaPlayer?.off("error", onError);
+      }
     } catch (e) {
       if (audioStream && !audioStream.destroyed) {
         try { audioStream.destroy(); } catch (e2) { logger.warn("[Player] Error destroying stream:", e2?.message); }
@@ -1330,12 +1346,7 @@ export default class Player extends EventEmitter {
       this._clearTrackEndTimer();
       this._activeTrackOpt = null;
 
-      if (this._mediaPlayer) {
-        if (typeof this._mediaPlayer.destroy === "function") {
-          try { this._mediaPlayer.destroy(); } catch(e) { logger.warn("[Player] MediaPlayer destroy error on leave:", e?.message); }
-        }
-        this._mediaPlayer = null;
-      }
+      await this._stopMediaPlayer();
 
       const channelId = this._channelId;
       if (this._revoice && channelId && typeof this._revoice.markIntentionalDisconnect === "function") {
@@ -1405,7 +1416,6 @@ export default class Player extends EventEmitter {
 
       const connToDestroy = this.connection;
       this.connection   = null;
-      this._mediaPlayer = null;
       if (this._revoice && this._channelId) {
         try { this._revoice.markIntentionalDisconnect(this._channelId); } catch(e) { logger.warn("[Player] Mark intentional disconnect on destroy:", e?.message); }
       }
@@ -2290,7 +2300,7 @@ export default class Player extends EventEmitter {
     } else {
       try {
         if (this._moonlink?.manager) {
-          const result = await this._moonlink.search(`ytsearch:${songData.title}`);
+          const result = await this._moonlink.search(songData.title, "youtube");
           const track  = result?.tracks?.[0];
           if (track?.encoded) {
             const nlBase = `http://${this._nl.host}:${this._nl.port}`;

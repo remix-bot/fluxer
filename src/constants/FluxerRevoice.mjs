@@ -101,13 +101,17 @@ function installLiveKitLogFilter() {
   const origLog = console.log;
   const origInfo = console.info;
 
-  const filtered = function (...args) {
+  const filteredLog = function (...args) {
     if (isLiveKitLogMessage(...args)) return;
     return origLog.apply(console, args);
   };
+  const filteredInfo = function (...args) {
+    if (isLiveKitLogMessage(...args)) return;
+    return origInfo.apply(console, args);
+  };
 
-  console.log = filtered;
-  console.info = filtered;
+  console.log = filteredLog;
+  console.info = filteredInfo;
 }
 
 /**

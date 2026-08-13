@@ -512,6 +512,12 @@ export class CommandHandler extends EventEmitter {
       return;
     }
 
+    const guildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
+    const prefix = this.getPrefix(guildId);
+    const ping = `<@${this.client.user?.id}>`;
+    const pingBang = `<@!${this.client.user?.id}>`;
+    if (!(msg.content.startsWith(prefix) || msg.content.startsWith(ping) || msg.content.startsWith(pingBang))) return;
+
     const userId = msg.message?.author?.id ?? msg.author?.id;
     if (userId && !this.owners.includes(userId)) {
       const now  = Date.now();
@@ -525,11 +531,6 @@ export class CommandHandler extends EventEmitter {
         }
       }
     }
-    const guildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
-    const prefix = this.getPrefix(guildId);
-    const ping = `<@${this.client.user?.id}>`;
-    const pingBang = `<@!${this.client.user?.id}>`;
-    if (!(msg.content.startsWith(prefix) || msg.content.startsWith(ping) || msg.content.startsWith(pingBang))) return;
 
     const len = msg.content.startsWith(prefix) ? prefix.length : (msg.content.startsWith(pingBang) ? pingBang.length : ping.length);
     const args = msg.content.slice(len).replace(/\u00A0/gi, " ").trim().split(" ").map(e => e.trim());

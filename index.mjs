@@ -89,6 +89,32 @@ export class Remix {
     const presenceContents = config.presenceContents ?? [];
     const presenceInterval = config.presenceInterval ?? 30_000;
 
+    const buildRuntimePresence = (entry) => {
+      const isObj = typeof entry === "object" && entry !== null;
+      const customStatus = {};
+      if (isObj) {
+        if (entry.text)       customStatus.text     = entry.text;
+        if (entry.emoji_name) customStatus.emojiName = entry.emoji_name;
+        if (entry.emoji_id)   customStatus.emojiId   = entry.emoji_id;
+      } else {
+        customStatus.text = String(entry);
+      }
+
+      const update = { status: "online", afk: false, customStatus };
+
+      if (isObj && entry.activity) {
+        update.activities = [{
+          name: entry.activity.name ?? "music",
+          type: entry.activity.type ?? 0,
+          url:  entry.activity.url  ?? undefined,
+        }];
+      }
+
+      return update;
+    };
+    let presenceRotationIndex = presenceContents.length > 1 ? 1 : 0;
+    let presenceRotationStarted = false;
+
     const timers = config.timers ?? {};
     this.T = {
       aloneCheckInterval:  timers.aloneCheckInterval  ?? 60_000,
@@ -295,6 +321,19 @@ export class Remix {
       }
 
       this.gatewayHandler.onReady();
+
+      if (!presenceRotationStarted && presenceContents.length > 1) {
+        presenceRotationStarted = true;
+        setInterval(() => {
+          try {
+            const entry = presenceContents[presenceRotationIndex % presenceContents.length];
+            client.user?.setPresence(buildRuntimePresence(entry));
+            presenceRotationIndex = (presenceRotationIndex + 1) % presenceContents.length;
+          } catch (e) {
+            logger.warn("[Presence] Rotation update failed:", e?.message);
+          }
+        }, presenceInterval).unref?.();
+      }
       } catch (e) {
         logger.error("[Ready] Fatal error in Ready handler:", e);
       }
