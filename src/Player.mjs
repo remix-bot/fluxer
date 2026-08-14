@@ -738,9 +738,12 @@ export default class Player extends EventEmitter {
     }
 
     if (this._mediaPlayer) {
+      const fProcToKill   = this._mediaPlayer.fProc;
+      const wasFfmpegDone = this._mediaPlayer.ffmpegFinished;
+
       try {
-        if (this._mediaPlayer.fProc) {
-          try { this._mediaPlayer.fProc.removeAllListeners(); } catch(e) { logger.warn("[Player] Error removing listeners:", e?.message); }
+        if (fProcToKill) {
+          try { fProcToKill.removeAllListeners(); } catch(e) { logger.warn("[Player] Error removing listeners:", e?.message); }
         }
 
         await this._mediaPlayer.stop();
@@ -749,8 +752,8 @@ export default class Player extends EventEmitter {
       }
 
       try {
-        if (this._mediaPlayer?.fProc && !this._mediaPlayer.ffmpegFinished) {
-          try { this._mediaPlayer.fProc.kill("SIGKILL"); } catch(e) { logger.warn("[Player] FFmpeg SIGKILL error:", e?.message); }
+        if (fProcToKill && !wasFfmpegDone) {
+          try { fProcToKill.kill("SIGKILL"); } catch(e) { logger.warn("[Player] FFmpeg SIGKILL error:", e?.message); }
         }
       } catch(e) { logger.warn("[Player] Stop MediaPlayer error:", e?.message); }
 
