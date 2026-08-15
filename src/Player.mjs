@@ -89,6 +89,15 @@ function isIgnorableMediaStateError(err) {
   return msg.includes("InvalidState") || msg.includes("failed to capture frame") || msg.includes("capture frame");
 }
 
+function isExpectedFfmpegStopError(err) {
+  const msg = err?.message ?? String(err ?? "");
+  return msg.includes("ffmpeg was killed")
+      || msg.includes("SIGKILL")
+      || msg.includes("SIGTERM")
+      || msg.includes("Output stream closed")
+      || msg.includes("ERR_STREAM_DESTROYED");
+}
+
 class PlayerWorkerPool {
   /**
    * @param {number} size Number of worker threads to spawn in the pool
@@ -652,12 +661,9 @@ export default class Player extends EventEmitter {
       }
       logger.mediaplayer("[Player] Existing MediaPlayer unhealthy, cleaning up...");
       try {
-        if (this._mediaPlayer.fProc) {
-          try { this._mediaPlayer.fProc.removeAllListeners(); } catch(e) { logger.warn("[Player] Error removing listeners:", e?.message); }
-        }
-        await this._mediaPlayer.stop();
+        await this._stopMediaPlayer();
+        this._streamingStopped = false;
       } catch(e) { logger.warn("[Player] MediaPlayer stop error:", e?.message); }
-      this._mediaPlayer = null;
     }
 
     if (!roomAlive) {
@@ -738,17 +744,55 @@ export default class Player extends EventEmitter {
     }
 
     if (this._mediaPlayer) {
-      const fProcToKill   = this._mediaPlayer.fProc;
-      const wasFfmpegDone = this._mediaPlayer.ffmpegFinished;
+      const mediaPlayer   = this._mediaPlayer;
+      this._mediaPlayer   = null;
+      const fProcToKill   = mediaPlayer.fProc;
+      const wasFfmpegDone = mediaPlayer.ffmpegFinished;
+      const localTrack    = mediaPlayer.localAudioTrack ?? mediaPlayer.track ?? null;
+      const localTrackSid = localTrack?.sid ?? localTrack?.info?.sid ?? null;
+      const source        = mediaPlayer.source ?? null;
 
       try {
         if (fProcToKill) {
-          try { fProcToKill.removeAllListeners(); } catch(e) { logger.warn("[Player] Error removing listeners:", e?.message); }
+          try {
+            fProcToKill.removeAllListeners("start");
+            fProcToKill.removeAllListeners("codecData");
+            fProcToKill.removeAllListeners("end");
+            fProcToKill.removeAllListeners("error");
+            fProcToKill.on("error", (e) => {
+              if (isExpectedFfmpegStopError(e)) {
+                logger.mediaplayer("[Player] Suppressed expected FFmpeg stop error:", e?.message);
+                return;
+              }
+              logger.warn("[Player] FFmpeg error after teardown:", e?.message);
+            });
+          } catch(e) { logger.warn("[Player] Error replacing FFmpeg listeners:", e?.message); }
         }
 
-        await this._mediaPlayer.stop();
+        await mediaPlayer.stop();
       } catch (e) {
         logger.error("[Player] Error stopping media player:", e.message);
+      }
+
+      try {
+        const participant = this.connection?.room?.localParticipant;
+        if (participant && localTrackSid && typeof participant.unpublishTrack === "function") {
+          await participant.unpublishTrack(localTrackSid, true);
+        }
+      } catch (e) {
+        logger.warn("[Player] Error unpublishing media track:", e?.message);
+      }
+
+      try {
+        if (localTrack && typeof localTrack.close === "function") await localTrack.close(false);
+      } catch (e) {
+        logger.warn("[Player] Error stopping local audio track:", e?.message);
+      }
+
+      try {
+        if (source && typeof source.close === "function") await source.close();
+      } catch (e) {
+        logger.warn("[Player] Error closing audio source:", e?.message);
       }
 
       try {
@@ -756,8 +800,6 @@ export default class Player extends EventEmitter {
           try { fProcToKill.kill("SIGKILL"); } catch(e) { logger.warn("[Player] FFmpeg SIGKILL error:", e?.message); }
         }
       } catch(e) { logger.warn("[Player] Stop MediaPlayer error:", e?.message); }
-
-      this._mediaPlayer = null;
     }
   }
 
@@ -2189,22 +2231,7 @@ export default class Player extends EventEmitter {
   }
 
   async _doPlayNext() {
-    if (this._currentPassthrough) {
-      try {
-        if (typeof this._currentPassthrough.unpipe  === "function") this._currentPassthrough.unpipe();
-        if (typeof this._currentPassthrough.destroy === "function") this._currentPassthrough.destroy();
-      } catch(e) { logger.warn("[Player] Passthrough cleanup error:", e?.message); }
-      this._currentPassthrough = null;
-    }
-
-    if (this._mediaPlayer) {
-      try {
-        if (this._mediaPlayer.fProc) {
-          try { this._mediaPlayer.fProc.removeAllListeners(); } catch(e) { logger.warn("[Player] Error removing listeners:", e?.message); }
-        }
-        await this._mediaPlayer.stop();
-      } catch(e) { logger.warn("[Player] MediaPlayer stop on next track:", e?.message); }
-    }
+    await this._stopMediaPlayer();
 
     this._streamingStopped = false;
 
