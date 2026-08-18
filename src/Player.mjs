@@ -317,6 +317,7 @@ export default class Player extends EventEmitter {
   connection        = null;
   _guildId          = null;
   _channelId        = null;
+  _lastConnectedAt  = null;
   _home247Channel   = null;
 
   queue        = null;
@@ -1178,6 +1179,7 @@ export default class Player extends EventEmitter {
       this.connection = connection;
       this._channelId = channelId;
       this._guildId   = cleanId(channel.guildId);
+      this._lastConnectedAt = Date.now();
       this.leaving    = false;
 
       const room = connection.room;

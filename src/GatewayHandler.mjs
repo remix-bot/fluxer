@@ -56,6 +56,8 @@ export class GatewayHandler {
     this._lastReadyAt = 0;
     /** @type {number} Window after a Ready event during which voice disconnects are treated as WS-induced (ms). */
     this._wsReconnectGraceMs = 30_000;
+    /** @type {number} How recently another player in the same guild must have connected to count as move evidence, vs. a long-stable second 24/7 channel (ms). */
+    this._moveEvidenceWindowMs = 10_000;
   }
 
   /**
@@ -916,12 +918,6 @@ export class GatewayHandler {
     const client = remix.client;
     const guildId = vsuGuildId;
 
-    const activeGuildPlayers = [...remix.players.playerMap.entries()].filter(([, p]) =>
-        cleanId(p?._guildId ?? "") === cleanId(guildId ?? "")
-    );
-    const multiVoiceGuild = activeGuildPlayers.length > 1;
-
-
     if (newChannelId && guildId && oldChannelId && oldChannelId !== newChannelId) {
       try {
         const cleanNew  = cleanId(newChannelId);
@@ -1321,13 +1317,16 @@ export class GatewayHandler {
     const cleanOld = cleanId(oldChannelId);
     if (!cleanGuild || !cleanOld) return false;
 
+    const now = Date.now();
     const activePlayers = [...remix.players.playerMap.values()].filter(
         p => !p._destroyed && cleanId(p._guildId ?? "") === cleanGuild
     );
 
     for (const player of activePlayers) {
       const playerChannel = cleanId(player._channelId ?? "");
-      if (playerChannel && playerChannel !== cleanOld) {
+      if (!playerChannel || playerChannel === cleanOld) continue;
+      const connectedAt = player._lastConnectedAt ?? 0;
+      if (now - connectedAt < this._moveEvidenceWindowMs) {
         return true;
       }
     }

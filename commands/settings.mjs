@@ -8,6 +8,7 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor, cleanId, getMessageGuildId } from "../src/MessageHandler.mjs";
 import { logger } from "../src/constants/Logger.mjs";
 import runnables from "../settings/runnables.mjs";
+import { get247ChannelMode, set247ChannelMode, remove247ChannelMode } from "../src/constants/Helpers247.mjs";
 
 function embed(desc, opts = {}) {
   const b = new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc);
@@ -89,61 +90,6 @@ function displayValue(key, value) {
 /** Resolve guild name from a message context */
 function getGuildName(message) {
   return message.message?.guild?.name ?? message.channel?.guild?.name ?? "this server";
-}
-
-/**
- * Get the 24/7 mode for a specific channel.
- * Reads from the per-channel map (stay_247_modes) first,
- * falls back to the guild-wide stay_247_mode for backward compat.
- *
- * @param {ServerSettings} set
- * @param {string} channelId  Clean channel ID
- * @returns {string} "on" | "auto" | "off"
- */
-function get247ChannelMode(set, channelId) {
-  const modes = set.get("stay_247_modes");
-  if (modes && typeof modes === "object" && !Array.isArray(modes)) {
-    const perChannel = modes[channelId];
-    if (perChannel === "on" || perChannel === "auto" || perChannel === "off") return perChannel;
-  }
-  const guildMode = set.get("stay_247_mode") ?? "off";
-  return guildMode;
-}
-
-/**
- * Set the 24/7 mode for a specific channel.
- *
- * @param {ServerSettings} set
- * @param {string} channelId  Clean channel ID
- * @param {string} mode      "on" | "auto" | "off"
- */
-function set247ChannelMode(set, channelId, mode) {
-  let modes = set.get("stay_247_modes");
-  if (!modes || typeof modes !== "object" || Array.isArray(modes)) modes = {};
-  modes[channelId] = mode;
-  set.set("stay_247_modes", modes);
-  set.set("stay_247_mode", mode);
-}
-
-/**
- * Remove a channel from the per-channel modes map.
- * If no channels remain, clears stay_247_modes entirely.
- *
- * @param {ServerSettings} set
- * @param {string} channelId  Clean channel ID
- * @param {Set} currentChannels  Current set of all 247 channels for this guild
- */
-function remove247ChannelMode(set, channelId, currentChannels) {
-  let modes = set.get("stay_247_modes");
-  if (!modes || typeof modes !== "object" || Array.isArray(modes)) return;
-  delete modes[channelId];
-  set.set("stay_247_modes", modes);
-  if (!currentChannels || currentChannels.size === 0) {
-    set.set("stay_247_mode", "off");
-  } else {
-    const firstChannel = [...currentChannels][0];
-    set.set("stay_247_mode", modes[firstChannel] ?? "auto");
-  }
 }
 
 function get247Channels(set) {
@@ -416,6 +362,12 @@ async function handle247(ctx, message, value) {
 
     const { channelId } = await ctx.players.checkVoiceChannels(message);
     const channels  = get247Channels(set);
+
+    if (!channelId && channels.size > 1) {
+      return message.reply(embed(
+          ctx.t(message, "responses.settings.noVoice247", { mode: "off", prefix: ctx.handler.getPrefix(guildId) })
+      ));
+    }
 
     if (channelId) {
       const id = cleanId(channelId);
