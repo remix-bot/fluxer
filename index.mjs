@@ -114,6 +114,7 @@ export class Remix {
     };
     let presenceRotationIndex = presenceContents.length > 1 ? 1 : 0;
     let presenceRotationStarted = false;
+    let wsHandlerRearmStarted = false;
 
     const timers = config.timers ?? {};
     this.T = {
@@ -286,6 +287,14 @@ export class Remix {
       logger.player("Logged in as " + (client.user?.username ?? "bot"));
 
       this._attachWsErrorHandlers();
+
+      if (!wsHandlerRearmStarted) {
+        wsHandlerRearmStarted = true;
+        setInterval(() => {
+          this._attachWsErrorHandlers();
+          this.gatewayHandler.attachRawListener();
+        }, 5_000).unref?.();
+      }
 
       const botId = client.user?.id ?? "0";
 
