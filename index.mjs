@@ -634,6 +634,8 @@ export class Remix {
       const wsManager = this.client?.ws;
       if (!wsManager) return;
 
+      let attachedNew = false;
+
       const logWsError = (label, err) => {
         const now = Date.now();
         if (now - _wsErrorCooldown.lastLogged < _wsErrorCooldown.COOLDOWN_MS) return;
@@ -645,6 +647,7 @@ export class Remix {
         if (!wsObj) return;
         if (wsObj._fluxerErrorHandled) return;
         wsObj._fluxerErrorHandled = true;
+        attachedNew = true;
 
         if (typeof wsObj.on === "function") {
           wsObj.on("error", (err) => logWsError(label, err));
@@ -662,6 +665,7 @@ export class Remix {
         if (!shard) return;
         if (shard._fluxerErrorHandled) return;
         shard._fluxerErrorHandled = true;
+        attachedNew = true;
         shard.on("error", (err) => logWsError(`Shard ${id}`, err));
         if (shard.ws) attachToSocket(shard.ws, `Shard ${id} socket`);
       };
@@ -678,6 +682,7 @@ export class Remix {
 
       if (typeof wsManager.on === "function" && !wsManager._fluxerErrorHandled) {
         wsManager._fluxerErrorHandled = true;
+        attachedNew = true;
         wsManager.on("error", ({ shardId, error }) => {
           logWsError(`WSManager (shard ${shardId})`, error);
         });
@@ -685,12 +690,15 @@ export class Remix {
 
       if (typeof wsManager.on === "function" && !wsManager._shardCreateHandled) {
         wsManager._shardCreateHandled = true;
+        attachedNew = true;
         wsManager.on("shardCreate", (shard) => {
           attachToShard(shard, shard.id ?? "?");
         });
       }
 
-      logger.player("[WS] Proactive error handlers attached to gateway sockets.");
+      if (attachedNew) {
+        logger.player("[WS] Proactive error handlers attached to gateway sockets.");
+      }
     } catch (e) {
       logger.warn("[WS] Failed to attach WS error handlers:", e.message);
     }
