@@ -1592,28 +1592,10 @@ export class GatewayHandler {
             `[BootRecovery] Successfully rejoined channel ${channelId} (mode: ${mode}) [${i + 1}/${channelsToRejoin.length}]`
         );
       } else {
-
-        try {
-          const set = remix.settingsMgr.getServer(guildId);
-          if (set) {
-            const raw = set.get("stay_247");
-            const channels = new Set(
-                (Array.isArray(raw) ? raw : [raw])
-                    .filter(id => id && id !== "none" && cleanId(id) !== channelId)
-            );
-            set.set("stay_247", channels.size > 0 ? [...channels] : "none");
-            remove247ChannelMode(set, channelId, channels);
-            logger.warn(
-                `[BootRecovery] Auto-removed channel ${channelId} from 24/7 ` +
-                `in guild ${guildId} after persistent track publication failure`
-            );
-          }
-        } catch (cleanupErr) {
-          logger.error(
-              `[BootRecovery] Failed to auto-remove channel ${channelId} from 24/7:`,
-              cleanupErr?.message ?? cleanupErr
-          );
-        }
+        logger.warn(
+            `[BootRecovery] Failed to rejoin channel ${channelId} in guild ${guildId} after retries — ` +
+            `keeping 24/7 setting intact, will retry on next disconnect/restart.`
+        );
       }
     }
 
