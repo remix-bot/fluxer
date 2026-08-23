@@ -906,7 +906,10 @@ export class PlayerManager {
           logger.warn("[PlayerManager] Failed to find fallback text channel:", e?.message);
         }
       }
-      if (!ch || typeof ch.send !== "function") return;
+      if (!ch || typeof ch.send !== "function") {
+        logger.warn(`[PlayerManager] Could not resolve any channel to send now-playing announcement (guild ${guildId})`);
+        return;
+      }
 
       if (!player.textChannel) player.textChannel = ch;
 
@@ -916,6 +919,8 @@ export class PlayerManager {
       ch.send(payload).catch(err => {
         if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
           logger.warn(`[PlayerManager] Cannot send player message in channel ${ch.id} — missing permissions`);
+        } else {
+          logger.warn(`[PlayerManager] Failed to send player message in channel ${ch.id}:`, err?.message ?? err);
         }
       });
     });

@@ -834,6 +834,8 @@ export class Remix {
         ch.send(payload).catch(err => {
           if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
             logger.warn(`[_spawnPlayer] Cannot send announcement in channel ${ch.id} — missing permissions`);
+          } else {
+            logger.warn(`[_spawnPlayer] Failed to send announcement in channel ${ch.id}:`, err?.message ?? err);
           }
         });
       } catch(e) {
