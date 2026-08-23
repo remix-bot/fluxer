@@ -282,7 +282,8 @@ class YTUtils extends EventEmitter {
     if (uri.includes("/c/") && !uri.includes("/watch")) return false;
     if (uri.includes("/playlist?"))                      return false;
     if (uri.includes("/user/"))                          return false;
-    if (!info.length || info.length === 0)               return false;
+    if (info.isStream)                                    return false;
+    if (!info.length || info.length <= 0)                 return false;
     return true;
   }
 
