@@ -1,29 +1,28 @@
-/**
- * @file TrackOptionsManager.mjs — TrackOptionsManager — SQLite-backed per-track options storage for auto-seek and end-time timers
- * @module src.TrackOptionsManager
- */
-
+/** @module src/TrackOptionsManager @description Per-user track options (start/end timestamps) stored in MySQL. Provides caching, matching, and CRUD for track segments. */
 import mysql from "mysql2";
 import { logger } from "./constants/Logger.mjs";
 
 const DEFAULT_ALIAS = "default";
 const MAX_ALIAS_LEN = 32;
 
-/**
- * TrackOptionsManager class.
- */
+/** @class TrackOptionsManager @description Manages per-user track options (start/end timestamps, aliases) stored in MySQL. Provides caching, best-match lookup, and CRUD operations. */
 export class TrackOptionsManager {
+  /** @type {import('mysql2').Pool} */
   db = null;
+  /** @type {string|null} */
   botId = null;
+  /** @private */
   _hasTable = false;
+  /** @private */
   _ready = false;
+  /** @private */
   _readyPromise = null;
+  /** @private @type {Map<string, object>} */
   _cache = new Map();
+  /** @private @type {number} */
   _cacheMaxSize = 2000;
 
-  /**
-   * @param {Object} mysqlConfig MySQL connection config passed to mysql2's createPool
-   */
+  /** @param {object} mysqlConfig - MySQL connection config. */
   constructor(mysqlConfig) {
     this.db = mysql.createPool({ connectionLimit: 10, ...mysqlConfig });
     this.db.on("error", (err) => {
@@ -32,10 +31,12 @@ export class TrackOptionsManager {
     this._readyPromise = this._ensureTable();
   }
 
+  /** @async Wait for the table to be ready. @returns {Promise<void>} */
   async ready() {
     await this._readyPromise;
   }
 
+  /** @private @async Ensure the track_options table exists with proper schema. */
   async _ensureTable() {
     try {
       await this._query(
@@ -62,6 +63,7 @@ export class TrackOptionsManager {
     }
   }
 
+  /** @private @async Migrate from old schema (single unique key) to new (with alias column). */
   async _migrateOldTable() {
     try {
       const cols = await this._query(`SHOW COLUMNS FROM track_options LIKE 'alias'`);
@@ -75,10 +77,12 @@ export class TrackOptionsManager {
     }
   }
 
+  /** @async Set the bot ID for multi-bot isolation. @param {string} id */
   async setBotId(id) {
     this.botId = id;
   }
 
+  /** @private Execute a raw SQL query. @param {string} q @returns {Promise<Array>} */
   _query(q) {
     return new Promise((resolve, reject) => {
       this.db.query(q, (error, results) => {
@@ -88,22 +92,26 @@ export class TrackOptionsManager {
     });
   }
 
+  /** @private @returns {string} SQL WHERE clause fragment for bot_id. */
   _botIdWhere() {
     if (!this.botId) return "";
     return ` AND bot_id = ${mysql.escape(String(this.botId))}`;
   }
 
+  /** @private @returns {{col: string, val: string}} SQL column and value fragments for bot_id INSERT. */
   _botIdInsert() {
     if (!this.botId) return { col: "", val: "" };
     return { col: ", bot_id", val: `, ${mysql.escape(String(this.botId))}` };
   }
 
+  /** Sanitize an alias to alphanumeric, lowercase, max MAX_ALIAS_LEN chars. @param {*} raw @returns {string} */
   static sanitizeAlias(raw) {
     if (!raw || typeof raw !== "string") return DEFAULT_ALIAS;
     const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, "").toLowerCase().slice(0, MAX_ALIAS_LEN);
     return cleaned || DEFAULT_ALIAS;
   }
 
+  /** Build a unique identifier for a track from its URL or artist-title combination. @param {object} track @returns {string|null} */
   static makeTrackIdentifier(track) {
     if (!track) return null;
     if (track.url) {
@@ -122,6 +130,7 @@ export class TrackOptionsManager {
     return null;
   }
 
+  /** @async Save or update a track option. @param {string} userId @param {object} track @param {number} startMs @param {number} endMs @param {string} [alias] @returns {Promise<{identifier: string, startMs: number, endMs: number, alias: string}|null>} */
   async set(userId, track, startMs, endMs, alias = DEFAULT_ALIAS) {
     await this.ready();
     const identifier = TrackOptionsManager.makeTrackIdentifier(track);
@@ -145,6 +154,7 @@ export class TrackOptionsManager {
     }
   }
 
+  /** @async Get a user's track option for a track. @param {string} userId @param {object} track @param {string} [alias] @returns {Promise<{startMs: number, endMs: number, title: string, alias: string}|null>} */
   async get(userId, track, alias = DEFAULT_ALIAS) {
     await this.ready();
     const identifier = TrackOptionsManager.makeTrackIdentifier(track);
@@ -177,6 +187,7 @@ export class TrackOptionsManager {
     }
   }
 
+  /** @async Get all track options for a track for a user. @param {string} userId @param {object} track @returns {Promise<Array>} */
   async getAllForTrack(userId, track) {
     await this.ready();
     const identifier = TrackOptionsManager.makeTrackIdentifier(track);
@@ -193,6 +204,7 @@ export class TrackOptionsManager {
     }
   }
 
+  /** @async Remove track option(s) for a user. @param {string} userId @param {object} track @param {string|null} [alias] @returns {Promise<boolean>} Whether a row was deleted. */
   async remove(userId, track, alias = null) {
     await this.ready();
     const identifier = TrackOptionsManager.makeTrackIdentifier(track);
@@ -220,6 +232,7 @@ export class TrackOptionsManager {
     }
   }
 
+  /** @async List all track options for a user. @param {string} userId @param {number} [limit=25] @returns {Promise<Array>} */
   async list(userId, limit = 25) {
     await this.ready();
     try {
@@ -233,6 +246,7 @@ export class TrackOptionsManager {
     }
   }
 
+  /** @async Find the first matching track option among a set of users. @param {string[]} userIds @param {object} track @param {string} [alias] @returns {Promise<{startMs: number, endMs: number, title: string, alias: string, userId: string}|null>} */
   async getBestMatchForChannel(userIds, track, alias = DEFAULT_ALIAS) {
     await this.ready();
     const identifier = TrackOptionsManager.makeTrackIdentifier(track);

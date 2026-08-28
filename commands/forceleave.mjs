@@ -1,11 +1,15 @@
 /**
- * @file forceleave command — Force the bot to leave a voice channel (requires ManageChannels)
  * @module commands/forceleave
+ * @description Force the bot to leave a voice channel (requires ManageChannels permission).
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { cleanId } from "../src/MessageHandler.mjs";
 
+/**
+ * @type {CommandBuilder}
+ * @description Command definition for the forceleave command.
+ */
 export const command = new CommandBuilder()
   .setName("forceleave")
   .addAliases("fl")
@@ -20,9 +24,11 @@ export const command = new CommandBuilder()
 
 
 /**
- * Execute the forceleave command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * Run handler for the forceleave command.
+ * Validates the target channel and forces the bot to leave.
+ *
+ * @param {object} msg - The command message wrapper.
+ * @param {object} data - Parsed command data containing the channelId option.
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {

@@ -1,6 +1,6 @@
 /**
- * @file volume.mjs — Set or view the playback volume
- * @module commands.volume
+ * @module commands/volume
+ * @description Get or change the playback volume for the current voice channel.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -9,6 +9,10 @@ import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { MAX_VOLUME } from "../src/constants/UI.mjs";
 
 
+/**
+ * @type {CommandBuilder}
+ * @description Command definition for the volume command.
+ */
 export const command = new CommandBuilder()
     .setName("volume")
     .setDescription("Get or change the current volume.", "commands.volume")
@@ -21,9 +25,11 @@ export const command = new CommandBuilder()
     .addAliases("v", "vol");
 
 /**
- * Execute the volume command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * Run handler for the volume command.
+ * Displays the current volume or sets it to a new value.
+ *
+ * @param {object} message - The command message wrapper.
+ * @param {object} data - Parsed command data containing the volume option.
  * @returns {Promise<void>}
  */
 export async function run(message, data) {

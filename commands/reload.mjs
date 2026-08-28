@@ -1,6 +1,6 @@
 /**
- * @file reload.mjs — Hot-reload commands without restarting the bot (owner-only)
- * @module commands.reload
+ * @module commands/reload
+ * @description Owner-only command to hot-reload commands, source modules, or audio modules at runtime.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -10,6 +10,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+/**
+ * @type {CommandBuilder}
+ * @description Command definition for the reload command (owner-only).
+ */
 export const command = new CommandBuilder()
     .setName("reload")
     .setDescription("Reload commands, src modules, or audio modules. Leave blank to see all targets.")
@@ -25,6 +29,15 @@ export const command = new CommandBuilder()
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const ROOT      = path.resolve(__dirname, "..");
 
+/**
+ * Reload a single command by name, removing the old one and re-importing its file.
+ * @private
+ * @async
+ * @param {object} ctx - The bot (Remix) instance context.
+ * @param {object} msg - The command message wrapper.
+ * @param {string} name - The command name to reload.
+ * @returns {Promise<{ ok: boolean, msg: string }>} Result with success status and message.
+ */
 async function reloadCommand(ctx, msg, name) {
   if (name === "index")
     return { ok: false, msg: ctx.t(msg, "responses.reload.indexNoReload") };
@@ -61,6 +74,16 @@ async function reloadCommand(ctx, msg, name) {
   return { ok: true, msg: ctx.t(msg, "responses.reload.reloaded", { name }) };
 }
 
+/**
+ * Reload a single source module by re-importing its file.
+ * @private
+ * @async
+ * @param {object} ctx - The bot (Remix) instance context.
+ * @param {object} msg - The command message wrapper.
+ * @param {string} filePath - Absolute path to the module file.
+ * @param {string} label - Human-readable label for error messages.
+ * @returns {Promise<{ ok: boolean, msg: string }>} Result with success status and message.
+ */
 async function reloadModule(ctx, msg, filePath, label) {
   if (!fs.existsSync(filePath))
     return { ok: false, msg: ctx.t(msg, "responses.reload.fileNotFound", { label }) };
@@ -72,6 +95,12 @@ async function reloadModule(ctx, msg, filePath, label) {
   }
 }
 
+/**
+ * List all JS/MJS module files in a subdirectory.
+ * @private
+ * @param {string} subdir - The subdirectory name relative to project root.
+ * @returns {Array<{ file: string, label: string }>} Array of file info objects.
+ */
 function allModuleFiles(subdir) {
   const dir = path.join(ROOT, subdir);
   if (!fs.existsSync(dir)) return [];
@@ -80,6 +109,16 @@ function allModuleFiles(subdir) {
       .map(f => ({ file: path.join(dir, f), label: `${subdir}/${f}` }));
 }
 
+/**
+ * Display lines in a paginated embed with arrow navigation.
+ * @private
+ * @async
+ * @param {object} msg - The command message wrapper.
+ * @param {string} title - The embed title.
+ * @param {string[]} lines - The lines of text to paginate.
+ * @param {number} [pageSize=14] - Number of lines per page.
+ * @returns {Promise<void>}
+ */
 async function showPaged(msg, title, lines, pageSize = 14) {
   const pages = [];
   for (let i = 0; i < lines.length; i += pageSize)
@@ -115,6 +154,15 @@ async function showPaged(msg, title, lines, pageSize = 14) {
   setTimeout(() => { unsub?.(); }, 5 * 60_000);
 }
 
+/**
+ * Display reload results in a paginated embed.
+ * @private
+ * @async
+ * @param {object} msg - The command message wrapper.
+ * @param {object[]} results - Array of { ok, msg } result objects.
+ * @param {string} label - Category label for the title.
+ * @returns {Promise<void>}
+ */
 async function showResults(msg, results, label) {
   const ok  = results.filter(r => r.ok).length;
   const bad = results.filter(r => !r.ok).length;
@@ -123,9 +171,11 @@ async function showResults(msg, results, label) {
 }
 
 /**
- * Execute the reload command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * Run handler for the reload command.
+ * Reloads commands, src modules, or audio modules based on the target option.
+ *
+ * @param {object} msg - The command message wrapper.
+ * @param {object} data - Parsed command data containing the target option.
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {

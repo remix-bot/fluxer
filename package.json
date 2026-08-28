@@ -5,21 +5,22 @@
   },
   "dependencies": {
     "@fluxerjs/core": "^2.2.0",
+    "@fluxerjs/util": "^2.2.0",
     "@fluxerjs/voice": "^2.2.0",
     "bcryptjs": "^3.0.3",
-    "ffmpeg-static": "^5.3.0",
     "ffprobe-static": "^3.1.0",
-    "follow-redirects": "^1.16.0",
-    "moonlink.js": "^5.2.0",
+    "lavalink-client": "^2.10.3",
     "mysql2": "^3.9.0",
-    "redis": "^5.12.1",
-    "revoice.js": "^0.2.1696"
-  },
+    "opusscript": "^0.0.8",
+    "prism-media": "^1.3.5",
+    "redis": "^5.12.1"
+  },w
   "scripts": {
     "dev": "node --inspect index.mjs --trace-warnings",
     "start": "node index.mjs",
-    "commands": "node index.mjs usage",
-    "defaultsSync": "node index.mjs sreload",
     "migrate": "node settings/migrate.mjs"
+  },
+  "optionalDependencies": {
+    "@discordjs/opus": "^0.10.0"
   }
 }

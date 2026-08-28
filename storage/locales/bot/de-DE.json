@@ -295,6 +295,7 @@
       "specifyChannel": "⚠️ Du bist in keinem Sprachkanal. Ich spiele in:\n{{channels}}\n\nNutze `{{prefix}}leave <#channel>` um einen bestimmten Kanal zu verlassen.",
       "noPlayerInChannel": "⚠️ Ich spiele nicht in <#{{channel}}>. Ich bin in:\n{{channels}}",
       "playerNotInit": "Player nicht initialisiert.",
+      "left": "✅ Erfolgreich verlassen",
       "leftRejoin247": "✅ Erfolgreich verlassen — trete <#{{channel}}> in wenigen Sekunden wieder bei.\nUm den 24/7-Modus dauerhaft zu deaktivieren, nutze `{{prefix}}247 off`.",
       "left247On": "✅ Erfolgreich verlassen.\n24/7-Modus ist **aktiv** — Bot wird nicht automatisch wiederkommen. Nutze `{{prefix}}play`, um ihn zurückzuholen, oder `{{prefix}}247 off` zum vollständigen Deaktivieren.\nNutze `{{prefix}}247` um alle gespeicherten Kanäle zu sehen.",
       "autoRejoinHint": "⚠️ 24/7-Modus ist aktiviert (auto) — trete <#{{channel}}> in wenigen Sekunden wieder bei.\nUm mich dauerhaft zu entfernen, deaktiviere zuerst den 24/7-Modus: `{{prefix}}247 off`"

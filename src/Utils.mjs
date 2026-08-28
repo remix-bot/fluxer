@@ -1,40 +1,24 @@
-/**
- * @file Utils.mjs — Utility class with static helpers — text normalization, markdown escaping, duration parsing, and string truncation
- * @module src.Utils
- */
-
-/**
- * Utils.mjs — Music bot utility functions
- * @module Utils
- *
- * Internal helpers delegate to @fluxerjs/util where available
- * (escapeMarkdown, truncate) with additional null-safety guards.
- */
+/** @module src/Utils @description General-purpose utility functions for formatting, validation, string manipulation, and ID cleaning. */
 
 import { escapeMarkdown as _escapeMarkdown, truncate as _truncate } from "@fluxerjs/util";
 import { logger } from "./constants/Logger.mjs";
 
 /**
- * Strip non-digit characters from a value, returning a clean ID string.
- * Replaces the inline `String(x).replace(/\D/g, "")` pattern used 97+ times.
- * @param {string|number} value
- * @returns {string}
+ * Strip all non-digit characters from a value to extract a Snowflake/numeric ID.
+ * @param {*} value - The value to clean (string, number, or null/undefined).
+ * @returns {string} The numeric portion of the value, or empty string if none.
  */
 export function cleanId(value) {
   return String(value ?? "").replace(/\D/g, "");
 }
 
-/**
- * @class Utils
- * @description Static utility methods for time formatting, array manipulation,
- * string processing, and validation used across the music bot.
- */
+/** @class Utils @description Collection of static utility methods for formatting, parsing, and string manipulation. */
 export class Utils {
 
   /**
-   * Format milliseconds to human-readable time string (H:MM:SS or M:SS)
-   * @param {number} milliseconds - Duration in milliseconds
-   * @returns {string} Formatted time string
+   * Format a duration in milliseconds to a human-readable string (e.g. "1:23:45").
+   * @param {number} milliseconds - Duration in milliseconds.
+   * @returns {string} Formatted duration string.
    */
   static prettifyMS(milliseconds) {
     if (!milliseconds || milliseconds < 0 || !isFinite(milliseconds)) {
@@ -54,9 +38,9 @@ export class Utils {
   }
 
   /**
-   * Parse duration string (H:MM:SS or M:SS or raw seconds) to milliseconds.
-   * @param {string} str - Duration string
-   * @returns {number} Milliseconds, 0 if invalid
+   * Parse a duration string (e.g. "1:30", "1:30:00", "90") into milliseconds.
+   * @param {string} str - Duration string in mm:ss, hh:mm:ss, or plain seconds.
+   * @returns {number} Duration in milliseconds, or 0 if unparseable.
    */
   static parseDuration(str) {
     if (!str || typeof str !== "string") return 0;
@@ -78,9 +62,9 @@ export class Utils {
   }
 
   /**
-   * Format seconds to MM:SS (for NodeLink duration compatibility)
-   * @param {number} seconds - Duration in seconds
-   * @returns {string} Formatted time
+   * Format seconds into a human-readable duration string.
+   * @param {number} seconds - Duration in seconds.
+   * @returns {string} Formatted duration string.
    */
   static formatSeconds(seconds) {
     if (!seconds || seconds < 0 || !isFinite(seconds)) return "0:00";
@@ -88,10 +72,9 @@ export class Utils {
   }
 
   /**
-   * Shuffles array in-place using Fisher-Yates algorithm
-   * @template T
-   * @param {T[]} array - Array to shuffle
-   * @returns {T[]} Same array reference (shuffled)
+   * Fisher-Yates in-place shuffle of an array.
+   * @param {Array} array - The array to shuffle (mutated in place).
+   * @returns {Array} The same array, shuffled.
    */
   static shuffleArr(array) {
     if (!Array.isArray(array) || array.length < 2) return array;
@@ -104,11 +87,11 @@ export class Utils {
   }
 
   /**
-   * Truncate text with ellipsis
-   * @param {string} str - String to truncate
-   * @param {number} [maxLen=100] - Maximum length
-   * @param {string} [suffix="..."] - Suffix to add
-   * @returns {string} Truncated string
+   * Truncate a string to a maximum length, appending a suffix if truncated.
+   * @param {string} str - The string to truncate.
+   * @param {number} [maxLen=100] - Maximum character length.
+   * @param {string} [suffix="..."] - Suffix to append when truncated.
+   * @returns {string} Truncated string.
    */
   static truncate(str, maxLen = 100, suffix = "...") {
     if (!str || typeof str !== "string") return "";
@@ -118,10 +101,9 @@ export class Utils {
   }
 
   /**
-   * Clean song title by removing common suffixes/prefixes for better matching
-   * Used for lyrics search and display normalization
-   * @param {string} title - Raw title
-   * @returns {string} Cleaned title
+   * Clean a track title by removing common noise patterns (feat, remix, lyrics, etc.).
+   * @param {string} title - The raw track title.
+   * @returns {string} Cleaned title.
    */
   static cleanTitle(title) {
     if (!title || typeof title !== "string") return "Unknown";
@@ -156,10 +138,9 @@ export class Utils {
   }
 
   /**
-   * Escape markdown formatting characters.
-   * Delegates to @fluxerjs/util escapeMarkdown.
-   * @param {string} text - Raw text
-   * @returns {string} Escaped text
+   * Escape Discord markdown special characters in text.
+   * @param {string} text - The text to escape.
+   * @returns {string} Escaped text, or empty string if falsy.
    */
   static escapeMarkdown(text) {
     if (!text || typeof text !== "string") return "";
@@ -167,9 +148,9 @@ export class Utils {
   }
 
   /**
-   * Format number with commas (e.g., 1,000,000)
-   * @param {number} num - Number to format
-   * @returns {string} Formatted number
+   * Format a number with locale-aware thousand separators.
+   * @param {number} num - The number to format.
+   * @returns {string} Formatted number string.
    */
   static formatNumber(num) {
     if (num === null || num === undefined || isNaN(num)) return "0";
@@ -177,9 +158,9 @@ export class Utils {
   }
 
   /**
-   * Generate random unique ID
-   * @param {number} [length=16] - Desired length of ID (8-32 recommended)
-   * @returns {string} Random ID
+   * Generate a unique ID string based on timestamp and random characters.
+   * @param {number} [length=16] - Target length of the ID (clamped 8–32).
+   * @returns {string} A unique alphanumeric ID.
    */
   static uid(length = 16) {
     const targetLen = Math.max(8, Math.min(length, 32));
@@ -195,9 +176,9 @@ export class Utils {
   }
 
   /**
-   * Check if a value represents a finite number
-   * @param {string|number} str
-   * @returns {boolean}
+   * Check whether a value is a valid finite number or numeric string.
+   * @param {*} str - Value to check.
+   * @returns {boolean} True if the value is a valid number.
    */
   static isNumber(str) {
     if (str === null || str === undefined || str === "") return false;
@@ -207,10 +188,9 @@ export class Utils {
   }
 
   /**
-   * Check if value is a valid URL
-   * Used by worker.mjs YTUtils.isValidUrl
-   * @param {string} str - String to check
-   * @returns {boolean} True if valid URL
+   * Check whether a string is a valid URL.
+   * @param {string} str - String to check.
+   * @returns {boolean} True if the string is a valid URL.
    */
   static isValidUrl(str) {
     if (!str || typeof str !== "string") return false;
@@ -223,11 +203,11 @@ export class Utils {
   }
 
   /**
-   * Clamp number between min and max
-   * @param {number} num - Number to clamp
-   * @param {number} min - Minimum value
-   * @param {number} max - Maximum value
-   * @returns {number} Clamped value
+   * Clamp a number between a minimum and maximum value.
+   * @param {number} num - The number to clamp.
+   * @param {number} min - Minimum value.
+   * @param {number} max - Maximum value.
+   * @returns {number} Clamped value.
    */
   static clamp(num, min, max) {
     if (isNaN(num)) return min;
@@ -235,8 +215,8 @@ export class Utils {
   }
 
   /**
-   * Sleep/delay promise
-   * @param {number} ms - Milliseconds to sleep
+   * Return a promise that resolves after a specified delay.
+   * @param {number} ms - Delay in milliseconds.
    * @returns {Promise<void>}
    */
   static sleep(ms) {
@@ -244,12 +224,12 @@ export class Utils {
   }
 
   /**
-   * Timeout wrapper for promises
+   * Wrap a promise with a timeout. Rejects if the promise does not settle in time.
    * @template T
-   * @param {Promise<T>} promise - Promise to wrap
-   * @param {number} ms - Timeout in milliseconds
-   * @param {string} [message="Operation timed out"] - Error message
-   * @returns {Promise<T>}
+   * @param {Promise<T>} promise - The promise to wrap.
+   * @param {number} ms - Timeout in milliseconds.
+   * @param {string} [message="Operation timed out"] - Rejection message.
+   * @returns {Promise<T>} The original promise result, or rejection on timeout.
    */
   static timeout(promise, ms, message = "Operation timed out") {
     let timerId;
@@ -260,14 +240,14 @@ export class Utils {
   }
 
   /**
-   * Create progress bar string
-   * @param {number} current - Current position in ms or 0-1 ratio
-   * @param {number} [total] - Total duration in ms (if omitted, current is treated as 0-1 ratio)
-   * @param {number} [length=15] - Bar length in characters
-   * @param {string} [filledChar="━"] - Filled character
-   * @param {string} [emptyChar="─"] - Empty character
-   * @param {string} [indicator="⬤"] - Position indicator
-   * @returns {string} Progress bar string
+   * Generate a text-based progress bar.
+   * @param {number} current - Current progress value or ratio.
+   * @param {number} [total] - Total value. If omitted, current is treated as a 0–1 ratio.
+   * @param {number} [length=15] - Bar length in characters.
+   * @param {string} [filledChar="━"] - Character for the filled portion.
+   * @param {string} [emptyChar="─"] - Character for the empty portion.
+   * @param {string} [indicator="⬤"] - Character for the current position indicator.
+   * @returns {string} The progress bar string.
    */
   static progressBar(
       current,
@@ -301,10 +281,10 @@ export class Utils {
   }
 
   /**
-   * Format track info for display
-   * @param {object} track - Track object
-   * @param {boolean} [includeDuration=true] - Include duration
-   * @returns {string} Formatted string
+   * Format a track object into a display string with title, artist, and optional duration.
+   * @param {object} track - Track object with title, author, and optional duration.
+   * @param {boolean} [includeDuration=true] - Whether to include the duration.
+   * @returns {string} Formatted track info string.
    */
   static formatTrackInfo(track, includeDuration = true) {
     if (!track) return "Unknown Track";
@@ -325,9 +305,9 @@ export class Utils {
   }
 
   /**
-   * Parse YouTube-like ISO duration (PT4M13S) to milliseconds
-   * @param {string} isoDuration - ISO 8601 duration
-   * @returns {number} Milliseconds
+   * Parse an ISO 8601 duration string (e.g. "PT1H30M45S") into milliseconds.
+   * @param {string} isoDuration - The ISO duration string.
+   * @returns {number} Duration in milliseconds, or 0 if unparseable.
    */
   static parseISODuration(isoDuration) {
     if (!isoDuration || typeof isoDuration !== "string") return 0;
@@ -345,11 +325,11 @@ export class Utils {
   }
 
   /**
-   * Normalize text for fuzzy matching: NFKD, strip non-word chars, collapse whitespace, lowercase.
-   * Replaces the duplicated normalizeMatchText / normalizeTrackText functions.
-   * @param {string} value - Raw text to normalize
-   * @param {boolean} [cleanFirst=false] - Run cleanTitle() first (for worker.mjs title matching)
-   * @returns {string} Normalized text
+   * Normalize text by stripping non-alphanumeric characters, lowercasing, and trimming.
+   * Optionally cleans the title first using cleanTitle.
+   * @param {string} value - The text to normalize.
+   * @param {boolean} [cleanFirst=false] - Whether to run cleanTitle before normalizing.
+   * @returns {string} Normalized lowercase text.
    */
   static normalizeText(value, cleanFirst = false) {
     let text = String(value ?? "");

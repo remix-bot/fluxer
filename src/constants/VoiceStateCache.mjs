@@ -1,78 +1,58 @@
-/**
- * @file VoiceStateCache.mjs — VoiceStateCache — O(1) composite-keyed LRU cache for voice state lookups with dual indexes (user→channel, channel→users)
- * @module src.constants.VoiceStateCache
- */
-
-/**
- * VoiceStateCache — O(1) voice-state lookups with bounded memory.
- *
- * Replaces the raw `observedVoiceUsers` / `observedVoiceBots` Maps with a
- * composite-keyed, indexed, LRU-evicted cache that supports:
- *
- *   • O(1) lookup:  "is anyone in channel X?"   → channelMembers.get(guildId, channelId)
- *   • O(1) lookup:  "what channel is user X in?" → userLocations.get(guildId, userId)
- *   • O(1) lookup:  "how many humans in channel X?" → channelMembers.get(...).size
- *   • Bounded memory via LRU eviction (default 50 000 entries)
- *   • Composite keys (guildId:userId) so multi-guild users don't overwrite
- *   • Single update function used by both raw WS and high-level handlers
- *
- * Data structures:
- *   userLocations   — Map<"guildId:userId", {channelId, guildId, userId}>
- *   channelMembers  — Map<"guildId:channelId", Set<userId>>
- *   botLocations    — Map<"guildId:userId", {channelId, guildId, userId}>
- *   botChannelMembers — Map<"guildId:channelId", Set<userId>>
- *   _lruOrder       — String[]  (most-recently-updated keys, for eviction)
- */
+/** @module constants/VoiceStateCache */
 
 import { logger } from "./Logger.mjs";
 import { cleanId } from "../Utils.mjs";
 
 /**
- * VoiceStateCache class.
+ * LRU-backed cache mapping users (and bots) to their voice-channel locations.
+ * Supports O(1) lookups by guild+user or guild+channel and implements the
+ * Map-like interface (`get`, `set`, `delete`, `has`, `forEach`, `entries`, `keys`, `values`).
+ * @class
  */
 export class VoiceStateCache {
   /**
    * @param {object} [opts]
-   * @param {number} [opts.maxUsers=50000]  Max human entries before LRU eviction
-   * @param {number} [opts.maxBots=10000]   Max bot entries before LRU eviction
+   * @param {number} [opts.maxUsers=50000] - Max cached human user entries.
+   * @param {number} [opts.maxBots=10000]  - Max cached bot user entries.
    */
   constructor(opts = {}) {
-    /** @type {Map<string, {channelId, guildId, userId}>} keyed "guildId:userId" */
     this.userLocations = new Map();
-    /** @type {Map<string, Set<string>>} keyed "guildId:channelId", values are userIds */
     this.channelMembers = new Map();
 
-    /** @type {Map<string, {channelId, guildId, userId}>} keyed "guildId:userId" */
     this.botLocations = new Map();
-    /** @type {Map<string, Set<string>>} keyed "guildId:channelId", values are userIds */
     this.botChannelMembers = new Map();
 
     this._maxUsers = opts.maxUsers ?? 50_000;
     this._maxBots  = opts.maxBots  ?? 10_000;
-    /** @type {string[]} MRU-first list of user location keys */
     this._lruUserKeys = [];
-    /** @type {string[]} MRU-first list of bot location keys */
     this._lruBotKeys = [];
   }
 
-  /** Build composite key "guildId:userId" (both cleaned to digits only) */
+  /**
+   * Build a composite user key for storage.
+   * @param {string} guildId
+   * @param {string} userId
+   * @returns {string}
+   */
   static userKey(guildId, userId) {
     return `${cleanId(guildId)}:${cleanId(userId)}`;
   }
 
-  /** Build composite key "guildId:channelId" (both cleaned to digits only) */
+  /**
+   * Build a composite channel key for storage.
+   * @param {string} guildId
+   * @param {string} channelId
+   * @returns {string}
+   */
   static channelKey(guildId, channelId) {
     return `${cleanId(guildId)}:${cleanId(channelId)}`;
   }
 
   /**
-   * Update voice state for a user.
-   *
-   * @param {object} params
-   * @param {string} params.guildId
-   * @param {string} params.userId
-   * @param {string|null} params.channelId  null = user left voice
-   * @param {boolean} [params.isBot=false]
+   * Update (or remove) a user's voice-channel location in the cache.
+   * When `channelId` is provided the user is added; when `null`/falsy the user is removed.
+   * Automatically evicts LRU entries when capacity is exceeded.
+   * @param {{ guildId: string, userId: string, channelId: string|null, isBot?: boolean }} opts
    */
   updateUser({ guildId, userId, channelId, isBot = false }) {
     const cleanGuild   = cleanId(guildId);
@@ -139,9 +119,7 @@ export class VoiceStateCache {
   }
 
   /**
-   * Check if there are any human users in a specific channel.
-   * O(1) via channelMembers index.
-   *
+   * Check whether any human users are cached in the given channel.
    * @param {string} guildId
    * @param {string} channelId
    * @returns {boolean}
@@ -153,9 +131,7 @@ export class VoiceStateCache {
   }
 
   /**
-   * Get the number of human users in a specific channel.
-   * O(1) via channelMembers index.
-   *
+   * Get the count of human users cached in the given channel.
    * @param {string} guildId
    * @param {string} channelId
    * @returns {number}
@@ -167,9 +143,7 @@ export class VoiceStateCache {
   }
 
   /**
-   * Get all human userIds in a specific channel.
-   * O(1) lookup + Set iteration.
-   *
+   * Get the array of human user IDs cached in the given channel.
    * @param {string} guildId
    * @param {string} channelId
    * @returns {string[]}
@@ -181,9 +155,7 @@ export class VoiceStateCache {
   }
 
   /**
-   * Get the channelId a human user is currently in (within a specific guild).
-   * O(1) via userLocations index.
-   *
+   * Get the channel ID a human user is currently in, or `null`.
    * @param {string} guildId
    * @param {string} userId
    * @returns {string|null}
@@ -195,8 +167,7 @@ export class VoiceStateCache {
   }
 
   /**
-   * Check if a human user is tracked in a specific guild.
-   *
+   * Check whether a human user exists in the cache for the given guild.
    * @param {string} guildId
    * @param {string} userId
    * @returns {boolean}
@@ -206,19 +177,17 @@ export class VoiceStateCache {
   }
 
   /**
-   * Get user location info (channelId, guildId) for a human user.
-   *
+   * Get the full location record for a human user.
    * @param {string} guildId
    * @param {string} userId
-   * @returns {{channelId: string, guildId: string, userId: string}|undefined}
+   * @returns {{ channelId: string, guildId: string, userId: string }|undefined}
    */
   getUserLocation(guildId, userId) {
     return this.userLocations.get(VoiceStateCache.userKey(guildId, userId));
   }
 
   /**
-   * Seed a user into the cache (only if not already present).
-   *
+   * Seed a user into the cache only if not already present.
    * @param {string} guildId
    * @param {string} userId
    * @param {string} channelId
@@ -232,8 +201,7 @@ export class VoiceStateCache {
   }
 
   /**
-   * Remove all entries for a specific guild (used on GuildDelete).
-   *
+   * Remove all cached entries (human and bot) for a given guild.
    * @param {string} guildId
    */
   removeGuild(guildId) {
@@ -283,8 +251,7 @@ export class VoiceStateCache {
   }
 
   /**
-   * Remove a specific channel's index entries (used when a player leaves).
-   *
+   * Remove all cached entries (human and bot) for a specific channel.
    * @param {string} guildId
    * @param {string} channelId
    */
@@ -317,12 +284,10 @@ export class VoiceStateCache {
   }
 
   /**
-   * Selectively remove entries for users whose IDs appear in a given set
-   * (used during GuildCreate to purge stale entries being replaced).
-   *
+   * Remove specific users from a guild's cache.
    * @param {string} guildId
-   * @param {Set<string>} userIds  User IDs whose entries should be purged
-   * @param {boolean} [botsOnly=false]  Only purge bot entries
+   * @param {string[]} userIds
+   * @param {boolean} [botsOnly=false] - If `true`, only purge bot entries.
    */
   purgeUsersInGuild(guildId, userIds, botsOnly = false) {
     const cleanGuild = cleanId(guildId);
@@ -353,21 +318,20 @@ export class VoiceStateCache {
   }
 
   /**
-   * Get the "observedVoiceUsers" size (human count).
-   * Backward-compat with `this.observedVoiceUsers.size`
+   * Number of cached human users.
+   * @type {number}
    */
   get observedVoiceUsersSize() { return this.userLocations.size; }
 
   /**
-   * Get the "observedVoiceBots" size.
-   * Backward-compat with `this.observedVoiceBots.size`
+   * Number of cached bot users.
+   * @type {number}
    */
   get observedVoiceBotsSize() { return this.botLocations.size; }
 
   /**
-   * Iterate over all human user locations.
-   * Yields [compositeKey, {channelId, guildId, userId}] — same shape as Map entries.
-   * Backward-compat with `for (const [uid, info] of this.observedVoiceUsers)`.
+   * Iterate over all cached human user entries as `[userId, { channelId, guildId }]` pairs.
+   * @yields {[string, { channelId: string, guildId: string }]}
    */
   *iterateHumanUsers() {
     for (const [uKey, loc] of this.userLocations) {
@@ -376,9 +340,8 @@ export class VoiceStateCache {
   }
 
   /**
-   * Iterate over all bot user locations.
-   * Yields [compositeKey, {channelId, guildId, userId}].
-   * Backward-compat with `for (const [uid, info] of this.observedVoiceBots)`.
+   * Iterate over all cached bot user entries as `[compositeKey, { channelId, guildId }]` pairs.
+   * @yields {[string, { channelId: string, guildId: string }]}
    */
   *iterateBotUsers() {
     for (const [uKey, loc] of this.botLocations) {
@@ -387,13 +350,10 @@ export class VoiceStateCache {
   }
 
   /**
-   * Get a human user's location by userId and guildId.
-   * If guildId is provided, uses O(1) composite key.
-   * If guildId is null, falls back to O(n) scan (legacy compat).
-   *
+   * Get the location record for a human user. If `guildId` is omitted, performs a linear scan.
    * @param {string} userId
-   * @param {string|null} [guildId=null]
-   * @returns {{channelId: string, guildId: string}|undefined}
+   * @param {string|null} [guildId]
+   * @returns {{ channelId: string, guildId: string }|undefined}
    */
   getHumanUser(userId, guildId = null) {
     if (guildId) {
@@ -407,10 +367,9 @@ export class VoiceStateCache {
   }
 
   /**
-   * Set a human user's location (backward-compat with observedVoiceUsers.set).
-   *
+   * Set a human user's voice location via `updateUser`.
    * @param {string} userId
-   * @param {{channelId: string, guildId: string}} info
+   * @param {{ guildId: string, channelId: string }} info
    */
   setHumanUser(userId, info) {
     const guildId = info.guildId;
@@ -421,10 +380,9 @@ export class VoiceStateCache {
   }
 
   /**
-   * Set a bot user's location (backward-compat with observedVoiceBots.set).
-   *
-   * @param {string} compositeKey  "guildId:userId" composite key
-   * @param {{channelId: string, guildId: string}} info
+   * Set a bot user's voice location via `updateUser`.
+   * @param {string} compositeKey - `guildId:userId` composite key.
+   * @param {{ guildId: string, channelId: string }} info
    */
   setBotUser(compositeKey, info) {
     const guildId = info.guildId;
@@ -436,11 +394,9 @@ export class VoiceStateCache {
   }
 
   /**
-   * Delete a human user by userId (scans all guilds if no guildId given).
-   * Backward-compat with observedVoiceUsers.delete(userId).
-   *
+   * Remove a human user from the cache. If `guildId` is omitted, scans all entries.
    * @param {string} userId
-   * @param {string|null} [guildId=null]
+   * @param {string|null} [guildId]
    */
   deleteHumanUser(userId, guildId = null) {
     if (guildId) {
@@ -456,10 +412,8 @@ export class VoiceStateCache {
   }
 
   /**
-   * Delete a bot user by composite key.
-   * Backward-compat with observedVoiceBots.delete(compositeKey).
-   *
-   * @param {string} compositeKey  "guildId:userId"
+   * Remove a bot user from the cache by its composite key.
+   * @param {string} compositeKey - `guildId:userId` composite key.
    */
   deleteBotUser(compositeKey) {
     const parts = compositeKey.split(":");
@@ -471,11 +425,9 @@ export class VoiceStateCache {
   }
 
   /**
-   * Check if a human user exists in the cache.
-   * Backward-compat with observedVoiceUsers.has(userId).
-   *
+   * Check whether a human user exists in the cache. If `guildId` is omitted, scans all entries.
    * @param {string} userId
-   * @param {string|null} [guildId=null]
+   * @param {string|null} [guildId]
    * @returns {boolean}
    */
   hasHumanUser(userId, guildId = null) {
@@ -490,10 +442,8 @@ export class VoiceStateCache {
   }
 
   /**
-   * Check if a bot user exists in the cache.
-   * Backward-compat with observedVoiceBots.has(compositeKey).
-   *
-   * @param {string} compositeKey
+   * Check whether a bot user exists in the cache by composite key.
+   * @param {string} compositeKey - `guildId:userId` composite key.
    * @returns {boolean}
    */
   hasBotUser(compositeKey) {
@@ -501,8 +451,8 @@ export class VoiceStateCache {
   }
 
   /**
-   * Default iterator — iterates human users.
-   * Yields [userId, {channelId, guildId}] — same shape as old observedVoiceUsers Map.
+   * Implement the iterable protocol over human user entries.
+   * @yields {[string, { channelId: string, guildId: string }]}
    */
   *[Symbol.iterator]() {
     for (const [uKey, loc] of this.userLocations) {
@@ -511,15 +461,13 @@ export class VoiceStateCache {
   }
 
   /**
-   * Backward-compat with `observedVoiceUsers.size`.
+   * Number of cached human users (Map-like `.size`).
+   * @type {number}
    */
   get size() { return this.userLocations.size; }
 
   /**
-   * Backward-compat with `observedVoiceUsers.has(userId)`.
-   * If called with a single argument (userId), scans all guilds.
-   * If called with two arguments (userId, guildId), does O(1) lookup.
-   *
+   * Map-like `has` — checks if a human user is cached.
    * @param {string} userId
    * @param {string} [guildId]
    * @returns {boolean}
@@ -536,13 +484,10 @@ export class VoiceStateCache {
   }
 
   /**
-   * Backward-compat with `observedVoiceUsers.get(userId)`.
-   * If called with a single argument (userId), returns first match across all guilds.
-   * If called with two arguments (userId, guildId), does O(1) lookup.
-   *
+   * Map-like `get` — retrieve a human user's location.
    * @param {string} userId
    * @param {string} [guildId]
-   * @returns {{channelId: string, guildId: string}|undefined}
+   * @returns {{ channelId: string, guildId: string }|undefined}
    */
   get(userId, guildId) {
     if (guildId !== undefined) {
@@ -557,10 +502,9 @@ export class VoiceStateCache {
   }
 
   /**
-   * Backward-compat with `observedVoiceUsers.set(userId, {channelId, guildId})`.
-   *
+   * Map-like `set` — upsert a human user's location.
    * @param {string} userId
-   * @param {{channelId: string, guildId: string}} info
+   * @param {{ guildId: string, channelId: string }} info
    */
   set(userId, info) {
     const guildId   = info?.guildId;
@@ -571,8 +515,7 @@ export class VoiceStateCache {
   }
 
   /**
-   * Backward-compat with `observedVoiceUsers.delete(userId)`.
-   *
+   * Map-like `delete` — remove a human user. If `guildId` is omitted, removes all matching entries.
    * @param {string} userId
    * @param {string} [guildId]
    */
@@ -592,9 +535,8 @@ export class VoiceStateCache {
   }
 
   /**
-   * Backward-compat with `observedVoiceUsers.forEach(fn)`.
-   *
-   * @param {Function} fn  callback(userId, info, cache)
+   * Map-like `forEach` — iterate over human user entries.
+   * @param {function(string, { channelId: string, guildId: string }, VoiceStateCache): void} fn
    */
   forEach(fn) {
     for (const [userId, info] of this) {
@@ -603,14 +545,16 @@ export class VoiceStateCache {
   }
 
   /**
-   * Backward-compat with `observedVoiceUsers.entries()`.
+   * Map-like `entries` iterator.
+   * @yields {[string, { channelId: string, guildId: string }]}
    */
   *entries() {
     yield* this;
   }
 
   /**
-   * Backward-compat with `observedVoiceUsers.keys()`.
+   * Map-like `keys` iterator.
+   * @yields {string}
    */
   *keys() {
     for (const [userId] of this) {
@@ -619,7 +563,8 @@ export class VoiceStateCache {
   }
 
   /**
-   * Backward-compat with `observedVoiceUsers.values()`.
+   * Map-like `values` iterator.
+   * @yields {{ channelId: string, guildId: string }}
    */
   *values() {
     for (const [, info] of this) {
@@ -627,6 +572,10 @@ export class VoiceStateCache {
     }
   }
 
+  /**
+   * Diagnostic statistics for the cache.
+   * @type {{ humanUsers: number, botUsers: number, humanChannels: number, botChannels: number, lruUserKeysLen: number, lruBotKeysLen: number }}
+   */
   get stats() {
     return {
       humanUsers: this.userLocations.size,

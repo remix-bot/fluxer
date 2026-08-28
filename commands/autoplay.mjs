@@ -1,6 +1,6 @@
 /**
- * @file autoplay command — Toggle autoplay to automatically play similar tracks when the queue ends
  * @module commands/autoplay
+ * @description Toggle autoplay mode — automatically play similar tracks when the queue ends.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -8,6 +8,7 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { logger } from "../src/constants/Logger.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the autoplay command. */
 export const command = new CommandBuilder()
   .setName("autoplay")
   .setDescription("Toggle autoplay — automatically play similar tracks when the queue ends.", "commands.autoplay")
@@ -15,9 +16,12 @@ export const command = new CommandBuilder()
   .addAliases("ap");
 
 /**
- * Execute the autoplay command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @async
+ * Run handler for the autoplay command.
+ * Toggles autoplay on the player. When enabled, registers a queueEnd listener
+ * that fetches similar tracks (via Last.fm or YouTube) and adds them to the queue.
+ * @param {object} msg - The command message wrapper.
+ * @param {object} data - Parsed command data (unused, no options required).
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {

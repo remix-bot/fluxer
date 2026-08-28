@@ -1,6 +1,6 @@
 /**
- * @file lyrics.mjs — Fetch and display lyrics for the current or specified song
- * @module commands.lyrics
+ * @module commands/lyrics
+ * @description Display synced or unsynced lyrics for the currently playing track from NodeLink.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -10,18 +10,24 @@ import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { Utils } from "../src/Utils.mjs";
 import { EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the lyrics command. */
 export const command = new CommandBuilder()
     .setName("lyrics")
     .setDescription("Display synced lyrics from NodeLink", "commands.lyrics")
     .addAliases("lyric", "ly")
     .setCategory("music");
 
+/** @private @type {string[]} Loading animation frames. */
 const LOADING_FRAMES     = ["◐", "◓", "◑", "◒"];
+/** @private @type {number} Session timeout in milliseconds (3 minutes). */
 const SESSION_MS           = 180_000;
 
 /**
- * Execute the lyrics command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @async
+ * Run handler for the lyrics command.
+ * Fetches lyrics for the currently playing track and displays them with
+ * paginated embeds and reaction-based navigation.
+ * @param {object} message - The command message wrapper.
  * @returns {Promise<void>}
  */
 export async function run(message) {
@@ -126,6 +132,13 @@ export async function run(message) {
     let currentPage      = 0;
     let emojiRemoveTimeout;
 
+    /**
+     * @private
+     * Build the embed payload for a specific lyrics page.
+     * @param {number} pageIdx - Zero-based page index.
+     * @param {boolean} [expired=false] - Whether navigation controls have expired.
+     * @returns {object} Embed payload for message reply/edit.
+     */
     const buildContent = (pageIdx, expired = false) => {
       const headerLine = `by *${artist}*${syncIndicator} • Page ${pageIdx + 1}/${totalPages}`;
       const descBody   = pages[pageIdx];
@@ -150,6 +163,11 @@ export async function run(message) {
       await msg.message.react(emoji).catch(() => {});
     }
 
+    /**
+     * @private
+     * Remove all navigation reactions from the lyrics message.
+     * @returns {Promise<void>}
+     */
     const clearReactions = async () => {
       try {
         await msg.message.removeAllReactions();
@@ -160,6 +178,11 @@ export async function run(message) {
       }
     };
 
+    /**
+     * @private
+     * Reset the emoji removal timeout timer for the lyrics session.
+     * @returns {void}
+     */
     const resetEmojiTimer = () => {
       clearTimeout(emojiRemoveTimeout);
       emojiRemoveTimeout = setTimeout(async () => {

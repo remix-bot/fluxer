@@ -1,6 +1,6 @@
 /**
- * @file test.mjs — Test/debug command for voice channel user detection
- * @module commands.test
+ * @module commands/test
+ * @description Owner-only diagnostic command to display voice channel user counts.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -8,15 +8,19 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { logger } from "../src/constants/Logger.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the test command (owner-only). */
 export const command = new CommandBuilder()
   .setName("test")
   .setDescription("Shows how many people are in each voice channel.")
+  .setCategory("util")
   .setRequirement(r => r.setOwnerOnly(true));
 
 /**
- * Execute the test command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @async
+ * Run handler for the test command.
+ * Iterates the voice state cache and reports user counts per voice channel.
+ * @param {object} msg - The command message wrapper.
+ * @param {object} data - Parsed command data (unused).
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {
@@ -54,6 +58,13 @@ export async function run(msg, data) {
     return msg.reply({ embeds: [embed] });
   }
 
+  /**
+   * @private
+   * Resolve a channel ID to a human-readable channel name.
+   * Tries cache, guild cache, then REST fetch as fallback.
+   * @param {string} channelId - The voice channel ID.
+   * @returns {Promise<string>} The channel name or a fallback string.
+   */
   const getChannelName = async (channelId) => {
     const cached = this.client.channels.get(channelId);
     if (cached?.name) return cached.name;

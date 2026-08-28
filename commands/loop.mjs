@@ -1,12 +1,13 @@
 /**
- * @file loop.mjs — Toggle loop mode for the queue or current track
- * @module commands.loop
+ * @module commands/loop
+ * @description Toggle looping of the current song or the entire queue.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the loop command. */
 export const command = new CommandBuilder()
     .setName("loop")
     .setDescription("Toggle the looping of your queue/song.", "commands.loop")
@@ -18,9 +19,11 @@ export const command = new CommandBuilder()
             .setRequired(true));
 
 /**
- * Execute the loop command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @async
+ * Run handler for the loop command.
+ * Toggles loop mode for the queue or the current song.
+ * @param {object} message - The command message wrapper.
+ * @param {object} data - Parsed command data containing the loop type option.
  * @returns {Promise<void>}
  */
 export async function run(message, data) {

@@ -1,6 +1,6 @@
 /**
- * @file servers.mjs — List servers the bot is currently in (owner-only)
- * @module commands.servers
+ * @module commands/servers
+ * @description Owner-only command to list all servers the bot is in with pagination.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -9,6 +9,7 @@ import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 import { logger } from "../src/constants/Logger.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the servers command (owner-only). */
 export const command = new CommandBuilder()
     .setName("servers")
     .setDescription("Fetch a list of servers the bot is in")
@@ -17,8 +18,10 @@ export const command = new CommandBuilder()
 
 
 /**
- * Execute the servers command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @async
+ * Run handler for the servers command.
+ * Lists all guilds the bot is a member of, with paginated embed and reaction navigation.
+ * @param {object} msg - The command message wrapper.
  * @returns {Promise<void>}
  */
 export async function run(msg) {
@@ -60,6 +63,13 @@ export async function run(msg) {
 
   let currentPage = 0;
 
+  /**
+   * @private
+   * Build the embed payload for a specific page of the server list.
+   * @param {number} pageIdx - Zero-based page index.
+   * @param {boolean} [expired=false] - Whether the reaction controls have expired.
+   * @returns {object} Embed payload for message reply/edit.
+   */
   const buildPageContent = (pageIdx, expired = false) => {
     const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
@@ -90,6 +100,11 @@ export async function run(msg) {
     await replyMsg.message.react(emoji).catch(() => {});
   }
 
+  /**
+   * @private
+   * Remove all navigation reactions from the reply message.
+   * @returns {Promise<void>}
+   */
   const clearReactions = async () => {
     try {
       await replyMsg.message.removeAllReactions();
@@ -102,6 +117,11 @@ export async function run(msg) {
     }
   };
 
+  /**
+   * @private
+   * Reset the emoji removal timeout timer.
+   * @returns {void}
+   */
   const resetTimer = () => {
     clearTimeout(emojiTimeout);
     emojiTimeout = setTimeout(async () => {

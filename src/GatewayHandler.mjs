@@ -1,8 +1,4 @@
-/**
- * @file GatewayHandler.mjs — GatewayHandler — processes raw WebSocket events for voice state tracking, 24/7 recovery, and guild lifecycle
- * @module src.GatewayHandler
- */
-
+/** @module src/GatewayHandler @description Handles all Discord gateway events relevant to voice state tracking, 24/7 mode, boot recovery, presence rotation, and permission checks. */
 import { Events, GatewayOpcodes } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { logger, _wsErrorCooldown } from "./constants/Logger.mjs";
@@ -13,16 +9,11 @@ import { REQUIRED_BOT_PERMISSIONS } from "./MessageHandler.mjs";
 import { cleanId } from "./Utils.mjs";
 import { iterateVoiceStates, hasHumansInChannel, getChannelsWithHumans } from "./constants/VoiceStateResolver.mjs";
 
-/**
- * GatewayHandler — manages raw WebSocket gateway events, voice-state tracking,
- * presence rotation, and high-level Fluxer event handlers (GuildCreate,
- * GuildDelete, VoiceStateUpdate).
- *
- * Extracted from index.mjs to reduce the Remix constructor footprint.
- */
+/** @class GatewayHandler @description Handles all Discord gateway events relevant to voice state tracking, 24/7 mode, boot recovery, presence rotation, and permission checks. Key responsibilities include voice state cache seeding and updates, bot move-away detection with 24/7 rejoin scheduling, boot recovery with sequential rejoin of 24/7 channels, inactivity timer management on human join/leave, and guild create/delete handling with startup grace period. */
 export class GatewayHandler {
   /**
-   * @param {import('../../index.mjs').Remix} remix          The running bot instance.
+   * Create a new GatewayHandler.
+   * @param {import('../index.mjs').Remix} remix - The bot context.
    */
   constructor(remix) {
     this.remix = remix;
@@ -40,31 +31,21 @@ export class GatewayHandler {
     this.presenceTimer = null;
     this.presenceIndex = 0;
 
-    /** @type {Map<string, {channelId, guildId}>} guildId:userId → state */
     this._prevVoiceState = new Map();
 
-    /** @type {Map<string, {guild, timer}>} guildId → deferred cleanup data */
     this._deferredGuildDeletes = new Map();
-    /** @type {number} How long to defer GuildDelete processing during startup (ms) */
     this._startupDeleteGraceMs = 15_000;
-    /** @type {boolean} Whether we're still in the startup grace period */
     this._inStartupGrace = true;
-    /** @type {number} Counter for deferred deletions (used for batch summary log) */
     this._deferredDeleteCount = 0;
 
-    /** @type {number} Timestamp of the last Events.Ready fire (initial + reconnects). 0 = never. */
     this._lastReadyAt = 0;
-    /** @type {number} Window after a Ready event during which voice disconnects are treated as WS-induced (ms). */
     this._wsReconnectGraceMs = 30_000;
-    /** @type {number} How recently another player in the same guild must have connected to count as move evidence, vs. a long-stable second 24/7 channel (ms). */
     this._moveEvidenceWindowMs = 10_000;
   }
 
   /**
-   * Check whether a voice disconnect was likely caused by a recent WS reconnect
-   * rather than a user-initiated leave. Uses the time since the last Events.Ready
-   * fire as the signal — if the bot just re-identified, any voice session
-   * invalidation is almost certainly WS-induced.
+   * Check whether a WebSocket reconnect happened recently (within 30s).
+   * Used to treat transient disconnects as non-24/7-requiring.
    * @returns {boolean}
    */
   isWsReconnectRecent() {
@@ -72,22 +53,21 @@ export class GatewayHandler {
     return Date.now() - this._lastReadyAt < this._wsReconnectGraceMs;
   }
 
-  /**
-   * Generate a composite key for bots in the observedVoiceBots map.
-   * Bots can be in multiple guilds so we namespace by guildId.
-   */
+  /** @private Build a composite bot key for voice state tracking. @param {string} userId @param {string} guildId @returns {string|null} */
   getObservedVoiceBotKey(userId, guildId) {
     const cleanUserId = cleanId(userId ?? "");
     const cleanGuildId = cleanId(guildId ?? "");
     return cleanUserId && cleanGuildId ? `${cleanGuildId}:${cleanUserId}` : cleanUserId || null;
   }
 
+  /** @private Build a previous voice state lookup key. @param {string} userId @param {string} guildId @returns {string|null} */
   getPrevVoiceStateKey(userId, guildId) {
     const cleanUserId = cleanId(userId ?? "");
     const cleanGuildId = cleanId(guildId ?? "");
     return cleanUserId && cleanGuildId ? `${cleanGuildId}:${cleanUserId}` : null;
   }
 
+  /** Find a previous voice state entry for a user. @param {string} userId @param {string|null} [guildId=null] @returns {{key: string|null, value: object|null}} */
   findPrevVoiceStateEntry(userId, guildId = null) {
     const directKey = this.getPrevVoiceStateKey(userId, guildId);
     if (directKey && this._prevVoiceState.has(directKey)) {
@@ -107,12 +87,12 @@ export class GatewayHandler {
   }
 
   /**
-   * Check if the bot has all required permissions in a newly joined guild.
-   * If critical permissions are missing, log a warning and attempt to send
-   * a notification to the guild's system channel (or first text channel).
-   *
-   * @param {import('@fluxerjs/core').Guild} guild
-   * @param {string} guildId
+   * Check and warn about missing bot permissions in a guild.
+   * Sends an embed to the system channel if critical or optional perms are missing.
+   * @param {object} guild - The guild object.
+   * @param {string} guildId - The guild ID.
+   * @returns {Promise<void>}
+   * @private
    */
   async _checkGuildPermissions(guild, guildId) {
     const { remix } = this;
@@ -175,8 +155,8 @@ export class GatewayHandler {
   }
 
   /**
-   * Seed observedVoiceUsers / observedVoiceBots from all cached guild voice
-   * states.  Called once on Ready after the guild cache is populated.
+   * Seed the voice state cache from VoiceManager or guild cache on startup.
+   * @private
    */
   seedVoiceStatesFromGuilds() {
     const { remix } = this;
@@ -229,19 +209,11 @@ export class GatewayHandler {
   }
 
   /**
-   * Re-read the guild's voice_states cache and update observedVoiceUsers
-   * for any human users found in the specified channel.
-   *
-   * This is crucial after bot recovery: when the bot restarts and rejoins a
-   * voice channel, the initial `seedVoiceStatesFromGuilds()` may have run
-   * before the guild cache was fully populated, or before the bot received
-   * VOICE_STATE_UPDATE events for users already in the channel.  Calling
-   * this after a player joins ensures the bot knows about humans who were
-   * already present.
-   *
-   * @param {string} guildId
-   * @param {string} channelId
-   * @returns {number} Number of human users found in the channel.
+   * Re-seed voice states for a specific channel from multiple sources.
+   * Checks VoiceManager, guild cache, VoiceStateCache, and LiveKit participants.
+   * @param {string} guildId - The guild ID.
+   * @param {string} channelId - The channel ID.
+   * @returns {number} Number of humans found in the channel.
    */
   reseedVoiceStatesForChannel(guildId, channelId) {
     const { remix } = this;
@@ -370,13 +342,7 @@ export class GatewayHandler {
     return humansFound;
   }
 
-  /**
-   * Attach a raw "message" listener to the shard-0 WebSocket so we can
-   * process gateway opcodes (READY, GUILD_CREATE, VOICE_STATE_UPDATE, etc.)
-   * before @fluxerjs/core emits its high-level events.
-   *
-   * Safe to call on every reconnect — will detach from the old socket first.
-   */
+  /** Attach a raw WebSocket listener to cache VOICE_SERVER_UPDATE events. @private */
   attachRawListener() {
     const { remix } = this;
     const client = remix.client;
@@ -500,6 +466,7 @@ export class GatewayHandler {
     } catch(e) { logger.warn("[Gateway] attachRawListener failed:", e?.message); }
   }
 
+  /** Rotate the bot's presence/status text at a configured interval. @private */
   setupPresenceRotation() {
     if (this.presenceContents.length === 0) return;
 
@@ -549,8 +516,8 @@ export class GatewayHandler {
   }
 
   /**
-   * Register all high-level Fluxer event listeners on the Fluxer client.
-   * Call once during bot startup.
+   * Register all gateway event handlers (GuildCreate, GuildDelete, VoiceStateUpdate, VoiceStatesSync).
+   * Called once during bot initialisation.
    */
   setupEventHandlers() {
     const { remix } = this;
@@ -656,9 +623,10 @@ export class GatewayHandler {
   }
 
   /**
-   * Main voice state update dispatcher — calls focused sub-handlers.
-   * Parses the raw VOICE_STATE_UPDATE payload, computes the old channel,
-   * then delegates to specialised methods.
+   * Main handler for VOICE_STATE_UPDATE events. Routes to human or bot sub-handlers.
+   * @param {object} data - The voice state update payload from the gateway.
+   * @returns {Promise<void>}
+   * @private
    */
   async _handleVoiceStateUpdate(data) {
     const { remix } = this;
@@ -697,15 +665,7 @@ export class GatewayHandler {
     this._handleBotVoiceChange(player, playerGuildId, homeChannelId, oldChannelId, newChannelId, vsuGuildId, data);
   }
 
-  /**
-   * Handle bulk voice state sync from GUILD_CREATE or READY.
-   * Populates VoiceStateCache with all users currently in voice channels
-   * for a guild. This is the PRIMARY way the bot learns about users who
-   * were already in voice when the bot started (before it receives any
-   * individual VOICE_STATE_UPDATE events).
-   *
-   * @param {{ guildId: string, voiceStates: Array<{user_id: string, channel_id: string|null, member?: {user?: {bot?: boolean}}}> }} data
-   */
+  /** Handle VoiceStatesSync bulk event from the gateway. @param {object} data - Sync payload with voiceStates array. @private */
   _handleVoiceStatesSync(data) {
     const { remix } = this;
     const client = remix.client;
@@ -739,10 +699,7 @@ export class GatewayHandler {
     }
   }
 
-  /**
-   * Update the voice state cache when users move between channels.
-   * Adds users to the cache on join, removes them on leave.
-   */
+  /** @private Update the voice state cache for a user joining/leaving. @param {string} userId @param {string} guildId @param {string|null} oldChannelId @param {string|null} newChannelId @param {boolean} isBot @param {object|null} prev */
   _updateVoiceStateCache(userId, guildId, oldChannelId, newChannelId, isBot, prev) {
     const { remix } = this;
 
@@ -757,10 +714,7 @@ export class GatewayHandler {
     }
   }
 
-  /**
-   * Update the previous state map (LRU eviction).
-   * Maintains a bounded map of previous voice states for computing oldChannelId.
-   */
+  /** @private Update the previous-voice-state map and evict stale entries. @param {string} userId @param {string} guildId @param {string|null} oldChannelId @param {string|null} newChannelId @param {boolean} isBot @param {object} prevEntry @param {object|null} prev */
   _updatePreviousStates(userId, guildId, oldChannelId, newChannelId, isBot, prevEntry, prev) {
     const { remix } = this;
     const prevKey = prevEntry.key;
@@ -795,12 +749,7 @@ export class GatewayHandler {
     }
   }
 
-  /**
-   * Find which player is affected by this voice state change.
-   * Checks both old and new channels for an existing player.
-   *
-   * @returns {{ player: object|null, playerGuildId: string|null, homeChannelId: string|null }}
-   */
+  /** @private Find a player affected by a voice state change. @param {string} guildId @param {string|null} oldChannelId @param {string|null} newChannelId @returns {{player: Player|null, playerGuildId: string|null, homeChannelId: string|null}} */
   _findAffectedPlayer(guildId, oldChannelId, newChannelId) {
     const { remix } = this;
 
@@ -825,10 +774,7 @@ export class GatewayHandler {
     return { player: null, playerGuildId: null, homeChannelId: null };
   }
 
-  /**
-   * Manage inactivity timers when humans join/leave voice channels.
-   * Also handles dashboard updates for human voice state changes.
-   */
+  /** @private Manage inactivity timers when a human joins or leaves a voice channel. @param {Player|null} player @param {string|null} playerGuildId @param {string|null} homeChannelId @param {string} userId @param {string|null} oldChannelId @param {string|null} newChannelId @param {string} vsuGuildId @param {object} vsu */
   async _handleInactivityOnVoiceChange(player, playerGuildId, homeChannelId, userId, oldChannelId, newChannelId, vsuGuildId, vsu) {
     const { remix } = this;
     const client = remix.client;
@@ -910,8 +856,16 @@ export class GatewayHandler {
   }
 
   /**
-   * Handle the bot being moved to a different channel or disconnected.
-   * Covers 24/7 re-key on move and auto-rejoin / autoleave on disconnect.
+   * Handle a voice state update for the bot itself.
+   * Detects move-away from 24/7 channels and unexpected disconnects.
+   * @param {Player|null} player - The affected player (if any).
+   * @param {string|null} playerGuildId - The guild ID from the player.
+   * @param {string|null} homeChannelId - The 24/7 home channel ID from the player.
+   * @param {string|null} oldChannelId - The channel the bot was in.
+   * @param {string|null} newChannelId - The channel the bot moved to (null if disconnected).
+   * @param {string} vsuGuildId - The guild ID from the VSU event.
+   * @param {object} vsu - The raw VSU payload.
+   * @private
    */
   _handleBotVoiceChange(player, playerGuildId, homeChannelId, oldChannelId, newChannelId, vsuGuildId, vsu) {
     const { remix } = this;
@@ -919,175 +873,86 @@ export class GatewayHandler {
     const guildId = vsuGuildId;
 
     if (newChannelId && guildId && oldChannelId && oldChannelId !== newChannelId) {
+      // During boot recovery, ignore move events — the recovery loop handles rejoining.
+      if (this._bootRecoveryActive) {
+        logger.voice247(
+            `[247] Ignoring bot move ${cleanId(oldChannelId)} → ${cleanId(newChannelId)} during boot recovery.`
+        );
+        return;
+      }
       try {
-        const cleanNew  = cleanId(newChannelId);
+        const cleanNew = cleanId(newChannelId);
         const cleanOld = cleanId(oldChannelId);
-        const moveSet = remix.settingsMgr.getServer(guildId);
-        const moveRaw = moveSet?.get("stay_247");
-        const saved247Channels = (!moveRaw || moveRaw === "none")
-            ? []
-            : Array.isArray(moveRaw)
-                ? moveRaw.map(id => cleanId(id)).filter(id => id.length >= 15)
-                : [cleanId(moveRaw)].filter(id => id.length >= 15);
 
-        if (saved247Channels.length > 1) {
-          logger.voice247(
-              `[247] Ignoring move-style bot voice update ${cleanOld} → ${cleanNew} ` +
-              `because guild ${guildId} already has multiple saved 24/7 channels ` +
-              `[${saved247Channels.join(", ")}]`
-          );
-          return;
-        }
-
-        const existingPlayer = remix.players.playerMap.get(cleanOld);
-        const newChannelAlreadySaved = (() => {
+        // Check if old channel is a saved 24/7 channel
+        const oldIs247 = (() => {
           try {
             const set = remix.settingsMgr.getServer(guildId);
-            const raw = set?.get("stay_247");
-            if (!raw || raw === "none") return false;
-            const saved = Array.isArray(raw)
-                ? raw.map(id => cleanId(id)).filter(id => id.length >= 15)
-                : [cleanId(raw)].filter(id => id.length >= 15);
-            return saved.includes(cleanNew);
-          } catch (_) {
-            return false;
-          }
+            return get247ChannelMode(set, cleanOld) === "on";
+          } catch (_) { return false; }
         })();
-        const newChannelPendingSpawn =
-            remix.players?._pendingJoins?.has?.(cleanNew) ||
-            false;
-        const targetChannel = client.channels.get(cleanNew)
-            ?? client.channels.get?.(cleanNew)
-            ?? null;
-        const targetGuildId = cleanId(targetChannel?.guildId ?? targetChannel?.guild?.id ?? guildId ?? "");
-        const playerGuildIdLocal = cleanId(existingPlayer?._guildId ?? "");
-        const guildPlayers = [...remix.players.playerMap.entries()].filter(([, p]) =>
-            cleanId(p?._guildId ?? "") === cleanId(guildId ?? "")
-        );
-        const guildIsAmbiguous = guildPlayers.length > 1;
 
-        let rekeyed = false;
-        if (existingPlayer && cleanNew !== cleanOld) {
-          if (newChannelAlreadySaved || newChannelPendingSpawn) {
-            logger.voice247(
-                `[247] Keeping both channels ${cleanOld} and ${cleanNew} ` +
-                `(saved=${newChannelAlreadySaved} pending=${newChannelPendingSpawn})`
-            );
-            rekeyed = false;
-          } else
-          if (guildIsAmbiguous) {
-            const playerAtNewKey = remix.players.playerMap.get(cleanNew);
-            if (playerAtNewKey && playerAtNewKey !== existingPlayer) {
-              existingPlayer._channelId = cleanNew;
-              existingPlayer._home247Channel = cleanNew;
-              if (targetGuildId) existingPlayer._guildId = targetGuildId;
-              rekeyed = false;
-              logger.voice247(
-                  `[247] Updated player channel ${cleanOld} → ${cleanNew} ` +
-                  `(guild ${guildId} has ${guildPlayers.length} active players, ` +
-                  `new key occupied by another player — skipped re-key)`
-              );
-            } else {
-              remix.players.playerMap.delete(cleanOld);
-              remix.players.playerMap.set(cleanNew, existingPlayer);
-              existingPlayer._channelId = cleanNew;
-              existingPlayer._home247Channel = cleanNew;
-              if (targetGuildId) existingPlayer._guildId = targetGuildId;
-              rekeyed = true;
-              logger.voice247(
-                  `[247] Re-keyed playerMap ${cleanOld} → ${cleanNew} ` +
-                  `(guild ${guildId} has ${guildPlayers.length} active players)`
-              );
-            }
-          } else if (playerGuildIdLocal && targetGuildId && playerGuildIdLocal !== targetGuildId) {
-            if (!existingPlayer) {
-              logger.voice247(
-                  `[247] Stale cross-guild move ${cleanOld} → ${cleanNew} ` +
-                  `(no player in playerMap for old channel — updating bot state only)`
-              );
-            } else {
-              const vsuGuildIdClean = cleanId(guildId ?? "");
-              if (vsuGuildIdClean && targetGuildId === vsuGuildIdClean) {
-                existingPlayer._guildId = targetGuildId;
-                existingPlayer._channelId = cleanNew;
-                existingPlayer._home247Channel = cleanNew;
-                remix.players.playerMap.delete(cleanOld);
-                remix.players.playerMap.set(cleanNew, existingPlayer);
-                rekeyed = true;
-                logger.voice247(
-                    `[247] Fixed stale guild during recovery: re-keyed ${cleanOld} → ${cleanNew} ` +
-                    `(playerGuild ${playerGuildIdLocal} → ${targetGuildId})`
-                );
-              } else {
-                logger.warn(
-                    `[247] Refused cross-guild re-key ${cleanOld} → ${cleanNew} ` +
-                    `(playerGuild=${playerGuildIdLocal} targetGuild=${targetGuildId})`
-                );
-              }
-            }
-          } else {
+        // Check if new channel is a saved 24/7 channel or has a pending spawn
+        const newChannelSaved = (() => {
+          try {
+            const set = remix.settingsMgr.getServer(guildId);
+            return get247ChannelMode(set, cleanNew) === "on";
+          } catch (_) { return false; }
+        })();
+        const newChannelPendingSpawn = remix.players?._pendingJoins?.has?.(cleanNew) || false;
+
+        const existingPlayer = remix.players.playerMap.get(cleanOld);
+
+        if (oldIs247 && existingPlayer) {
+          // Old channel is 24/7 — bot physically moved away, so the voice
+          // connection to old channel is dead. Destroy the old player and
+          // schedule a fresh rejoin so it gets a new live connection.
+          logger.voice247(
+              `[247] Bot moved away from 24/7 channel ${cleanOld} → ${cleanNew}. ` +
+              `Destroying stale player, scheduling rejoin for ${cleanOld}.`
+          );
+          remix.players.playerMap.delete(cleanOld);
+          const homeCh = cleanId(existingPlayer._home247Channel ?? "");
+          if (homeCh && homeCh !== cleanOld) remix.players.playerMap.delete(homeCh);
+          try { existingPlayer.destroy(); } catch (_) {}
+          const rejoinDelay = this.T.rejoin247Delay ?? 3_000;
+          setTimeout(() => {
+            this._rejoinChannel(cleanId(guildId), cleanOld).catch(err => {
+              logger.warn(`[247] Failed to rejoin ${cleanOld} after move-away:`, err.message);
+            });
+          }, rejoinDelay);
+        } else if (newChannelSaved || newChannelPendingSpawn) {
+          // New channel is already 24/7 or being spawned — keep both, don't rekey.
+          logger.voice247(
+              `[247] Keeping both channels ${cleanOld} and ${cleanNew} ` +
+              `(saved=${newChannelSaved} pending=${newChannelPendingSpawn})`
+          );
+        } else if (existingPlayer && cleanNew !== cleanOld) {
+          // Neither channel is 24/7 — safe to rekey the player.
+          const targetChannel = client.channels.get(cleanNew)
+              ?? client.channels.get?.(cleanNew)
+              ?? null;
+          const targetGuildId = cleanId(targetChannel?.guildId ?? targetChannel?.guild?.id ?? guildId ?? "");
+
+          const playerAtNewKey = remix.players.playerMap.get(cleanNew);
+          if (!playerAtNewKey || playerAtNewKey === existingPlayer) {
             remix.players.playerMap.delete(cleanOld);
             remix.players.playerMap.set(cleanNew, existingPlayer);
             existingPlayer._channelId = cleanNew;
             existingPlayer._home247Channel = cleanNew;
             if (targetGuildId) existingPlayer._guildId = targetGuildId;
-            rekeyed = true;
             logger.voice247(`[247] Re-keyed playerMap ${cleanOld} → ${cleanNew}`);
-          }
-        }
-
-        const set = remix.settingsMgr.getServer(guildId);
-        const raw = set?.get("stay_247");
-        if ((rekeyed || existingPlayer) && raw && raw !== "none") {
-          const channels = Array.isArray(raw)
-              ? new Set(raw.map(id => cleanId(id)).filter(id => id.length >= 15))
-              : new Set();
-          if (channels.has(cleanOld) && cleanOld !== cleanNew && cleanNew.length >= 15) {
-            if (channels.has(cleanNew) || newChannelAlreadySaved || newChannelPendingSpawn) {
-              logger.voice247(
-                  `[247] Preserved stay_247 channels ${cleanOld} and ${cleanNew} ` +
-                  `(saved=${channels.has(cleanNew) || newChannelAlreadySaved} pending=${newChannelPendingSpawn})`
-              );
-              return;
-            }
-
-            const currentGuildPlayers = [...remix.players.playerMap.values()].filter(p =>
-                cleanId(p?._guildId ?? "") === cleanId(guildId ?? "")
+          } else {
+            logger.voice247(
+                `[247] Skipped re-key ${cleanOld} → ${cleanNew} (new key occupied by another player)`
             );
-            if (currentGuildPlayers.length > 1) {
-              if (!channels.has(cleanNew)) {
-                channels.add(cleanNew);
-                set.set("stay_247", [...channels]);
-                const modes2 = set.get("stay_247_modes");
-                if (modes2 && typeof modes2 === "object" && !Array.isArray(modes2) && !modes2[cleanNew]) {
-                  modes2[cleanNew] = modes2[cleanOld] ?? "auto";
-                  set.set("stay_247_modes", modes2);
-                }
-                logger.voice247(
-                    `[247] Added stay_247 channel ${cleanNew} (kept ${cleanOld}) — guild has ${currentGuildPlayers.length} active players`
-                );
-              }
-              return;
-            }
-
-            channels.delete(cleanOld);
-            channels.add(cleanNew);
-            set.set("stay_247", [...channels]);
-
-            const modes = set.get("stay_247_modes");
-            if (modes && typeof modes === "object" && !Array.isArray(modes)) {
-              if (modes[cleanOld] && !modes[cleanNew]) {
-                modes[cleanNew] = modes[cleanOld];
-              }
-              delete modes[cleanOld];
-              set.set("stay_247_modes", modes);
-            }
-
-            logger.voice247(`[247] Updated stay_247: ${cleanOld} → ${cleanNew}`);
           }
         }
+
+        // Simplified 24/7: stay_247 list only changes via !247 command.
+        // Do NOT auto-add/remove channels on bot move.
       } catch (e) {
-        logger.warn("[247] Failed to auto-save channel:", e.message);
+        logger.warn("[247] Bot move handler failed:", e.message);
       }
     }
 
@@ -1115,8 +980,6 @@ export class GatewayHandler {
 
         if (remix.intentionalLeaves.has(cleanOld)) {
           logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — intentional leave.`);
-        } else if (remix.revoice?._intentionalDisconnects?.has?.(cleanOld)) {
-          logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — intentional (revoice).`);
         } else if (this._isGuildMoveInProgress(cleanGuild, cleanOld)) {
           logger.voiceState(`[VoiceState] Bot disconnected from ${cleanOld} — guild move in progress, skipping.`);
         } else if (this._bootRecoveryActive) {
@@ -1126,10 +989,10 @@ export class GatewayHandler {
           const mode = set ? get247ChannelMode(set, cleanOld) : "off";
           const wsInduced = this.isWsReconnectRecent();
 
-          if (mode === "auto" || wsInduced) {
-            const reason = wsInduced && mode !== "auto"
+          if (mode === "on" || wsInduced) {
+            const reason = wsInduced && mode !== "on"
                 ? `WS reconnect detected (${Math.round((Date.now() - this._lastReadyAt) / 1000)}s ago) — treating as transient, scheduling rejoin`
-                : `24/7 auto mode — cleaning up and scheduling rejoin`;
+                : `24/7 mode — scheduling rejoin`;
             logger.voice247(
                 `[VoiceState] Bot unexpectedly disconnected from ${cleanOld} — ${reason}.`
             );
@@ -1169,31 +1032,29 @@ export class GatewayHandler {
     }
   }
 
-  /** @type {Set<string>} Channel IDs currently being rejoined (dedup guard) */
+  /** @private @type {Set<string>} @description Channel IDs currently being rejoined (duplicate guard). */
   _rejoinInProgress = new Set();
 
-  /** @type {Map<string, number>} Channel IDs with retry attempt counts */
+  /** @private @type {Map<string, number>} @description Channel ID → retry count for exponential backoff. */
   _rejoinAttempts = new Map();
 
-  /** @type {boolean} Whether boot recovery (rejoin247Channels) is currently running */
+  /** @private @type {boolean} @description Whether boot recovery is actively rejoining 24/7 channels. */
   _bootRecoveryActive = false;
 
-  /** @type {number} Maximum number of rejoin retry attempts */
+  /** @type {number} @description Maximum number of rejoin retry attempts per channel. */
   static MAX_REJOIN_RETRIES = 3;
 
   /**
-   * Shared rejoin attempt logic with exponential backoff retry.
-   * Used by both _rejoinChannel (disconnect recovery) and
-   * rejoin247Channels (boot recovery).
-   *
-   * @param {string} channelId - Clean channel ID
-   * @param {string} guildId - Clean guild ID
-   * @param {number} [maxRetries=3] Maximum retry attempts
-   * @param {number} [baseDelay=5000] Base delay for exponential backoff (ms)
-   * @param {string} [context="Rejoin"] Log context prefix
-   * @returns {Promise<object|null>} The spawned player, or null on failure
+   * Attempt to spawn a player for a channel with exponential-backoff retries.
+   * @param {string} channelId - The target channel ID.
+   * @param {string} guildId - The guild ID.
+   * @param {number} [maxRetries=3] - Maximum retry attempts.
+   * @param {number} [baseDelay=5000] - Base delay in ms (doubled each retry).
+   * @param {string} [context='Rejoin'] - Label for log messages.
+   * @returns {Promise<Player|null>} The spawned player, or null if all retries failed.
+   * @private
    */
-  async _attemptRejoin(channelId, guildId, maxRetries = 3, baseDelay = 5_000, context = "Rejoin") {
+  async _attemptRejoin(channelId, guildId, maxRetries = 3, baseDelay = 5_000, context = 'Rejoin') {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         const player = await this.remix._spawnPlayer(guildId, channelId);
@@ -1206,8 +1067,8 @@ export class GatewayHandler {
       } catch (err) {
         const errMsg = err?.message ?? String(err);
         const isTrackTimeout = errMsg.includes("track publication timed out")
-            || errMsg.includes("publishToRoom failed")
-            || errMsg.includes("Failed to create MediaPlayer")
+            || errMsg.includes("lavalink player create failed")
+            || errMsg.includes("Failed to create audio player")
             || errMsg.includes("internal error");
 
         if (isTrackTimeout && attempt < maxRetries) {
@@ -1231,14 +1092,12 @@ export class GatewayHandler {
   }
 
   /**
-   * Rejoin a voice channel after an unexpected disconnect.
-   * Used by the %247 auto mode to automatically reconnect.
-   *
-   * Includes deduplication (prevents concurrent rejoin for the same channel)
-   * and delegates retry logic to _attemptRejoin.
-   *
-   * @param {string} guildId
-   * @param {string} channelId
+   * Safely rejoin a 24/7 channel. Guards against duplicate joins,
+   * intentional leaves, missing channels, and pending joins.
+   * @param {string} guildId - The guild ID.
+   * @param {string} channelId - The target channel ID.
+   * @returns {Promise<Player|null>} The spawned player, or null if skipped.
+   * @private
    */
   async _rejoinChannel(guildId, channelId) {
     const { remix } = this;
@@ -1264,12 +1123,6 @@ export class GatewayHandler {
 
     if (remix.intentionalLeaves.has(cleanChannelId)) {
       logger.voice247(`[Rejoin] Channel ${cleanChannelId} was intentionally left — skipping.`);
-      this._rejoinAttempts.delete(cleanChannelId);
-      return;
-    }
-
-    if (remix.revoice?._intentionalDisconnects?.has?.(cleanChannelId)) {
-      logger.voice247(`[Rejoin] Channel ${cleanChannelId} was intentionally left (revoice) — skipping.`);
       this._rejoinAttempts.delete(cleanChannelId);
       return;
     }
@@ -1301,16 +1154,7 @@ export class GatewayHandler {
     }
   }
 
-  /**
-   * Check whether a guild-move operation is currently in progress for the
-   * given guild and old channel.  During a move, Fluxer sends two
-   * VoiceStateUpdate events (leave old + join new) in rapid succession;
-   * the "leave" should NOT be treated as an unexpected disconnect.
-   *
-   * @param {string} guildId       The guild ID to check
-   * @param {string} oldChannelId  The channel the bot appears to have left
-   * @returns {boolean} True if a move is in progress and the disconnect should be ignored
-   */
+  /** @private Check whether a guild currently has a move in progress (recently connected player or pending join). Used to suppress false positive disconnect-rejoin loops. @param {string} guildId - The guild ID. @param {string} oldChannelId - The channel the bot just left. @returns {boolean} True if a move is in progress within the evidence window. */
   _isGuildMoveInProgress(guildId, oldChannelId) {
     const { remix } = this;
     const cleanGuild = cleanId(guildId);
@@ -1346,21 +1190,7 @@ export class GatewayHandler {
     return false;
   }
 
-  /**
-   * Invoke after the bot has connected and Moonlink has been initialised.
-   * Seeds voice states, attaches raw WS listener, kicks off presence rotation,
-   * and rejoins 24/7 channels with staggered delays to avoid overwhelming
-   * the LiveKit server.
-   */
-  /**
-   * Paginate /users/@me/guilds via REST and add any guilds that Fluxer
-   * didn't cache (because their GUILD_CREATE was never received) as
-   * lightweight stubs into client.guilds.  This ensures guild count and
-   * any guild-map lookups reflect the real server count.
-   *
-   * Stubs only carry { id, name } — enough for counting and ID lookups.
-   * They are skipped if a full guild object is already in the cache.
-   */
+  /** @async @private Fetch all guilds the bot is in via REST and create stub entries in the client cache for any missing guilds. This ensures settings and 24/7 lookups work even for guilds that haven't sent GUILD_CREATE yet. */
   async seedGuildsFromRest() {
     const { remix } = this;
     const client    = remix.client;
@@ -1428,11 +1258,7 @@ export class GatewayHandler {
     }
   }
 
-  /**
-   * Try to get the Guild class from @fluxerjs/core so we can create proper
-   * Guild instances for stubs instead of plain objects.
-   * Returns null if the class can't be resolved.
-   */
+  /** @private @returns {Function|null} The Guild constructor class. */
   _getGuildClass() {
     if (this._GuildClass) return this._GuildClass;
     try {
@@ -1448,6 +1274,11 @@ export class GatewayHandler {
     return null;
   }
 
+  /**
+   * Called when the bot receives the READY event.
+   * Seeds voice states, starts presence rotation, ends startup grace period,
+   * and begins 24/7 boot recovery.
+   */
   onReady() {
     this._lastReadyAt = Date.now();
     this.seedVoiceStatesFromGuilds();
@@ -1478,14 +1309,10 @@ export class GatewayHandler {
   }
 
   /**
-   * Rejoin all 24/7 channels after boot with staggered delays.
-   *
-   * Both %247 auto and %247 on channels are rejoined because:
-   *   %247 auto: always stays in voice (disconnect + reboot)
-   *   %247 on:   only on reboot, not on disconnect
-   *
-   * Channels are rejoined one at a time with a delay between each to
-   * avoid overwhelming the LiveKit server with concurrent track publications.
+   * Boot recovery: sequentially rejoin all saved 24/7 channels.
+   * Sets _bootRecoveryActive=true to suppress fake move events during the process.
+   * Cleans up missing channels from settings to prevent repeated failures.
+   * @returns {Promise<void>}
    */
   async rejoin247Channels() {
     this._bootRecoveryActive = true;
@@ -1503,7 +1330,7 @@ export class GatewayHandler {
 
       for (const channelId of channels) {
         const mode = get247ChannelMode(serverSettings, channelId);
-        if (mode === "auto" || mode === "on") {
+        if (mode === "on") {
           channelsToRejoin.push({ guildId, channelId, mode });
         }
       }
@@ -1603,14 +1430,14 @@ export class GatewayHandler {
         `[BootRecovery] Boot recovery complete. ${channelsToRejoin.length} channel(s) processed.`
     );
 
-    setTimeout(() => { this._bootRecoveryActive = false; }, 15_000);
+    this._bootRecoveryActive = false;
   }
 
   /**
-   * Perform the actual cleanup for a guild that the bot was removed from.
-   * Extracted from the GuildDelete handler so it can be called after the
-   * startup grace period expires.
-   * @param {string} guildId
+   * Process a confirmed guild deletion. Cleans up voice cache and previous state.
+   * Does NOT delete 24/7 settings (preserved for re-invite).
+   * @param {string} guildId - The deleted guild ID.
+   * @private
    */
   _processGuildDelete(guildId) {
     const { remix } = this;

@@ -1,6 +1,7 @@
 /**
- * @file playnext.mjs — Add a song to the top of the queue (play next)
- * @module commands.playnext
+ * @module commands/playnext
+ * @description Play a song and insert it at the top of the queue instead of the end.
+ * Supports inline provider prefixes and flag-based provider selection.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -9,6 +10,10 @@ import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { PROVIDER_CHOICES, parseInlineProvider } from "../src/constants/providers.mjs";
 
 
+/**
+ * @type {CommandBuilder}
+ * @description Command definition for the playnext command.
+ */
 export const command = new CommandBuilder()
     .setName("playnext")
     .setId("playnext")
@@ -34,9 +39,11 @@ export const command = new CommandBuilder()
     .addAlias("pn");
 
 /**
- * Execute the playnext command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * Run handler for the playnext command.
+ * Searches for a track and adds the result to the top of the queue.
+ *
+ * @param {object} message - The command message wrapper.
+ * @param {object} data - Parsed command data containing query and provider options.
  * @returns {Promise<void>}
  */
 export async function run(message, data) {

@@ -1,52 +1,45 @@
-/**
- * @file API.mjs — API constants — FluxerList API endpoints, authentication headers, pagination defaults, and cache TTL values
- * @module src.constants.API
- */
+/** @module constants/API */
 
 /**
- * API.mjs — Single source of truth for all external API constants.
- *
- * FLUXERLIST        — FluxerList vote-tracking API configuration & endpoints
- * FLUXERLIST_AUTH   — Authentication header format & key prefix
- * FLUXERLIST_LIMITS — Pagination & rate limit defaults
- *
- * Edit only here; FluxerListManager.mjs and commands/vote.mjs import from this file.
+ * FluxerList API configuration.
+ * @namespace FLUXERLIST
  */
-
 export const FLUXERLIST = {
-  /** Base URL for all FluxerList API v1 endpoints */
+  /** Base URL for the FluxerList REST API. @type {string} */
   BASE_URL: "https://fluxerlist.com/api/v1",
 
-  /** FluxerList website base URL (for vote links, profiles, etc.) */
+  /** Public FluxerList website URL. @type {string} */
   SITE_URL: "https://fluxerlist.com",
 
-  /** Available endpoint paths — append :id and query params at call time */
+  /** API endpoint path templates. @type {{ SERVER_VOTERS: string, BOT_VOTERS: string }} */
   ENDPOINTS: {
-    /** GET /api/v1/servers/:id/voters — voters for a server */
     SERVER_VOTERS: "/servers/:id/voters",
 
-    /** GET /api/v1/bots/:id/voters — voters for a bot */
     BOT_VOTERS: "/bots/:id/voters",
   },
 
-  /** Resource types supported by the API (used in command choices) */
+  /** Accepted resource type identifiers. @type {string[]} */
   RESOURCE_TYPES: ["server", "bot"],
 
-  /** Thumbnail image for vote embeds (FluxerList branding) */
+  /** Thumbnail API base URL. @type {string} */
   THUMBNAIL: "https://fluxerlist.com/api/v1",
 };
 
+/**
+ * FluxerList authentication helpers.
+ * @namespace FLUXERLIST_AUTH
+ */
 export const FLUXERLIST_AUTH = {
-  /** Header name for API key authentication */
+  /** HTTP header name for auth. @type {string} */
   HEADER: "Authorization",
 
-  /** Prefix prepended to all FluxerList API keys */
+  /** Required API key prefix. @type {string} */
   KEY_PREFIX: "fl_",
 
   /**
-   * Build the Authorization header value.
-   * @param {string} apiKey - The raw API key (with or without the fl_ prefix)
-   * @returns {string} Header value in "Bearer fl_xxx" format
+   * Format an API key as a Bearer token, prepending the prefix if needed.
+   * @param {string} apiKey - Raw or prefixed API key.
+   * @returns {string} `Bearer fl_...` string.
    */
   bearer(apiKey) {
     const key = apiKey.startsWith(FLUXERLIST_AUTH.KEY_PREFIX)
@@ -56,29 +49,30 @@ export const FLUXERLIST_AUTH = {
   },
 };
 
+/**
+ * FluxerList pagination and cache limits.
+ * @namespace FLUXERLIST_LIMITS
+ */
 export const FLUXERLIST_LIMITS = {
-  /** Default page number when none is specified */
+  /** Default page number. @type {number} */
   DEFAULT_PAGE: 1,
 
-  /** Default number of results per page */
+  /** Default items-per-page. @type {number} */
   DEFAULT_LIMIT: 50,
 
-  /** Maximum number of results per page (API enforced) */
+  /** Maximum allowed items-per-page. @type {number} */
   MAX_LIMIT: 100,
 
-  /** Cache TTL in milliseconds for voter list responses (5 min) */
+  /** Cache time-to-live in milliseconds. @type {number} */
   CACHE_TTL_MS: 5 * 60 * 1000,
 };
 
 /**
- * Build a full FluxerList API URL by replacing :id in the endpoint path.
- *
- * @param {string} endpoint - One of FLUXERLIST.ENDPOINTS values (e.g. "/servers/:id/voters")
- * @param {string} resourceId - The server or bot ID or slug to substitute for :id
- * @param {object} [queryParams] - Optional query parameters
- * @param {number} [queryParams.page] - Page number (default: 1)
- * @param {number} [queryParams.limit] - Results per page, max 100 (default: 50)
- * @returns {string} Full URL ready for fetch()
+ * Build a full FluxerList API URL by substituting `:id` in the endpoint and appending query params.
+ * @param {string} endpoint - Endpoint template (e.g. `"/servers/:id/voters"`).
+ * @param {string} resourceId - Value to substitute for `:id`.
+ * @param {{ page?: number, limit?: number }} [queryParams={}]
+ * @returns {string} Fully qualified URL.
  */
 export function buildFluxerListUrl(endpoint, resourceId, queryParams = {}) {
   const path = endpoint.replace(":id", encodeURIComponent(resourceId));
@@ -95,12 +89,10 @@ export function buildFluxerListUrl(endpoint, resourceId, queryParams = {}) {
 }
 
 /**
- * Build the vote/profile link for a resource on FluxerList.
- * Both vote and profile links share the same URL pattern.
- *
- * @param {"server"|"bot"} type - Resource type
- * @param {string} resourceId - The server or bot ID or slug
- * @returns {string} URL to the resource page on FluxerList
+ * Build a FluxerList vote link for a server or bot.
+ * @param {"server"|"bot"} type - Resource type.
+ * @param {string} resourceId - The server/bot ID.
+ * @returns {string} Absolute URL to the vote page.
  */
 export function buildVoteLink(type, resourceId) {
   const path = type === "server" ? "servers" : "bots";

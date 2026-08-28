@@ -1,6 +1,6 @@
 /**
- * @file seek.mjs — Seek to a specific position in the current track
- * @module commands.seek
+ * @module commands/seek
+ * @description Seek to a specific position in the currently playing track.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -9,6 +9,7 @@ import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { Utils } from "../src/Utils.mjs";
 import { ERROR_COLOR } from "../src/constants/UI.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the seek command. */
 export const command = new CommandBuilder()
   .setName("seek")
   .setDescription("Seek to a specific position in the current track.", "commands.seek")
@@ -20,9 +21,11 @@ export const command = new CommandBuilder()
   );
 
 /**
- * Execute the seek command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @async
+ * Run handler for the seek command.
+ * Parses a duration string and seeks the player to that position.
+ * @param {object} msg - The command message wrapper.
+ * @param {object} data - Parsed command data containing the position option.
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {

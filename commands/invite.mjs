@@ -1,12 +1,16 @@
 /**
- * @file invite command — Get the bot invite link and support server invite
  * @module commands/invite
+ * @description Display the bot invite link and support server information.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 
+/**
+ * @type {CommandBuilder}
+ * @description Command definition for the invite command.
+ */
 export const command = new CommandBuilder()
     .setName("invite")
     .setDescription("Get the invite link for Remix and the support server.", "commands.invite")
@@ -14,9 +18,10 @@ export const command = new CommandBuilder()
     .setCategory("util");
 
 /**
- * Execute the invite command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * Run handler for the invite command.
+ * Sends an embed with the bot invite link and support server info.
+ *
+ * @param {object} message - The command message wrapper.
  * @returns {Promise<void>}
  */
 export async function run(message) {

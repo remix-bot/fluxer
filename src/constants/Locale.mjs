@@ -1,53 +1,46 @@
-/**
- * @file Locale.mjs — Locale — i18n system loading JSON locale files with per-guild language settings and template variable interpolation
- * @module src.constants.Locale
- */
+/** @module constants/Locale */
 
 import { readFileSync, readdirSync, existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { logger } from "./Logger.mjs";
 
+/** @private */
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** @private */
 const LOCALES_DIR = path.resolve(__dirname, "../../storage/locales/bot");
 
 /**
- * Lightweight i18n locale loader.
- *
- * Loads all JSON files from storage/locales/bot/ at startup and provides
- * a `t(guildId, key, replacements?)` translation function.
- *
- * Usage in commands (where `this` is the Remix bot instance):
- *   this.t(msg, "responses.play.noResults")
- *   this.t(msg, "responses.clear.cleared", { count: 5 })
+ * Locale/i18n manager that loads JSON locale files from disk and provides
+ * dot-notation key lookups with `{{placeholder}}` and `$prefix` substitution.
+ * @class
  */
 export class Locale {
-  constructor() {
-    /** @type {Map<string, Object>} locale code → parsed JSON */
-    this.locales = new Map();
-    /** @type {Map<string, Object>} guildId → locale JSON (resolved & cached) */
-    this._resolved = new Map();
-    /** Default fallback locale */
-    this.defaultLocale = "en";
-    /** settingsMgr reference — set after construction via bind() */
-    this.settingsMgr = null;
-    /** getPrefix callback — set by CommandHandler so prefix logic lives in one place */
-    this._getPrefixFn = null;
-    /** Maximum guild locale cache size */
-    this._maxResolvedCache = 5000;
+  /**
+   * @param {string} [defaultPrefix="%"] - Fallback prefix used when no prefix
+   *   resolver is registered and the settings manager yields no prefix.
+   */
+  constructor(defaultPrefix = "%") {
+    /** @private */ this.locales = new Map();
+    /** @private */ this._resolved = new Map();
+    /** @type {string} */ this.defaultLocale = "en";
+    /** @private */ this.settingsMgr = null;
+    /** @private */ this._getPrefixFn = null;
+    /** @private */ this._defaultPrefix = defaultPrefix;
+    /** @private */ this._maxResolvedCache = 5000;
   }
 
   /**
-   * Bind a settings manager so translate() can look up per-guild locale settings.
-   * @param {object} settingsMgr - RemoteSettingsManager instance
+   * Bind a settings manager so the locale resolver can look up per-guild locale preferences.
+   * @param {object} settingsMgr - Settings manager exposing `guilds.get(guildId)`.
    */
   bind(settingsMgr) {
     this.settingsMgr = settingsMgr;
   }
 
   /**
-   * Load all locale JSON files from the locales directory.
-   * Call once at startup after config is available.
+   * Load all `.json` locale files from the locales directory.
+   * Clears any previously loaded data and the resolved-cache.
    */
   load() {
     this.locales.clear();
@@ -81,8 +74,7 @@ export class Locale {
   }
 
   /**
-   * Return the set of available locale codes.
-   * Useful for validation (e.g. the settings command).
+   * Return the set of loaded locale codes.
    * @returns {Set<string>}
    */
   availableLocales() {
@@ -90,12 +82,11 @@ export class Locale {
   }
 
   /**
-   * Resolve the locale data for a guild.
-   * Checks the per-guild "locale" setting from the DB, falls back to English.
-   * Results are cached per guildId.
-   *
+   * Resolve the locale data object for a guild, using per-guild settings or falling
+   * back to the default locale. Results are cached with an LRU-style cap.
+   * @private
    * @param {string} guildId
-   * @returns {Object}
+   * @returns {object} The locale data object.
    */
   _getLocaleData(guildId) {
     if (!guildId) return this.locales.get(this.defaultLocale) ?? {};
@@ -126,8 +117,8 @@ export class Locale {
   }
 
   /**
-   * Clear the resolved locale cache (call when locale setting changes).
-   * @param {string} [guildId] - Specific guild to invalidate, or omit for all.
+   * Invalidate the resolved-cache for a specific guild or all guilds.
+   * @param {string} [guildId] - Omit to clear the entire cache.
    */
   invalidateCache(guildId) {
     if (guildId) {
@@ -138,17 +129,16 @@ export class Locale {
   }
 
   /**
-   * Set the prefix resolver callback. Called once by CommandHandler at startup
-   * so that all prefix resolution goes through CommandHandler.getPrefix().
-   * @param {(guildId: string) => string} fn
+   * Register a custom prefix resolver function.
+   * @param {function(string): string} fn - Receives `guildId`, returns the prefix string.
    */
   setPrefixResolver(fn) {
     this._getPrefixFn = fn;
   }
 
   /**
-   * Get the per-guild prefix. Delegates to CommandHandler.getPrefix() when
-   * available, otherwise falls back to a direct settings lookup.
+   * Resolve the command prefix for a guild.
+   * @private
    * @param {string} guildId
    * @returns {string}
    */
@@ -165,9 +155,10 @@ export class Locale {
   }
 
   /**
-   * Look up a dotted key in a nested object.
-   * @param {Object} obj
-   * @param {string} key  e.g. "responses.play.noResults"
+   * Resolve a dot-notation key against a nested object.
+   * @private
+   * @param {object} obj
+   * @param {string} key - e.g. "commands.play.description"
    * @returns {*}
    */
   _resolve(obj, key) {
@@ -181,12 +172,12 @@ export class Locale {
   }
 
   /**
-   * Translate a key with optional {{placeholder}} replacements.
-   *
+   * Translate a locale key for a guild, applying `{{placeholder}}` replacements
+   * and `$prefix` substitution. Falls back to the default locale, then the raw key.
    * @param {string} guildId
-   * @param {string} key        Dotted key, e.g. "responses.play.noResults"
-   * @param {Object} [replacements={}]  e.g. { count: 5, channel: "#general" }
-   * @returns {string} Translated string, or the key itself if not found
+   * @param {string} key - Dot-notation locale key.
+   * @param {Object<string, *>} [replacements={}] - Placeholder values to substitute.
+   * @returns {string} The translated (or fallback) string.
    */
   translate(guildId, key, replacements = {}) {
     const localeData = this._getLocaleData(guildId);

@@ -1,37 +1,38 @@
-# WIP Web Dashboard for Remix
+# Settings System
 
-Control Remix through a web interface and set server settings and similar.
+Per-guild settings for Remix, backed by MySQL.
 
-Installation instructions will follow soon:tm:
+## How it works
 
-## Setup
+- Defaults live in `storage/defaults.json`. Every guild starts from this template.
+- `src/Settings.mjs` contains the implementation:
+  - `SettingsManager` — defines the setting keys, their defaults and descriptions.
+  - `ServerSettings` — per-guild view; `get`/`set`/`reset` operate in memory and persist with an 80 ms debounced write.
+  - `RemoteSettingsManager` — loads every guild row from the MySQL `settings` table (`id` primary key + `data` JSON column) and writes individual keys back with `JSON_SET`.
+- The `settings` table is the only table you need to create manually:
 
-1. Create a mysql server with the following table:
-  ```MySQL
-  CREATE TABLE `ksiTokens` (
-  `user` varchar(26) NOT NULL,
-  `id` varchar(50) NOT NULL,
-  `token` varchar(70) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci NOT NULL,
-  `createdAt` datetime NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
-
-CREATE TABLE `logins` (
-  `user` text NOT NULL,
-  `id` varchar(50) NOT NULL,
-  `token` varchar(70) NOT NULL,
-  `verified` tinyint(1) NOT NULL,
-  `createdAt` datetime NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
+  ```sql
+  CREATE TABLE `settings` (
+    `id` varchar(70) NOT NULL,
+    `data` json NOT NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
   ```
-2. Fill out the connection details in `config.json` in the remix root directory (See `config.example.json`)
-3. SSL setup:
-  - Create a certificate. For example [using Let's Encrypt](https://letsencrypt.org/de/getting-started/)
-  - Find the path to your private key and certificate pem files. Certbot uses `/etc/letsencrypt/live/remix.fairuse.org/privkey.pem` for the private key and `/etc/letsencrypt/live/remix.fairuse.org/fullchain.pem` for the certificate file. Fill in the paths in the config file
-  - set `useSSL` in `config.json` to `true`
-  - Make sure to configure the ports correctly. HTTPS connects to port `443` so make sure to set `webPort` accordingly.
 
-Credits for Website design:
-- NoLogicAlan 
-- ophx
-- ShadowLp174
-- Fantic
+## Files
+
+| File | Purpose |
+| :--- | :--- |
+| `Settings.mjs` | Re-export of `src/Settings.mjs` classes |
+| `migrate.mjs` | One-shot tool that clones every guild row from one settings table/bot ID to another (`npm run migrate`) |
+| `runnables.mjs` | Validators applied when a setting changes (e.g. `prefix` must be ≤ 5 chars with no whitespace, `pfp` only accepts `default`) |
+
+## Managing settings in a server
+
+Use the `%settings` command (requires Manage Server):
+
+- `%settings get` — view all settings for this server
+- `%settings set <key> <value>` — change a setting
+- `%settings reset <key>` — reset a setting to its default
+- `%settings help` — explain a specific key
+
+Shortcut commands `prefix` / `pfx` and `247` map to the corresponding settings keys.

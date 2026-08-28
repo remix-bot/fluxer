@@ -1,10 +1,11 @@
 /**
- * @file remove.mjs — Remove a specific song from the queue by position
- * @module commands.remove
+ * @module commands/remove
+ * @description Remove a specific track from the queue by its position.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the remove command. */
 export const command = new CommandBuilder()
   .setName("remove")
   .setDescription("Remove a specific song from the queue.", "commands.remove")
@@ -15,9 +16,11 @@ export const command = new CommandBuilder()
       .setRequired(true));
 
 /**
- * Execute the remove command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @async
+ * Run handler for the remove command.
+ * Removes a track at the specified 1-based index from the queue.
+ * @param {object} message - The command message wrapper.
+ * @param {object} data - Parsed command data containing the index option.
  * @returns {Promise<void>}
  */
 export async function run(message, data) {

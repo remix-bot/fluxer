@@ -1,12 +1,13 @@
 /**
- * @file support.mjs — Show support server invite link
- * @module commands.support
+ * @module commands/support
+ * @description Displays a link and invitation to the bot's support server.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the support command. */
 export const command = new CommandBuilder()
   .setName("support")
   .setDescription("The support server for Remix. Feel free to ask help, report bugs or just chat :)", "commands.support")
@@ -14,8 +15,9 @@ export const command = new CommandBuilder()
   .setCategory("util");
 
 /**
- * run function.
- * @param {object} msg
+ * Run handler for the support command.
+ * Sends an embed with the support server link.
+ * @param {object} msg - The command message wrapper.
  * @returns {void}
  */
 export function run(msg) {

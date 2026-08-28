@@ -1,5 +1,5 @@
 {
-  "Comment": "Fluxer music bot configuration. IMPORTANT: Node.js >= 22.0.0 is required (moonlink.js v5 dependency). Run 'node --version' to verify.",
+  "Comment": "Fluxer music bot configuration. Requires Node.js >= 22.13.0. Run 'node --version' to verify.",
   "token": "your bot token",
   "fluxer.js": {
     "rest": {
@@ -7,9 +7,6 @@
       "timeout": 30000,
       "retries": 3
     }
-  },
-  "fluxer-api": {
-    "Comment": "Configuration options for a fluxer REST client if self-hosting. See: https://docs.fluxer.app"
   },
   "prefix": "your desired prefix (such as %)",
   "presenceInterval": null,
@@ -32,16 +29,12 @@
       "activity": { "name": "RedTech & NoLogicAlan", "type": 2 }
     }
   ],
-  "spotify": {
-    "clientId": "your spotify client id",
-    "clientSecret": "your spotify client secret"
-  },
   "nodelink": {
     "host": "localhost",
     "port": 3000,
     "password": "youshallnotpass",
     "requestTimeout": 60000,
-    "Comment": "requestTimeout: ms before a NodeLink HTTP request is aborted. Default: 60000 (60s). Raise if you see 'NodeLink request timeout' errors."
+    "Comment": "requestTimeout: ms before a NodeLink HTTP request is aborted. Default: 60000 (60s). Raise if you see 'NodeLink request timeout' errors. All audio sources (Spotify, Deezer, Apple Music, etc.) are resolved by NodeLink, so configure source credentials in nodelink.config.json, not here."
   },
   "comment-radio": {
     "message": "If you have radio stations you'd like to connect, add them to the array below. Radio stations must be rendered like following:",
@@ -59,8 +52,6 @@
     }
   },
   "radio": [],
-  "helpCatalog": true,
-  "helpPagination": true,
   "mysql": {
     "host": "your-mysql-host.com",
     "port": 3306,
@@ -68,22 +59,13 @@
     "password": "password of your user",
     "database": "name of the target database"
   },
-  "webPort": 80,
   "dashboard": {
     "enabled": false,
     "redis": {
       "url": "redis://localhost:6379"
-    }
+    },
+    "Comment": "Optional dashboard backend. When enabled, the bot speaks Redis RPC (request/response/info channels) with an external web frontend. Login codes are verified (bcrypt) from the MySQL login_codes table. Keep Redis network-isolated — the RPC channel has no shared secret."
   },
-  "dashboardUrl": "The url the dashboard is accessible with.",
-  "ssl": {
-    "private": "path-to-private-key.pem",
-    "cert": "path-to-certificate.pem",
-    "useSSL": false,
-    "httpPort": 80
-  },
-  "sessionSecret": "secret for the expressjs session middleware; https://www.npmjs.com/package/express-session#user-content-secret",
-  "geniusToken": "Genius access token (Used for lyrics); optional",
   "lastfm": {
     "Comment": "Last.fm integration: auto-scrobble songs, play loved/top/recent tracks. Register at https://www.last.fm/api/account/create",
     "enabled": true,
@@ -102,7 +84,7 @@
   },
   "owners": ["user id for owner-only commands", "another user id"],
   "playerAFKTimeout": 60000,
-  "Comment": "The above specifies the time in ms after which a player goes inactive; Optional.",
+  "Comment2": "The above specifies the time in ms after which a player goes inactive; Optional.",
   "customStatsFooter": "Text shown in the footer of the $prefixstats embed; optional.",
   "embedColor": "0xe9196c",
   "logging": {
@@ -119,8 +101,7 @@
     "guild":       true,
     "recovery":    false,
     "settings":    true,
-    "worker":      false,
-    "moonlink":    false,
+    "lavalink":    true,
     "dashboard":   false,
     "redis":       false
   },

@@ -1,26 +1,11 @@
-/**
- * @file VoiceStateResolver.mjs — VoiceStateResolver — unified voice state enumeration across Map/Array/Object guild voice_states with human-detection fallbacks
- * @module src.constants.VoiceStateResolver
- */
-
-/**
- * VoiceStateResolver.mjs — Unified voice state enumeration.
- *
- * Eliminates the 12+ duplicated voice-state-iteration blocks scattered
- * across Player.mjs, PlayerManager.mjs, GatewayHandler.mjs, and Dashboard.mjs.
- *
- * Fluxer's guild.voice_states can be a Map, an Array, or a plain Object
- * depending on the client version and cache state. This module normalises
- * all three into a single iteration interface.
- */
+/** @module constants/VoiceStateResolver */
 
 import { logger } from "./Logger.mjs";
 
 /**
- * Iterate over all voice states for a guild, yielding objects with
- * { userId, channelId, isBot } regardless of the underlying data structure.
- *
- * @param {import("@fluxerjs/core").Guild} guild
+ * Iterate over a guild's voice states, normalising different data shapes.
+ * Yields objects with `{ userId, channelId, isBot }` for each member in a voice channel.
+ * @param {object} guild - Discord guild object with a `voice_states` property.
  * @yields {{ userId: string, channelId: string, isBot: boolean }}
  */
 export function* iterateVoiceStates(guild) {
@@ -59,18 +44,16 @@ export function* iterateVoiceStates(guild) {
 }
 
 /**
- * Check whether a guild's voice channel contains any non-bot users.
- * Uses three fallback strategies: VoiceStateCache, guild.voice_states,
- * and LiveKit remote participants.
- *
+ * Check whether any non-bot humans are currently in a voice channel.
+ * Checks, in order: VoiceStateCache → ObservedVoiceUsers → guild voice_states → LiveKit participants.
  * @param {object} opts
- * @param {string} opts.guildId  - Clean guild ID
- * @param {string} opts.channelId - Clean channel ID
- * @param {object} [opts.client]  - Fluxer client (for guild cache)
- * @param {object} [opts.voiceCache] - VoiceStateCache instance
- * @param {Map}    [opts.observedVoiceUsers] - Observed voice users map
- * @param {object} [opts.room]    - LiveKit Room (for remote participants)
- * @param {string} [opts.botId]   - Bot user ID (to exclude from LiveKit check)
+ * @param {string} opts.guildId
+ * @param {string} opts.channelId
+ * @param {object} [opts.client] - Discord client with `guilds`.
+ * @param {VoiceStateCache} [opts.voiceCache]
+ * @param {Map} [opts.observedVoiceUsers]
+ * @param {object} [opts.room] - LiveKit room with `remoteParticipants`.
+ * @param {string} [opts.botId]
  * @returns {boolean}
  */
 export function hasHumansInChannel({ guildId, channelId, client, voiceCache, observedVoiceUsers, room, botId }) {
@@ -128,10 +111,9 @@ export function hasHumansInChannel({ guildId, channelId, client, voiceCache, obs
 }
 
 /**
- * Get all channel IDs that have at least one human user in voice.
- *
- * @param {import("@fluxerjs/core").Guild} guild
- * @returns {Set<string>} Set of channel IDs with human users
+ * Get the set of channel IDs that contain at least one human user.
+ * @param {object} guild - Discord guild object.
+ * @returns {Set<string>}
  */
 export function getChannelsWithHumans(guild) {
   const channels = new Set();
@@ -142,9 +124,8 @@ export function getChannelsWithHumans(guild) {
 }
 
 /**
- * Get all user IDs in a specific voice channel (including bots).
- *
- * @param {import("@fluxerjs/core").Guild} guild
+ * Get the list of user IDs present in a specific voice channel.
+ * @param {object} guild - Discord guild object.
  * @param {string} channelId
  * @returns {string[]}
  */

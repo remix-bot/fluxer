@@ -1,20 +1,4 @@
-/**
- * @file LastFmManager.mjs — LastFmManager — Last.fm API integration for scrobbling, now-playing, loved tracks, top tracks, and track recommendations
- * @module src.LastFmManager
- */
-
-/**
- * LastFmManager.mjs — Last.fm API client for scrobbling, auth, and user data.
- *
- * Features:
- *   - Auth flow (desktop API: get token → user authorizes → get session)
- *   - Now-playing notification (track.scrobble with timestamp=0)
- *   - Full scrobble after threshold (50% of track or 4 min, whichever is less)
- *   - Fetch loved / top / recent tracks for %play lastfm loved/top/recent
- *   - Per-user session key storage in MySQL table `lastfm_users`
- *
- * Last.fm API docs: https://www.last.fm/api
- */
+/** @module src/LastFmManager @description Last.fm API integration for scrobbling, now-playing updates, loved tracks, and user session management with MySQL persistence. */
 
 import crypto from "node:crypto";
 import { logger } from "./constants/Logger.mjs";
@@ -22,27 +6,19 @@ import { Utils } from "./Utils.mjs";
 
 const BASE_URL = "https://ws.audioscrobbler.com/2.0/";
 
+/** @private @param {string} value @returns {string} */
 function normalizeTrackText(value) {
   return Utils.normalizeText(value);
 }
 
-/**
- * Build the API signature required by Last.fm for authenticated calls.
- * See: https://www.last.fm/api/authentication
- */
+/** @private Build an API signature per Last.fm auth spec. @param {object} params @param {string} apiSecret @returns {string} MD5 hex digest. */
 function buildSignature(params, apiSecret) {
   const sorted = Object.keys(params).sort();
   const str = sorted.map(k => k + params[k]).join("");
   return crypto.createHash("md5").update(str + apiSecret).digest("hex");
 }
 
-/**
- * Make a signed Last.fm API call.
- * @param {object} params  - API parameters (method, api_key, etc.)
- * @param {string} apiSecret
- * @param {boolean} [post=false] - Use POST instead of GET
- * @returns {Promise<object>} Parsed JSON response
- */
+/** @private Make an authenticated Last.fm API call. @async @param {object} params @param {string} apiSecret @param {boolean} [post=false] @returns {Promise<object>} @throws {Error} On HTTP or Last.fm API error. */
 async function apiCall(params, apiSecret, post = false) {
   const allParams = { ...params };
   allParams.api_sig = buildSignature(allParams, apiSecret);
@@ -71,14 +47,9 @@ async function apiCall(params, apiSecret, post = false) {
   return data;
 }
 
-/**
- * LastFmManager class.
- */
+/** @class LastFmManager @description Manages Last.fm user sessions, scrobbling, loved tracks, and top/recent track queries with MySQL persistence. */
 export class LastFmManager {
-  /**
-   * @param {object} config - The `lastfm` section from config.json
-   * @param {object} mysqlConfig - MySQL connection info for creating the users table
-   */
+  /** @param {object} config @param {string} config.apiKey @param {string} config.apiSecret @param {boolean} [config.enabled] @param {number} [config.scrobbleThreshold] @param {number} [config.scrobbleMinMs] @param {object} mysqlConfig */
   constructor(config, mysqlConfig) {
     this.apiKey    = config?.apiKey ?? "";
     this.apiSecret = config?.apiSecret ?? "";
@@ -89,9 +60,7 @@ export class LastFmManager {
     this._mysqlConfig = mysqlConfig;
     this._pool = null;
 
-    /** @type {string|null} Bot user ID — used to isolate rows per-bot in shared databases */
     this.botId = null;
-    /** @type {boolean} Whether the bot_id column exists in the lastfm tables */
     this._hasBotIdColumn = false;
 
     this._userCache = new Map();
@@ -110,10 +79,7 @@ export class LastFmManager {
     }
   }
 
-  /**
-   * Set the bot ID for multi-bot database isolation.
-   * Ensures bot_id column exists in lastfm tables, then clears caches.
-   */
+  /** @async Set the bot ID for multi-bot isolation. @param {string} id */
   async setBotId(id) {
     const changed = this.botId !== id;
     this.botId = id;
@@ -123,12 +89,7 @@ export class LastFmManager {
     }
   }
 
-  /**
-   * Auto-migrate: add bot_id column to lastfm_users and lastfm_stats if missing.
-   * Uses NOT NULL DEFAULT '' because MySQL primary key columns cannot be NULL.
-   * If the column exists but isn't in the PK (previous failed migration with
-   * DEFAULT NULL), fix the NULL values and retry the PK update.
-   */
+  /** @private @async Ensure the bot_id column exists and is part of the primary key. */
   async _ensureBotIdColumn() {
     if (this._hasBotIdColumn) return;
     const pool = await this._getPool();
@@ -194,16 +155,13 @@ export class LastFmManager {
     this._hasBotIdColumn = true;
   }
 
-  /**
-   * Returns SQL WHERE fragment for bot_id filtering.
-   * Uses prepared statement placeholder (?) for safety.
-   * @returns {{ where: string, params: string[] }}
-   */
+  /** @private @returns {{where: string, params: Array}} SQL filter fragment for bot_id. */
   _botIdFilter() {
     if (!this.botId || !this._hasBotIdColumn) return { where: "", params: [] };
     return { where: " AND bot_id = ?", params: [String(this.botId)] };
   }
 
+  /** @private @async Get or create the MySQL connection pool. @returns {Promise<object>} */
   async _getPool() {
     if (this._pool) return this._pool;
     const mysql = await import("mysql2/promise");
@@ -218,6 +176,7 @@ export class LastFmManager {
     return this._pool;
   }
 
+  /** @private @async Create the lastfm_users and lastfm_stats tables if they don't exist. */
   async _initTable() {
     const pool = this._pool;
     await pool.execute(`
@@ -243,6 +202,7 @@ export class LastFmManager {
     `);
   }
 
+  /** @async Get a user's Last.fm session from cache or DB. @param {string} userId @returns {Promise<{sessionKey: string, username: string, scrobbleEnabled: boolean}|null>} */
   async getUser(userId) {
     const cached = this._userCache.get(userId);
     if (cached) return cached;
@@ -270,6 +230,7 @@ export class LastFmManager {
     return data;
   }
 
+  /** @async Save or update a user's Last.fm session. @param {string} userId @param {string} sessionKey @param {string} username @returns {Promise<{sessionKey: string, username: string, scrobbleEnabled: boolean}>} */
   async saveUser(userId, sessionKey, username) {
     const pool = await this._getPool();
     const f = this._botIdFilter();
@@ -298,6 +259,7 @@ export class LastFmManager {
     return data;
   }
 
+  /** @async Remove a user's Last.fm session from cache and DB. @param {string} userId */
   async removeUser(userId) {
     const pool = await this._getPool();
     const f = this._botIdFilter();
@@ -305,6 +267,7 @@ export class LastFmManager {
     this._userCache.delete(userId);
   }
 
+  /** @async Toggle scrobbling for a user. @param {string} userId @param {boolean} enabled */
   async setScrobble(userId, enabled) {
     const pool = await this._getPool();
     const f = this._botIdFilter();
@@ -316,10 +279,7 @@ export class LastFmManager {
     if (cached) cached.scrobbleEnabled = enabled;
   }
 
-  /**
-   * Step 1: Get an auth token. The user must visit the Last.fm auth URL to approve it.
-   * @returns {Promise<string>} The auth token
-   */
+  /** @async Request a Last.fm auth token. @returns {Promise<string>} The auth token. @throws {Error} If Last.fm is not enabled. */
   async getAuthToken() {
     this._assertEnabled();
     const data = await apiCall(
@@ -329,17 +289,12 @@ export class LastFmManager {
     return data.token;
   }
 
-  /**
-   * Get the URL the user should visit to authorize the token.
-   */
+  /** Build the Last.fm auth URL for user authorization. @param {string} token @returns {string} */
   getAuthUrl(token) {
     return `https://www.last.fm/api/auth/?api_key=${this.apiKey}&token=${token}`;
   }
 
-  /**
-   * Step 2: After the user authorizes the token, exchange it for a session key.
-   * @returns {Promise<{ key: string, name: string }>}
-   */
+  /** @async Exchange an auth token for a session. @param {string} token @returns {Promise<object>} The session object with key and name. @throws {Error} If Last.fm is not enabled. */
   async getSession(token) {
     this._assertEnabled();
     const data = await apiCall(
@@ -349,10 +304,7 @@ export class LastFmManager {
     return data.session;
   }
 
-  /**
-   * Send a "now playing" notification to Last.fm (does NOT count as a scrobble).
-   * Called immediately when a track starts.
-   */
+  /** @async Send a now-playing update to Last.fm for a user. @param {string} userId @param {object} track @param {string} track.title @param {string} [track.album] @param {number} [track.trackNumber] */
   async updateNowPlaying(userId, track) {
     if (!this.enabled) return;
     const user = await this.getUser(userId);
@@ -378,10 +330,7 @@ export class LastFmManager {
     }
   }
 
-  /**
-   * Scrobble a track (counts toward the user's Last.fm play counts).
-   * Called after the track has played for >= 50% of its duration (or 4 minutes).
-   */
+  /** @async Scrobble a track for a user. @param {string} userId @param {object} track @param {number} startedAtMs @param {string} track.title @param {string} [track.album] @param {number} [track.trackNumber] */
   async scrobble(userId, track, startedAtMs) {
     if (!this.enabled) return;
     const user = await this.getUser(userId);
@@ -410,11 +359,7 @@ export class LastFmManager {
     }
   }
 
-  /**
-   * Get the user's loved tracks.
-   * @param {number} [limit=20] - Max tracks to return
-   * @returns {Promise<Array<{ artist, name, url, image }>>}
-   */
+  /** @async Get a user's loved tracks. @param {string} userId @param {number} [limit=20] @returns {Promise<Array<{artist: string, name: string, url: string, image: string}>>} @throws {Error} If user not linked. */
   async getLovedTracks(userId, limit = 20) {
     const user = await this.getUser(userId);
     if (!user) throw new Error("NOT_LINKED");
@@ -437,12 +382,7 @@ export class LastFmManager {
     }));
   }
 
-  /**
-   * Get the user's top tracks.
-   * @param {string} userId
-   * @param {string} [period="overall"] - overall | 7day | 1month | 3month | 6month | 12month
-   * @param {number} [limit=20]
-   */
+  /** @async Get a user's top tracks. @param {string} userId @param {string} [period="overall"] @param {number} [limit=20] @returns {Promise<Array<{artist: string, name: string, url: string, playcount: number, image: string}>>} @throws {Error} If user not linked. */
   async getTopTracks(userId, period = "overall", limit = 20) {
     const user = await this.getUser(userId);
     if (!user) throw new Error("NOT_LINKED");
@@ -467,11 +407,7 @@ export class LastFmManager {
     }));
   }
 
-  /**
-   * Get the user's recent tracks.
-   * @param {string} userId
-   * @param {number} [limit=20]
-   */
+  /** @async Get a user's recent tracks. @param {string} userId @param {number} [limit=20] @returns {Promise<Array<{artist: string, name: string, url: string, now: boolean, image: string}>>} @throws {Error} If user not linked. */
   async getRecentTracks(userId, limit = 20) {
     const user = await this.getUser(userId);
     if (!user) throw new Error("NOT_LINKED");
@@ -495,9 +431,7 @@ export class LastFmManager {
     }));
   }
 
-  /**
-   * Get track info (play count, tags, etc.) for the %np embed.
-   */
+  /** @async Get track info from Last.fm. @param {string} artist @param {string} track @param {string} [userId] @returns {Promise<object|null>} Track info object or null. */
   async getTrackInfo(artist, track, userId = null) {
     if (!this.enabled) return null;
 
@@ -522,12 +456,7 @@ export class LastFmManager {
     }
   }
 
-  /**
-   * Love a track on Last.fm for the given user.
-   * @param {string} userId - The Fluxer user ID
-   * @param {string} artist - Track artist
-   * @param {string} track - Track name
-   */
+  /** @async Love a track on Last.fm. @param {string} userId @param {string} artist @param {string} track @throws {Error} If user not linked. */
   async loveTrack(userId, artist, track) {
     if (!this.enabled) return;
     const user = await this.getUser(userId);
@@ -546,12 +475,7 @@ export class LastFmManager {
     );
   }
 
-  /**
-   * Unlove a track on Last.fm for the given user.
-   * @param {string} userId - The Fluxer user ID
-   * @param {string} artist - Track artist
-   * @param {string} track - Track name
-   */
+  /** @async Unlove a track on Last.fm. @param {string} userId @param {string} artist @param {string} track @throws {Error} If user not linked. */
   async unloveTrack(userId, artist, track) {
     if (!this.enabled) return;
     const user = await this.getUser(userId);
@@ -570,15 +494,7 @@ export class LastFmManager {
     );
   }
 
-  /**
-   * Search Last.fm for a freeform track query and return the best match.
-   * Useful for `%play lastfm: kendrick lamar luther` where artist/title
-   * boundaries are ambiguous.
-   *
-   * @param {string} query
-   * @param {number} [limit=10]
-   * @returns {Promise<{ artist: string, name: string, url: string } | null>}
-   */
+  /** @async Search for tracks on Last.fm and score results by relevance. @param {string} query @param {number} [limit=10] @returns {Promise<Array<{artist: string, name: string, url: string, image: string}>|null>} */
   async searchTrack(query, limit = 10) {
     if (!this.enabled) return null;
 
@@ -699,11 +615,12 @@ export class LastFmManager {
   }
 
   /**
-   * Get similar tracks from Last.fm for a given track.
-   * @param {string} artist
-   * @param {string} track
-   * @param {number} [limit=5]
-   * @returns {Promise<Array<{ artist: string, name: string, url: string, match: number }>>}
+   * Get similar tracks for a given artist and track from Last.fm.
+   * @async
+   * @param {string} artist - The artist name.
+   * @param {string} track - The track name.
+   * @param {number} [limit=5] - Maximum number of results.
+   * @returns {Promise<Array<{artist: string, name: string, url: string, match: number}>>} Filtered similar tracks (match > 0.1).
    */
   async getSimilarTracks(artist, track, limit = 5) {
     if (!this.enabled) return [];
@@ -731,9 +648,10 @@ export class LastFmManager {
 
   /**
    * Get detailed artist info from Last.fm.
-   * @param {string} artist - Artist name
-   * @param {string} [userId=null] - Optional user ID for user-specific playcount
-   * @returns {Promise<object|null>} Parsed artist object or null on error
+   * @async
+   * @param {string} artist - The artist name.
+   * @param {string|null} [userId] - Optional user ID to include user playcount.
+   * @returns {Promise<object|null>} Artist info object with name, url, image, tags, bio, stats, similar, and userplaycount, or null.
    */
   async getArtistInfo(artist, userId = null) {
     if (!this.enabled) return null;
@@ -779,10 +697,11 @@ export class LastFmManager {
 
   /**
    * Get detailed album info from Last.fm.
-   * @param {string} artist - Artist name
-   * @param {string} album - Album name
-   * @param {string} [userId=null] - Optional user ID for user-specific playcount
-   * @returns {Promise<object|null>} Parsed album object or null on error
+   * @async
+   * @param {string} artist - The artist name.
+   * @param {string} album - The album name.
+   * @param {string|null} [userId] - Optional user ID to include user playcount.
+   * @returns {Promise<object|null>} Album info object with name, artist, url, image, tags, tracks, and userplaycount, or null.
    */
   async getAlbumInfo(artist, album, userId = null) {
     if (!this.enabled) return null;
@@ -825,10 +744,11 @@ export class LastFmManager {
   }
 
   /**
-   * Get an artist's top tracks from Last.fm.
-   * @param {string} artist - Artist name
-   * @param {number} [limit=10] - Max tracks to return
-   * @returns {Promise<Array<object>>} Array of top tracks
+   * Get top tracks for an artist from Last.fm.
+   * @async
+   * @param {string} artist - The artist name.
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{artist: string, name: string, url: string, playcount: number, image: string}>>} Top tracks.
    */
   async getArtistTopTracks(artist, limit = 10) {
     if (!this.enabled) return [];
@@ -855,10 +775,11 @@ export class LastFmManager {
   }
 
   /**
-   * Get an artist's top albums from Last.fm.
-   * @param {string} artist - Artist name
-   * @param {number} [limit=10] - Max albums to return
-   * @returns {Promise<Array<object>>} Array of top albums
+   * Get top albums for an artist from Last.fm.
+   * @async
+   * @param {string} artist - The artist name.
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, artist: string, url: string, playcount: number, image: string}>>} Top albums.
    */
   async getArtistTopAlbums(artist, limit = 10) {
     if (!this.enabled) return [];
@@ -885,10 +806,11 @@ export class LastFmManager {
   }
 
   /**
-   * Get similar artists from Last.fm.
-   * @param {string} artist - Artist name
-   * @param {number} [limit=10] - Max similar artists to return
-   * @returns {Promise<Array<object>>} Array of similar artists with match percentage
+   * Get similar artists for a given artist from Last.fm.
+   * @async
+   * @param {string} artist - The artist name.
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, url: string, image: string, match: number}>>} Similar artists.
    */
   async getSimilarArtists(artist, limit = 10) {
     if (!this.enabled) return [];
@@ -915,9 +837,10 @@ export class LastFmManager {
 
   /**
    * Get a user's top tags from Last.fm.
-   * @param {string} userId - The Fluxer user ID
-   * @param {number} [limit=20] - Max tags to return
-   * @returns {Promise<Array<object>>} Array of top tags with count
+   * @async
+   * @param {string} userId - The Discord user ID.
+   * @param {number} [limit=20] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, url: string, count: number}>>} Top tags.
    */
   async getUserTopTags(userId, limit = 20) {
     if (!this.enabled) return [];
@@ -945,9 +868,10 @@ export class LastFmManager {
   }
 
   /**
-   * Get detailed tag info from Last.fm.
-   * @param {string} tag - Tag name
-   * @returns {Promise<object|null>} Tag info or null on error
+   * Get information about a specific tag from Last.fm.
+   * @async
+   * @param {string} tag - The tag name.
+   * @returns {Promise<object|null>} Tag info with name, url, reach, count, and summary, or null.
    */
   async getTagInfo(tag) {
     if (!this.enabled) return null;
@@ -980,9 +904,10 @@ export class LastFmManager {
 
   /**
    * Get top tracks for a tag from Last.fm.
-   * @param {string} tag - Tag name
-   * @param {number} [limit=10] - Max tracks to return
-   * @returns {Promise<Array<object>>} Array of tracks
+   * @async
+   * @param {string} tag - The tag name.
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{artist: string, name: string, url: string, playcount: number, image: string}>>} Tag's top tracks.
    */
   async getTagTopTracks(tag, limit = 10) {
     if (!this.enabled) return [];
@@ -1010,9 +935,10 @@ export class LastFmManager {
 
   /**
    * Get top artists for a tag from Last.fm.
-   * @param {string} tag - Tag name
-   * @param {number} [limit=10] - Max artists to return
-   * @returns {Promise<Array<object>>} Array of artists
+   * @async
+   * @param {string} tag - The tag name.
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, url: string, playcount: number, image: string}>>} Tag's top artists.
    */
   async getTagTopArtists(tag, limit = 10) {
     if (!this.enabled) return [];
@@ -1038,12 +964,11 @@ export class LastFmManager {
   }
 
   /**
-   * Get play counts for an artist across multiple users ("who knows").
-   * Processes users in batches of 5 for concurrency control.
-   * @param {string} artist - Artist name
-   * @param {Array<string>} userIds - Array of Fluxer user IDs to check
-   * @returns {Promise<Array<{ userId: string, username: string, playcount: number }>>}
-   *   Sorted by playcount descending, only includes users with playcount > 0
+   * Get who knows an artist among a list of users, ranked by playcount.
+   * @async
+   * @param {string} artist - The artist name.
+   * @param {Array<string>} userIds - Array of Discord user IDs.
+   * @returns {Promise<Array<{userId: string, username: string, playcount: number}>>} Users who know the artist, sorted by playcount descending.
    */
   async getWhoKnows(artist, userIds) {
     if (!this.enabled) return [];
@@ -1091,10 +1016,11 @@ export class LastFmManager {
   }
 
   /**
-   * Compare two Last.fm users by their top artists overlap.
-   * @param {string} userId1 - First Fluxer user ID
-   * @param {string} userId2 - Second Fluxer user ID
-   * @returns {Promise<object|null>} Comparison result or null on error
+   * Compare two users' top artists and compute a match percentage.
+   * @async
+   * @param {string} userId1 - First Discord user ID.
+   * @param {string} userId2 - Second Discord user ID.
+   * @returns {Promise<object|null>} Comparison result with user1, user2, commonArtists, and matchPercentage, or null.
    */
   async compareUsers(userId1, userId2) {
     if (!this.enabled) return null;
@@ -1145,9 +1071,10 @@ export class LastFmManager {
   }
 
   /**
-   * Get a user's weekly chart list from Last.fm.
-   * @param {string} userId - The Fluxer user ID
-   * @returns {Promise<Array<object>>} Array of chart periods
+   * Get the list of weekly chart periods for a user.
+   * @async
+   * @param {string} userId - The Discord user ID.
+   * @returns {Promise<Array<{from: number, to: number}>>} Weekly chart periods with Unix timestamps.
    */
   async getUserWeeklyChartList(userId) {
     if (!this.enabled) return [];
@@ -1173,10 +1100,11 @@ export class LastFmManager {
   }
 
   /**
-   * Search Last.fm for artists matching a query.
-   * @param {string} query - Search query
-   * @param {number} [limit=10] - Max results to return
-   * @returns {Promise<Array<object>>} Array of matching artists
+   * Search for artists on Last.fm.
+   * @async
+   * @param {string} query - The search query.
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, url: string, image: string, listeners: number}>>} Matching artists.
    */
   async searchArtist(query, limit = 10) {
     if (!this.enabled) return [];
@@ -1209,10 +1137,11 @@ export class LastFmManager {
   }
 
   /**
-   * Search Last.fm for albums matching a query.
-   * @param {string} query - Search query
-   * @param {number} [limit=10] - Max results to return
-   * @returns {Promise<Array<object>>} Array of matching albums
+   * Search for albums on Last.fm.
+   * @async
+   * @param {string} query - The search query.
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, artist: string, url: string, image: string}>>} Matching albums.
    */
   async searchAlbum(query, limit = 10) {
     if (!this.enabled) return [];
@@ -1245,34 +1174,29 @@ export class LastFmManager {
   }
 
   /**
-   * Parse a Last.fm music URL and extract artist and track info.
-   * Supports:
-   *   https://www.last.fm/music/Artist
-   *   https://www.last.fm/music/Artist/Track
-   *   https://www.last.fm/music/Artist/Album/Track
-   *   https://www.last.fm/music/Artist/_/Track
-   *
-   * Delegates to the module-level {@link parseLastFmUrl} so the same logic
-   * is reused by `commands/play.mjs` and the instance API.
-   *
-   * @param {string} url
-   * @returns {{ artist: string, track: string|null, album: string|null, url: string } | null}
+   * Parse a Last.fm music URL into artist, track, and album components.
+   * @param {string} url - The Last.fm URL to parse.
+   * @returns {object|null} Parsed components { artist, track, album, url } or null if invalid.
    */
   parseLastFmUrl(url) {
     return parseLastFmUrl(url);
   }
 
   /**
-   * Check if a string is a Last.fm music URL.
-   * @param {string} str
-   * @returns {boolean}
+   * Check whether a string is a valid Last.fm music URL.
+   * @param {string} str - String to check.
+   * @returns {boolean} True if the string is a Last.fm music URL.
    */
   isLastFmUrl(str) {
     return isLastFmUrl(str);
   }
 
   /**
-   * Get the user's Last.fm profile info.
+   * Get a user's Last.fm profile info.
+   * @async
+   * @param {string} userId - The Discord user ID.
+   * @returns {Promise<object>} The Last.fm user object.
+   * @throws {Error} If user is not linked.
    */
   async getUserInfo(userId) {
     const user = await this.getUser(userId);
@@ -1291,11 +1215,11 @@ export class LastFmManager {
   }
 
   /**
-   * Get a list of the user's Last.fm playlists by scraping their profile page.
-   * The Last.fm API removed user.getplaylists, so we fetch the HTML page.
-   *
-   * @param {string} userId
-   * @returns {Promise<Array<{ title: string, trackCount: number, url: string }>>}
+   * Get a user's Last.fm playlists by scraping their profile page.
+   * @async
+   * @param {string} userId - The Discord user ID.
+   * @returns {Promise<Array<{id: string, title: string, url: string, trackCount: number}>>} User's playlists.
+   * @throws {Error} If user is not linked or fetch fails.
    */
   async getPlaylists(userId) {
     const user = await this.getUser(userId);
@@ -1341,13 +1265,13 @@ export class LastFmManager {
   }
 
   /**
-   * Fetch tracks from a specific Last.fm playlist.
-   * Since the API removed playlist.fetch, we scrape the playlist page.
-   *
-   * @param {string} userId
-   * @param {number|string} playlistId - Playlist number (1-based from getPlaylists) or full Last.fm playlist URL
-   * @param {number} [limit=50] - Max tracks to return
-   * @returns {Promise<Array<{ artist, name, url, image }>>}
+   * Get tracks from a user's Last.fm playlist by scraping the playlist page.
+   * @async
+   * @param {string} userId - The Discord user ID.
+   * @param {string|number} playlistId - Playlist number (1-based index) or URL.
+   * @param {number} [limit=50] - Maximum number of tracks.
+   * @returns {Promise<Array<{artist: string, name: string, url: string, image: string}>>} Playlist tracks.
+   * @throws {Error} If user is not linked or playlist not found.
    */
   async getPlaylistTracks(userId, playlistId, limit = 50) {
     const user = await this.getUser(userId);
@@ -1432,11 +1356,13 @@ export class LastFmManager {
   }
 
   /**
-   * Get the user's top albums (for %lastfm play albums).
-   * @param {string} userId
-   * @param {string} [period="overall"] - overall | 7day | 1month | 3month | 6month | 12month
-   * @param {number} [limit=20]
-   * @returns {Promise<Array<{ artist, name, url, playcount, image }>>}
+   * Get a user's top albums from Last.fm.
+   * @async
+   * @param {string} userId - The Discord user ID.
+   * @param {string} [period="overall"] - Time period (7day, 1month, 3month, 6month, 12month, overall).
+   * @param {number} [limit=20] - Maximum number of results.
+   * @returns {Promise<Array<{artist: string, name: string, url: string, playcount: number, image: string}>>} Top albums.
+   * @throws {Error} If user is not linked.
    */
   async getTopAlbums(userId, period = "overall", limit = 20) {
     const user = await this.getUser(userId);
@@ -1463,11 +1389,13 @@ export class LastFmManager {
   }
 
   /**
-   * Get the user's top artists.
-   * @param {string} userId
-   * @param {string} [period="overall"] - overall | 7day | 1month | 3month | 6month | 12month
-   * @param {number} [limit=15]
-   * @returns {Promise<Array<{ name: string, url: string, playcount: number, image: string }>>}
+   * Get a user's top artists from Last.fm.
+   * @async
+   * @param {string} userId - The Discord user ID.
+   * @param {string} [period="overall"] - Time period (7day, 1month, 3month, 6month, 12month, overall).
+   * @param {number} [limit=15] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, url: string, playcount: number, image: string}>>} Top artists.
+   * @throws {Error} If user is not linked.
    */
   async getTopArtists(userId, period = "overall", limit = 15) {
     const user = await this.getUser(userId);
@@ -1493,16 +1421,16 @@ export class LastFmManager {
   }
 
   /**
-   * Fetch tracks from Last.fm by category and return search queries
-   * that can be resolved by the player's worker (YouTube Music search).
-   *
-   * @param {string} userId
-   * @param {"loved"|"top"|"recent"|"playlist"|"albums"} category
-   * @param {object}  [options]
-   * @param {string}  [options.period="overall"] - Period for top tracks (overall|7day|1month|3month|6month|12month)
-   * @param {number}  [options.limit=20]         - Max tracks to return
-   * @param {string|number} [options.playlistId] - Playlist ID or index (required when category="playlist")
-   * @returns {Promise<{ username: string, tracks: Array<{ query: string, artist: string, name: string, url: string }> }>}
+   * Get tracks from a user's Last.fm data for playback based on category.
+   * @async
+   * @param {string} userId - The Discord user ID.
+   * @param {string} category - One of: loved, top, recent, playlist, albums, artists.
+   * @param {object} [options={}] - Additional options.
+   * @param {number} [options.limit] - Maximum number of tracks.
+   * @param {string} [options.period] - Time period for top/albums/artists categories.
+   * @param {string|number} [options.playlistId] - Playlist ID (required for playlist category).
+   * @returns {Promise<{username: string, tracks: Array<{query: string, artist: string, name: string, url: string, image?: string}>}>} Tracks ready for playback.
+   * @throws {Error} If user is not linked or category is unknown.
    */
   async getTracksForPlay(userId, category, options = {}) {
     const user = await this.getUser(userId);
@@ -1585,12 +1513,10 @@ export class LastFmManager {
   }
 
   /**
-   * Get the total lifetime scrobbles across ALL linked Last.fm users.
-   * Syncs each user's scrobble count from the Last.fm API, then sums them up.
-   * Results are cached for 10 minutes to avoid hammering the API.
-   *
-   * @param {number} [concurrency=3] - How many users to sync in parallel
-   * @returns {Promise<number>} Total scrobbles across all linked users
+   * Get total scrobble count across all linked users (cached for 10 minutes).
+   * @async
+   * @param {number} [concurrency=3] - Number of concurrent user syncs.
+   * @returns {Promise<number>} Total scrobble count.
    */
   async getTotalScrobbles(concurrency = 3) {
     if (!this.enabled) return 0;
@@ -1609,9 +1535,7 @@ export class LastFmManager {
     }
   }
 
-  /**
-   * Internal: sync all users' scrobble counts from Last.fm and return the sum.
-   */
+  /** @private @async Sync all users' scrobble counts from Last.fm and cache the total. @param {number} concurrency - Concurrent sync batch size. @returns {Promise<number>} Fresh total scrobble count. */
   async _refreshTotalScrobbles(concurrency) {
     try {
       const pool = await this._getPool();
@@ -1653,8 +1577,9 @@ export class LastFmManager {
   }
 
   /**
-   * Get the total number of linked Last.fm users.
-   * @returns {Promise<number>}
+   * Get the number of linked Last.fm users from the stats table.
+   * @async
+   * @returns {Promise<number>} Linked user count.
    */
   async getLinkedUsersCount() {
     if (!this.enabled) return 0;
@@ -1673,10 +1598,11 @@ export class LastFmManager {
   }
 
   /**
-   * Get the scrobble leaderboard — top users by scrobble_count.
-   * @param {number} [page=0] - 0-based page index
-   * @param {number} [perPage=10] - Users per page
-   * @returns {Promise<{ entries: Array<{ userId, username, scrobbleCount }>, totalUsers: number, page, perPage, totalPages: number }>}
+   * Get the scrobble leaderboard with pagination.
+   * @async
+   * @param {number} [page=0] - Zero-based page index.
+   * @param {number} [perPage=10] - Number of entries per page.
+   * @returns {Promise<{entries: Array<{userId: string, username: string, scrobbleCount: number}>, totalUsers: number, page: number, perPage: number, totalPages: number}>} Leaderboard data.
    */
   async getLeaderboard(page = 0, perPage = 10) {
     if (!this.enabled) return { entries: [], totalUsers: 0, page: 0, perPage: 10, totalPages: 0 };
@@ -1709,11 +1635,10 @@ export class LastFmManager {
   }
 
   /**
-   * Update a user's scrobble_count from their Last.fm profile (user.getinfo).
-   * This syncs the local counter with Last.fm's actual count.
-   * Called lazily when the leaderboard is viewed or the user checks their profile.
-   * @param {string} userId
-   * @returns {Promise<number>} The updated scrobble count
+   * Sync a user's scrobble count from Last.fm to the local database.
+   * @async
+   * @param {string} userId - The Discord user ID.
+   * @returns {Promise<number>} The synced scrobble count.
    */
   async syncUserScrobbleCount(userId) {
     if (!this.enabled) return 0;
@@ -1735,9 +1660,10 @@ export class LastFmManager {
 
   /**
    * Get a user's Last.fm friends list.
-   * @param {string} userId - The Fluxer user ID
-   * @param {number} [limit=20] - Max friends to return
-   * @returns {Promise<Array<object>>} Array of friend objects
+   * @async
+   * @param {string} userId - The Discord user ID.
+   * @param {number} [limit=20] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, url: string, image: string, realname: string, country: string}>>} Friends list.
    */
   async getUserFriends(userId, limit = 20) {
     if (!this.enabled) return [];
@@ -1761,11 +1687,12 @@ export class LastFmManager {
   }
 
   /**
-   * Get a user's weekly artist chart.
-   * @param {string} userId - The Fluxer user ID
-   * @param {number|null} [from=null] - Start timestamp
-   * @param {number|null} [to=null] - End timestamp
-   * @returns {Promise<Array<object>>} Array of artist objects
+   * Get a user's weekly artist chart for a specific time range.
+   * @async
+   * @param {string} userId - The Discord user ID.
+   * @param {number|null} [from] - Start Unix timestamp.
+   * @param {number|null} [to] - End Unix timestamp.
+   * @returns {Promise<Array<{name: string, url: string, playcount: number, image: string}>>} Weekly artist chart.
    */
   async getUserWeeklyArtistChart(userId, from = null, to = null) {
     if (!this.enabled) return [];
@@ -1790,11 +1717,12 @@ export class LastFmManager {
   }
 
   /**
-   * Get a user's weekly track chart.
-   * @param {string} userId - The Fluxer user ID
-   * @param {number|null} [from=null] - Start timestamp
-   * @param {number|null} [to=null] - End timestamp
-   * @returns {Promise<Array<object>>} Array of track objects
+   * Get a user's weekly track chart for a specific time range.
+   * @async
+   * @param {string} userId - The Discord user ID.
+   * @param {number|null} [from] - Start Unix timestamp.
+   * @param {number|null} [to] - End Unix timestamp.
+   * @returns {Promise<Array<{name: string, artist: string, url: string, playcount: number, image: string}>>} Weekly track chart.
    */
   async getUserWeeklyTrackChart(userId, from = null, to = null) {
     if (!this.enabled) return [];
@@ -1820,11 +1748,12 @@ export class LastFmManager {
   }
 
   /**
-   * Get a user's weekly album chart.
-   * @param {string} userId - The Fluxer user ID
-   * @param {number|null} [from=null] - Start timestamp
-   * @param {number|null} [to=null] - End timestamp
-   * @returns {Promise<Array<object>>} Array of album objects
+   * Get a user's weekly album chart for a specific time range.
+   * @async
+   * @param {string} userId - The Discord user ID.
+   * @param {number|null} [from] - Start Unix timestamp.
+   * @param {number|null} [to] - End Unix timestamp.
+   * @returns {Promise<Array<{name: string, artist: string, url: string, playcount: number, image: string}>>} Weekly album chart.
    */
   async getUserWeeklyAlbumChart(userId, from = null, to = null) {
     if (!this.enabled) return [];
@@ -1850,10 +1779,11 @@ export class LastFmManager {
   }
 
   /**
-   * Get top tags for an artist.
-   * @param {string} artist - Artist name
-   * @param {number} [limit=10] - Max tags to return
-   * @returns {Promise<Array<object>>} Array of tag objects
+   * Get top tags for an artist from Last.fm.
+   * @async
+   * @param {string} artist - The artist name.
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, url: string, count: number}>>} Artist's top tags.
    */
   async getArtistTopTags(artist, limit = 10) {
     if (!this.enabled) return [];
@@ -1873,11 +1803,12 @@ export class LastFmManager {
   }
 
   /**
-   * Get top tags for an album.
-   * @param {string} artist - Artist name
-   * @param {string} album - Album name
-   * @param {number} [limit=10] - Max tags to return
-   * @returns {Promise<Array<object>>} Array of tag objects
+   * Get top tags for an album from Last.fm.
+   * @async
+   * @param {string} artist - The artist name.
+   * @param {string} album - The album name.
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, url: string, count: number}>>} Album's top tags.
    */
   async getAlbumTopTags(artist, album, limit = 10) {
     if (!this.enabled) return [];
@@ -1898,11 +1829,12 @@ export class LastFmManager {
   }
 
   /**
-   * Get top tags for a track.
-   * @param {string} artist - Artist name
-   * @param {string} track - Track name
-   * @param {number} [limit=10] - Max tags to return
-   * @returns {Promise<Array<object>>} Array of tag objects
+   * Get top tags for a track from Last.fm.
+   * @async
+   * @param {string} artist - The artist name.
+   * @param {string} track - The track name.
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, url: string, count: number}>>} Track's top tags.
    */
   async getTrackTopTags(artist, track, limit = 10) {
     if (!this.enabled) return [];
@@ -1923,10 +1855,11 @@ export class LastFmManager {
   }
 
   /**
-   * Get top albums for a tag.
-   * @param {string} tag - Tag name
-   * @param {number} [limit=10] - Max albums to return
-   * @returns {Promise<Array<object>>} Array of album objects
+   * Get top albums for a tag from Last.fm.
+   * @async
+   * @param {string} tag - The tag name.
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, artist: string, url: string, playcount: number, image: string}>>} Tag's top albums.
    */
   async getTagTopAlbums(tag, limit = 10) {
     if (!this.enabled) return [];
@@ -1948,10 +1881,11 @@ export class LastFmManager {
   }
 
   /**
-   * Get top artists by country.
-   * @param {string} country - Country name
-   * @param {number} [limit=10] - Max artists to return
-   * @returns {Promise<Array<object>>} Array of artist objects
+   * Get top artists for a country from Last.fm.
+   * @async
+   * @param {string} country - The country name.
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, url: string, listeners: number, image: string}>>} Country's top artists.
    */
   async getGeoTopArtists(country, limit = 10) {
     if (!this.enabled) return [];
@@ -1972,10 +1906,11 @@ export class LastFmManager {
   }
 
   /**
-   * Get top tracks by country.
-   * @param {string} country - Country name
-   * @param {number} [limit=10] - Max tracks to return
-   * @returns {Promise<Array<object>>} Array of track objects
+   * Get top tracks for a country from Last.fm.
+   * @async
+   * @param {string} country - The country name.
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, artist: string, url: string, listeners: number, image: string}>>} Country's top tracks.
    */
   async getGeoTopTracks(country, limit = 10) {
     if (!this.enabled) return [];
@@ -1997,9 +1932,10 @@ export class LastFmManager {
   }
 
   /**
-   * Get global trending tracks from Last.fm charts.
-   * @param {number} [limit=10] - Max tracks to return
-   * @returns {Promise<Array<object>>} Array of trending track objects
+   * Get the global top tracks chart from Last.fm.
+   * @async
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, artist: string, url: string, listeners: number, playcount: number, image: string}>>} Global top tracks.
    */
   async getChartTopTracks(limit = 10) {
     if (!this.enabled) return [];
@@ -2021,9 +1957,10 @@ export class LastFmManager {
   }
 
   /**
-   * Get global trending artists from Last.fm charts.
-   * @param {number} [limit=10] - Max artists to return
-   * @returns {Promise<Array<object>>} Array of trending artist objects
+   * Get the global top artists chart from Last.fm.
+   * @async
+   * @param {number} [limit=10] - Maximum number of results.
+   * @returns {Promise<Array<{name: string, url: string, listeners: number, playcount: number, image: string}>>} Global top artists.
    */
   async getChartTopArtists(limit = 10) {
     if (!this.enabled) return [];
@@ -2044,11 +1981,12 @@ export class LastFmManager {
   }
 
   /**
-   * Get play counts for a specific track across multiple users ("who knows track").
-   * @param {string} artist - Artist name
-   * @param {string} track - Track name
-   * @param {Array<string>} userIds - Array of Fluxer user IDs to check
-   * @returns {Promise<Array<{ userId: string, username: string, playcount: number }>>}
+   * Get who knows a specific track among a list of users, ranked by playcount.
+   * @async
+   * @param {string} artist - The artist name.
+   * @param {string} track - The track name.
+   * @param {Array<string>} userIds - Array of Discord user IDs.
+   * @returns {Promise<Array<{userId: string, username: string, playcount: number}>>} Users who know the track, sorted by playcount descending.
    */
   async getWhoKnowsTrack(artist, track, userIds) {
     if (!this.enabled) return [];
@@ -2096,11 +2034,12 @@ export class LastFmManager {
   }
 
   /**
-   * Get play counts for a specific album across multiple users ("who knows album").
-   * @param {string} artist - Artist name
-   * @param {string} album - Album name
-   * @param {Array<string>} userIds - Array of Fluxer user IDs to check
-   * @returns {Promise<Array<{ userId: string, username: string, playcount: number }>>}
+   * Get who knows a specific album among a list of users, ranked by playcount.
+   * @async
+   * @param {string} artist - The artist name.
+   * @param {string} album - The album name.
+   * @param {Array<string>} userIds - Array of Discord user IDs.
+   * @returns {Promise<Array<{userId: string, username: string, playcount: number}>>} Users who know the album, sorted by playcount descending.
    */
   async getWhoKnowsAlbum(artist, album, userIds) {
     if (!this.enabled) return [];
@@ -2148,11 +2087,11 @@ export class LastFmManager {
   }
 
   /**
-   * Find users with similar top artists (affinity).
-   * For each pair of users, compute overlap of their top artists.
-   * @param {Array<string>} userIds - Array of Fluxer user IDs
-   * @param {number} [limit=10] - Max results to return
-   * @returns {Promise<Array<object>>} Array of affinity results
+   * Compute affinity (common artists) between multiple users.
+   * @async
+   * @param {Array<string>} userIds - Array of Discord user IDs (minimum 2).
+   * @param {number} [limit=10] - Maximum number of affinity pairs to return.
+   * @returns {Promise<Array<{users: string[], userIds: string[], matchCount: number, commonArtists: Array<{name: string, url: string, playcount: number}>}>>} Affinity pairs sorted by match count descending.
    */
   async getAffinity(userIds, limit = 10) {
     if (!this.enabled) return [];
@@ -2212,10 +2151,11 @@ export class LastFmManager {
   }
 
   /**
-   * Get artist crowns for a user — artists where they are the #1 listener in the server.
-   * @param {string} userId - The Fluxer user ID
-   * @param {Array<string>} userIds - Array of Fluxer user IDs in the server
-   * @returns {Promise<Array<object>>} Array of crown objects
+   * Get a user's "crowns" — artists where they have the highest playcount among the given users.
+   * @async
+   * @param {string} userId - The Discord user ID to check crowns for.
+   * @param {Array<string>} userIds - Array of all Discord user IDs to compare against.
+   * @returns {Promise<Array<{artist: string, artistUrl: string, userPlaycount: number, nextBest: object|null, image: string}>>} Crown entries sorted by user playcount descending.
    */
   async getCrowns(userId, userIds) {
     if (!this.enabled) return [];
@@ -2253,14 +2193,12 @@ export class LastFmManager {
     } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
   }
 
+  /** @private Throw if Last.fm integration is not enabled/configured. @throws {Error} If apiKey or apiSecret is missing. */
   _assertEnabled() {
     if (!this.enabled) throw new Error("Last.fm integration is not configured (missing apiKey/apiSecret).");
   }
 
-  /**
-   * Increment per-user scrobble_count after a successful scrobble.
-   * Non-blocking — fire-and-forget.
-   */
+  /** @private Increment a user's scrobble_count in the database by 1 (fire-and-forget). @param {string} userId - The Discord user ID. */
   _incrementScrobbleCount(userId) {
     if (!userId) return;
     const f = this._botIdFilter();
@@ -2272,12 +2210,14 @@ export class LastFmManager {
     }).catch(e => { logger.warn("[LastFm] scrobble_count pool acquire failed:", e?.message); });
   }
 
+  /** @private Build a search query string from artist and title for playback. @param {string} artist - The artist name. @param {string} title - The track title. @returns {string} Combined search query. */
   _buildPlayQuery(artist, title) {
     const cleanArtist = String(artist ?? "").trim();
     const cleanTitle = String(title ?? "").trim();
     return [cleanTitle, cleanArtist].filter(Boolean).join(" ");
   }
 
+  /** @private Extract the best artist name from a track object, checking multiple possible fields. @param {object} track - Track object. @returns {string} The artist name. */
   _extractArtist(track) {
     const preservedArtist = track?.lastfm?.artist
       ?? track?.requestedArtist
@@ -2289,6 +2229,7 @@ export class LastFmManager {
       ?? "Unknown Artist";
   }
 
+  /** @private Extract the best track title from a track object, checking multiple possible fields. @param {object} track - Track object. @returns {string} The track title. */
   _extractTitle(track) {
     return track?.lastfm?.name
       ?? track?.requestedTitle
@@ -2297,6 +2238,7 @@ export class LastFmManager {
       ?? "Unknown Track";
   }
 
+  /** @private Extract the duration in seconds from a track object, supporting number (ms), object with .seconds, ISO 8601, or plain seconds. @param {object} track - Track object. @returns {string|number} Duration in seconds, or empty string if unavailable. */
   _extractDurationSec(track) {
     if (!track.duration) return "";
     if (typeof track.duration === "object" && track.duration.seconds) return track.duration.seconds;
@@ -2309,9 +2251,10 @@ export class LastFmManager {
   }
 
   /**
-   * Should this track be scrobbled based on play duration?
-   * Last.fm rule: scrobble if played for >= 50% of track duration OR >= 4 minutes,
-   * and the track must be >= 30 seconds long.
+   * Determine whether a track should be scrobbled based on playback time and duration.
+   * @param {object} track - Track object with duration and title/artist info.
+   * @param {number} playedMs - How many milliseconds the track has been playing.
+   * @returns {boolean} True if the track meets the scrobble threshold.
    */
   shouldScrobble(track, playedMs) {
     const durationMs = typeof track.duration === "object" && track.duration.seconds
@@ -2332,15 +2275,9 @@ export class LastFmManager {
 }
 
 /**
- * Parse a Last.fm music URL and extract artist and track info.
- * Supports:
- *   https://www.last.fm/music/Artist
- *   https://www.last.fm/music/Artist/Track
- *   https://www.last.fm/music/Artist/Album/Track
- *   https://www.last.fm/music/Artist/_/Track
- *
- * @param {string} url
- * @returns {{ artist: string, track: string|null, album: string|null, url: string } | null}
+ * Parse a Last.fm music URL into its components.
+ * @param {string} url - The Last.fm URL to parse.
+ * @returns {{artist: string, track: string|null, album: string|null, url: string}|null} Parsed components, or null if not a valid Last.fm music URL.
  */
 export function parseLastFmUrl(url) {
   try {
@@ -2372,15 +2309,15 @@ export function parseLastFmUrl(url) {
 }
 
 /**
- * Check if a string is a Last.fm music URL.
- * @param {string} str
- * @returns {boolean}
+ * Check whether a string is a valid Last.fm music URL.
+ * @param {string} str - String to check.
+ * @returns {boolean} True if the string is a Last.fm URL with a /music/ path.
  */
 export function isLastFmUrl(str) {
   if (!str || typeof str !== "string") return false;
   try {
     const u = new URL(str);
-    return /^(?:www\.)?last\.fm$/i.test(u.hostname) && /^\/music\//.test(u.pathname);
+    return /^(?:www\.)?last\.fm$/i.test(u.hostname) && /^\/music\//i.test(u.pathname);
   } catch (e) {
     return false;
   }

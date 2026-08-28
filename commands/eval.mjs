@@ -1,6 +1,6 @@
 /**
- * @file eval command — Owner-only JavaScript code evaluation with sensitive-data redaction
  * @module commands/eval
+ * @description Owner-only command to evaluate arbitrary JavaScript code and display the result.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -10,10 +10,7 @@ import { logger } from "../src/constants/Logger.mjs";
 import { inspect } from "node:util";
 import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 
-
-/**
- * Matches any key that *contains* one of these strings (case-insensitive).
- */
+/** @private @type {string[]} Property name substrings that indicate sensitive/secret data. */
 const RESTRICTED = [
   "token",
   "config",
@@ -24,21 +21,23 @@ const RESTRICTED = [
   "secret",
   "authorization",
   "mysql",
-  "nodelink",
+  "lavalink",
   "_nl",
   "credential",
   "apikey",
   "webhook",
 ];
 
+/** @private @type {number} Maximum recursion depth when scanning for sensitive keys. */
 const SCAN_DEPTH = 6;
 
 /**
- * Check whether an object contains sensitive keys at any nesting level.
- * @param {object} obj - The object to scan
- * @param {number} [level=0] - Current recursion depth
- * @param {WeakSet} [visited=new WeakSet()] - Visited object tracker
- * @returns {boolean}
+ * @private
+ * Recursively check whether an object contains keys matching RESTRICTED substrings.
+ * @param {*} obj - The object to scan.
+ * @param {number} [level=0] - Current recursion depth.
+ * @param {WeakSet} [visited=new WeakSet()] - Already-visited objects to prevent cycles.
+ * @returns {boolean} True if any sensitive key is found.
  */
 function hasSensitive(obj, level = 0, visited = new WeakSet()) {
   if (level >= SCAN_DEPTH || typeof obj !== "object" || obj === null) return false;
@@ -52,11 +51,12 @@ function hasSensitive(obj, level = 0, visited = new WeakSet()) {
 }
 
 /**
- * Recursively redact sensitive keys from an object, replacing values with "[REDACTED]".
- * @param {object} obj - The object to scrub
- * @param {number} [level=0] - Current recursion depth
- * @param {WeakSet} [visited=new WeakSet()] - Visited object tracker
- * @returns {object} The scrubbed object (or the original if no changes were needed)
+ * @private
+ * Recursively redact sensitive keys in an object, replacing values with "[REDACTED]".
+ * @param {*} obj - The object to clean.
+ * @param {number} [level=0] - Current recursion depth.
+ * @param {WeakSet} [visited=new WeakSet()] - Already-visited objects to prevent cycles.
+ * @returns {*} The cleaned object (original reference if no modifications, new object otherwise).
  */
 function removeSensitive(obj, level = 0, visited = new WeakSet()) {
   if (level >= SCAN_DEPTH || typeof obj !== "object" || obj === null) return obj;
@@ -85,9 +85,12 @@ function removeSensitive(obj, level = 0, visited = new WeakSet()) {
 }
 
 /**
- * Await a value if it is a Promise, then redact sensitive data and format for display.
- * @param {*} value - The value to clean and format
- * @returns {Promise<string>} Formatted, safe string representation
+ * @private
+ * @async
+ * Sanitize a value for safe display: await promises, redact sensitive keys,
+ * inspect with node:util, and escape Discord markup characters.
+ * @param {*} value - The raw eval result.
+ * @returns {Promise<string>} The sanitized output string.
  */
 async function clean(value) {
   if (value instanceof Promise) value = await value;
@@ -111,9 +114,11 @@ async function clean(value) {
 }
 
 /**
- * Determine whether a code string is a single expression (no semicolons, blocks, or declarations).
- * @param {string} code - The code to inspect
- * @returns {boolean}
+ * @private
+ * Determine whether a code string is a single expression (vs. statements).
+ * Used to decide whether to wrap in a return statement.
+ * @param {string} code - The code to analyze.
+ * @returns {boolean} True if the code appears to be a single expression.
  */
 function isSingleExpression(code) {
   const trimmed = code.trim();
@@ -137,8 +142,12 @@ function isSingleExpression(code) {
 }
 
 /**
- * Executes the code and returns the raw data instead of a formatted string,
- * so we can paginate it inside Embeds later.
+ * @private
+ * @async
+ * Execute a JavaScript expression/statement in a sandboxed async context.
+ * @param {string} expression - The code to evaluate.
+ * @param {object} context - The `this` context for the eval.
+ * @returns {Promise<{output: string, isError: boolean, type: string, elapsed: number}>} Eval result.
  */
 async function runEval(expression, context) {
   const start = Date.now();
@@ -163,6 +172,7 @@ async function runEval(expression, context) {
   return { output, isError, type, elapsed };
 }
 
+/** @type {CommandBuilder} @description Command definition for the eval command (owner-only). */
 export const command = new CommandBuilder()
     .setName("eval")
     .setDescription("Evaluates JavaScript code (Owner Only).")
@@ -175,9 +185,12 @@ export const command = new CommandBuilder()
     );
 
 /**
- * Execute the eval command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @async
+ * Run handler for the eval command.
+ * Evaluates the provided JavaScript expression, sanitizes the output,
+ * and displays it in a paginated embed with reaction navigation.
+ * @param {object} msg - The command message wrapper.
+ * @param {object} data - Parsed command data containing the expression option.
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {
@@ -204,6 +217,13 @@ export async function run(msg, data) {
   const totalPages = chunks.length;
   let currentPage = 0;
 
+  /**
+   * @private
+   * Build the embed payload for a specific page of the eval output.
+   * @param {number} pageIdx - Zero-based page index.
+   * @param {boolean} [expired=false] - Whether the reaction controls have expired.
+   * @returns {object} Embed payload for message reply/edit.
+   */
   const buildPageContent = (pageIdx, expired = false) => {
     const title = isError
         ? this.t(msg, "responses.eval.resultTitleError")
@@ -239,6 +259,11 @@ export async function run(msg, data) {
     await replyMsg.message.react(emoji).catch(() => {});
   }
 
+  /**
+   * @private
+   * Remove all navigation reactions from the eval reply message.
+   * @returns {Promise<void>}
+   */
   const clearReactions = async () => {
     try {
       await replyMsg.message.removeAllReactions();
@@ -251,6 +276,11 @@ export async function run(msg, data) {
     }
   };
 
+  /**
+   * @private
+   * Reset the emoji removal timeout timer for the eval session.
+   * @returns {void}
+   */
   const resetTimer = () => {
     clearTimeout(emojiTimeout);
     emojiTimeout = setTimeout(async () => {

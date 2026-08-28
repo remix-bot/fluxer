@@ -1,6 +1,6 @@
 /**
- * @file stats.mjs — Display bot statistics — uptime, servers, users, and memory usage
- * @module commands.stats
+ * @module commands/stats
+ * @description Display bot statistics including guild count, user count, uptime, and ping.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -9,6 +9,10 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { logger } from "../src/constants/Logger.mjs";
 
+/**
+ * @type {CommandBuilder}
+ * @description Command definition for the stats command.
+ */
 export const command = new CommandBuilder()
     .setName("stats")
     .setDescription("Display stats about the bot like the uptime.", "commands.stats")
@@ -21,6 +25,13 @@ let cachedUserCount = null;
 let cacheExpiresAt  = 0;
 let inflightPromise = null;
 
+/**
+ * Run tasks with a concurrency limit.
+ * @private
+ * @param {number} limit - Maximum number of concurrent tasks.
+ * @param {Function[]} tasks - Array of task functions to execute.
+ * @returns {Promise<unknown[]>} Array of task results.
+ */
 async function pool(limit, tasks) {
   const results   = [];
   const executing = new Set();
@@ -33,6 +44,13 @@ async function pool(limit, tasks) {
   return results;
 }
 
+/**
+ * Fetch the total member count for a guild by paginating through members.
+ * @private
+ * @async
+ * @param {object} guild - The Discord guild object.
+ * @returns {Promise<number>} Total member count.
+ */
 async function fetchGuildMemberCount(guild) {
   try {
     let after = undefined;
@@ -58,6 +76,13 @@ async function fetchGuildMemberCount(guild) {
   }
 }
 
+/**
+ * Refresh the cached total user count across all guilds.
+ * @private
+ * @async
+ * @param {object} client - The Discord client instance.
+ * @returns {Promise<number>} Total user count.
+ */
 async function refreshUserCount(client) {
   const guilds = [...client.guilds.values()];
   const counts = await pool(10, guilds.map(g => () => fetchGuildMemberCount(g)));
@@ -67,12 +92,24 @@ async function refreshUserCount(client) {
   return cachedUserCount;
 }
 
+/**
+ * Get the total user count, using cache if still valid or refreshing if expired.
+ * @private
+ * @param {object} client - The Discord client instance.
+ * @returns {Promise<number>} Total user count.
+ */
 function getUserCount(client) {
   if (cachedUserCount !== null && Date.now() < cacheExpiresAt) return Promise.resolve(cachedUserCount);
   if (!inflightPromise) inflightPromise = refreshUserCount(client);
   return inflightPromise;
 }
 
+/**
+ * Count players with active voice connections.
+ * @private
+ * @param {Map} playerMap - The player map from PlayerManager.
+ * @returns {number} Number of live connected players.
+ */
 function getLivePlayerCount(playerMap) {
   let live = 0;
 
@@ -101,6 +138,13 @@ function getLivePlayerCount(playerMap) {
 let cachedGuildCount    = null;
 let guildCacheExpiresAt = 0;
 
+/**
+ * Get the total guild count via REST API with caching.
+ * @private
+ * @async
+ * @param {object} client - The Discord client instance.
+ * @returns {Promise<number>} Total guild count.
+ */
 async function getGuildCount(client) {
   if (cachedGuildCount !== null && Date.now() < guildCacheExpiresAt) {
     return cachedGuildCount;
@@ -133,6 +177,27 @@ async function getGuildCount(client) {
   }
 }
 
+/**
+ * Build the stats embed with all bot information.
+ * @private
+ * @param {Function} t - Translation function.
+ * @param {object} msg - The command message wrapper.
+ * @param {object} stats - Statistics data object.
+ * @param {number} stats.guildCount - Number of guilds.
+ * @param {number} stats.userCount - Number of users.
+ * @param {number} stats.playerCount - Number of active players.
+ * @param {number} stats.scrobbleCount - Total Last.fm scrobbles.
+ * @param {number} stats.linkedUsers - Number of Last.fm linked users.
+ * @param {number} stats.ping - Bot response ping in ms.
+ * @param {string} stats.uptime - Formatted uptime string.
+ * @param {string} stats.comHash - Git commit hash.
+ * @param {string} stats.comLink - Git commit link URL.
+ * @param {string} [stats.reason] - Last restart reason.
+ * @param {string} [stats.footer] - Custom footer text.
+ * @param {boolean} stats.loading - Whether data is still loading.
+ * @param {boolean} stats.lastfmEnabled - Whether Last.fm integration is enabled.
+ * @returns {EmbedBuilder} The constructed embed.
+ */
 function buildEmbed(t, msg, { guildCount, userCount, playerCount, scrobbleCount, linkedUsers, ping, uptime, comHash, comLink, reason, footer, loading, lastfmEnabled }) {
   const num = (v) => Utils.formatNumber(v);
   const ld  = (v) => loading ? "..." : v;
@@ -171,8 +236,11 @@ function buildEmbed(t, msg, { guildCount, userCount, playerCount, scrobbleCount,
 }
 
 /**
- * Execute the stats command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * Run handler for the stats command.
+ * Collects bot statistics and displays them in an embed, initially with loading
+ * state then edited with the real data.
+ *
+ * @param {object} message - The command message wrapper.
  * @returns {Promise<void>}
  */
 export async function run(message) {

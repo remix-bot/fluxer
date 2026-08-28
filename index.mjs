@@ -1,6 +1,7 @@
 /**
- * @file index.mjs — Fluxer Remix bot — main entry point; initializes client, voice, commands, players, and event handlers
  * @module index
+ * @description Entry point for the Fluxer music bot. Creates the {@link Remix} instance,
+ * sets up process-level error handlers, and registers signal-based graceful shutdown.
  */
 
 import * as fs from "fs";
@@ -15,8 +16,7 @@ import { RemoteSettingsManager } from "./src/Settings.mjs";
 import { PlayerManager } from "./src/PlayerManager.mjs";
 import childProcess from "node:child_process";
 import { getVoiceManager } from "@fluxerjs/voice";
-import { FluxerRevoice } from "./src/constants/FluxerRevoice.mjs";
-import { MoonlinkManager } from "./src/MoonlinkManager.mjs";
+import { LavalinkManager } from "./src/LavalinkManager.mjs";
 import { Dashboard } from "./src/dashboard/Dashboard.mjs";
 import { Locale } from "./src/constants/Locale.mjs";
 import { VoiceStateCache } from "./src/constants/VoiceStateCache.mjs";
@@ -26,13 +26,11 @@ import { FluxerListManager } from "./src/FluxerListManager.mjs";
 import { TrackOptionsManager } from "./src/TrackOptionsManager.mjs";
 
 /**
- * Create a backward-compatible "bot view" wrapper around VoiceStateCache.
- *
- * The old code used separate Maps for observedVoiceUsers and observedVoiceBots.
- * VoiceStateCache merged both into one object, but the default iterator/size
- * only exposes human users.  This wrapper provides the Map-like interface that
- * iterates BOT entries instead, so code that does `for (const [k, v] of observedVoiceBots)`
- * still gets bot data, not human data.
+ * Create a Map-like view object that proxies bot voice-state lookups
+ * through the VoiceStateCache's bot-specific methods.
+ * @param {object} voiceCache - The {@link VoiceStateCache} instance.
+ * @returns {Map} A Map-like object with `size`, `get`, `set`, `has`, `delete`,
+ *   `forEach`, and iterator methods backed by the voice cache.
  */
 function createBotView(voiceCache) {
   return {
@@ -52,9 +50,16 @@ function createBotView(voiceCache) {
 
 
 /**
- * Remix class.
+ * @class
+ * @description Main bot class. Orchestrates client, settings, players, lavalink,
+ * gateway events, commands, and 24/7 voice channel management.
  */
 export class Remix {
+  /**
+   * Bootstrap the entire bot: load config, create Discord client, initialise
+   * settings/commands/players/dashboard, set up event handlers, load modules,
+   * and log in to Discord.
+   */
   constructor() {
     let config;
     try {
@@ -77,7 +82,7 @@ export class Remix {
 
     setGlobalColor(config.embedColor);
 
-    this.locale = new Locale();
+    this.locale = new Locale(typeof config.prefix === "string" && config.prefix ? config.prefix : "%");
     this.locale.load();
 
     this.dashboard = new Dashboard(this, {
@@ -214,8 +219,8 @@ export class Remix {
     };
     commands.owners = config.owners ?? [];
 
-    this.moonlink = null;
-    let moonlinkInitialised = false;
+    this.lavalink = null;
+    let lavalinkInitialised = false;
 
     this.voiceCache = new VoiceStateCache({ maxUsers: 50_000, maxBots: 10_000 });
 
@@ -252,31 +257,23 @@ export class Remix {
         const cleaned = rawArr
             .map(id => cleanId(id))
             .filter(id => id.length >= 15 && id.length <= 22);
+
+        if (cleaned.length > 1) {
+          // Only 1 channel per guild supported. Keep first, drop the rest.
+          serverSettings.set("stay_247", cleaned.slice(0, 1));
+          logger.settings(
+            `[settings] Trimmed stay_247 for guild ${guildId}: had ${cleaned.length} channels, kept first 1.`
+          );
+          continue;
+        }
+
         const needsSave = JSON.stringify(cleaned) !== JSON.stringify(val);
         if (needsSave || !Array.isArray(val)) {
           const newVal = cleaned.length > 0 ? cleaned : "none";
           serverSettings.set("stay_247", newVal);
-          if (cleaned.length === 0 && (val && val !== "none")) {
-            serverSettings.set("stay_247_mode", "off");
-          }
           logger.settings(
             `[settings] Cleaned stay_247 for guild ${guildId}: ${JSON.stringify(val)} → ${JSON.stringify(newVal)}`
           );
-        }
-
-        const modesMap = serverSettings.get("stay_247_modes");
-        if (!modesMap || typeof modesMap !== "object") {
-          const guildMode = serverSettings.get("stay_247_mode") ?? "off";
-          if (guildMode && guildMode !== "off" && cleaned.length > 0) {
-            const newModes = {};
-            for (const chId of cleaned) {
-              newModes[chId] = guildMode;
-            }
-            serverSettings.set("stay_247_modes", newModes);
-            logger.settings(
-              `[settings] Migrated stay_247_mode → stay_247_modes for guild ${guildId}: ${guildMode} → ${JSON.stringify(newModes)}`
-            );
-          }
         }
       }
 
@@ -303,30 +300,14 @@ export class Remix {
       this.dashboard.setBotId(botId);
       this.trackOptions.setBotId(botId);
 
-      if (!moonlinkInitialised) {
-        moonlinkInitialised = true;
-        this.moonlink = new MoonlinkManager(config.nodelink ?? {}, client);
-
-        this.moonlink.on("ready", (sessionId) => {
-          logger.moonlink(`[Moonlink] Session ready: ${sessionId}`);
-          for (const player of this.players?.playerMap?.values() ?? []) {
-            player._nl.sessionId = sessionId;
-          }
-          this.playerContext.moonlink = this.moonlink;
+      if (!lavalinkInitialised) {
+        lavalinkInitialised = true;
+        this.lavalink = new LavalinkManager(config.nodelink ?? {}, client, { id: botId, username: client.user?.username ?? "bot" });
+        this.lavalink.on("ready", () => {
+          logger.lavalink("[Lavalink] Session ready");
         });
-
-        try {
-          await this.moonlink.init(botId);
-        } catch (e) {
-          logger.error("[Moonlink] Init failed:", e.message);
-        }
-      } else {
-        logger.moonlink("[Moonlink] Reconnected — re-initialising node session.");
-        try {
-          await this.moonlink.init(botId);
-        } catch (e) {
-          logger.error("[Moonlink] Re-init failed:", e.message);
-        }
+        await this.lavalink.init();
+        this.playerContext.lavalink = this.lavalink;
       }
 
       this.gatewayHandler.onReady();
@@ -348,15 +329,12 @@ export class Remix {
       }
     });
 
-    this.revoice = FluxerRevoice.getInstance(client);
     client._remix = this;
 
     this.playerContext = {
       client:   this.client,
       config,
-      nodelink: config.nodelink,
-      moonlink: null,
-      revoice:  this.revoice,
+      lavalink: null,
     };
     this.players = new PlayerManager(settings, commands, {
       config,
@@ -616,18 +594,9 @@ export class Remix {
   }
 
   /**
-   * Attach error handlers on all @fluxerjs/ws shard WebSockets.
-   *
-   * When the Fluxer gateway's underlying WebSocket closes (e.g. network
-   * blip, server restart), @fluxerjs/ws throws a "WebSocket error" from
-   * its internal error handler.  Without an .on("error") listener on the
-   * WS object itself, this escalates to Node's uncaughtException handler,
-   * producing a noisy stack trace even though the bot recovers
-   * automatically via gateway reconnection.
-   *
-   * By attaching .on("error") handlers here, we catch the error at the
-   * source, log a single clean line, and prevent it from reaching
-   * uncaughtException.
+   * Attach proactive error handlers to WebSocket sockets/shards to prevent
+   * unhandled crashes from WebSocket transport errors. Re-armed periodically.
+   * @private
    */
   _attachWsErrorHandlers() {
     try {
@@ -704,6 +673,12 @@ export class Remix {
     }
   }
 
+  /**
+   * Mark a channel leave as intentional (user-initiated) to prevent
+   * the 24/7 auto-rejoin system from rejoining.
+   * @param {string} channelId - The channel ID.
+   * @param {number|null} [ttlMs=null] - Time-to-live in ms (default: config.timers.intentionalLeaveTTL or 10s).
+   */
   markIntentionalLeave(channelId, ttlMs = null) {
     const cleanChId = cleanId(channelId);
     if (!cleanChId) return;
@@ -716,12 +691,12 @@ export class Remix {
   }
 
   /**
-   * Spawn a player for a voice channel without requiring a user message.
-   * Used by the 24/7 settings command and the leave command's auto-rejoin.
-   *
-   * @param {string} guildId   — The guild ID
-   * @param {string} channelId — The voice channel ID to join
-   * @returns {Promise<Player>} The created player
+   * Spawn a new Player for a channel. Used by 24/7 boot recovery and enable247.
+   * Guards against duplicate players, missing channels, and pending joins.
+   * @param {string} guildId - The guild ID.
+   * @param {string} channelId - The target voice channel ID.
+   * @returns {Promise<Player>} The spawned and connected player.
+   * @throws {Error} If channel not found, not a voice channel, or join fails.
    */
   async _spawnPlayer(guildId, channelId) {
     const cleanGuildId   = cleanId(guildId);
@@ -733,7 +708,7 @@ export class Remix {
         ?? this.players.getPlayerByGuildAndChannel(cleanGuildId, cleanChannelId);
     if (existing) return existing;
 
-    if (!this.moonlink) throw new Error("Audio node not ready yet — try again in a moment");
+    if (!this.lavalink) throw new Error("Audio node not ready yet — try again in a moment");
 
     const channel = this.client?.channels?.get?.(cleanChannelId);
     if (!channel) throw new Error("Channel not found");
@@ -748,9 +723,7 @@ export class Remix {
     const player = new Player(this.config.token, {
       client:             this.client,
       config:             this.config,
-      nodelink:           this.config.nodelink,
-      moonlink:           this.moonlink ?? null,
-      revoice:            this.revoice ?? null,
+      lavalink:           this.lavalink ?? null,
       settingsMgr:        this.settingsMgr ?? this.settings ?? null,
       getPrefix:          (guildId) => this.handler.getPrefix(guildId),
       observedVoiceUsers: this.observedVoiceUsers ?? null,
@@ -768,8 +741,8 @@ export class Remix {
 
     player.on("autoleave", () => {
       const mode = player._get247Mode();
-      if (mode === "auto" || mode === "on") {
-        logger.inactivity(`[_spawnPlayer] autoleave suppressed for 24/7 ${mode} channel ${cleanChannelId} (guild ${cleanGuildId})`);
+      if (mode === "on") {
+        logger.inactivity(`[_spawnPlayer] autoleave suppressed for 24/7 channel ${cleanChannelId} (guild ${cleanGuildId})`);
         return;
       }
       if (player._hasHumansInChannel()) {
@@ -875,6 +848,15 @@ export class Remix {
     }
   }
 
+  /**
+   * Leave a voice channel programmatically. Removes 24/7 if active,
+   * destroys the player, and optionally sends a confirmation message.
+   * @param {string} channelId - The channel ID to leave.
+   * @param {string} guildId - The guild ID.
+   * @param {object} [message=null] - Optional message for reply confirmation.
+   * @param {boolean} [force=false] - Whether to force-leave regardless of 24/7 status.
+   * @returns {Promise<boolean>} True on success.
+   */
   async leaveChannel(channelId, guildId, message, force = false) {
     const cleanChId = cleanId(channelId);
     const cleanGuildId = cleanId(guildId);
@@ -886,24 +868,6 @@ export class Remix {
         : Array.isArray(raw)
             ? new Set(raw.map(id => cleanId(id)).filter(Boolean))
             : new Set([cleanId(raw)]);
-
-    const channelMode = channels.has(cleanChId) ? get247ChannelMode(set, cleanChId) : "off";
-
-    if (channels.has(cleanChId) && !force) {
-      if (channelMode === "auto") {
-        if (message) {
-          const prefix = this.handler.getPrefix(cleanGuildId);
-          const guildIdForLocale = message?.channel?.channel?.guildId ?? message?.guildId ?? cleanGuildId;
-          message.replyEmbed(
-              this.locale.translate(guildIdForLocale, "responses.leave.autoRejoinHint", {
-                channel: cleanChId,
-                prefix
-              })
-          );
-        }
-        return false;
-      }
-    }
 
     if (channels.has(cleanChId)) {
       channels.delete(cleanChId);
@@ -931,18 +895,22 @@ export class Remix {
     return true;
   }
 
-  /** @param {import("./src/MessageHandler.mjs").Message} message */
+  /**
+   * Get the server settings for the guild associated with a message.
+   * @param {object} message - The incoming message wrapper.
+   * @returns {object} The {@link ServerSettings} for the guild, or a fallback.
+   */
   getSettings(message) {
     const guildId = message?.channel?.channel?.guildId ?? message?.guildId ?? null;
     return this.settingsMgr.getServer(guildId);
   }
 
   /**
-   * Translate a key for the guild of the given message.
-   * @param {import("./src/MessageHandler.mjs").Message} message
-   * @param {string} key
-   * @param {Object} [data={}]
-   * @returns {string}
+   * Shorthand to translate a locale key for the guild of a given message.
+   * @param {object} message - The message wrapper (used to resolve guild ID).
+   * @param {string} key - The locale key.
+   * @param {object} [data={}] - Interpolation data.
+   * @returns {string} The localised string.
    */
   t(message, key, data = {}) {
     const guildId = message?.channel?.channel?.guildId
@@ -952,18 +920,25 @@ export class Remix {
     return this.locale.translate(guildId, key, data);
   }
 
+  /**
+   * Get or create a player for the given message context.
+   * Delegates to {@link PlayerManager.getPlayer}.
+   * @param {object} message - The message wrapper.
+   * @param {boolean} promptJoin - Whether to prompt the user to join a voice channel.
+   * @param {boolean} verifyUser - Whether to verify the user is in a voice channel.
+   * @param {boolean} shouldJoin - Whether to auto-join the voice channel.
+   * @returns {Promise<object>} The Player instance.
+   */
   getPlayer(message, promptJoin, verifyUser, shouldJoin) {
     return this.players.getPlayer(message, promptJoin, verifyUser, shouldJoin);
   }
 
   /**
-   * Return all guilds the given user shares with this bot.
-   * No longer gated behind settingsMgr — works with or without MySQL.
-   * Uses cached members first, falls back to observedVoiceUsers, then
-   * an async REST fetch for large guilds where the member cache is incomplete.
-   *
-   * @param {import("@fluxerjs/core").User} user
-   * @returns {Promise<Array<{name:string,id:string,icon:string|null,voiceChannels:Array}>>}
+   * Get all servers the bot and the given user share (i.e. the user is a member).
+   * Used by the dashboard to determine which servers a user can manage.
+   * @async
+   * @param {object} user - The Discord user.
+   * @returns {Promise<Array<object>>} Array of server summary objects with channels.
    */
   async getSharedServers(user) {
     if (!user) return [];
@@ -1017,6 +992,13 @@ export class Remix {
     return shared;
   }
 
+  /**
+   * Create and attach a paginated message to the given message.
+   * @param {string} form - The form/locale key for the page title.
+   * @param {string} content - The full content to paginate.
+   * @param {object} msg - The message wrapper.
+   * @param {number} linesPerPage - Maximum lines per page.
+   */
   pagination(form, content, msg, linesPerPage) {
     this.messages.initPagination(
         new PageBuilder(content).setForm(form).setMaxLines(linesPerPage),
@@ -1028,6 +1010,12 @@ export class Remix {
 
 const remix = new Remix();
 
+/**
+ * Check whether an error is a known-ignorable WebSocket transport crash
+ * from the fluxer.js ws or undici internals.
+ * @param {Error} err - The error to check.
+ * @returns {boolean} True if the error should be silently recovered.
+ */
 const isIgnorableWsCrash = (err) => {
   const message = String(err?.message ?? err ?? "");
   const stack = String(err?.stack ?? "");
@@ -1065,8 +1053,31 @@ process.on("uncaughtExceptionMonitor", (err, origin) => {
   logger.error("Error:", err, origin);
 });
 
+/**
+ * Graceful shutdown handler: destroys all active players, closes
+ * Lavalink, Redis, and Dashboard DB connections, then exits.
+ * @async
+ * @returns {Promise<void>}
+ */
 const saveAndExit = async () => {
   logger.recovery("\n[Shutdown] Cleaning up before exit...");
+  try {
+    if (remix.players?.playerMap) {
+      for (const [channelId, player] of remix.players.playerMap) {
+        try { player.destroy(); } catch (e) { logger.warn("[Shutdown] Player destroy error:", e?.message); }
+      }
+      remix.players.playerMap.clear();
+    }
+  } catch (e) {
+    logger.warn("[Shutdown] Player cleanup error:", e?.message);
+  }
+  try {
+    if (remix.lavalink) {
+      remix.lavalink.destroy();
+    }
+  } catch (e) {
+    logger.warn("[Shutdown] Lavalink cleanup error:", e?.message);
+  }
   try {
     if (remix.dashboard?.redis?.destroy) {
       await remix.dashboard.redis.destroy();

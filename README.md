@@ -18,10 +18,10 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/Node.js-%3E%3D22.0.0-339933.svg" alt="Node.js">
+  <img src="https://img.shields.io/badge/Node.js-%3E%3D22.13.0-339933.svg" alt="Node.js">
   <img src="https://img.shields.io/badge/ESM-Modules-yellow.svg" alt="ESM">
-  <img src="https://img.shields.io/badge/Audio-moonlink.js-orange.svg" alt="moonlink.js">
-  <img src="https://img.shields.io/badge/Voice-revoice.js-9b59b6.svg" alt="revoice.js">
+  <img src="https://img.shields.io/badge/Audio-lavalink--client%20%2B%20NodeLink-orange.svg" alt="lavalink-client">
+  <img src="https://img.shields.io/badge/Voice-%40fluxerjs%2Fvoice%20(LiveKit)-9b59b6.svg" alt="@fluxerjs/voice">
   <img src="https://img.shields.io/badge/Database-MySQL-4479A1.svg" alt="MySQL">
   <img src="https://img.shields.io/badge/Maintained%3F-Yes-green.svg" alt="Maintained">
 </p>
@@ -31,6 +31,7 @@
 ## Table of Contents
 
 - [About The Project](#-about-the-project)
+- [How Audio Playback Works](#-how-audio-playback-works)
 - [Features](#-features)
 - [Getting Started (Users)](#-getting-started-users)
 - [Commands](#-commands)
@@ -49,32 +50,59 @@
 
 ## About The Project
 
-Remix is a free and open-source music bot for [Fluxer](https://fluxer.app), built with [`@fluxerjs/core`](https://github.com/fluxerjs/core) and powered by [`moonlink.js`](https://github.com/ShadowLp174/moonlink.js) for seamless, high-quality audio streaming. It uses [`revoice.js`](https://www.npmjs.com/package/revoice.js) for LiveKit voice connections and audio playback, and [`@fluxerjs/voice`](https://github.com/fluxerjs/voice) for native voice channel integration alongside the Moonlink Lavalink proxy.
+Remix is a free and open-source music bot for [Fluxer](https://fluxer.app), built with [`@fluxerjs/core`](https://github.com/fluxerjs/core) for the Fluxer API and [`@fluxerjs/voice`](https://github.com/fluxerjs/voice) for LiveKit voice connections. Track search and streaming are handled by [`lavalink-client`](https://www.npmjs.com/package/lavalink-client) talking to a [NodeLink](https://github.com/PerformanC/NodeLink) audio node (Lavalink-compatible), and the bot publishes Opus audio to LiveKit as a participant — with a custom WebM/Opus pipeline (zero-re-encode passthrough and remux where possible).
 
 We believe music features shouldn't be locked behind paywalls — **all commands on Remix are 100% free and always will be.**
 
 ---
 
+## How Audio Playback Works
+
+Understanding the pipeline helps when debugging or contributing:
+
+```
+%play → LavalinkManager.search()  ──►  NodeLink (track resolution only)
+      → Player queue → FluxerAudioBridge.play(voiceConnection, track)
+            ├─ /v4/trackstream → direct WebM/Opus passthrough (no re-encode)
+            ├─ /v4/loadstream  → magic-byte sniffing:
+            │     • WebM (1A45DFA3) → passthrough to LiveKit
+            │     • OggS            → OggDemuxer → WebMOpusMuxer (remux, no re-encode)
+            │     • raw PCM         → OpusEncoder (opusscript / @discordjs/opus)
+            │                          → WebMOpusMuxer → LiveKit
+            └─ conn.play() → @fluxerjs/voice LiveKit connection (bot publishes audio
+                             as a LiveKit participant)
+```
+
+A few things worth knowing:
+
+- **No Lavalink players are created.** NodeLink is used for search and its REST stream/lyrics endpoints (`/v4/loadstream`, `/v4/trackstream`, `/v4/loadlyrics`); playback itself is pure LiveKit publishing.
+- **Seek / pause / resume** work by stopping the current stream and re-requesting it at an offset from NodeLink.
+- **Filters** (bassboost, nightcore, etc.) are applied server-side by NodeLink, so they take effect on the next track that starts.
+- **Volume** is applied client-side by the LiveKit connection (1–200).
+- Radio metadata (StreamTitle) is read with **ffprobe** (`ffprobe-static`).
+
+---
+
 ## Features
 
-- **High-quality audio playback** via moonlink.js (Lavalink proxy), revoice.js (LiveKit voice + MediaPlayer), and `@fluxerjs/voice`
-- **Multi-source search** — YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, and direct URL support
-- **24/7 mode** — keep the bot in a voice channel permanently, with auto-recovery on restart
-- **Session recovery** — active players and queues survive bot restarts and crash recovery
-- **Interactive emoji player** — reaction-based control panel with play, pause, skip, volume, shuffle, and more
-- **Lyrics** — fetch synced lyrics via NodeLink
+- **High-quality audio playback** — NodeLink streaming with a zero-re-encode WebM/Opus pipeline, published over LiveKit
+- **Multi-source search** — YouTube, YT Music, Spotify, SoundCloud, Deezer, Apple Music, Tidal, Bandcamp and 40+ more provider prefixes, plus direct URLs
+- **24/7 mode** — keep the bot in a voice channel permanently, with staggered auto-rejoin on boot and rejoin retries on connection loss
+- **Interactive emoji player** — reaction-based control panel with live progress, lyrics viewer, and a filter submenu
+- **Lyrics** — synced lyrics via NodeLink
 - **Radio stations** — built-in support for custom radio streams with keyword-based search
-- **Last.fm integration** — auto-scrobble songs, play loved/top/recent tracks, love/unlove tracks, view top artists, and view your Last.fm profile
+- **Last.fm integration** — account linking, scrobbling, now-playing, play loved/top/recent/albums, whoknows, crowns, compare, leaderboards, and profiles
 - **Autoplay** — automatically play similar tracks when the queue ends (powered by Last.fm)
 - **Seek** — jump to a specific position in the current track
-- **Track options** — set custom start/end times per track (like old iTunes), great for album compilations and hidden tracks
+- **Track options** — set custom start/end times per track, great for album compilations and hidden tracks
 - **Queue move** — reorder tracks by moving them to a different position
-- **Server settings** — per-guild configuration for prefix, volume, locale, 24/7 channels, and more
-- **Web dashboard** — optional browser-based control panel with Redis-backed sessions and Fluxer OAuth2 login
-- **Multi-language support** — available in English, Arabic, German, Kurdish (Sorani), and Brazilian Portuguese
+- **Audio filters** — bassboost, speed, nightcore and more (applied server-side by NodeLink)
+- **Server settings** — per-guild configuration (prefix, volume, locale, 24/7 channels, …) stored in MySQL
+- **Dashboard backend** — optional Redis-RPC backend that an external web frontend uses to monitor players and control playback remotely
+- **Multi-language support** — English, Arabic, German, Kurdish (Sorani), and Brazilian Portuguese
 - **Configurable logging** — granular control over which log categories appear in the console
-- **Graceful shutdown** — saves active session state on SIGINT/SIGTERM for seamless reboot recovery
-- **Module system** — pluggable module architecture for extending bot functionality
+- **Graceful shutdown** — destroys players and closes MySQL/Redis/NodeLink sessions cleanly on SIGINT/SIGTERM/SIGUSR2
+- **Module system** — pluggable module architecture for extending bot functionality (`storage/modules.json`)
 
 ---
 
@@ -132,13 +160,12 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 | `invite` | Get the bot invite link | `%invite` | `addbot`, `remix` |
 | `support` | Get an invite to the support server | `%support` | `server` |
 | `lastfm` | Link Last.fm, toggle scrobbling, view profile, love/unlove tracks, top artists, play tracks, leaderboard | `%lastfm link` / `%lastfm love` / `%lastfm artists` / `%lastfm lb` | `lf`, `lfm` |
+| `vote` | Check FluxerList voters for the bot | `%vote` | |
 | `reload` | Reload commands or modules at runtime (owner) | `%reload` | |
 | `servers` | List servers the bot is in (owner) | `%servers` | |
 | `eval` | Evaluate JavaScript (owner only) | `%eval 1+1` | |
 | `debug` | Debug voice connections and player state (owner) | `%debug voice` | |
 | `test` | Show voice channel user counts (owner) | `%test` | |
-
----
 
 ## Self-Hosting The Bot
 
@@ -152,13 +179,13 @@ The fastest way to self-host Remix is with Docker. Everything — the bot, MySQL
    ```bash
    git clone https://github.com/remix-bot/fluxer.git
    cd fluxer/docker
-   cp .env.example .env
    cp config_example.json config.json
+   cp .env.example .env   # optional — compose has working defaults
    ```
 
-2. **Edit `.env`** — set your bot token and MySQL passwords.
+2. **Edit `config.json`** — fill in your bot token, MySQL credentials (defaults match the compose MySQL service), NodeLink details (defaults match the compose NodeLink service), and your owner IDs. Spotify/Deezer/Apple Music credentials are configured on the **NodeLink side** (`nodelink.config.json`), not in the bot config.
 
-3. **Edit `config.json`** — fill in your bot token, Fluxer OAuth2 credentials (if using the dashboard), and any other settings. The Docker config already points MySQL/Redis/NodeLink at the correct service hostnames.
+3. **Edit `.env`** (optional) — MySQL passwords, host port mappings (`WEB_PORT`, `NODELINK_PORT`), and timezone.
 
 4. **Start everything:**
    ```bash
@@ -170,30 +197,30 @@ The fastest way to self-host Remix is with Docker. Everything — the bot, MySQL
    docker compose logs -f bot
    ```
 
-That's it. The bot will start, connect to MySQL (auto-creates the settings table), connect to NodeLink, and log in to Fluxer.
+That's it. The bot will start, connect to MySQL (Last.fm and track-options tables are auto-created), connect to NodeLink, and log in to Fluxer.
 
 #### Docker file structure
 
 ```
 docker/
-├── Dockerfile              # Multi-stage build (Node 22 + FFmpeg + tini)
-├── docker-entrypoint.sh    # Config validation on first boot
+├── Dockerfile              # Multi-stage build (Node 22 + tini, non-root user, healthcheck)
+├── docker-entrypoint.sh    # Writes config.json from CONFIG_JSON env var on first boot
 ├── docker-compose.yml      # bot + MySQL + Redis + NodeLink
+├── .env.example            # Compose env template (MySQL creds, ports, TZ)
 ├── config_example.json     # Docker-friendly config template
-├── .env.example            # Secrets template
-├── nodelink.config.json    # NodeLink audio node config
 ├── config.json             # You create this (gitignored)
-└── .env                    # You create this (gitignored)
+├── .env                    # You create this (gitignored)
+└── nodelink.config.json    # NodeLink audio node config
 ```
 
 #### Docker services
 
 | Service | Container | Port | Purpose |
 | :--- | :--- | :--- | :--- |
-| `bot` | remix-bot | 8080 → 80 | The Remix bot + web dashboard |
-| `mysql` | remix-mysql | — | Per-guild settings storage |
-| `redis` | remix-redis | — | Dashboard sessions + pub/sub (optional) |
-| `nodelink` | remix-nodelink | 3000 | Lavalink-compatible audio node |
+| `bot` | remix-bot | `${WEB_PORT:-8080}` → 80 | The Remix bot (+ optional dashboard backend) |
+| `mysql` | remix-mysql | — | Settings, Last.fm users, and track options storage |
+| `redis` | remix-redis | — | Dashboard RPC pub/sub (optional) |
+| `nodelink` | remix-nodelink | `${NODELINK_PORT:-3000}` | Lavalink-compatible audio node |
 
 #### Useful Docker commands
 
@@ -234,11 +261,10 @@ The entrypoint will write it to `/app/config.json` on first boot if no config fi
 
 #### Prerequisites
 
-- **Node.js** >= 22.0.0 (required by moonlink.js v5)
+- **Node.js** >= 22.13.0
 - **MySQL** 8.0+ with JSON column support
-- **[NodeLink](https://github.com/PerformanC/NodeLink)** instance (Lavalink proxy for audio)
-- **FFmpeg** (installed automatically via `ffmpeg-static`)
-- **Redis** (optional, required for the web dashboard)
+- **[NodeLink](https://github.com/PerformanC/NodeLink)** instance (Lavalink-compatible audio node)
+- **Redis** (optional — required only for the dashboard backend)
 
 ### Installation
 
@@ -262,8 +288,7 @@ The entrypoint will write it to `/app/config.json` on first boot if no config fi
    - `mysql` — your MySQL connection details (host, port, user, password, database)
    - `prefix` — the command prefix (default: `%`)
    - `nodelink` — your NodeLink instance connection details
-   - `spotify` — (optional) Spotify API credentials for Spotify track support
-   - `geniusToken` — *(deprecated, unused)* was previously for lyrics; lyrics are now fetched via NodeLink
+   - `lastfm` — (optional) Last.fm API credentials for scrobbling/autoplay features
    - `owners` — array of Fluxer user IDs with owner-only command access
 
 4. **Set up the database:** *(See [Database Setup](#-database-setup) below)*
@@ -280,7 +305,7 @@ The entrypoint will write it to `/app/config.json` on first boot if no config fi
 
 ### Database Setup
 
-Remix requires a MySQL database to store per-guild settings.
+Remix requires a MySQL database to store per-guild settings and user data.
 
 1. Create a dedicated database for Remix:
    ```sql
@@ -298,7 +323,7 @@ Remix requires a MySQL database to store per-guild settings.
    }
    ```
 
-3. Create the required table:
+3. Create the required `settings` table:
    ```sql
    CREATE TABLE `settings` (
      `id` varchar(70) NOT NULL,
@@ -306,58 +331,39 @@ Remix requires a MySQL database to store per-guild settings.
    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
    ```
 
-4. Create the track options table (for the `%trackopt` command):
-   ```sql
-   CREATE TABLE IF NOT EXISTS `track_options` (
-     `id` INT AUTO_INCREMENT PRIMARY KEY,
-     `user_id` VARCHAR(32) NOT NULL,
-     `track_identifier` VARCHAR(512) NOT NULL,
-     `track_title` VARCHAR(512) NOT NULL DEFAULT '',
-     `start_ms` INT UNSIGNED NOT NULL DEFAULT 0,
-     `end_ms` INT UNSIGNED NOT NULL DEFAULT 0,
-     `bot_id` VARCHAR(32) NOT NULL DEFAULT '',
-     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-     UNIQUE KEY `uq_user_track_bot` (`user_id`, `track_identifier`, `bot_id`)
-   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-   ```
-   This table is auto-created on startup if it doesn't exist, so manual creation is optional.
+4. Everything else is **auto-created on startup** if missing:
+   - `track_options` — per-user per-track start/end times (`%trackopt`)
+   - `lastfm_users` — Last.fm session keys and scrobble opt-ins
+   - `lastfm_stats` — stored scrobble/link counts
 
-5. *(Optional)* If migrating from the legacy settings system, run:
+5. *(Optional)* If you need to clone or repair the settings table across bot IDs, run:
    ```bash
    npm run migrate
    ```
 
 ### Dashboard Setup (Optional)
 
-Remix includes a web dashboard for controlling the bot through a browser interface.
+Remix ships the **backend half** of a web dashboard: a Redis-RPC service that an external frontend project talks to. There is no HTTP server or web UI in this repository.
 
-1. Enable the dashboard in `config.json`:
+1. Enable it in `config.json`:
    ```json
    "dashboard": {
      "enabled": true,
-     "redis": { "url": "redis://localhost:6379" },
-     "fluxer": {
-       "id": "your-fluxer-oauth2-app-id",
-       "secret": "your-fluxer-oauth2-client-secret",
-       "redirectUri": "https://your-backend.com/auth/fluxer"
-     }
+     "redis": { "url": "redis://localhost:6379" }
    }
    ```
 
-2. Create a Fluxer OAuth2 application at Settings > application.
+2. How it works:
+   - The bot listens on Redis pub/sub channels (`request` / `response` / `info`) and answers JSON-RPC style requests with an `id` for correlation.
+   - Supported requests: `fetchPlayers`, `user`, `sharedServers`, `server`, `allServers`, `commands`, and `function` (remote actions: `join`, `pausePlayback`, `resumePlayback`, `skip`, `volume`, `addToQueue`, `voiceState`, `leave`, `testConnection`).
+   - Player updates are broadcast (debounced) on per-bot/per-player Redis channels so the frontend can render live state.
+   - **Login flow:** the external frontend writes login codes into the MySQL `login_codes` table; the bot verifies them with bcrypt hashes and marks them verified. Player control additionally requires the user to be in the same voice channel (owners are exempt).
 
-3. For HTTPS support, configure SSL in `config.json`:
-   ```json
-   "ssl": {
-     "private": "/etc/letsencrypt/live/your.domain/privkey.pem",
-     "cert": "/etc/letsencrypt/live/your.domain/fullchain.pem",
-     "useSSL": true,
-     "httpPort": 80
-   }
-   ```
+3. **Security note:** the RPC channel has **no shared secret** — anything that can publish to your Redis can invoke the remote actions. Keep Redis network-isolated (as the Docker setup does) and don't expose it publicly.
 
-### Configuration Reference
+---
+
+## Configuration Reference
 
 Key configuration options in `config.json`:
 
@@ -367,28 +373,19 @@ Key configuration options in `config.json`:
 | `prefix` | string | `%` | Default command prefix |
 | `embedColor` | string | `0xe9196c` | Hex color for embed messages |
 | `owners` | string[] | `[]` | User IDs with owner privileges |
-| `playerAFKTimeout` | number | `60000` | Inactivity timeout in ms before bot leaves |
+| `playerAFKTimeout` | number | `60000` | Inactivity timeout in ms before the player panel session ends |
 | `customStatsFooter` | string | — | Custom text shown in the `%stats` embed footer |
-| `webPort` | number | `80` | Port for the web dashboard |
-| `helpCatalog` | bool | `true` | Enable categorized help command |
-| `helpPagination` | bool | `true` | Enable paginated help output |
+| `presenceInterval` | number | `30000` | Interval in ms for rotating bot presence status |
+| `presenceContents` | array | `[]` | Presence status messages to cycle through (strings or objects with `text`/`emoji_name`/`emoji_id`/`activity`) |
 | `mysql` | object | — | **Required.** MySQL connection settings |
 | `nodelink` | object | — | NodeLink connection (`host`, `port`, `password`, `requestTimeout`) |
-| `spotify` | object | — | Spotify API credentials (`clientId`, `clientSecret`) |
-| `geniusToken` | string | — | *(Deprecated, unused)* Previously for lyrics; lyrics are now fetched via NodeLink |
 | `lastfm` | object | — | Last.fm integration (`apiKey`, `apiSecret`, `scrobbleThreshold`, `scrobbleMinMs`) |
-| `dashboard` | object | — | Dashboard config: `enabled`, `redis`, `fluxer` (OAuth2) |
-| `dashboardUrl` | string | — | URL the dashboard is accessible from |
-| `sessionSecret` | string | — | Secret for Express.js session middleware |
-| `logging` | object | — | Per-category log toggle (`enabled` + 12 sub-categories, see config example) |
-| `timers` | object | — | Timing values for inactivity, recovery, rejoin, etc. (14 sub-keys) |
-| `cache` | object | — | Guild and member cache (`guilds.enabled`, `guilds.max`, `members.enabled`, `members.max`) |
+| `fluxerlist` | object | — | FluxerList integration (`apiKey`, `serverId`, `botId`, `serverSlug`, `botSlug`) |
+| `dashboard` | object | — | Dashboard backend: `enabled`, `redis.url` |
 | `radio` | array | `[]` | Custom radio station definitions |
-| `ssl` | object | — | SSL certificate paths (`private`, `cert`), `useSSL`, `httpPort` |
-| `presenceInterval` | number | — | Interval in ms for rotating bot presence status |
-| `presenceContents` | string[] | `[]` | Presence status messages to cycle through |
+| `logging` | object | — | Per-category log toggles: `enabled`, `warn`, and 14 categories (`player`, `inactivity`, `aloneCheck`, `voiceState`, `voice247`, `voice`, `mediaplayer`, `commands`, `guild`, `recovery`, `settings`, `lavalink`, `dashboard`, `redis`) |
+| `timers` | object | — | Timing values in ms: `inactivityTimeout`, `aloneCheckInterval`, `aloneCheckDebounce`, `rejoin247Delay`, `leave247RejoinDelay`, `playerUpdateInterval`, `searchSessionTimeout`, `playerSessionTimeout`, `intentionalLeaveTTL` |
 | `fluxer.js` | object | — | Fluxer.js REST options (`timeout`, `retries`) |
-| `fluxer-api` | object | — | Fluxer API endpoint configuration |
 
 ---
 
@@ -396,63 +393,69 @@ Key configuration options in `config.json`:
 
 ```
 fluxer/
-├── index.mjs                    # Entry point — Remix class, boot sequence, error handling
+├── index.mjs                    # Entry point — Remix class, boot sequence, alone-check,
+│                                #   presence rotation, error handling, graceful shutdown
 ├── config_example.json          # Configuration template
 ├── package.json
-├── commands/                    # Command modules (one file per command)
-│   ├── play.mjs                 # Play a track or playlist
+├── commands/                    # 37 command modules (one file per command)
+│   ├── play.mjs                 # Play a track or playlist (Last.fm categories, providers)
 │   ├── player.mjs               # Interactive emoji control panel with live progress
-│   ├── settings.mjs             # Per-guild settings management (prefix, 247, volume, etc.)
+│   ├── settings.mjs             # Per-guild settings management (+ prefix/247 shortcuts)
 │   ├── lyrics.mjs               # Synced lyrics from NodeLink
 │   ├── filter.mjs               # Audio filter controls
 │   ├── radio.mjs                # Radio station management
-│   ├── debug.mjs                # Voice connection debugger (owner only, paginated)
-│   ├── stats.mjs                # Bot stats with live player count
-│   ├── lastfm.mjs               # Last.fm account linking, scrobbling, and profile
+│   ├── debug.mjs                # Voice connection debugger (owner only)
+│   ├── lastfm.mjs               # Last.fm linking, scrobbling, profiles, leaderboards
 │   ├── trackopt.mjs             # Per-track start/end time options (set/get/remove/list)
 │   └── ...                      # All other commands
 ├── src/
-│   ├── CommandHandler.mjs       # Command loader, prefix manager, registry
-│   ├── MessageHandler.mjs       # Message parsing, embed builder, pagination, help
-│   ├── PlayerManager.mjs        # Spawns and manages per-channel Player instances
-│   ├── Player.mjs               # Core player — queue, playback, filters, events
-│   ├── MoonlinkManager.mjs      # Moonlink.js (Lavalink) node session manager
-│   ├── Settings.mjs             # RemoteSettingsManager + ServerSettings export
-│   ├── GatewayHandler.mjs       # Raw WS events, voice-state tracking, presence rotation
-│   ├── RecoveryManager.mjs      # Session persistence, crash recovery, 24/7 auto-join
-│   ├── LastFmManager.mjs        # Last.fm API client — auth, scrobbling, user data, stored scrobble stats
-│   ├── TrackOptionsManager.mjs  # Per-user track start/end time preferences (auto-seek, auto-skip)
-│   ├── Utils.mjs                # Shared utilities
-│   ├── worker.mjs               # Background task worker
-│   ├── probe.mjs                # FFprobe wrapper for audio stream info
+│   ├── CommandHandler.mjs       # Command framework — builder, options, requirements,
+│   │                            #   cooldowns, prefix manager, loader
+│   ├── MessageHandler.mjs       # Replies/embeds, reaction observers, pagination, help
+│   ├── PlayerManager.mjs        # Player lifecycle, VC resolution & permission checks,
+│   │                            #   dashboard broadcasts, Last.fm scrobble wiring
+│   ├── Player.mjs               # Core per-channel player — queue, playback, filters,
+│   │                            #   search sessions, autoplay, error circuit breaker
+│   ├── FluxerAudioBridge.mjs    # Audio engine — NodeLink REST streams → sniff/remux/
+│   │                            #   encode → LiveKit publishing
+│   ├── LavalinkManager.mjs      # lavalink-client wrapper (NodeLink mode) — search,
+│   │                            #   voice payload caching, node readiness
+│   ├── GatewayHandler.mjs       # Raw WS events, voice-state routing, guild lifecycle,
+│   │                            #   24/7 rejoin & rejoin retries
+│   ├── LastFmManager.mjs        # Last.fm API client — auth, scrobbling, user data,
+│   │                            #   MySQL persistence (lastfm_users / lastfm_stats)
+│   ├── FluxerListManager.mjs    # FluxerList voters API client (5-min TTL cache)
+│   ├── TrackOptionsManager.mjs  # Per-user per-track start/end times (MySQL + LRU cache)
+│   ├── Settings.mjs             # RemoteSettingsManager — MySQL-backed per-guild settings
+│   │                            #   with debounced JSON_SET writes
+│   ├── Utils.mjs                # Shared utilities (IDs, durations, markdown, progress bar)
+│   ├── probe.mjs                # ffprobe wrapper for audio stream info (radio metadata)
 │   ├── constants/
 │   │   ├── Logger.mjs           # Structured logger with per-category control
 │   │   ├── Locale.mjs           # i18n translation engine
-│   │   ├── Helpers247.mjs       # 24/7 mode helper utilities
-│   │   ├── providers.mjs        # Audio source provider definitions
+│   │   ├── Helpers247.mjs       # 24/7 mode helpers
+│   │   ├── UI.mjs               # Emoji + UI constants
+│   │   ├── providers.mjs        # 45+ audio source provider definitions
+│   │   ├── VoiceStateCache.mjs  # Dual LRU voice-state caches (humans / bots)
+│   │   ├── VoiceStateResolver.mjs # Voice-state normalization + humans-in-channel check
 │   │   └── audio/
-│   │       ├── StreamMerger.mjs # Audio stream merging utilities
-│   │       └── Tuna.mjs         # Audio filter/effect processing
+│   │       └── WebMOpusMuxer.mjs # Streaming EBML/Matroska muxer (Opus → WebM for LiveKit)
 │   └── dashboard/
-│       ├── Dashboard.mjs        # Web dashboard server (Express + WebSocket)
-│       ├── DatabaseManager.mjs  # Dashboard database query manager
-│       └── RedisHandler.mjs     # Redis session and pub/sub handler
+│       ├── Dashboard.mjs        # Dashboard backend — Redis RPC, player/user serializers,
+│       │                        #   remote-control actions with authorization checks
+│       ├── DatabaseManager.mjs  # mysql2 pool + parameterized queries + bcrypt helpers
+│       └── RedisHandler.mjs     # Redis pub/sub RPC transport with reconnect handling
 ├── settings/
-│   ├── Settings.mjs             # Abstract SettingsManager base class
-│   ├── migrate.mjs              # Legacy-to-remote settings migration script
-│   ├── runnables.mjs            # Runnable task definitions
+│   ├── Settings.mjs             # Re-export of src/Settings.mjs classes
+│   ├── migrate.mjs              # One-shot settings table clone/repair tool
+│   ├── runnables.mjs            # Setting validators (prefix, pfp, stay_247)
 │   └── README.md                # Settings system documentation
-├── docker/                      # Docker self-hosting (Dockerfile, compose, configs)
-│   ├── Dockerfile               # Multi-stage build (Node 22 + FFmpeg + tini)
-│   ├── docker-entrypoint.sh     # Config validation on first boot
-│   ├── docker-compose.yml       # bot + MySQL + Redis + NodeLink
-│   ├── config_example.json      # Docker-friendly config template
-│   ├── .env.example             # Secrets template
-│   └── nodelink.config.json     # NodeLink audio node config
+├── docker/                      # Docker self-hosting (Dockerfile, compose, entrypoint,
+│                                #   config templates, .env.example)
 └── storage/
     ├── defaults.json            # Default per-guild settings template
-    ├── modules.json             # Plugin module registry
-    ├── stats.json               # Runtime statistics
+    ├── modules.json             # Plugin module registry (empty by default)
+    ├── stats.json               # Static counters
     └── locales/bot/             # Translation files
         ├── en.json
         ├── ar-SA.json
@@ -487,9 +490,7 @@ To add a new language, place a JSON file in `storage/locales/bot/` following the
 | :--- | :--- | :--- |
 | `npm start` | `node index.mjs` | Start the bot |
 | `npm run dev` | `node --inspect index.mjs --trace-warnings` | Start with Node.js inspector |
-| `npm run commands` | `node index.mjs usage` | Generate command usage documentation |
-| `npm run defaultsSync` | `node index.mjs sreload` | Sync default settings to all guilds |
-| `npm run migrate` | `node settings/migrate.mjs` | Run the legacy settings migration |
+| `npm run migrate` | `node settings/migrate.mjs` | Clone/repair the remote settings table |
 
 ---
 
@@ -502,12 +503,13 @@ To add a new language, place a JSON file in `storage/locales/bot/` following the
 
 **Powered by:**
 - [`@fluxerjs/core`](https://github.com/fluxerjs/core) — Fluxer API client
-- [`revoice.js`](https://www.npmjs.com/package/revoice.js) — LiveKit voice connection and MediaPlayer
-- [`@fluxerjs/voice`](https://github.com/fluxerjs/voice) — Native voice channel integration
-- [`moonlink.js`](https://github.com/Ecliptia/moonlink.js) — Lavalink proxy
-- [`NodeLink`](https://github.com/PerformanC/NodeLink) — Audio node manager
+- [`@fluxerjs/voice`](https://github.com/fluxerjs/voice) — LiveKit voice connections and playback
+- [`lavalink-client`](https://www.npmjs.com/package/lavalink-client) — Lavalink/NodeLink client (search + streaming)
+- [`NodeLink`](https://github.com/PerformanC/NodeLink) — Lavalink-compatible audio node
+- [`prism-media`](https://github.com/discordjs/prism-media) — Opus encoding and stream demuxing
 
 <p align="center">
   &copy; 2026 Remix. Code licensed under the <a href="LICENSE">MIT License</a>.<br>
   <em>The Remix name, logo, and branding are proprietary and may not be reused.</em>
 </p>
+

@@ -1,6 +1,7 @@
 /**
- * @file player.mjs — Interactive player control panel with playback buttons and now-playing display
- * @module commands.player
+ * @module commands/player
+ * @description Create an interactive player control panel with live progress, reaction controls,
+ * and embedded lyrics viewer.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -10,11 +11,13 @@ import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 import { logger } from "../src/constants/Logger.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the player command. */
 export const command = new CommandBuilder()
     .setName("player")
     .setDescription("Create an interactive player control panel with live progress", "commands.player")
     .setCategory("music");
 
+/** @private @type {Object.<string, string>} Emoji indicators for player states. */
 const STATES = {
   playing: "🎵",
   paused: "⏸️",
@@ -22,6 +25,7 @@ const STATES = {
   loading: "⏳"
 };
 
+/** @private @type {Object.<string, {emoji: string, action: string, desc: string}>} Available control button definitions. */
 const CONTROLS = {
   prev: { emoji: "⏮️", action: "previous", desc: "Previous" },
   play: { emoji: "▶️", action: "resume", desc: "Play" },
@@ -37,6 +41,7 @@ const CONTROLS = {
   close: { emoji: "❌", action: "close", desc: "Close" }
 };
 
+/** @private @type {Object.<string, string>} Progress bar character set. */
 const PROGRESS = {
   filled: "▰",
   empty: "▱",
@@ -47,8 +52,11 @@ const PROGRESS = {
 
 
 /**
- * Execute the player command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @async
+ * Run handler for the player command.
+ * Creates an interactive embed panel with playback controls, progress bar,
+ * volume display, and an embedded lyrics viewer.
+ * @param {object} msg - The command message wrapper.
  * @returns {Promise<void>}
  */
 export async function run(msg) {
@@ -65,6 +73,12 @@ export async function run(msg) {
   const allControls = controlsLayout.flat();
   const controlEmojis = allControls.map(c => c.emoji);
 
+  /**
+   * @private
+   * Build the player panel embed with current state, progress, volume, and loop info.
+   * @param {object} [state={}] - Optional state override with a message field.
+   * @returns {EmbedBuilder} The constructed embed builder.
+   */
   const buildEmbed = (state = {}) => {
     const current = player.queue.getCurrent();
     const isPlaying = !player.paused && current;
@@ -162,6 +176,11 @@ export async function run(msg) {
   let lyricsUnobserve = null;
   let lyricsEmojiTimeout = null;
 
+  /**
+   * @private
+   * Remove all control reactions from the player panel message.
+   * @returns {Promise<void>}
+   */
   const clearReactions = async () => {
     try {
       await message.message.removeAllReactions();
@@ -174,6 +193,11 @@ export async function run(msg) {
     }
   };
 
+  /**
+   * @private
+   * Reset the emoji removal timeout for the player panel controls.
+   * @returns {void}
+   */
   const resetEmojiTimer = () => {
     clearTimeout(emojiRemoveTimeout);
     emojiRemoveTimeout = setTimeout(async () => {
@@ -184,6 +208,12 @@ export async function run(msg) {
     }, EMOJI_REMOVE_TIMEOUT);
   };
 
+  /**
+   * @private
+   * Remove navigation reactions from a lyrics message.
+   * @param {object} lyricsMsg - The wrapped lyrics message with a .message property.
+   * @returns {Promise<void>}
+   */
   const clearLyricsReactions = async (lyricsMsg) => {
     if (!lyricsMsg?.message) return;
     try {
@@ -197,6 +227,12 @@ export async function run(msg) {
     }
   };
 
+  /**
+   * @private
+   * Rebuild and edit the player panel embed with updated state.
+   * @param {object} [extra={}] - Additional state data to merge (e.g. status message).
+   * @returns {void}
+   */
   const refresh = (extra = {}) => {
     const embed = buildEmbed(extra);
     message.edit({ embeds: [embed] }).catch(() => {});
@@ -205,6 +241,14 @@ export async function run(msg) {
 
   let _sessionClosed = false;
 
+  /**
+   * @private
+   * @async
+   * Tear down the entire player session: clear timers, remove listeners,
+   * clean up reactions, and edit the embed to show the closed state.
+   * @param {string} [reason="timeout"] - The reason for closing ("timeout", "user", "disconnected").
+   * @returns {Promise<void>}
+   */
   const closeSession = async (reason = "timeout") => {
     if (_sessionClosed) return;
     _sessionClosed = true;
@@ -245,6 +289,11 @@ export async function run(msg) {
     }).catch(() => {});
   };
 
+  /**
+   * @private
+   * Reset the session inactivity timeout timer.
+   * @returns {void}
+   */
   const resetTimeout = () => {
     clearTimeout(sessionTimeout);
     sessionTimeout = setTimeout(() => closeSession("timeout"), timeout);
@@ -315,7 +364,6 @@ export async function run(msg) {
           break;
 
         case "stop":
-          await player._stopMediaPlayer();
           player.queue.reset();
           reply = this.t(msg, "responses.player.stoppedCleared");
           break;

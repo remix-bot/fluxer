@@ -1,6 +1,7 @@
 /**
- * @file lastfm command — Link Last.fm accounts, scrobble, view profiles, leaderboards, and more
  * @module commands/lastfm
+ * @description Last.fm integration command supporting account linking, scrobbling,
+ * profile viewing, leaderboards, whoknows, and playlist playback.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -14,6 +15,10 @@ import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 
 const VALID_PERIODS = ["7day", "1month", "3month", "6month", "12month", "overall"];
 
+/**
+ * @type {CommandBuilder}
+ * @description Command definition for the lastfm command.
+ */
 export const command = new CommandBuilder()
   .setName("lastfm")
   .setDescription("Link your Last.fm account, toggle scrobbling, or view your profile.", "commands.lastfm")
@@ -49,6 +54,13 @@ export const command = new CommandBuilder()
       .setRequired(false)
   );
 
+/**
+ * Return an embed indicating Last.fm is not configured.
+ * @private
+ * @param {object} ctx - The bot (Remix) instance context.
+ * @param {object} msg - The command message wrapper.
+ * @returns {{ embeds: EmbedBuilder[] }} Error embed payload.
+ */
 function notConfigured(ctx, msg) {
   return {
     embeds: [new EmbedBuilder()
@@ -57,6 +69,14 @@ function notConfigured(ctx, msg) {
   };
 }
 
+/**
+ * Return an embed indicating the user has not linked their Last.fm account.
+ * @private
+ * @param {object} ctx - The bot (Remix) instance context.
+ * @param {object} msg - The command message wrapper.
+ * @param {string} prefix - The guild's command prefix.
+ * @returns {{ embeds: EmbedBuilder[] }} Error embed payload.
+ */
 function notLinked(ctx, msg, prefix) {
   return {
     embeds: [new EmbedBuilder()
@@ -67,6 +87,12 @@ function notLinked(ctx, msg, prefix) {
 
 const SIMPLE_CATEGORIES = ["loved", "top", "recent", "albums", "artists"];
 
+/**
+ * Build a Last.fm track metadata object from a track.
+ * @private
+ * @param {object} track - The track object with artist, name, and url.
+ * @returns {{ source: string, artist: string, name: string, url: string }} Track metadata.
+ */
 function buildLastFmTrackMeta(track) {
   return {
     source: "lastfm",
@@ -76,6 +102,15 @@ function buildLastFmTrackMeta(track) {
   };
 }
 
+/**
+ * Resolve a Last.fm track to playable audio via a search provider.
+ * @private
+ * @async
+ * @param {object} player - The player instance.
+ * @param {object} track - The Last.fm track with query and metadata.
+ * @param {string} [resolveProvider="yt"] - The provider to resolve with.
+ * @returns {Promise<object[]|null>} Array of resolved track data, or null on failure.
+ */
 async function resolveLastFmTrack(player, track, resolveProvider = "yt") {
   const data = await player.workerJob("generalQuery", {
     query: track.query,
@@ -90,9 +125,10 @@ async function resolveLastFmTrack(player, track, resolveProvider = "yt") {
 }
 
 /**
- * Extract current track info from the player for Last.fm lookups.
- * @param {object} player
- * @returns {{ artist: string|null, name: string|null, album: string|null, track: object|null } | null}
+ * Extract Last.fm-relevant info from the player's current track.
+ * @private
+ * @param {object} player - The player instance.
+ * @returns {{ artist: string|null, name: string|null, album: string|null, track: object|null }} Extracted track info.
  */
 function extractCurrentTrack(player) {
   const track = player?.queue?.getCurrent();
@@ -104,9 +140,11 @@ function extractCurrentTrack(player) {
 }
 
 /**
- * Get all human member IDs from a guild for whoknows lookups.
- * @param {object} guild
- * @returns {Promise<Array<string>>}
+ * Get all non-bot user IDs in a guild.
+ * @private
+ * @async
+ * @param {object} guild - The Discord guild object.
+ * @returns {Promise<string[]>} Array of user ID strings.
  */
 async function getGuildLinkedUsers(guild) {
   const memberIds = [];
@@ -124,10 +162,11 @@ async function getGuildLinkedUsers(guild) {
 }
 
 /**
- * Parse a period string from token option or message content.
- * @param {object} data
- * @param {object} msg
- * @returns {string} A valid period string
+ * Extract a valid time period from command data or message content.
+ * @private
+ * @param {object} data - Parsed command data.
+ * @param {object} msg - The command message wrapper.
+ * @returns {string} The period string, defaults to "overall".
  */
 function extractPeriod(data, msg) {
   let raw = data.get("token")?.value;
@@ -144,18 +183,15 @@ function extractPeriod(data, msg) {
 }
 
 /**
- * Resolve a Last.fm category (loved/top/recent/playlist) into playable tracks.
- * Shared between `%lastfm play <cat>` and `%play lastfm:<cat>`.
- *
- * @param {object} ctx     - The command `this` context (has .lastfm, .getPlayer, .handler, .t)
- * @param {import("../src/MessageHandler.mjs").Message} msg     - The message object
- * @param {string} userId   - The Discord user ID
- * @param {string} category - "loved", "top", "recent", or "playlist"
- * @param {object} [options]
- * @param {string} [options.period]           - Period for top tracks
- * @param {number} [options.limit]            - Max tracks
- * @param {string|number} [options.playlistId] - Playlist number or URL (for category="playlist")
- * @param {string} [options.resolveProvider]  - Provider to search on when resolving tracks (e.g. "td" for Tidal, "sp" for Spotify). Default: "yt"
+ * Fetch and play tracks from a Last.fm category (loved, top, recent, albums, artists, playlist).
+ * @async
+ * @param {object} ctx - The bot (Remix) instance context.
+ * @param {object} msg - The command message wrapper.
+ * @param {string} userId - The Discord user ID.
+ * @param {string} category - The Last.fm category to play.
+ * @param {object} [options={}] - Additional options.
+ * @param {string} [options.resolveProvider="yt"] - Provider to resolve tracks with.
+ * @param {string} [options.playlistId] - Playlist number for playlist category.
  * @returns {Promise<void>}
  */
 export async function playLastFmCategory(ctx, msg, userId, category, options = {}) {
@@ -267,8 +303,11 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
 }
 
 /**
- * Parse "playlist N" from message text after "play" keyword.
- * @returns {{ category: string, playlistId?: string|number }}
+ * Parse play subcommand arguments for category and provider.
+ * @private
+ * @param {object} msg - The command message wrapper.
+ * @param {object} data - Parsed command data.
+ * @returns {{ category: string, resolveProvider?: string, playlistId?: string, showAllCategories?: boolean, invalidCategory?: string }} Parsed args.
  */
 function parsePlayArgs(msg, data) {
   let raw = data.get("token")?.value;
@@ -337,9 +376,11 @@ function parsePlayArgs(msg, data) {
 }
 
 /**
- * Execute the lastfm command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * Run handler for the lastfm command.
+ * Routes to the appropriate subcommand based on the action option.
+ *
+ * @param {object} msg - The command message wrapper.
+ * @param {object} data - Parsed command data containing action, user, and token options.
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {
@@ -2458,6 +2499,16 @@ export async function run(msg, data) {
   }
 }
 
+/**
+ * Build an embed listing tracks with optional playcount.
+ * @private
+ * @param {string} username - The Last.fm username.
+ * @param {string} title - The list title.
+ * @param {object[]} tracks - Array of track objects with name, artist, url, and optional playcount.
+ * @param {boolean} [showPlaycount=false] - Whether to show play counts.
+ * @param {string} [prefix="%"] - The command prefix for the footer hint.
+ * @returns {EmbedBuilder} The constructed embed.
+ */
 function buildTrackList(username, title, tracks, showPlaycount = false, prefix = "%") {
   const lines = tracks.map((t, i) => {
     const num = String(i + 1).padStart(2, " ");
@@ -2477,6 +2528,14 @@ function buildTrackList(username, title, tracks, showPlaycount = false, prefix =
     .setFooter({ text: `💡 Use ${prefix}lastfm play loved to play these!` });
 }
 
+/**
+ * Build a scrobble leaderboard embed for a given page.
+ * @private
+ * @param {object} lb - Leaderboard data with entries and perPage.
+ * @param {number} pageIdx - The page index (0-based).
+ * @param {string} prefix - The command prefix for the footer hint.
+ * @returns {EmbedBuilder} The constructed embed.
+ */
 function buildLeaderboardEmbed(lb, pageIdx, prefix) {
   const MEDALS = ["🥇", "🥈", "🥉"];
   const startRank = pageIdx * lb.perPage;
@@ -2499,9 +2558,10 @@ function buildLeaderboardEmbed(lb, pageIdx, prefix) {
 }
 
 /**
- * Format seconds into mm:ss or h:mm:ss.
- * @param {number} seconds
- * @returns {string}
+ * Format seconds into a human-readable duration string (h:mm:ss or m:ss).
+ * @private
+ * @param {number} seconds - Duration in seconds.
+ * @returns {string} Formatted duration, or empty string if invalid.
  */
 function formatDuration(seconds) {
   if (!seconds || seconds <= 0) return "";

@@ -1,14 +1,4 @@
-/**
- * @file PlayerManager.mjs — PlayerManager — creates, caches, and routes Player instances per voice channel across all guilds
- * @module src.PlayerManager
- */
-
-/**
- * PlayerManager.mjs — Manages voice channel players across servers
- *
- * Updated for moonlink.js: passes the MoonlinkManager instance into every
- * new Player so it can resolve tracks and retrieve session IDs.
- */
+/** @module src/PlayerManager @description Manages all Player instances. Handles player lifecycle (spawn, join, leave, destroy), voice channel resolution, dashboard events, and autoleave suppression for 24/7 channels. */
 
 import Player from "./Player.mjs";
 import { Utils, cleanId } from "./Utils.mjs";
@@ -21,6 +11,7 @@ import { Dashboard } from "./dashboard/Dashboard.mjs";
 import { hasHumansInChannel, iterateVoiceStates } from "./constants/VoiceStateResolver.mjs";
 
 
+/** @private @param {Player} player @param {object|null} [fallbackChannel=null] @returns {string} Cleaned guild ID. */
 function getPlayerGuildId(player, fallbackChannel = null) {
   return cleanId(
     player?._guildId ??
@@ -31,20 +22,12 @@ function getPlayerGuildId(player, fallbackChannel = null) {
   );
 }
 
+/** @private @param {Player} player @param {string|null} [fallbackChannelId=null] @returns {string} Cleaned channel ID. */
 function getPlayerChannelId(player, fallbackChannelId = null) {
   return cleanId(player?._channelId ?? player?._home247Channel ?? fallbackChannelId);
 }
 
-/**
- * Check whether the bot actually has the Connect permission on a specific
- * voice channel. This uses @fluxerjs/core's PermissionFlags to test the
- * bitfield directly, rather than relying on gateway error messages which
- * conflate real permission denials with stale-session 401s.
- *
- * @param {import('@fluxerjs/core').Client} client
- * @param {string} channelId
- * @returns {boolean} true if the bot has Connect (and Speak) on the channel
- */
+/** @private Check whether the bot has required voice permissions in a channel. @param {object} client @param {string} channelId @returns {boolean} True if the bot can connect, speak, and use VAD. */
 function botHasVoicePermissions(client, channelId) {
   try {
     const channel = client?.channels?.get?.(channelId);
@@ -63,19 +46,7 @@ function botHasVoicePermissions(client, channelId) {
   }
 }
 
-/**
- * Sanitize raw voice-join error messages into user-friendly text.
- *
- * IMPORTANT: A 401/"permission" error from the gateway does NOT always mean
- * the bot lacks the Connect permission. The Fluxer gateway can also return 401
- * when the bot's previous voice session hasn't been cleaned up yet (stale
- * session race). In that case the bot DOES have Connect — it's a transient
- * error, not a real permission denial.
- *
- * To tell the difference, we check the actual channel permissions using
- * botHasVoicePermissions(). If the bot HAS Connect but got 401, it's a
- * stale session ("SESSION_RACE"), not a real permission error ("PERMISSION").
- */
+/** @private Classify a join error into a known error code for user-facing messages. @param {Error} err @param {object} [client=null] @param {string} [channelId=null] @returns {string|null} Error code ('PERMISSION'|'NOT_FOUND'|'TIMEOUT'|'SESSION_RACE') or null. */
 function sanitizeJoinError(err, client = null, channelId = null) {
   const msg = String(err?.message ?? err ?? "");
   if (msg.includes("401") || msg.includes("Unauthorized")) {
@@ -99,47 +70,49 @@ function sanitizeJoinError(err, client = null, channelId = null) {
   return null;
 }
 
-/**
- * PlayerManager class.
- */
+/** @class PlayerManager @description Manages all Player instances. Handles player lifecycle (spawn, join, leave, destroy), voice channel resolution, dashboard events, and autoleave suppression for 24/7 channels. */
 export class PlayerManager {
-  /** @type {SettingsManager} */
+  /** @type {RemoteSettingsManager} */
   settings;
 
   /** @type {CommandHandler} */
   commands;
 
-  /** @type {Map<string, Player>} Keyed by cleaned channel ID */
+  /** @type {Map<string, Player>} Player instances keyed by channel ID. */
   playerMap = new Map();
 
-  /** @type {Map<string, Set<string>>} Reverse index: guildId → Set<channelId> for O(1) guild lookups */
+  /** @private @type {Map<string, Set<string>>} Guild ID → Set of channel IDs (for fast guild-player lookup). */
   _guildPlayerIndex = new Map();
 
-  /** @type {Set<string>} Channel IDs currently being joined (not yet in playerMap) */
+  /** @private @type {Set<string>} Channel IDs currently being joined. */
   _pendingJoins = new Set();
 
-  /** @type {Map<string, {timer, songUrl, startedAtMs}>} Pending scrobble timers keyed by channel ID.
-   *  Prevents duplicate scrobbles when startplay fires multiple times. */
+  /** @private @type {Map<string, {timer: setTimeout, songUrl: string, startedAtMs: number}>} */
   _pendingScrobbleTimers = new Map();
 
-  /** @type {Object} */
+  /** @type {object} Full bot config. */
   config;
 
-  /** @type {Object} */
+  /** @type {object} Player-specific config (lavalink reference). */
   playerConfig;
 
-  /** @type {import("./constants/Locale.mjs").Locale|null} */
+  /** @type {Locale|null} */
   locale = null;
 
-  /** @type {import("./dashboard/Dashboard.mjs").Dashboard|null} */
+  /** @type {Dashboard|null} */
   dashboard = null;
 
   /**
-   * @param {SettingsManager} settings
-   * @param {CommandHandler} commands
-   * @param {Object} config
-   * @param {Object} config.config  - Parsed config.json
-   * @param {Object} config.player  - Config data passed to new Player instances
+   * Create a new PlayerManager.
+   * @param {RemoteSettingsManager} settings - The settings manager.
+   * @param {CommandHandler} commands - The command handler.
+   * @param {object} config - Configuration object.
+   * @param {object} config.config - Full bot config.
+   * @param {object} config.player - Player-specific config (lavalink, etc.).
+   * @param {Dashboard} [config.dashboard] - Dashboard instance.
+   * @param {Locale} [config.locale] - Locale manager.
+   * @param {object} [config.timers] - Timer configuration.
+   * @param {TrackOptionsManager} [config.trackOptions] - Track options manager.
    */
   constructor(settings, commands, config) {
     this.commands     = commands;
@@ -153,12 +126,7 @@ export class PlayerManager {
     this.trackOptions = config.trackOptions ?? null;
   }
 
-  /**
-   * Add a channel to the guild→player reverse index.
-   * Called after a successful player join.
-   * @param {string} guildId
-   * @param {string} channelId
-   */
+  /** @private Index a player by guild and channel ID for fast lookups. @param {string} guildId @param {string} channelId */
   _indexPlayer(guildId, channelId) {
     const gId = cleanId(guildId);
     const cId = cleanId(channelId);
@@ -168,12 +136,7 @@ export class PlayerManager {
     set.add(cId);
   }
 
-  /**
-   * Remove a channel from the guild→player reverse index.
-   * Called on player leave/destroy.
-   * @param {string} guildId
-   * @param {string} channelId
-   */
+  /** @private Remove a player from the guild-player index. @param {string} guildId @param {string} channelId */
   _unindexPlayer(guildId, channelId) {
     const gId = cleanId(guildId);
     const cId = cleanId(channelId);
@@ -185,12 +148,7 @@ export class PlayerManager {
     }
   }
 
-  /**
-   * Get all [channelId, Player] entries for a guild.
-   * Uses the reverse index for O(1) guild lookup instead of O(n) scan.
-   * @param {string} guildId
-   * @returns {Array<[string, Player]>}
-   */
+  /** Get all active (non-destroyed) players for a guild. @param {string} guildId @returns {Array<[string, Player]>} Array of [channelId, Player] pairs. */
   getGuildPlayers(guildId) {
     const gId = cleanId(guildId);
     const set = this._guildPlayerIndex.get(gId);
@@ -207,13 +165,8 @@ export class PlayerManager {
     return result;
   }
 
-  /**
-   * Find a player by guildId and channelId using the reverse index.
-   * @param {string} guildId
-   * @param {string} channelId
-   * @returns {Player|null}
-   */
-  getPlayerByGuildAndChannel(guildId, channelId) {
+  /** Find a player by both guild and channel. @param {string} guildId @param {string} channelId @returns {Player|null} */
+ getPlayerByGuildAndChannel(guildId, channelId) {
     const cId = cleanId(channelId);
     const players = this.getGuildPlayers(guildId);
     for (const [mapChannelId, player] of players) {
@@ -222,12 +175,8 @@ export class PlayerManager {
     return null;
   }
 
-  /**
-   * Find a player by channelId alone (scans guild index first, then fallback).
-   * @param {string} channelId
-   * @returns {Player|null}
-   */
-  getPlayerByChannelId(channelId) {
+  /** Find a player by its channel ID across all guilds. @param {string} channelId @returns {Player|null} */
+ getPlayerByChannelId(channelId) {
     const cId = cleanId(channelId);
     for (const [, channelSet] of this._guildPlayerIndex) {
       for (const mapChannelId of channelSet) {
@@ -238,22 +187,7 @@ export class PlayerManager {
     return null;
   }
 
-  /**
-   * Forward player lifecycle/state events to the dashboard pub/sub channels.
-   *
-   * IMPORTANT: Events are sent in standard { type, data } format so
-   * the backend (backend-master) PlayerManager can parse them correctly.
-   *
-   * Two channels are used:
-   *   {platform}:players         — global, for init/close lifecycle events
-   *   {platform}:player_{id}     — per-player, for playback/queue/volume events
-   *
-   * @param {Player} player
-   * @param {Object} [context]
-   * @param {string|null} [context.channelId]
-   * @param {string|null} [context.guildId]
-   * @returns {Player}
-   */
+  /** Bind dashboard update and message-sending events on a player. @param {Player} player @param {object} [context={}] @returns {Player} The same player, with events bound. */
   setupEvents(player, context = {}) {
     if (!player || player._dashboardEventsBound) return player;
 
@@ -409,25 +343,14 @@ export class PlayerManager {
     return player;
   }
 
-  /**
-   * Translate a locale key using the message's guild locale.
-   * @param {Object} message
-   * @param {string} key
-   * @param {Object} [replacements={}]
-   * @returns {string}
-   */
+  /** @private Translate a locale key for a message context. @param {object} message @param {string} key @param {object} [replacements={}] @returns {string} */
   _t(message, key, replacements = {}) {
     if (!this.locale) return key;
     const guildId = getMessageGuildId(message);
     return this.locale.translate(guildId, key, replacements);
   }
 
-  /**
-   * Attempt to detect the voice channel a user is currently in.
-   * @param {Message} message
-   * @param {Object} [settings]
-   * @returns {Promise<{channelId: string|null, alreadyInVoice: boolean, hasHumans: boolean}>}
-   */
+  /** Detect which voice channel the message author is in. @async @param {object} message @param {object} settings @returns {Promise<{channelId: string|null, alreadyInVoice: boolean, hasHumans: boolean}>} */
   async checkVoiceChannels(message, settings) {
     const guildId = message?.guildId ?? message?.channel?.guildId ?? getMessageGuildId(message);
     const userId  = message?.author?.id ?? message?.member?.user?.id;
@@ -494,15 +417,8 @@ export class PlayerManager {
     return { channelId, alreadyInVoice, hasHumans: hasHumansResult };
   }
 
-  /**
-   * Get or create a player for the user's voice channel.
-   * @param {Message} message
-   * @param {boolean} [promptJoin=true]
-   * @param {boolean} [verifyUser=true]
-   * @param {boolean} [shouldJoin=false]
-   * @returns {Promise<Player|null>}
-   */
-  async getPlayer(message, promptJoin = true, verifyUser = true, shouldJoin = false) {
+  /** Get or spawn a player for the message's voice channel. @async @param {object} message @param {boolean} [promptJoin=true] @param {boolean} [verifyUser=true] @param {boolean} [shouldJoin=false] @returns {Promise<Player|null>} */
+ async getPlayer(message, promptJoin = true, verifyUser = true, shouldJoin = false) {
     const guildId = getMessageGuildId(message);
     const cleanGuildId = cleanId(guildId);
 
@@ -586,11 +502,7 @@ export class PlayerManager {
     return null;
   }
 
-  /**
-   * Prompt the user to select a voice channel.
-   * @param {Message} msg
-   * @returns {Promise<string|false>}
-   */
+  /** Prompt the user to select a voice channel via reactions or text input. @async @param {object} msg @returns {Promise<Player|false>} */
   async promptVC(msg) {
     const { channelId: autoDetected } = await this.checkVoiceChannels(msg);
     if (autoDetected) {
@@ -675,11 +587,7 @@ export class PlayerManager {
     });
   }
 
-  /**
-   * Make the player leave its current voice channel.
-   * @param {Message} msg
-   * @param {string} [cid]
-   */
+  /** Leave a voice channel, destroy the player, and send a confirmation. @async @param {object} msg @param {string} [cid] @returns {Promise<void>} */
   async leave(msg, cid) {
     if (!cid) {
       const guildId = getMessageGuildId(msg);
@@ -714,11 +622,7 @@ export class PlayerManager {
     await msg.reply(this._t(msg, "responses._common.successfullyLeft"));
   }
 
-  /**
-   * Restore saved volume for a player from server settings.
-   * @param {Player} player
-   * @param {string} guildId
-   */
+  /** @private Restore saved volume for a player from guild settings. @param {Player} player @param {string} guildId */
   _restorePlayerVolume(player, guildId) {
     const savedVol = this.settings?.getServer?.(guildId)?.get?.("volume");
     if (savedVol !== undefined && savedVol !== null) {
@@ -727,12 +631,7 @@ export class PlayerManager {
     }
   }
 
-  /**
-   * Create and register a new Player for the given voice channel.
-   * @param {Message} message
-   * @param {string} cid - Voice channel ID
-   * @returns {Promise<Player|null>}
-   */
+  /** Create a new Player, join the voice channel, and set up events. @async @param {object} message @param {string} cid @returns {Promise<Player|null>} The spawned player, or null on failure. */
   async initPlayer(message, cid) {
     const channel = this.commands.client?.channels?.get(cid);
 
@@ -775,9 +674,7 @@ export class PlayerManager {
       ...this.playerConfig,
       client:             this.commands.client,
       config:             this.config,
-      nodelink:           this.config.nodelink,
-      moonlink:           this.playerConfig?.moonlink ?? null,
-      revoice:            this.playerConfig?.revoice ?? null,
+      lavalink:           this.playerConfig?.lavalink ?? null,
       settingsMgr:        this.settings,
       getPrefix:          (guildId) => this.commands.getPrefix(guildId),
       observedVoiceUsers: this.observedVoiceUsers ?? null,
@@ -818,8 +715,8 @@ export class PlayerManager {
           ? get247ChannelMode(this.settings.getServer(guildId), matchChannel)
           : "off";
 
-      if (mode247 === "auto" || mode247 === "on") {
-        logger.inactivity(`[PlayerManager] autoleave suppressed for 24/7 ${mode247} channel ${activeChannelId} (guild ${guildId})`);
+      if (mode247 === "on") {
+        logger.inactivity(`[PlayerManager] autoleave suppressed for 24/7 channel ${activeChannelId} (guild ${guildId})`);
         return;
       }
       if (player._hasHumansInChannel()) {
@@ -841,17 +738,8 @@ export class PlayerManager {
 
       const prefix = this.commands.getPrefix(guildId);
 
-      let desc;
-      if (mode247 === "on") {
-        desc = this.locale?.translate(guildId, "responses.join.autoLeave247On", { channel: `<#${activeChannelId}>`, prefix })
-          ?? `Left channel <#${activeChannelId}> because of inactivity.\nI'll rejoin automatically when the bot restarts (${prefix}247 on mode).`;
-      } else if (mode247 === "auto") {
-        desc = this.locale?.translate(guildId, "responses.join.autoLeave247Auto", { channel: `<#${activeChannelId}>`, prefix })
-          ?? `Left channel <#${activeChannelId}> — reconnecting automatically (${prefix}247 auto mode)...`;
-      } else {
-        desc = this.locale?.translate(guildId, "responses.join.autoLeaveInactive247", { channel: `<#${activeChannelId}>`, prefix })
-          ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247 on/auto\``;
-      }
+      const desc = this.locale?.translate(guildId, "responses.join.autoLeaveInactive", { channel: `<#${activeChannelId}>`, prefix })
+          ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247\``;
       if (typeof ch?.send === "function") {
         ch.send({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)], allowedMentions: { parse: [] } }).catch(err => {
           if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
@@ -862,6 +750,18 @@ export class PlayerManager {
     });
 
     player.on("message", (m) => {
+      const isTextChannel = (c) => {
+        if (!c) return false;
+        if (c.type === undefined || c.type === null) return false;
+        const voiceTypes = [2, 13, "GUILD_VOICE", "GUILD_STAGE_VOICE", "STAGE", "voice", "stage"];
+        if (voiceTypes.includes(c.type)) return false;
+        if (typeof c.isTextBased === "function") return c.isTextBased();
+        const textTypes = [0, 5, 10, 11, 12, "GUILD_TEXT", "GUILD_ANNOUNCEMENT", "text"];
+        if (textTypes.includes(c.type)) return true;
+        logger.warn(`[PlayerManager] isTextChannel: unknown channel type=${c.type} id=${c.id}, rejecting`);
+        return false;
+      };
+
       let ch       = player.textChannel;
       const guildId = cleanId(player._guildId ?? ch?.guildId ?? ch?.guild?.id ?? getMessageGuildId({ channel: ch }));
 
@@ -870,33 +770,35 @@ export class PlayerManager {
           ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
       if (disabled) return;
 
-      if (!ch || typeof ch.send !== "function") {
+      if (!isTextChannel(ch)) {
         try {
           const serverSettings = this.settings.getServer(guildId);
           const savedAnnChId = serverSettings?.get?.("announcementChannelId");
           if (savedAnnChId) {
-            ch = this.commands?.client?.channels?.get?.(cleanId(savedAnnChId)) ?? null;
+            const resolved = this.commands?.client?.channels?.get?.(cleanId(savedAnnChId)) ?? null;
+            if (isTextChannel(resolved)) ch = resolved;
           }
         } catch(e) {
           logger.warn("[PlayerManager] Failed to resolve announcement channel:", e?.message);
         }
       }
-      if (!ch || typeof ch.send !== "function") {
+      if (!isTextChannel(ch)) {
         try {
           const guild = this.commands?.client?.guilds?.get?.(guildId);
           if (guild?.systemChannelId) {
-            ch = guild.channels?.get?.(guild.systemChannelId) ?? null;
+            const resolved = guild.channels?.get?.(guild.systemChannelId) ?? null;
+            if (isTextChannel(resolved)) ch = resolved;
           }
         } catch(e) {
           logger.warn("[PlayerManager] Failed to resolve system channel:", e?.message);
         }
       }
-      if (!ch || typeof ch.send !== "function") {
+      if (!isTextChannel(ch)) {
         try {
           const guild = this.commands?.client?.guilds?.get?.(guildId);
           if (guild?.channels) {
             for (const c of (guild.channels.values?.() ?? [])) {
-              if (c.isTextBased?.() || c.type === 0 || c.type === "GUILD_TEXT") {
+              if (isTextChannel(c)) {
                 ch = c;
                 break;
               }
@@ -906,12 +808,12 @@ export class PlayerManager {
           logger.warn("[PlayerManager] Failed to find fallback text channel:", e?.message);
         }
       }
-      if (!ch || typeof ch.send !== "function") {
-        logger.warn(`[PlayerManager] Could not resolve any channel to send now-playing announcement (guild ${guildId})`);
+      if (!isTextChannel(ch)) {
+        logger.warn(`[PlayerManager] Could not resolve any text channel to send now-playing announcement (guild ${guildId})`);
         return;
       }
 
-      if (!player.textChannel) player.textChannel = ch;
+      if (!player.textChannel || !isTextChannel(player.textChannel)) player.textChannel = ch;
 
       const payload = typeof m === "object" && Array.isArray(m.embeds)
         ? { ...m, allowedMentions: { parse: [] } }
@@ -948,10 +850,6 @@ export class PlayerManager {
         logger.warn(`[PlayerManager] Stale voice session detected for channel ${cleanChannelId}, retrying in 2s...`);
         try {
           await new Promise(r => setTimeout(r, 2_000));
-          if (player._revoice && player._channelId) {
-            try { player._revoice._leaveGateway(player._channelId, player._guildId ?? player._resolveGuildId()); } catch(e) { logger.warn("[PlayerManager] Failed to leave gateway during retry:", e?.message); }
-            try { player._revoice.deleteConnection(player._channelId); } catch(e) { logger.warn("[PlayerManager] Failed to delete connection during retry:", e?.message); }
-          }
           await player.join(cid);
 
           this.playerMap.set(cleanChannelId, player);
@@ -982,14 +880,7 @@ export class PlayerManager {
     }
   }
 
-  /**
-   * Handle the "startplay" event for Last.fm: send now-playing notification
-   * to all linked users in the voice channel, and schedule a deferred scrobble
-   * after the track has played for long enough (50% duration or 4 min).
-   *
-   * @param {Player} player
-   * @param {Object} song - Track object
-   */
+  /** @private Handle Last.fm now-playing update and schedule scrobble timer. @param {Player} player @param {object} song */
   _handleLastFmStartPlay(player, song) {
     const lastfm = this._lastfm;
     if (!lastfm?.enabled) return;

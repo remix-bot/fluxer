@@ -1,20 +1,24 @@
 /**
- * @file np.mjs — Show now-playing information for the current track
- * @module commands.np
+ * @module commands/np
+ * @description Display the currently playing track name and URL.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the np (now playing) command. */
 export const command = new CommandBuilder()
     .setName("np")
     .setDescription("Request the name and url of the currently playing song.", "commands.np")
-    .addAliases("current", "nowplaying");
+    .addAliases("current", "nowplaying")
+    .setCategory("music");
 
 /**
- * Execute the np command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @async
+ * Run handler for the np command.
+ * Fetches and displays the now-playing status with track title and thumbnail.
+ * @param {object} msg - The command message wrapper.
  * @returns {Promise<void>}
  */
 export async function run(msg) {

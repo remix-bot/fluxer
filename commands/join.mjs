@@ -1,141 +1,19 @@
 /**
- * @file join command — Make the bot join a voice channel and initialise a player
  * @module commands/join
+ * @description Makes the bot join a voice channel. Supports explicit channel argument
+ * (mention, ID, or name) or auto-detects the user’s current voice channel.
+ * All player spawning goes through PlayerManager.initPlayer() for consistent
+ * 24/7 handling, event binding, and permission checks.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor, cleanId, getMessageGuildId } from "../src/MessageHandler.mjs";
-import { logger } from "../src/constants/Logger.mjs";
-import Player from "../src/Player.mjs";
-
 
 /**
- * Join a voice channel, create a Player, and register event listeners.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {string} cid - The voice channel ID to join
- * @param {Function} [cb] - Callback invoked with the player on success
- * @param {Function} [ecb] - Callback invoked on error
- * @returns {Promise<void>}
+ * @type {CommandBuilder}
+ * @description Command definition for the join command.
  */
-export async function joinChannel(message, cid, cb = () => {}, ecb = () => {}) {
-  const cleanChannelId = cleanId(cid);
-  if (!this.client.channels.has(cleanChannelId)) {
-    ecb();
-    const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription(this.t(message, "responses.join.channelNotFound", { channel: cid }));
-    return message.reply({ embeds: [embed] });
-  }
-  const existing = this.players.playerMap.get(cleanChannelId)
-      ?? [...this.players.playerMap.values()].find((player) => cleanId(player?._channelId) === cleanChannelId);
-  if (existing) {
-    cb(existing);
-    const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription(this.t(message, "responses.join.alreadyJoined", { channel: cid }));
-    return message.reply({ embeds: [embed] });
-  }
-
-  if (!this.moonlink) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription(this.t(message, "responses.join.audioNodeConnecting"));
-    ecb();
-    return message.reply({ embeds: [embed] });
-  }
-
-  const p = new Player(this.config.token, {
-    client:             this.client,
-    config:             this.config,
-    nodelink:           this.config.nodelink,
-    moonlink:           this.moonlink ?? null,
-    revoice:            this.revoice ?? null,
-    messageChannel:     message.channel,
-    settingsMgr:        this.settingsMgr ?? this.settings ?? null,
-    observedVoiceUsers: this.observedVoiceUsers ?? null,
-  });
-
-  p.on("autoleave", () => {
-    const activeChannelId = cleanId(p._channelId ?? cid) || cid;
-    const homeChannelId = cleanId(p._home247Channel ?? activeChannelId) || activeChannelId;
-    const guildId = getMessageGuildId(message);
-
-    const is247 = (() => {
-      try {
-        const raw = this.settingsMgr?.getServer?.(guildId)?.get?.("stay_247");
-        return raw && raw !== "none";
-      } catch (_) { return false; }
-    })();
-
-    const mode247 = (() => {
-      if (!is247) return "off";
-      try {
-        const set = this.settingsMgr?.getServer?.(guildId);
-        const modes = set?.get?.("stay_247_modes");
-        const matchCh = homeChannelId || activeChannelId;
-        if (modes && typeof modes === "object" && !Array.isArray(modes) && modes[matchCh]) {
-          return modes[matchCh];
-        }
-        return set?.get?.("stay_247_mode") ?? "off";
-      } catch (_) { return "off"; }
-    })();
-
-    this.players.playerMap.delete(activeChannelId);
-    if (activeChannelId !== cid) this.players.playerMap.delete(cid);
-    if (homeChannelId !== activeChannelId) this.players.playerMap.delete(homeChannelId);
-    p.destroy();
-
-    if (is247 && (mode247 === "on" || mode247 === "auto")) {
-      const rejoinDelay = this.config?.timers?.rejoin247Delay ?? 3_000;
-      const prefix = this.handler.getPrefix(guildId);
-      const embed = new EmbedBuilder().setColor(getGlobalColor())
-          .setDescription(this.t(message, "responses.join.autoLeaveInactive247", { channel: activeChannelId, prefix }));
-      message.channel.send({ embeds: [embed] }).catch(() => {});
-      setTimeout(async () => {
-        try {
-          if (typeof this._spawnPlayer === "function") {
-            await this._spawnPlayer(guildId, homeChannelId);
-          }
-        } catch (e) {
-          logger.warn(`[join/autoleave] 24/7 auto-rejoin failed for ${homeChannelId}: ${e.message}`);
-        }
-      }, rejoinDelay);
-    } else {
-      const embed2 = new EmbedBuilder().setColor(getGlobalColor())
-          .setDescription(this.t(message, "responses.join.autoLeaveInactive", { channel: activeChannelId }));
-      message.channel.send({ embeds: [embed2] }).catch(() => {});
-    }
-  });
-
-  p.on("message", m => {
-    const guildId  = getMessageGuildId(message);
-    const raw      = this.settingsMgr?.getServer?.(guildId)?.get("songAnnouncements");
-    const disabled = raw === false || raw === 0 ||
-        ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
-    if (disabled) return;
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(m);
-    message.channel.send({ embeds: [embed] }).catch(() => {});
-  });
-
-  this.players._pendingJoins.add(cleanChannelId);
-
-  const joiningEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.join.joining"));
-  const statusMsg = await message.reply({ embeds: [joiningEmbed] });
-  try {
-    await p.join(cleanChannelId);
-    this.players.playerMap.set(cleanChannelId, p);
-    this.players._pendingJoins.delete(cleanChannelId);
-    const okEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.join.joined", { channel: cid }));
-    await statusMsg.edit({ embeds: [okEmbed] });
-    cb(p);
-  } catch (e) {
-    this.players._pendingJoins.delete(cleanChannelId);
-    this.players.playerMap.delete(cleanChannelId);
-    p.destroy();
-    const errEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.join.joinFailed", { error: e.message }));
-    await statusMsg.edit({ embeds: [errEmbed] });
-    ecb(e);
-  }
-}
-
 export const command = new CommandBuilder()
     .setName("join")
     .setDescription("Make the bot join your voice channel, or specify one.", "commands.join")
@@ -148,48 +26,56 @@ export const command = new CommandBuilder()
     );
 
 /**
- * Execute the join command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
- * @returns {Promise<void>}
+ * Resolve a user-provided channel string to a channel ID.
+ * Supports <#ID> mentions, raw numeric IDs, and channel name matching.
+ *
+ * @param {string} rawArg - The raw argument string from the command.
+ * @param {object} ctx - The bot context (Remix instance).
+ * @returns {string|null} The resolved channel ID, or null if not found.
+ */
+function resolveChannelId(rawArg, ctx) {
+  if (!rawArg) return null;
+  const mentionMatch = rawArg.match(/^<(#|&)?(\d+)>$/);
+  const idMatch = rawArg.match(/^(\d{15,})$/);
+
+  if (mentionMatch) return mentionMatch[2];
+  if (idMatch) return idMatch[1];
+
+  // Try name-based lookup
+  const guildId = cleanId(getMessageGuildId(ctx._currentMessage));
+  if (!guildId) return null;
+
+  const allChannels = [...(ctx.client?.channels?.values?.() ?? [])];
+  const match = allChannels.find(c => {
+    const cServerId = cleanId(c.guildId ?? c.guild?.id ?? c.server_id ?? c.serverId);
+    return c.type === 2 && cServerId === guildId && c.name?.toLowerCase() === rawArg.toLowerCase();
+  });
+  return match?.id ?? null;
+}
+
+/**
+ * Run handler for the join command.
+ * Resolves the target voice channel and delegates to PlayerManager.initPlayer().
+ *
+ * @param {object} message - The command message wrapper.
+ * @param {object} data - Parsed command data containing option values.
+ * @returns {Promise<Player|null>} The spawned player, or null on failure.
  */
 export async function run(message, data) {
   const rawArg = data?.get?.("channel")?.value?.trim?.() ?? null;
 
   if (rawArg) {
-    const mentionMatch = rawArg.match(/^<#(\d+)>$/);
-    const idMatch      = rawArg.match(/^(\d{15,})$/);
-    let resolvedId     = null;
-
-    if (mentionMatch) {
-      resolvedId = mentionMatch[1];
-    } else if (idMatch) {
-      resolvedId = idMatch[1];
-    } else {
-      const guildId = cleanId(getMessageGuildId(message));
-      const allChannels = [
-        ...(this.client?.channels?.values?.() ?? [])
-      ];
-      const match = allChannels.find(c => {
-        const cServerId = cleanId(c.guildId ?? c.guild?.id ?? c.server_id ?? c.serverId);
-        const isVoice = c.type === 2;
-        return isVoice && cServerId === guildId &&
-            (c.name?.toLowerCase() === rawArg.toLowerCase());
-      });
-      if (match) resolvedId = match.id;
-    }
-
+    const resolvedId = resolveChannelId(rawArg, this);
     if (!resolvedId) {
       const embed = new EmbedBuilder().setColor(getGlobalColor())
           .setDescription(this.t(message, "responses.join.voiceChannelNotFound"));
       return message.reply({ embeds: [embed] });
     }
-
     return this.players.initPlayer(message, resolvedId);
   }
 
+  // No argument — auto-detect the user’s current voice channel
   const { channelId: cid } = await this.players.checkVoiceChannels(message);
-
   if (!cid) {
     const prefix = this.handler.getPrefix(getMessageGuildId(message));
     const embed = new EmbedBuilder().setColor(getGlobalColor())
@@ -199,8 +85,3 @@ export async function run(message, data) {
 
   return this.players.initPlayer(message, cid);
 }
-
-export const exportDef = {
-  name: "joinChannel",
-  object: joinChannel
-};

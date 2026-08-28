@@ -1,6 +1,6 @@
 /**
- * @file radio.mjs — Play a radio stream or search for radio stations
- * @module commands.radio
+ * @module commands/radio
+ * @description Play internet radio stations with interactive station selection via reactions.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -10,6 +10,10 @@ import { logger } from "../src/constants/Logger.mjs";
 import { NUMBER_EMOJIS, CANCEL_EMOJI, PREV_EMOJI, NEXT_EMOJI } from "../src/constants/UI.mjs";
 
 
+/**
+ * @type {CommandBuilder}
+ * @description Command definition for the radio command. Returns null if no stations configured.
+ */
 export const command = function() {
   if (!this.config.radio?.length) return null;
   return new CommandBuilder()
@@ -25,9 +29,11 @@ export const command = function() {
 };
 
 /**
- * Execute the radio command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * Run handler for the radio command.
+ * Lists stations, plays a named station, or starts the default station.
+ *
+ * @param {object} msg - The command message wrapper.
+ * @param {object} data - Parsed command data containing the station option.
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {
@@ -131,6 +137,16 @@ export async function run(msg, data) {
   return playStation(this, msg, radios[0]);
 }
 
+/**
+ * Play a radio station on the player, switching if one is already playing.
+ * @private
+ * @async
+ * @param {object} ctx - The bot (Remix) instance context.
+ * @param {object} msg - The command message wrapper.
+ * @param {object} radio - The radio station config object.
+ * @param {object|null} [editTarget=null] - Optional message to edit instead of sending a new reply.
+ * @returns {Promise<void>}
+ */
 async function playStation(ctx, msg, radio, editTarget = null) {
   const p = await ctx.getPlayer(msg, true, true, true);
   if (!p) return;

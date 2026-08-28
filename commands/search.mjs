@@ -1,6 +1,6 @@
 /**
- * @file search.mjs — Search for songs with interactive selection menu
- * @module commands.search
+ * @module commands/search
+ * @description Search for tracks across providers and pick one to play via reaction selection.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -10,6 +10,7 @@ import { PROVIDER_CHOICES, PROVIDER_NAMES, parseInlineProvider } from "../src/co
 import { NUMBER_EMOJIS, CANCEL_EMOJI } from "../src/constants/UI.mjs";
 import { logger } from "../src/constants/Logger.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the search command. */
 export const command = new CommandBuilder()
     .setName("search")
     .setDescription(
@@ -37,9 +38,12 @@ export const command = new CommandBuilder()
     );
 
 /**
- * Execute the search command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @async
+ * Run handler for the search command.
+ * Searches for tracks, displays results as an embed with number reactions,
+ * and adds the selected track to the queue.
+ * @param {object} msg - The command message wrapper.
+ * @param {object} data - Parsed command data containing provider and query options.
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {
@@ -57,10 +61,12 @@ export async function run(msg, data) {
   if (!channel?.send) return;
 
   /**
-   * Build a search-result embed using EmbedBuilder.
-   * @param {string} description
-   * @param {string} [footerText]
-   * @param {string} [authorLabel] - defaults to `name` (provider name)
+   * @private
+   * Build a search result embed.
+   * @param {string} description - The embed description text.
+   * @param {string|null} footerText - Optional footer text.
+   * @param {string} [authorLabel=name] - The author field label (provider name).
+   * @returns {EmbedBuilder} The constructed embed.
    */
   const makeEmbed = (description, footerText, authorLabel = name) => {
     const b = new EmbedBuilder()
@@ -113,6 +119,11 @@ export async function run(msg, data) {
   const channelId    = rawMsg.channelId ?? rawMsg.channel_id ?? rawMsg.channel?.id;
   const msgId        = rawMsg.id;
 
+  /**
+   * @private
+   * Remove all reactions from the search result message.
+   * @returns {Promise<void>}
+   */
   const clearReactions = async () => {
     try {
       await rawMsg.removeAllReactions();

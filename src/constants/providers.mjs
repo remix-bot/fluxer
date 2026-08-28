@@ -1,18 +1,11 @@
-/**
- * @file providers.mjs — Music provider definitions — source names, emoji icons, choice lists, and inline provider parsing for search commands
- * @module src.constants.providers
- */
+/** @module constants/providers */
 
 /**
- * providers.mjs — Single source of truth for all provider data.
- *
- * PROVIDERS      — full map: { prefix, label } — used by worker.mjs for search
- * PROVIDER_NAMES — derived label-only map      — used by Player.mjs for display
- * PROVIDER_CHOICES — ordered list of valid keys — used by command option builders
- *
- * Edit only here; worker.mjs and Player.mjs import from this file.
+ * Map of provider shorthand keys to their Lavalink search prefix and display label.
+ * Both short aliases (e.g. `scld`) and full names (e.g. `soundcloud`) map to the same
+ * prefix/label pair.
+ * @type {Object<string, { prefix: string, label: string }>}
  */
-
 export const PROVIDERS = {
   yt:        { prefix: "ytsearch",    label: "YouTube" },
   ytm:       { prefix: "ytmsearch",   label: "YouTube Music" },
@@ -71,11 +64,18 @@ export const PROVIDERS = {
   ftts:      { prefix: "ftts",        label: "Flowery TTS" },
 };
 
-/** Label-only map — convenience alias for display use (e.g. Player.mjs). */
+/**
+ * Shorthand-to-label lookup derived from {@link PROVIDERS}.
+ * @type {Object<string, string>}
+ */
 export const PROVIDER_NAMES = Object.fromEntries(
   Object.entries(PROVIDERS).map(([k, v]) => [k, v.label])
 );
 
+/**
+ * Complete list of accepted provider keys for command choices.
+ * @type {string[]}
+ */
 export const PROVIDER_CHOICES = [
   "ytm", "yt", "scld", "sc",
   "sp", "spotify",
@@ -105,8 +105,10 @@ export const PROVIDER_CHOICES = [
 ];
 
 /**
- * Parse an inline provider prefix from a query string (e.g. "sp: song name").
- * @param {string} raw
+ * Parse an inline provider prefix from raw query text (e.g. `"yt: never gonna give you up"`).
+ * If the prefix is recognised, splits into provider key and remaining query;
+ * otherwise returns the full string as the query with `provider: null`.
+ * @param {string} raw - The raw user input string.
  * @returns {{ provider: string|null, query: string }}
  */
 export function parseInlineProvider(raw) {

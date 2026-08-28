@@ -1,19 +1,4 @@
-/**
- * @file FluxerListManager.mjs — FluxerListManager — FluxerList bot listing API client for vote checking and server stats
- * @module src.FluxerListManager
- */
-
-/**
- * FluxerListManager.mjs — FluxerList API client for voter data queries.
- *
- * Features:
- *   - Fetch paginated voter lists for servers and bots
- *   - Bearer token authentication (fl_ prefixed API keys)
- *   - In-memory response caching with configurable TTL
- *   - Graceful error handling (401/403 auth errors, network failures)
- *
- * FluxerList API docs: https://fluxerlist.com/api/v1
- */
+/** @module src/FluxerListManager @description FluxerList API integration for fetching server/bot voter lists with caching. */
 
 import { logger } from "./constants/Logger.mjs";
 import {
@@ -23,18 +8,9 @@ import {
   buildFluxerListUrl,
 } from "./constants/API.mjs";
 
-/**
- * FluxerListManager class.
- */
+/** @class FluxerListManager @description Fetches and caches voter lists from the FluxerList API for servers and bots. */
 export class FluxerListManager {
-  /**
-   * @param {object} config - The `fluxerlist` section from config.json
-   * @param {string} [config.apiKey] - FluxerList API key (prefixed with fl_)
-   * @param {string} [config.serverId] - Default server ID or slug for voter queries
-   * @param {string} [config.botId] - Default bot ID or slug for voter queries
-   * @param {string} [config.serverSlug] - Server URL slug for website links (e.g. "remix-hq")
-   * @param {string} [config.botSlug] - Bot URL slug for website links (e.g. "remix")
-   */
+  /** @param {object} [config={}] @param {string} [config.apiKey] @param {string} [config.serverId] @param {string} [config.botId] @param {string} [config.serverSlug] @param {string} [config.botSlug] */
   constructor(config = {}) {
     this.apiKey     = config?.apiKey ?? "";
     this.serverId   = config?.serverId ?? "";
@@ -52,23 +28,12 @@ export class FluxerListManager {
     }
   }
 
-  /**
-   * Generate a cache key from the request parameters.
-   * @param {"server"|"bot"} type
-   * @param {string} id
-   * @param {number} page
-   * @param {number} limit
-   * @returns {string}
-   */
+  /** @private @param {string} type @param {string} id @param {number} page @param {number} limit @returns {string} */
   _cacheKey(type, id, page, limit) {
     return `${type}:${id}:p${page}:l${limit}`;
   }
 
-  /**
-   * Get a cached response if still fresh.
-   * @param {string} key
-   * @returns {object|null}
-   */
+  /** @private @param {string} key @returns {object|null} */
   _getCached(key) {
     const entry = this._cache.get(key);
     if (!entry) return null;
@@ -79,12 +44,7 @@ export class FluxerListManager {
     return entry.data;
   }
 
-  /**
-   * Store a response in the cache with the configured TTL.
-   * @param {string} key
-   * @param {object} data
-   * @param {number} [ttlMs] - Override TTL in milliseconds
-   */
+  /** @private @param {string} key @param {object} data @param {number} [ttlMs] */
   _setCached(key, data, ttlMs) {
     this._cache.set(key, {
       data,
@@ -99,18 +59,7 @@ export class FluxerListManager {
     }
   }
 
-  /**
-   * Fetch the list of voters for a server or bot.
-   *
-   * @param {"server"|"bot"} type - Resource type
-   * @param {string} [id] - Server or bot ID or slug (falls back to config default)
-   * @param {object} [options]
-   * @param {number} [options.page=1] - Page number (1-based)
-   * @param {number} [options.limit=50] - Results per page (max 100)
-   * @param {boolean} [options.skipCache=false] - Bypass cache and fetch fresh data
-   * @returns {Promise<{ total: number, page: number, limit: number, voters: Array<{ username: string, fluxerId: number, votedAt: string }> }>}
-   * @throws {Error} If the API key is missing or the request fails
-   */
+  /** @async Fetch voters from FluxerList API. @param {"server"|"bot"} type @param {string} [id] @param {object} [options={}] @param {number} [options.page] @param {number} [options.limit] @param {boolean} [options.skipCache] @returns {Promise<object>} @throws {Error} On auth, not-found, or HTTP errors. */
   async getVoters(type, id, options = {}) {
     this._assertEnabled();
 
@@ -173,36 +122,17 @@ export class FluxerListManager {
     return data;
   }
 
-  /**
-   * Convenience: fetch voters for a server.
-   * @param {string} [id] - Server ID or slug (falls back to config default)
-   * @param {object} [options] - Same as getVoters options
-   * @returns {Promise<object>}
-   */
+  /** @async @param {string} [id] @param {object} [options] @returns {Promise<object>} */
   async getServerVoters(id, options = {}) {
     return this.getVoters("server", id, options);
   }
 
-  /**
-   * Convenience: fetch voters for a bot.
-   * @param {string} [id] - Bot ID or slug (falls back to config default)
-   * @param {object} [options] - Same as getVoters options
-   * @returns {Promise<object>}
-   */
+  /** @async @param {string} [id] @param {object} [options] @returns {Promise<object>} */
   async getBotVoters(id, options = {}) {
     return this.getVoters("bot", id, options);
   }
 
-  /**
-   * Fetch ALL voters across all pages for a resource.
-   * Use with caution on resources with many voters — this makes multiple API calls.
-   *
-   * @param {"server"|"bot"} type
-   * @param {string} [id] - Resource ID or slug
-   * @param {object} [options]
-   * @param {number} [options.limit=100] - Results per page (uses max to minimize calls)
-   * @returns {Promise<Array<{ username: string, fluxerId: number, votedAt: string }>>}
-   */
+  /** @async Fetch all pages of voters for a resource. @param {"server"|"bot"} type @param {string} [id] @param {object} [options] @returns {Promise<Array>} */
   async getAllVoters(type, id, options = {}) {
     this._assertEnabled();
 
@@ -223,6 +153,7 @@ export class FluxerListManager {
     return allVoters;
   }
 
+  /** @private @throws {Error} If not configured. */
   _assertEnabled() {
     if (!this.enabled) {
       throw new Error("FluxerList integration is not configured (missing apiKey in config.json).");

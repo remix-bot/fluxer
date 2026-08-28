@@ -1,10 +1,11 @@
 /**
- * @file move.mjs — Move a track from one position to another in the queue
- * @module commands.move
+ * @module commands/move
+ * @description Move a track from one position to another in the queue.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the move command. */
 export const command = new CommandBuilder()
   .setName("move")
   .setDescription("Move a track from one position to another in the queue.", "commands.move")
@@ -22,9 +23,11 @@ export const command = new CommandBuilder()
   );
 
 /**
- * Execute the move command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @async
+ * Run handler for the move command.
+ * Moves a track in the queue from one position to another.
+ * @param {object} message - The command message wrapper.
+ * @param {object} data - Parsed command data containing from/to positions.
  * @returns {Promise<void>}
  */
 export async function run(message, data) {

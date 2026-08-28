@@ -1,15 +1,19 @@
 /**
- * @file RedisHandler.mjs — RedisHandler — Redis pub/sub handler for cross-process dashboard state synchronization
- * @module src.dashboard.RedisHandler
+ * @module dashboard/RedisHandler
+ * @description Redis pub/sub handler for the dashboard. Maintains a main publisher client
+ * and a subscriber client. Receives JSON requests on the "request" channel,
+ * dispatches them to a user-supplied handler, and publishes results on "response".
  */
 
 import { createClient } from "redis";
 import { logger } from "../constants/Logger.mjs";
 
 /**
- * Default retry strategy: exponential backoff starting at 500ms, max 5s, max 20 retries.
- * @param {Object} options
- * @returns {number} Delay in ms before next retry, or an Error to stop retrying
+ * Default reconnection strategy for Redis sockets.
+ * @param {object} options - Reconnection options from the Redis client.
+ * @param {number} options.totalRetryTime - Cumulative retry time so far.
+ * @param {number} options.attempt - Current retry attempt number.
+ * @returns {number|Error} Delay in ms before next retry, or an Error to stop retrying.
  */
 const DEFAULT_RETRY_STRATEGY = (options) => {
   if (options.totalRetryTime > 60_000) {
@@ -19,22 +23,25 @@ const DEFAULT_RETRY_STRATEGY = (options) => {
 };
 
 /**
- * RedisHandler class.
+ * @class
+ * @description Manages dual Redis connections (publisher + subscriber) for real-time
+ * dashboard communication via pub/sub.
  */
 export class RedisHandler {
+  /** @type {string} Platform prefix used for Redis channel names. */
   platform = "fluxer";
 
-  /** @type {import("redis").RedisClientType|null} */
+  /** @type {import('redis').RedisClientType|null} The main (publisher) Redis client. */
   client = null;
-  /** @type {import("redis").RedisClientType|null} */
+  /** @type {import('redis').RedisClientType|null} The subscriber Redis client. */
   subscriber = null;
-  /** Whether the handler has been explicitly destroyed */
+  /** @private @type {boolean} Whether the handler has been destroyed. */
   _destroyed = false;
 
   /**
-   * @param {Object} opts
-   * @param {import("redis").RedisClientOptions} opts Redis client options
-   * @param {string} [opts.platform] Platform identifier for channel namespacing
+   * Create a new RedisHandler and immediately begin connecting.
+   * @param {object} [opts={}] - Redis connection options (passed to `createClient`).
+   * @param {string} [opts.platform] - Platform prefix for channels.
    */
   constructor(opts = {}) {
     this.platform = opts.platform ?? "fluxer";
@@ -61,8 +68,10 @@ export class RedisHandler {
   }
 
   /**
-   * Connect both publisher and subscriber with reconnection support.
-   * Wrapped in a method so it can be called once from the constructor.
+   * Connect both the publisher and subscriber clients, then subscribe
+   * to the "request" and "info" channels and start the ping interval.
+   * @private
+   * @async
    */
   async _connect() {
     try {
@@ -113,12 +122,8 @@ export class RedisHandler {
   }
 
   /**
-   * Send the "connected" announcement to the backend.
-   * Delayed by 5 seconds so the bot has time to initialise players,
-   * recovery manager, and Moonlink before the backend starts sending
-   * requests like fetchPlayers. Without this delay the backend's
-   * initChannels() fires before the bot's playerMap is populated,
-   * causing "Redis request timed out" errors and a retry loop.
+   * Send a "connected" info message to the dashboard after a 5-second debounce.
+   * @returns {void}
    */
   readyMessage() {
     if (this._destroyed) return;
@@ -135,9 +140,10 @@ export class RedisHandler {
 
   /**
    * Publish a message to a Redis channel.
-   * @param {string} channel
-   * @param {string} message
-   * @returns {Promise<number>} Number of subscribers that received the message
+   * No-op if the handler is destroyed or the client is not ready.
+   * @param {string} channel - The Redis channel to publish to.
+   * @param {string} message - The message string to send.
+   * @returns {Promise<number>} Number of subscribers that received the message.
    */
   send(channel, message) {
     if (this._destroyed || !this.client?.isReady) return Promise.resolve(0);
@@ -147,24 +153,20 @@ export class RedisHandler {
     });
   }
 
-  /**
-   * @callback RequestCallback
-   * @param {Object} data
-   * @param {string} data.type
-   * @returns {Promise<Object>}
-   */
+  /** @type {Function|null} The current request handler function. */
   handleRequest;
 
   /**
-   * @param {RequestCallback} handler
+   * Set the handler function invoked for incoming "request" payloads.
+   * @param {Function} handler - Async function `(data) => result`.
    */
   setRequestHandler(handler) {
     this.handleRequest = handler;
   }
 
   /**
-   * Gracefully close both Redis connections.
-   * Should be called on process shutdown to avoid abrupt connection drops.
+   * Gracefully close both Redis connections and stop all internal timers.
+   * @async
    * @returns {Promise<void>}
    */
   async destroy() {

@@ -1,12 +1,13 @@
 /**
- * @file skip.mjs — Skip the currently playing song
- * @module commands.skip
+ * @module commands/skip
+ * @description Skip the currently playing track.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the skip command. */
 export const command = new CommandBuilder()
     .setName("skip")
     .setDescription("Skip the current playing song.", "commands.skip")
@@ -14,8 +15,10 @@ export const command = new CommandBuilder()
     .setCategory("music");
 
 /**
- * Execute the skip command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * @async
+ * Run handler for the skip command.
+ * Skips the current track and shows which track was skipped.
+ * @param {object} message - The command message wrapper.
  * @returns {Promise<void>}
  */
 export async function run(message) {

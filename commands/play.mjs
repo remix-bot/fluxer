@@ -1,6 +1,7 @@
 /**
- * @file play.mjs — Play a song, playlist, or Last.fm URL — the main music command with provider selection
- * @module commands.play
+ * @module commands/play
+ * @description Play a song or playlist from a URL or search query.
+ * Supports YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, and Last.fm integration.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -15,9 +16,10 @@ import { ERROR_COLOR } from "../src/constants/UI.mjs";
 const LASTFM_PLAY_CATEGORIES = ["loved", "top", "recent", "albums"];
 
 /**
- * Parse a lastfm query like "td:top", "sp:loved", "playlist 1", or just "top".
- * Returns { category, resolveProvider } where resolveProvider is the
- * search provider to use for resolving tracks (e.g. "td" for Tidal).
+ * Parse a Last.fm sub-provider string (e.g. "lf:loved", "sp:top").
+ * @private
+ * @param {string} query - The raw query string to parse.
+ * @returns {{ category: string, resolveProvider: string|null, invalidCategory?: string }} Parsed components.
  */
 function parseLastFmSubProvider(query) {
   const value = query.trim();
@@ -61,6 +63,13 @@ function parseLastFmSubProvider(query) {
 }
 
 
+/**
+ * Parse a Last.fm track query into artist and name components.
+ * Supports "title by artist" and "artist - title" formats.
+ * @private
+ * @param {string} raw - The raw query string.
+ * @returns {{ artist: string, name: string, source: string }|null} Parsed track info or null.
+ */
 function parseLastFmTrackQuery(raw) {
   const value = String(raw ?? "").trim();
   if (!value) return null;
@@ -86,6 +95,10 @@ function parseLastFmTrackQuery(raw) {
   return null;
 }
 
+/**
+ * @type {CommandBuilder}
+ * @description Command definition for the play command.
+ */
 export const command = new CommandBuilder()
     .setName("play")
     .setId("play")
@@ -125,9 +138,11 @@ export const command = new CommandBuilder()
     .addAlias("p");
 
 /**
- * Execute the play command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * Run handler for the play command.
+ * Handles URL detection, Last.fm integration, provider selection, and track searching.
+ *
+ * @param {object} message - The command message wrapper.
+ * @param {object} data - Parsed command data containing query and provider options.
  * @returns {Promise<void>}
  */
 export async function run(message, data) {

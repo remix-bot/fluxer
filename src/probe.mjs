@@ -1,14 +1,19 @@
-/**
- * @file probe.mjs — Health probe — monitors NodeLink and LiveKit endpoint availability
- * @module src.probe
- */
+/** @module src/probe @description Audio probing utilities using ffprobe to extract metadata from media files/streams. */
 
 import ffprobe from "ffprobe-static";
 import { spawn } from "node:child_process";
 import { logger } from "./constants/Logger.mjs";
 
+/** @type {number} @description Maximum time in milliseconds to wait for ffprobe to complete. */
 const PROBE_TIMEOUT_MS = 15_000;
 
+/**
+ * Probe a media file or stream URL for metadata using ffprobe.
+ * Extracts album, artist, title, and duration.
+ * @param {string} file - File path or stream URL to probe.
+ * @returns {Promise<{album: string, artist: string, title: string, duration: number}>} Parsed metadata.
+ * @throws {Error} If ffprobe times out, fails to spawn, or produces unparseable output.
+ */
 export default function probe(file) {
   return new Promise((res, rej) => {
     const args = [

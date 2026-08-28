@@ -1,233 +1,43 @@
-/**
- * @file Player.mjs — Core Player class — manages voice connections, audio streaming, queue, and playback lifecycle via FluxerRevoice/LiveKit
- * @module src.Player
- */
+/** @module src/Player @description Core music player with queue management, voice connection handling, track streaming, and playback controls. */
 
-/**
- * Player.mjs — FluxerRevoice edition
- *
- * Track resolution  → moonlink.js Manager (search / load via NodeLink REST)
- * Session handling  → moonlink.js (WebSocket to NodeLink, session ID, player state)
- * Voice connection  → FluxerRevoice (Fluxer gateway → LiveKit voice)
- * Audio playback    → revoice.js MediaPlayer (FFmpeg → LiveKit audio track)
- *
- * FluxerRevoice uses the Fluxer API/gateway (via @fluxerjs/voice) to obtain
- * LiveKit credentials instead of a third-party REST API that the default
- * revoice.js Revoice class uses. This avoids the 401 Unauthorized error
- * that occurs when a Fluxer bot token is sent to an incompatible API.
- */
 
-import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
-const { MediaPlayer } = require("revoice.js");
-
-import { ConnectionState, LKRoomEvent } from "./constants/FluxerRevoice.mjs";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { Utils, cleanId } from "./Utils.mjs";
 import { EventEmitter } from "node:events";
 import meta from "./probe.mjs";
-import { Worker } from "node:worker_threads";
 import http from "node:http";
 import https from "node:https";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "./MessageHandler.mjs";
 import { logger } from "./constants/Logger.mjs";
 import { get247ChannelMode } from "./constants/Helpers247.mjs";
-import { PROVIDER_NAMES } from "./constants/providers.mjs";
+import { PROVIDERS, PROVIDER_NAMES } from "./constants/providers.mjs";
 import { hasHumansInChannel } from "./constants/VoiceStateResolver.mjs";
+import { FluxerAudioBridge } from "./FluxerAudioBridge.mjs";
 
 
-/** NodeLink default password — centralised so it doesn't need to be hardcoded in two places. */
-export const NL_DEFAULT_PASSWORD = "youshallnotpass";
-
-const _sanitizeCache = new Map();
-
-/**
- * Strip NodeLink host, port, and password from a string so they are never
- * shown to end-users in Fluxer messages.
- * @param {string} msg
- * @param {Object} nl  - The player's _nl config object { host, port, password }
- * @returns {string}
- */
-function sanitizeError(msg, nl = {}) {
-  if (!msg) return msg;
-  const host     = nl.host     ?? "";
-  const port     = nl.port     ?? 0;
-  const password = nl.password ?? NL_DEFAULT_PASSWORD;
-  const cacheKey = `${host}:${port}:${password}`;
-
-  let regexes = _sanitizeCache.get(cacheKey);
-  if (!regexes) {
-    regexes = [];
-    if (host && host !== "localhost") {
-      const eh = host.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      regexes.push(new RegExp(`https?://${eh}(:\\d+)?[^\\s"']*`, "gi"));
-      if (port) regexes.push(new RegExp(`${eh}:${port}`, "g"));
-    }
-    if (port) {
-      regexes.push(new RegExp(`https?://localhost:${port}[^\\s"']*`, "gi"));
-    }
-    if (password && password !== NL_DEFAULT_PASSWORD) {
-      const ep = password.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      regexes.push(new RegExp(ep, "g"));
-    }
-    if (_sanitizeCache.size >= 20) _sanitizeCache.clear();
-    _sanitizeCache.set(cacheKey, regexes);
-  }
-
-  let s = String(msg);
-  for (const re of regexes) {
-    re.lastIndex = 0;
-    s = s.replace(re, re.source.includes("redacted") ? "[redacted]" : "[internal]");
-  }
-  return s;
-}
-
-function isIgnorableMediaStateError(err) {
-  const msg = err?.message ?? String(err ?? "");
-  return msg.includes("InvalidState") || msg.includes("failed to capture frame") || msg.includes("capture frame");
-}
-
-function isExpectedFfmpegStopError(err) {
-  const msg = err?.message ?? String(err ?? "");
-  return msg.includes("ffmpeg was killed")
-      || msg.includes("SIGKILL")
-      || msg.includes("SIGTERM")
-      || msg.includes("Output stream closed")
-      || msg.includes("ERR_STREAM_DESTROYED");
-}
-
-class PlayerWorkerPool {
-  /**
-   * @param {number} size Number of worker threads to spawn in the pool
-   * @param {string} workerPath Filesystem path to the worker script (see src/worker.mjs)
-   * @param {Object} [nlConfig={}] NodeLink connection config passed to each worker on init
-   */
-  constructor(size, workerPath, nlConfig = {}) {
-    this._size       = size;
-    this._workerPath = workerPath;
-    this._nlConfig   = nlConfig;
-    this._workers    = [];
-    this._queue      = [];
-    this._pending    = new Map();
-    this._jobCounter = 0;
-
-    for (let i = 0; i < size; i++) this._spawn();
-  }
-
-  _spawn() {
-    const worker = new Worker(this._workerPath, {
-      workerData: {
-        poolMode: true,
-        data: { nodelink: this._nlConfig ?? {} }
-      }
-    });
-    const entry = { worker, busy: false, _currentJobKey: null };
-
-    worker.on("message", (raw) => {
-      try {
-        const msg = typeof raw === "string" ? JSON.parse(raw) : raw;
-        const { jobKey, event, data } = msg;
-        const cb = this._pending.get(jobKey);
-        if (!cb) return;
-        if (event === "message" && cb.onMessage) {
-          cb.onMessage(data);
-        } else if (event === "finished") {
-          this._pending.delete(jobKey);
-          entry.busy = false;
-          entry._currentJobKey = null;
-          cb.resolve(data);
-          this._drain();
-        } else if (event === "error") {
-          this._pending.delete(jobKey);
-          entry.busy = false;
-          entry._currentJobKey = null;
-          cb.reject(new Error(String(data)));
-          this._drain();
-        }
-      } catch(e) { logger.warn("[Player] Worker message handler error:", e?.message); }
-    });
-
-    worker.on("error", (err) => {
-      if (entry._currentJobKey != null) {
-        const cb = this._pending.get(entry._currentJobKey);
-        if (cb) {
-          this._pending.delete(entry._currentJobKey);
-          cb.reject(err);
-        }
-        entry._currentJobKey = null;
-      }
-      entry.busy = false;
-      const errIdx = this._workers.indexOf(entry);
-      if (errIdx !== -1) this._workers.splice(errIdx, 1);
-      this._spawn();
-      this._drain();
-    });
-
-    worker.on("exit", (code) => {
-      const exitIdx = this._workers.indexOf(entry);
-      if (exitIdx !== -1) this._workers.splice(exitIdx, 1);
-      if (this._workers.length < this._size) this._spawn();
-    });
-
-    this._workers.push(entry);
-  }
-
-  _drain() {
-    if (this._queue.length === 0) return;
-    const free = this._workers.find(e => !e.busy);
-    if (!free) return;
-    const job = this._queue.shift();
-    this._dispatch(free, job);
-  }
-
-  _dispatch(entry, { jobKey, msg, resolve, reject, onMessage }) {
-    entry.busy = true;
-    entry._currentJobKey = jobKey;
-    this._pending.set(jobKey, { resolve, reject, onMessage });
-    entry.worker.postMessage(JSON.stringify(msg));
-  }
-
-  run(jobId, data, onMessage = null) {
-    const jobKey = String(++this._jobCounter);
-    const msg    = { poolMode: true, jobKey, jobId, data };
-    return new Promise((resolve, reject) => {
-      const free = this._workers.find(e => !e.busy);
-      if (free) {
-        this._dispatch(free, { jobKey, msg, resolve, reject, onMessage });
-      } else {
-        this._queue.push({ jobKey, msg, resolve, reject, onMessage });
-      }
-    });
-  }
-
-  terminate() {
-    for (const entry of this._workers) {
-      entry.worker.terminate().catch(() => {});
-    }
-    this._workers  = [];
-    this._queue    = [];
-    this._pending.clear();
-  }
-}
-
-/**
- * Queue class.
- */
+/** @class Queue @description Internal queue data structure that tracks tracks, loop state, and emits queue events. @extends {EventEmitter} */
 export class Queue extends EventEmitter {
+  /** @type {Array<object>} @description The queued track objects. */
   data = [];
+  /** @type {object|null} @description The currently playing track. */
   current = null;
+  /** @type {boolean} @description Whether queue loop is enabled. */
   loop = false;
+  /** @type {boolean} @description Whether single-song loop is enabled. */
   songLoop = false;
 
+  /** Initialize an empty queue with no loop enabled. */
   constructor() {
     super();
   }
 
+  /** @returns {boolean} Whether the queue has no tracks. */
   isEmpty() { return this.data.length === 0; }
+  /** @returns {number} Number of tracks in the queue (excluding current). */
   size()    { return this.data.length; }
 
+  /** Advance to the next track in the queue. If songLoop is active, returns the current track. Emits a queue update event. @returns {object|null} The next track, or null if the queue is empty. */
   next() {
     const previous = this.current;
 
@@ -247,6 +57,7 @@ export class Queue extends EventEmitter {
     return this.current;
   }
 
+/** Remove a track from the queue by index. @param {number} idx - Zero-based index of the track to remove. @returns {string} Result message indicating success or out-of-bounds error. */
   remove(idx) {
     if (idx < 0 || idx >= this.data.length) return "Index out of bounds";
     const title = this.data[idx].title;
@@ -255,6 +66,7 @@ export class Queue extends EventEmitter {
     return `Successfully removed **${title}** from the queue.`;
   }
 
+/** Move a track from one position to another (0-based indices). @param {number} from - Source index. @param {number} to - Destination index. @returns {string} Result message indicating success or error. */
   move(from, to) {
     if (from < 0 || from >= this.data.length) return "Source index out of bounds";
     if (to < 0 || to >= this.data.length)     return "Target index out of bounds";
@@ -265,11 +77,13 @@ export class Queue extends EventEmitter {
     return `Moved **${track.title}** from position ${from + 1} to ${to + 1}.`;
   }
 
+/** Add a single track to the queue. @param {object} data - Track data object. @param {boolean} [top=false] - If true, insert at the front of the queue. @returns {number} The new length of the queue. */
   add(data, top = false) {
     this.emit("queue", { type: "add", data: { append: !top, data } });
     return top ? this.data.unshift(data) : this.data.push(data);
   }
 
+/** Add multiple tracks to the queue (up to 1000). @param {Array<object>} tracks - Array of track data objects. @param {boolean} [top=false] - If true, insert at the front of the queue. @returns {number} Number of tracks actually added. */
   addMany(tracks, top = false) {
     if (!tracks?.length) return 0;
     if (!Array.isArray(tracks)) tracks = [];
@@ -283,26 +97,35 @@ export class Queue extends EventEmitter {
     return count;
   }
 
+  /** Remove all tracks from the queue. */
   clear()  { this.data.length = 0; }
+  /** Clear the queue and reset all state (current, loops). */
   reset()  { this.clear(); this.current = null; this.songLoop = false; this.loop = false; }
 
+  /** @param {boolean} bool - Enable or disable song loop. */
   setSongLoop(bool) { this.songLoop = bool; }
+  /** @param {boolean} bool - Enable or disable queue loop. */
   setLoop(bool)     { this.loop = bool; }
 
+/** Toggle a loop mode on or off. @param {"song"|"queue"} loop - The type of loop to toggle. @returns {boolean|null} The new loop state, or null if the loop type is invalid. */
   toggleLoop(loop) {
     if (loop === "song")  { this.setSongLoop(!this.songLoop); return this.songLoop; }
     if (loop === "queue") { this.setLoop(!this.loop);         return this.loop; }
     return null;
   }
 
+  /** Shuffle the queue in place and emit a queue event. */
   shuffle() {
     Utils.shuffleArr(this.data);
     this.emit("queue", { type: "shuffle", data: this.data });
   }
 
+  /** @returns {object|null} The currently playing track. */
   getCurrent() { return this.current; }
+  /** @returns {Array<object>} A copy of the queue array. */
   getQueue()   { return this.data; }
 
+/** Get a paginated slice of the queue. @param {number} [page=1] - 1-based page number (clamped to valid range). @param {number} [pageSize=10] - Number of tracks per page. @returns {object} Page result with items, page, totalPages, total, and start index. */
   getPage(page = 1, pageSize = 10) {
     const total      = this.data.length;
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -312,25 +135,24 @@ export class Queue extends EventEmitter {
   }
 }
 
+/** @class Player @description Main music player class. Manages voice connections, playback, queue, filters, and search. Extends EventEmitter. */
 export default class Player extends EventEmitter {
-  /** @type {import("revoice.js").VoiceConnection|null} */
-  connection        = null;
-  _guildId          = null;
-  _channelId        = null;
-  _lastConnectedAt  = null;
-  _home247Channel   = null;
+  /** @private */
+  _voiceConn         = null;
+  _audioBridge       = null;
+  lavalinkPlayer     = null;
+  connection         = null;
+  _guildId           = null;
+  _channelId         = null;
+  _lastConnectedAt   = null;
+  _home247Channel    = null;
 
   queue        = null;
   client       = null;
   settings     = null;
   config       = {};
-  /** @type {import("revoice.js").MediaPlayer|null} */
-  _mediaPlayer = null;
-  /** @type {import("./constants/FluxerRevoice.mjs").FluxerRevoice|null} Shared FluxerRevoice instance (injected from Remix) */
-  _revoice     = null;
 
-  /** @type {import("./MoonlinkManager.mjs").MoonlinkManager|null} */
-  _moonlink    = null;
+  _lavalink    = null;
 
   leaving           = false;
   _paused           = false;
@@ -343,11 +165,8 @@ export default class Player extends EventEmitter {
   resultLimit       = 5;
   preferredVolume   = 1;
 
-  _streamingStopped    = false;
   _skipping            = false;
   _seeking             = false;
-  _replayingSeek       = false;
-  _currentPassthrough  = null;
   _wasRadio            = false;
   _radioAnnounced      = false;
   _queueEndedSent      = false;
@@ -363,9 +182,6 @@ export default class Player extends EventEmitter {
   static TRACK_MOSTLY_FINISHED_RATIO = 0.85;
   static TRACK_MOSTLY_FINISHED_FLOOR_MS = 15_000;
   static RADIO_SAFETY_TIMEOUT_MS = 20 * 60 * 1000;
-  static PUBLISH_MAX_RETRIES = 3;
-  static PUBLISH_BASE_RETRY_MS = 3_000;
-  static CONNECTION_WAIT_MS = 3_000;
 
   _inactivityTimer     = null;
   _inactivityLimit = Player.INACTIVITY_DEFAULT_MS;
@@ -374,22 +190,23 @@ export default class Player extends EventEmitter {
   _isJoining           = false;
 
   _destroyed           = false;
+  _rejoinTimer         = null;
 
-  _nl = {
-    host:           "localhost",
-    port:           3000,
-    password:       "youshallnotpass",
-    sessionId:      null,
-    requestTimeout: 60_000,
-  };
-
-  /**
-   * @param {string} token Bot token (kept for revoice.js API compatibility; unused by FluxerRevoice)
-   * @param {Object} [opts={}] Player configuration, merged over DEFAULT_OPTS
-   * @param {import("@fluxerjs/core").Client} [opts.client] Fluxer client instance
-   * @param {string} [opts.channelId] Voice channel ID to bind this player to
-   * @param {string} [opts.guildId] Guild ID the voice channel belongs to
-   */
+/**
+ * Create a new Player instance bound to a voice channel.
+ *
+ * @param {string} token - Bot authentication token (used internally, NOT guild ID).
+ * @param {object} [opts={}] - Player configuration options.
+ * @param {import('@fluxerjs/core').Client} [opts.client] - The Discord/Fluxer client instance.
+ * @param {object} [opts.config] - Full bot configuration object.
+ * @param {import('../src/LavalinkManager.mjs').LavalinkManager} [opts.lavalink] - Lavalink node manager for track search.
+ * @param {import('../src/Settings.mjs').RemoteSettingsManager} [opts.settingsMgr] - Remote settings manager.
+ * @param {Function} [opts.getPrefix] - Function returning command prefix for a guild: (guildId) => string.
+ * @param {import('../src/constants/VoiceStateCache.mjs').VoiceStateCache} [opts.observedVoiceUsers] - Voice state cache (legacy alias, same as voiceCache).
+ * @param {import('../src/constants/VoiceStateCache.mjs').VoiceStateCache} [opts.voiceCache] - Voice state cache for human/bot tracking.
+ * @param {import('../src/constants/Locale.mjs').Locale} [opts.locale] - Locale manager for i18n.
+ * @param {import('../src/TrackOptionsManager.mjs').TrackOptionsManager} [opts.trackOptions] - Per-user track option matcher.
+ */
   constructor(token, opts = {}) {
     super();
 
@@ -405,11 +222,12 @@ export default class Player extends EventEmitter {
     this.trackOptions = opts.trackOptions ?? null;
     this._activeTrackOpt = null;
 
-    this._nl = {
-      ...this._nl,
-      ...(this.config?.nodelink ?? {}),
-      ...(opts.nodelink ?? {}),
-    };
+    this._lavalink = opts.lavalink ?? null;
+
+    this._audioBridge = new FluxerAudioBridge(opts.lavalink ?? null);
+    this._audioBridge.on("error", (err) => {
+      logger.error(`[Player] Audio bridge error (guild ${this._guildId}): ${err.message}`);
+    });
 
     const inactivityMs = this.config?.timers?.inactivityTimeout ?? this.config?.inactivityTimeout;
     if (inactivityMs !== undefined) {
@@ -419,41 +237,58 @@ export default class Player extends EventEmitter {
       }
     }
 
-    this._moonlink = opts.moonlink ?? null;
-
-    this._revoice = opts.revoice ?? null;
-
-    if (this._moonlink) {
-      this._onMoonlinkReady = (sessionId) => {
-        const oldId = this._nl.sessionId;
-        this._nl.sessionId = sessionId;
-        if (oldId && oldId !== sessionId) {
-          logger.moonlink(`[Player] Session ID updated: ${oldId} → ${sessionId}`);
-        }
+    if (this._lavalink) {
+      this._onLavalinkPlayerDisconnect = (lavaPlayer) => {
+        if (!lavaPlayer || String(lavaPlayer.guildId) !== String(this._guildId)) return;
+        logger.lavalink("[Player] lavalink-client player disconnect (guild: " + this._guildId + ") — ignored (voice via LiveKit)");
       };
-      this._moonlink.on("ready", this._onMoonlinkReady);
-      const existingSession = this._moonlink.getLiveSessionId?.() ?? this._moonlink.sessionId;
-      if (existingSession) {
-        this._nl.sessionId = existingSession;
-      }
+      this._lavalink.on("playerDisconnected", this._onLavalinkPlayerDisconnect);
     }
   }
 
   /**
-   * Check if 24/7 mode is enabled for this player's channel.
-   * Returns true for both "on" and "auto" modes.
+   * Handle the end of a track. Advances to next song or starts 24/7 wait.
+   * For radio tracks, stops playback and starts inactivity (if not 24/7).
+   * @private
+   */
+  _handleTrackEnd() {
+    const songData = this.queue.getCurrent();
+    if (!songData) return;
+
+    this._clearTrackEndTimer();
+
+    if (songData.type === "radio") {
+      logger.player(`[Player] Radio track ended: ${songData.title}`);
+      this._lastPlayedTrack = this.queue.getCurrent() ?? songData;
+      this.queue.current = null;
+      this.emit("stopplay");
+      if (!this._is247Enabled()) {
+        this._startInactivityTimer();
+      }
+      return;
+    }
+
+    if (!this._paused) {
+      this._lastPlayedTrack = this.queue.getCurrent() ?? songData;
+      if (!this.queue.songLoop) this.queue.current = null;
+      this._playingNext = false;
+      this.playNext().catch(e => logger.error("[Player] auto-advance playNext error:", e.message));
+    }
+  }
+
+  /**
+   * Check whether 24/7 mode is active for this player's current channel.
+   * @returns {boolean} True if 24/7 is enabled.
    */
   _is247Enabled() {
     return this._get247Mode() !== "off";
   }
 
   /**
-   * Get the 24/7 mode for this player's channel.
-   * Returns "auto", "on", or "off".
-   *
-   *   %247 auto: bot stays in voice always (never leaves, auto-rejoins on disconnect + reboot)
-   *   %247 on:   bot stays in voice always (never leaves due to inactivity, rejoins on reboot)
-   *   %247 off:  bot leaves when inactive
+   * Resolve the 24/7 mode for this player's current or home channel.
+   * Checks the guild's stay_247 setting to determine if the channel is registered.
+   * @returns {"on"|"off"} The 24/7 mode. Only "on" or "off" — no "auto".
+   * @private
    */
   _get247Mode() {
     if (!this._guildId) return "off";
@@ -479,12 +314,7 @@ export default class Player extends EventEmitter {
     return get247ChannelMode(serverSettings, channelId);
   }
 
-  /**
-   * Resolve the guild ID for this player, using the channel cache
-   * as a fallback if _guildId is not set. This is needed for
-   * guild-scoped gateway leave signals.
-   * @returns {string|null}
-   */
+  /** @private @returns {string|null} The cleaned guild ID, or null if unresolvable. */
   _resolveGuildId() {
     const cleanGuild = cleanId(this._guildId ?? "");
     if (cleanGuild) return cleanGuild;
@@ -501,6 +331,7 @@ export default class Player extends EventEmitter {
     return null;
   }
 
+  /** @private Restore saved volume from guild settings. */
   _restoreVolume() {
     if (!this._guildId) return;
     let savedVol = null;
@@ -522,10 +353,14 @@ export default class Player extends EventEmitter {
       if (!Number.isNaN(parsed) && parsed > 0) {
         this.preferredVolume = Utils.clamp(parsed / 100, 0, 2);
         logger.player(`[Player] Restored volume ${savedVol}% for guild ${this._guildId}`);
+        if (this._voiceConn) {
+          try { this._voiceConn.setVolume(this.preferredVolume * 100); } catch (_) {}
+        }
       }
     }
   }
 
+  /** @private @returns {boolean} Whether there are non-bot users in the voice channel. */
   _hasHumansInChannel() {
     return hasHumansInChannel({
       guildId:   cleanId(this._guildId ?? ""),
@@ -533,11 +368,17 @@ export default class Player extends EventEmitter {
       client:    this.client,
       voiceCache: this._voiceCache,
       observedVoiceUsers: this._observedVoiceUsers,
-      room:      this.connection?.room,
       botId:     this.client?.user?.id,
     });
   }
 
+  /**
+   * Start the inactivity timer. Skipped if:
+   * - 24/7 mode is active (mode === "on")
+   * - Queue has songs
+   * - Humans are present in the channel
+   * The timer callback re-checks all conditions before emitting autoleave.
+   */
   _startInactivityTimer() {
     this._stopInactivityTimer();
     if (this._inactivityLimit <= 0) return;
@@ -545,8 +386,8 @@ export default class Player extends EventEmitter {
     const mode = this._get247Mode();
     logger.inactivity(`[Player] Checking 24/7 mode for guild ${this._guildId}: ${mode}`);
 
-    if (mode === "auto" || mode === "on") {
-      logger.inactivity(`[Player] 24/7 ${mode} mode active for guild ${this._guildId}, skipping inactivity timer`);
+    if (mode === "on") {
+      logger.inactivity(`[Player] 24/7 mode active for guild ${this._guildId}, skipping inactivity timer`);
       return;
     }
 
@@ -563,8 +404,8 @@ export default class Player extends EventEmitter {
     logger.inactivity(`[Player] Starting inactivity timer for guild ${this._guildId} (${this._inactivityLimit / 1000}s)`);
     this._inactivityTimer = setTimeout(() => {
       const currentMode = this._get247Mode();
-      if (currentMode === "auto" || currentMode === "on") {
-        logger.inactivity(`[Player] 24/7 ${currentMode} mode enabled during inactivity wait, aborting leave`);
+      if (currentMode === "on") {
+        logger.inactivity(`[Player] 24/7 mode enabled during inactivity wait, aborting leave`);
         return;
       }
       if (this.queue?.getCurrent() || !this.queue?.isEmpty()) {
@@ -580,6 +421,9 @@ export default class Player extends EventEmitter {
     }, this._inactivityLimit);
   }
 
+  /**
+   * Clear the inactivity timer if running.
+   */
   _stopInactivityTimer() {
     this._pendingInactivityCheck = false;
     if (this._inactivityTimer) {
@@ -590,14 +434,14 @@ export default class Player extends EventEmitter {
   }
 
   /**
-   * Schedule a rejoin after a 24/7 channel's voice connection drops.
-   * Delegates to the GatewayHandler's rejoin logic via the bot context.
-   * This is the fallback path when the gateway doesn't send a VOICE_STATE_UPDATE
-   * for the bot (because FluxerRevoice already called vm.leaveChannel()).
-   *
-   * @param {string} channelId - Clean channel ID
-   * @param {string} guildId - Clean guild ID
-   * @param {string} mode - 24/7 mode ("auto" or "on")
+   * Schedule a 24/7 rejoin after a delay. Guards against:
+   * - Player already destroyed
+   * - Intentional leave registered
+   * - Pending or existing player in the target channel
+   * @param {string} channelId - The channel to rejoin.
+   * @param {string} guildId - The guild ID.
+   * @param {string} mode - The 24/7 mode ("on").
+   * @private
    */
   _schedule247Rejoin(channelId, guildId, mode) {
     const ctx = this.client?._remix;
@@ -622,17 +466,14 @@ export default class Player extends EventEmitter {
     const rejoinDelay = ctx.config?.timers?.rejoin247Delay ?? 3_000;
     logger.voice247(`[Player] Scheduling 24/7 ${mode} rejoin for channel ${channelId} (guild ${guildId}) in ${rejoinDelay / 1000}s`);
 
-    setTimeout(() => {
+    this._rejoinTimer = setTimeout(() => {
+      this._rejoinTimer = null;
       if (this._destroyed) {
         logger.voice247(`[Player] 24/7 rejoin cancelled — player destroyed`);
         return;
       }
       if (ctx.intentionalLeaves?.has(channelId)) {
         logger.voice247(`[Player] 24/7 rejoin cancelled — intentional leave registered`);
-        return;
-      }
-      if (ctx.revoice?._intentionalDisconnects?.has?.(channelId)) {
-        logger.voice247(`[Player] 24/7 rejoin cancelled — intentional disconnect registered`);
         return;
       }
 
@@ -642,168 +483,7 @@ export default class Player extends EventEmitter {
     }, rejoinDelay);
   }
 
-  async _ensureMediaPlayer() {
-    if (this._destroyed) return false;
-    if (!this.connection) return false;
-
-    const room = this.connection.room;
-    if (!room) return false;
-
-    const roomAlive = room.isConnected;
-    const cs = room.connectionState;
-
-    logger.mediaplayer(`[Player] _ensureMediaPlayer: attempting to create MediaPlayer (isConnected: ${roomAlive}, connectionState: ${cs})`);
-
-    if (this._mediaPlayer) {
-      const mpAlive = !this._mediaPlayer.destroyed && typeof this._mediaPlayer.playStream === "function";
-      if (roomAlive && mpAlive) {
-        logger.mediaplayer("[Player] Reusing healthy MediaPlayer");
-        return true;
-      }
-      logger.mediaplayer("[Player] Existing MediaPlayer unhealthy, cleaning up...");
-      try {
-        await this._stopMediaPlayer();
-        this._streamingStopped = false;
-      } catch(e) { logger.warn("[Player] MediaPlayer stop error:", e?.message); }
-    }
-
-    if (!roomAlive) {
-      logger.mediaplayer(`[Player] Room dead, skipping MediaPlayer creation`);
-      return false;
-    }
-
-    if (this._destroyed) return false;
-
-    const MAX_PUBLISH_RETRIES = Player.PUBLISH_MAX_RETRIES;
-    const BASE_RETRY_DELAY_MS = Player.PUBLISH_BASE_RETRY_MS;
-
-    for (let attempt = 1; attempt <= MAX_PUBLISH_RETRIES; attempt++) {
-      try {
-        const mp = new MediaPlayer();
-        mp.setMaxListeners(20);
-
-        if (mp.source && typeof mp.source.captureFrame === "function") {
-          const _orig = mp.source.captureFrame.bind(mp.source);
-          mp.source.captureFrame = async (frame) => {
-            if (this._streamingStopped || this._skipping || this._seeking || this._replayingSeek || this.leaving || this._destroyed) {
-              return;
-            }
-            try {
-              return await _orig(frame);
-            } catch (e) {
-              if (
-                  e?.message?.includes("InvalidState") ||
-                  e?.message?.includes("failed to capture frame")
-              ) {
-                return;
-              }
-              throw e;
-            }
-          };
-        }
-
-        await mp.publishToRoom(room);
-        this._mediaPlayer = mp;
-        logger.mediaplayer("[Player] MediaPlayer published successfully");
-        return true;
-      } catch (e) {
-        const msg = e?.message ?? String(e);
-        const isTransient = msg.includes("track publication timed out")
-            || msg.includes("publishToRoom failed")
-            || msg.includes("internal error");
-
-        try { this._mediaPlayer?.stop?.(); } catch(e) { logger.warn("[Player] MediaPlayer stop during retry:", e?.message); }
-        this._mediaPlayer = null;
-
-        if (isTransient && attempt < MAX_PUBLISH_RETRIES) {
-          const backoffMs = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
-          logger.warn(`[Player] publishToRoom failed (attempt ${attempt}/${MAX_PUBLISH_RETRIES}): ${msg} — retrying in ${backoffMs / 1000}s`);
-          await new Promise(resolve => setTimeout(resolve, backoffMs));
-          if (this._destroyed || !room.isConnected) return false;
-          continue;
-        }
-
-        logger.error(`[Player] publishToRoom failed: ${msg}`);
-        return false;
-      }
-    }
-    return false;
-  }
-
-  async _stopMediaPlayer() {
-    this._streamingStopped = true;
-
-    if (this._currentPassthrough) {
-      try {
-        const stream = this._currentPassthrough;
-        this._currentPassthrough = null;
-        if (typeof stream.unpipe === "function") stream.unpipe();
-        if (typeof stream.destroy === "function") stream.destroy();
-      } catch (e) {
-        logger.error("[Player] Error destroying passthrough:", e.message);
-      }
-    }
-
-    if (this._mediaPlayer) {
-      const mediaPlayer   = this._mediaPlayer;
-      this._mediaPlayer   = null;
-      const fProcToKill   = mediaPlayer.fProc;
-      const wasFfmpegDone = mediaPlayer.ffmpegFinished;
-      const localTrack    = mediaPlayer.localAudioTrack ?? mediaPlayer.track ?? null;
-      const localTrackSid = localTrack?.sid ?? localTrack?.info?.sid ?? null;
-      const source        = mediaPlayer.source ?? null;
-
-      try {
-        if (fProcToKill) {
-          try {
-            fProcToKill.removeAllListeners("start");
-            fProcToKill.removeAllListeners("codecData");
-            fProcToKill.removeAllListeners("end");
-            fProcToKill.removeAllListeners("error");
-            fProcToKill.on("error", (e) => {
-              if (isExpectedFfmpegStopError(e)) {
-                logger.mediaplayer("[Player] Suppressed expected FFmpeg stop error:", e?.message);
-                return;
-              }
-              logger.warn("[Player] FFmpeg error after teardown:", e?.message);
-            });
-          } catch(e) { logger.warn("[Player] Error replacing FFmpeg listeners:", e?.message); }
-        }
-
-        await mediaPlayer.stop();
-      } catch (e) {
-        logger.error("[Player] Error stopping media player:", e.message);
-      }
-
-      try {
-        const participant = this.connection?.room?.localParticipant;
-        if (participant && localTrackSid && typeof participant.unpublishTrack === "function") {
-          await participant.unpublishTrack(localTrackSid, true);
-        }
-      } catch (e) {
-        logger.warn("[Player] Error unpublishing media track:", e?.message);
-      }
-
-      try {
-        if (localTrack && typeof localTrack.close === "function") await localTrack.close(false);
-      } catch (e) {
-        logger.warn("[Player] Error stopping local audio track:", e?.message);
-      }
-
-      try {
-        if (source && typeof source.close === "function") await source.close();
-      } catch (e) {
-        logger.warn("[Player] Error closing audio source:", e?.message);
-      }
-
-      try {
-        if (fProcToKill && !wasFfmpegDone) {
-          try { fProcToKill.kill("SIGKILL"); } catch(e) { logger.warn("[Player] FFmpeg SIGKILL error:", e?.message); }
-        }
-      } catch(e) { logger.warn("[Player] Stop MediaPlayer error:", e?.message); }
-    }
-  }
-
+  /** @private @async @param {string} url @param {object} [options={}] @param {boolean} [returnStream=false] @returns {Promise<object|Readable|null>} */
   async _request(url, options = {}, returnStream = false) {
     return new Promise((resolve, reject) => {
       const fetchUrl = (target, _redirects = 0) => {
@@ -819,7 +499,6 @@ export default class Player extends EventEmitter {
           headers: {
             "User-Agent":    "Mozilla/5.0 (compatible; Bot/1.0)",
             "Accept":        "*/*",
-            "Authorization": this._nl.password,
             ...options.headers,
           },
         }, (res) => {
@@ -855,7 +534,7 @@ export default class Player extends EventEmitter {
         });
 
         req.on("error", reject);
-        req.setTimeout(options.timeout || this._nl.requestTimeout || 60_000, () => {
+        req.setTimeout(options.timeout || 60_000, () => {
           req.destroy();
           reject(new Error("Request timeout"));
         });
@@ -866,28 +545,31 @@ export default class Player extends EventEmitter {
     });
   }
 
-  async _fetchStream(url) {
-    return this._request(url, {
-      headers: {
-        ...(this._nl.sessionId ? { "Session-Id": this._nl.sessionId } : {}),
-        ...(this._guildId      ? { "Guild-Id":   this._guildId      } : {}),
+  /** @private Extract track duration in milliseconds from various possible track data shapes. @param {object} track @returns {number} */
+ _getTrackDurationMs(track) {
+    if (track?._durationMs != null && track._durationMs > 0) {
+      return track._durationMs;
+    }
+    if (track?.duration) {
+      if (typeof track.duration === "object" && track.duration?.seconds != null) {
+        return track.duration.seconds * 1000;
       }
-    }, true);
-  }
-
-  _getTrackDurationMs(track) {
-    if (!track?.duration) return 0;
-    if (typeof track.duration === "object" && track.duration?.seconds != null) {
-      return track.duration.seconds * 1000;
+      if (typeof track.duration === "string" && track.duration.startsWith("PT")) {
+        return Utils.parseISODuration(track.duration);
+      }
+      if (typeof track.duration === "number") return track.duration;
     }
-    if (typeof track.duration === "string" && track.duration.startsWith("PT")) {
-      return Utils.parseISODuration(track.duration);
+    if (track?.info?.length) return track.info.length;
+    if (track?.info?.duration != null) {
+      if (typeof track.info.duration === "number") return track.info.duration;
+      if (typeof track.info.duration === "object" && track.info.duration.seconds != null)
+        return track.info.duration.seconds * 1000;
     }
-    if (typeof track.duration === "number") return track.duration;
     return 0;
   }
 
-  _didTrackMostlyFinish(track) {
+  /** @private Check if a track has played past 85% or within 15s of the end. @param {object} track @returns {boolean} */
+ _didTrackMostlyFinish(track) {
     const totalMs = this._getTrackDurationMs(track);
     if (!totalMs || !this.startedPlaying) return false;
 
@@ -897,227 +579,14 @@ export default class Player extends EventEmitter {
     return elapsedMs / totalMs >= Player.TRACK_MOSTLY_FINISHED_RATIO || remainingMs <= Player.TRACK_MOSTLY_FINISHED_FLOOR_MS;
   }
 
-  async _streamViaRevoice(url, inputOptions = []) {
-    if (this._streamingStopped) return;
-    this._streamingStopped = false;
-
-    const currentTrack = this.queue.getCurrent();
-    let audioStream = null;
-
-    try {
-      audioStream = await this._fetchStream(url);
-      this._currentPassthrough = audioStream;
-
-      const cleanup = () => {
-        if (audioStream) {
-          try {
-            if (typeof audioStream.unpipe === "function") audioStream.unpipe();
-            if (typeof audioStream.destroy === "function") audioStream.destroy();
-          } catch (e) { logger.warn("[Player] Error:", e?.message); }
-        }
-        this._currentPassthrough = null;
-      };
-
-      const isGracefulExit = () =>
-        this._streamingStopped || this._skipping || this._seeking || this.leaving;
-
-
-      const streamError = new Promise((_, reject) => {
-        audioStream.on("error", (e) => {
-          if (isGracefulExit()) return;
-          const graceful = ["aborted", "ECONNRESET", "ERR_STREAM_DESTROYED", "ENOTFOUND", "ETIMEDOUT", "ECONNREFUSED"];
-          if (graceful.some(g => e.code === g || e.message?.includes(g))) {
-            if (this._didTrackMostlyFinish(currentTrack)) return;
-            return reject(new Error(`Stream ended early for ${currentTrack?.title || "track"}: ${e.message ?? e.code ?? "stream aborted"}`));
-          }
-          reject(e);
-        });
-      });
-
-      if (!this._mediaPlayer) { cleanup(); return; }
-
-      this._mediaPlayer.removeAllListeners("finish");
-      this._mediaPlayer.removeAllListeners("error");
-
-
-      try {
-        const playResult = this._mediaPlayer.playStream(audioStream, inputOptions);
-        if (playResult && typeof playResult.catch === "function") {
-          playResult.catch((e) => {
-            if (isIgnorableMediaStateError(e) || isGracefulExit()) {
-              logger.mediaplayer("[Player] Suppressed async playStream InvalidState rejection");
-              cleanup();
-              return;
-            }
-            cleanup();
-            throw e;
-          });
-        }
-      } catch (e) {
-        cleanup();
-        if (isIgnorableMediaStateError(e)) {
-          logger.mediaplayer("[Player] Suppressed InvalidState during stream start");
-          return;
-        }
-        throw e;
-      }
-
-
-      const trackDuration = this._getTrackDurationMs(currentTrack);
-      const safetyMs = (trackDuration > 0 && currentTrack?.type !== "radio")
-        ? trackDuration + Player.TRACK_MOSTLY_FINISHED_FLOOR_MS
-        : Player.RADIO_SAFETY_TIMEOUT_MS;
-
-      const streamStartedAt = Date.now();
-
-      let safetyTimer;
-      let onFinish, onError;
-
-      const playbackSettled = new Promise((resolve) => {
-        safetyTimer = setTimeout(() => {
-          logger.warn(`[Player] Stream safety timeout hit (${Math.round(safetyMs / 1000)}s) — advancing queue`);
-          cleanup();
-          resolve();
-        }, safetyMs);
-
-        onFinish = () => {
-          clearTimeout(safetyTimer);
-          cleanup();
-          resolve();
-        };
-
-        onError = (e) => {
-          clearTimeout(safetyTimer);
-          cleanup();
-          if (isIgnorableMediaStateError(e)) {
-            logger.mediaplayer("[Player] Suppressed InvalidState during playback");
-            return resolve();
-          }
-          if (this._streamingStopped) return resolve();
-
-          const elapsedMs = Date.now() - streamStartedAt;
-          const isEarlyError = elapsedMs < 3000 && !this._didTrackMostlyFinish(currentTrack);
-
-          if (isEarlyError) {
-            logger.warn(`[Player] Stream errored after ${elapsedMs}ms (likely bad URL or 403 on audio data):`, e?.message);
-            this._lastStreamError = { message: e?.message ?? String(e), at: Date.now(), elapsedMs };
-          } else {
-            logger.warn("[Player] MediaPlayer error during stream:", e?.message);
-          }
-          resolve();
-        };
-
-        this._mediaPlayer.once("finish", onFinish);
-        this._mediaPlayer.once("error", onError);
-      });
-
-      // Race the buffered-HTTP-stream error watcher against normal playback
-      // completion so a real network/stream failure (e.g. connection reset
-      // mid-download) is reported and advances the queue with an error
-      // message, instead of becoming an orphaned unhandled rejection while
-      // playback hangs waiting on events that will never fire.
-      try {
-        await Promise.race([streamError, playbackSettled]);
-      } finally {
-        clearTimeout(safetyTimer);
-        this._mediaPlayer?.off("finish", onFinish);
-        this._mediaPlayer?.off("error", onError);
-      }
-    } catch (e) {
-      if (audioStream && !audioStream.destroyed) {
-        try { audioStream.destroy(); } catch (e2) { logger.warn("[Player] Error destroying stream:", e2?.message); }
-      }
-      this._currentPassthrough = null;
-      if (isIgnorableMediaStateError(e)) {
-        logger.mediaplayer("[Player] Suppressed InvalidState in stream setup");
-        return;
-      }
-      if (this._streamingStopped) return;
-      throw e;
+  /** @private Stop the audio bridge if currently playing. */
+ _bridgeStop() {
+    if (this._audioBridge?.playing) {
+      this._audioBridge.stop();
     }
   }
 
-  async _streamUrl(url) {
-    const isNodeLink = url.includes(`${this._nl.host}:${this._nl.port}`) ||
-        url.includes("/v4/trackstream") ||
-        url.includes("/v4/loadstream");
-
-    if (!isNodeLink) return this._streamViaRevoice(url, ["-re"]);
-
-    if (url.includes("/v4/loadstream")) {
-      logger.player(`[Player] NodeLink loadStream PCM active`);
-      const pcmInputOpts = ["-re", "-f", "s16le", "-ar", "48000", "-ac", "2"];
-      return await this._streamViaRevoice(url, pcmInputOpts);
-    }
-
-    if (url.includes("/v4/trackstream")) {
-      try {
-        const json = await this._request(url, {
-          headers: {
-            ...(this._nl.sessionId ? { "Session-Id": this._nl.sessionId } : {}),
-            ...(this._guildId      ? { "Guild-Id":   this._guildId      } : {}),
-          }
-        });
-        if (!json?.url) throw new Error(`NodeLink gave no URL: ${JSON.stringify(json)}`);
-        logger.player(`[Player] NodeLink resolved stream URL`);
-        try {
-          return await this._streamViaRevoice(json.url, ["-re"]);
-        } catch (streamErr) {
-          const errMsg = String(streamErr?.message ?? streamErr ?? "");
-          if (errMsg.includes("403") || errMsg.includes("Forbidden")) {
-            logger.warn(`[Player] trackstream URL returned 403 — falling back to loadstream`);
-            return await this._fallbackToLoadstream(url);
-          }
-          throw streamErr;
-        }
-      } catch (err) {
-        const errMsg = String(err?.message ?? err ?? "");
-        if (errMsg.includes("403") || errMsg.includes("Forbidden")) {
-          logger.warn(`[Player] trackstream resolve failed with 403 — falling back to loadstream`);
-          return await this._fallbackToLoadstream(url);
-        }
-        logger.error("[Player] NodeLink resolve error:", errMsg);
-        throw new Error(sanitizeError(errMsg, this._nl));
-      }
-    }
-
-    try {
-      const json = await this._request(url, {
-        headers: {
-          ...(this._nl.sessionId ? { "Session-Id": this._nl.sessionId } : {}),
-          ...(this._guildId      ? { "Guild-Id":   this._guildId      } : {}),
-        }
-      });
-      if (!json?.url) throw new Error(`NodeLink gave no URL: ${JSON.stringify(json)}`);
-      logger.player(`[Player] NodeLink resolved stream URL`);
-      return this._streamViaRevoice(json.url, ["-re"]);
-    } catch (err) {
-      logger.error("[Player] NodeLink resolve error:", err.message);
-      throw new Error(sanitizeError(err.message, this._nl));
-    }
-  }
-
-  /**
-   * Fall back from trackstream to loadstream when YouTube blocks the direct URL.
-   * Extracts the encodedTrack from the trackstream URL and builds a loadstream URL.
-   * @param {string} trackstreamUrl
-   */
-  async _fallbackToLoadstream(trackstreamUrl) {
-    const match = trackstreamUrl.match(/encodedTrack=([^&]+)/);
-    if (!match) {
-      throw new Error("Cannot fall back to loadstream — no encodedTrack in trackstream URL");
-    }
-    const encodedTrack = decodeURIComponent(match[1]);
-    const nlBase = `http://${this._nl.host}:${this._nl.port}`;
-    let loadstreamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(encodedTrack)}&position=0&volume=100`;
-    if (this.activeFilterPayload) {
-      loadstreamUrl += `&filters=${encodeURIComponent(JSON.stringify(this.activeFilterPayload))}`;
-    }
-    logger.player(`[Player] Falling back to loadstream (NodeLink will fetch with fallback sources)`);
-    const pcmInputOpts = ["-re", "-f", "s16le", "-ar", "48000", "-ac", "2"];
-    return await this._streamViaRevoice(loadstreamUrl, pcmInputOpts);
-  }
-
+/** @async Join a voice channel via LiveKit. Sets up voice connection, event listeners, and resumes playback if queue has tracks. @param {string} channelId - The voice channel ID to join. @returns {Promise<void>} @throws {Error} If the channel is not found, VoiceManager is unavailable, or connection fails. */
   async join(channelId) {
     if (this._destroyed) return;
 
@@ -1125,24 +594,18 @@ export default class Player extends EventEmitter {
       logger.player(`[Player] Busy joining. Ignoring: ${channelId}`);
       return;
     }
-    if (this.connection && this._channelId === channelId) {
-      const isConnected = this.connection.connected ?? false;
-      if (isConnected) {
-        logger.player(`[Player] Already in channel: ${channelId}`);
-        return;
-      }
-      logger.player(`[Player] Dead connection detected for ${channelId}, cleaning up`);
-      try { this.connection.removeAllListeners(); } catch(e) { logger.warn("[Player] Connection cleanup error:", e?.message); }
+    if (this._voiceConn && this._channelId === channelId) {
+      logger.player(`[Player] Already in channel: ${channelId}`);
+      return;
+    }
 
-      if (this._revoice && this._channelId) {
-        try { this._revoice.markIntentionalDisconnect(this._channelId); } catch(e) { logger.warn("[Player] Mark intentional disconnect error:", e?.message); }
-        try { this._revoice._leaveGateway(this._channelId, this._guildId ?? this._resolveGuildId()); } catch(e) { logger.warn("[Player] Leave gateway error:", e?.message); }
-        try { this._revoice.deleteConnection(this._channelId); } catch(e) { logger.warn("[Player] Delete connection error:", e?.message); }
-      }
-
-      try { await this.connection.disconnect(); } catch(e) { logger.warn("[Player] Connection disconnect error:", e?.message); }
-      this.connection   = null;
-      this._mediaPlayer = null;
+    if (this._voiceConn) {
+      logger.player("[Player] Cleaning up existing voice connection before join");
+      this._bridgeStop();
+      try { await this._voiceConn.disconnect(); } catch(e) { logger.warn("[Player] Existing voiceConn disconnect error:", e?.message); }
+      this._voiceConn = null;
+      this.connection = null;
+      await Utils.sleep(500);
     }
 
     this._isJoining = true;
@@ -1150,207 +613,93 @@ export default class Player extends EventEmitter {
       const channel = this.client?.channels?.get?.(channelId);
       if (!channel) throw new Error(`Channel not found: ${channelId}`);
 
-      if (this.connection) {
-        logger.mediaplayer("[Player] Cleaning up existing connection before join");
-        try { this.connection.removeAllListeners(); } catch(e) { logger.warn("[Player] Connection cleanup error:", e?.message); }
-
-        if (this._revoice && this._channelId) {
-          try { this._revoice.markIntentionalDisconnect(this._channelId); } catch(e) { logger.warn("[Player] Mark intentional disconnect error:", e?.message); }
-          try { this._revoice._leaveGateway(this._channelId, this._guildId ?? this._resolveGuildId()); } catch(e) { logger.warn("[Player] Leave gateway error:", e?.message); }
-          try { this._revoice.deleteConnection(this._channelId); } catch(e) { logger.warn("[Player] Delete connection error:", e?.message); }
-        }
-
-        try {
-          await this.connection.disconnect();
-        } catch(e) { logger.warn("[Player] Connection disconnect error:", e?.message); }
-
-        await Utils.sleep(500);
-        this.connection   = null;
-        this._mediaPlayer = null;
+      if (this._lavalink) {
+        logger.player(`[Player] Waiting for Lavalink node...`);
+        await this._lavalink.waitForNode({ timeoutMs: 15_000 });
       }
 
-      if (!this._revoice) {
-        throw new Error("FluxerRevoice instance not available — cannot join voice channel");
-      }
-
-      logger.mediaplayer(`[Player] Joining channel ${channelId} via FluxerRevoice (Fluxer API)...`);
-
-      const connection = await this._revoice.join(channelId, false);
-      this.connection = connection;
       this._channelId = channelId;
       this._guildId   = cleanId(channel.guildId);
       this._lastConnectedAt = Date.now();
       this.leaving    = false;
 
-      const room = connection.room;
-      if (!room) {
-        throw new Error("No room available after revoice.js join");
+      logger.player(`[Player] Joining channel ${channelId} via vm.join() (LiveKit)...`);
+      const vm = getVoiceManager(this.client);
+      if (!vm) {
+        throw new Error("VoiceManager not available — call getVoiceManager(client) before login");
       }
 
-      logger.mediaplayer(`[Player] FluxerVoiceConnection obtained (isConnected: ${room.isConnected}, connectionState: ${room.connectionState})`);
+      let voiceConn;
+      try {
+        voiceConn = await vm.join(channel);
+      } catch (e) {
+        throw new Error(`vm.join() failed for channel ${channelId}: ${e.message}`);
+      }
 
-      let connected = false;
-      let settled   = false;
+      if (!voiceConn) {
+        throw new Error(`vm.join() returned null for channel ${channelId}`);
+      }
+
+      this._voiceConn = voiceConn;
+      this.connection = voiceConn;
+
+      if (typeof voiceConn.isConnected === "function" && !voiceConn.isConnected()) {
+        logger.player("[Player] Waiting for LiveKit room to connect...");
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error("LiveKit connection timeout (15s)")), 15_000);
+          const check = () => {
+            try {
+              if (voiceConn.isConnected()) { clearTimeout(timeout); return resolve(); }
+              if (voiceConn.connectionState === 0) { clearTimeout(timeout); return resolve(); }
+            } catch (_) { clearTimeout(timeout); return resolve(); }
+            setTimeout(check, 200);
+          };
+          check();
+        });
+        await Utils.sleep(500);
+      }
+
+      logger.player(`[Player] LiveKit voice connected (guild: ${this._guildId}, channel: ${channelId})` +
+        ` isConnected=${voiceConn.isConnected ? voiceConn.isConnected() : 'unknown'}`);
 
       try {
-        if (room.isConnected) {
-          connected = true;
-          settled   = true;
-          logger.mediaplayer("[Player] Room already connected (immediate check via isConnected)");
-        } else {
-          await new Promise((resolve, reject) => {
-            const cleanup = () => {
-              clearTimeout(timeout);
-              clearInterval(poll);
-              try { room.off(LKRoomEvent.ConnectionStateChanged, onStateChange); } catch(e) { logger.warn("[Player] Room listener cleanup error:", e?.message); }
-            };
-
-            const timeout = setTimeout(() => {
-              if (settled) return;
-              cleanup();
-              if (room.isConnected) {
-                connected = true;
-                settled   = true;
-                resolve();
-              } else if (!room.isConnected && (room.connectionState === ConnectionState.CONN_DISCONNECTED || room.connectionState === 0)) {
-                reject(new Error(`LiveKit disconnected (connectionState: ${room.connectionState})`));
-              } else {
-                connected = true;
-                settled   = true;
-                resolve();
-              }
-            }, Player.CONNECTION_WAIT_MS);
-
-            const onStateChange = (cs) => {
-              if (settled) return;
-              logger.mediaplayer(`[Player] LiveKit connectionStateChanged: ${cs}`);
-              if (cs === ConnectionState.CONN_CONNECTED || cs === 1) {
-                connected = true;
-                settled   = true;
-                cleanup();
-                resolve();
-              } else if (cs === ConnectionState.CONN_DISCONNECTED || cs === 0) {
-                cleanup();
-                reject(new Error(`LiveKit disconnected (connectionState: ${cs})`));
-              }
-            };
-
-            room.on(LKRoomEvent.ConnectionStateChanged, onStateChange);
-
-            const poll = setInterval(() => {
-              if (settled) return;
-              if (room.isConnected) {
-                connected = true;
-                settled   = true;
-                cleanup();
-                resolve();
-              } else if (room.connectionState === ConnectionState.CONN_DISCONNECTED || room.connectionState === 0) {
-                cleanup();
-                reject(new Error(`LiveKit disconnected (connectionState: ${room.connectionState})`));
-              }
-            }, 500);
-
-            if (room.isConnected) {
-              connected = true;
-              settled   = true;
-              cleanup();
-              logger.mediaplayer("[Player] Room already connected (immediate check)");
-              resolve();
-            } else if (room.connectionState === ConnectionState.CONN_DISCONNECTED || room.connectionState === 0) {
-              cleanup();
-              reject(new Error(`LiveKit disconnected (connectionState: ${room.connectionState})`));
-            }
-          });
-        }
-      } catch (err) {
-        logger.error("[Player] LiveKit connection failed:", err.message);
-        throw err;
-      }
-
-      if (connected) {
-        logger.mediaplayer("[Player] Room ready via FluxerRevoice, proceeding to MediaPlayer");
-      }
-
-      connection.on("error", (err) => {
-        if (this.connection !== connection) {
-          try { connection.removeAllListeners(); } catch(e) { logger.warn("[Player] Stale connection cleanup error:", e?.message); }
-          return;
-        }
-        logger.error("[Player] Voice error:", err?.message ?? err);
-        const mode = this._get247Mode();
-        this._stopMediaPlayer()
-            .catch(() => {})
-            .finally(() => {
-              if (this.leaving || this._destroyed) return;
-              if (mode === "auto" || mode === "on") {
-                logger.inactivity(`[Player] Voice error in 24/7 ${mode} mode — staying in channel, not autoleaving`);
-                return;
-              }
-              this.emit("autoleave");
-            });
-      });
-
-      connection.on("disconnect", () => {
-        if (this.connection !== connection) {
-          try { connection.removeAllListeners(); } catch(e) { logger.warn("[Player] Stale connection cleanup error:", e?.message); }
-          return;
-        }
-        if (!this.leaving && !this._destroyed) {
-          const mode = this._get247Mode();
-          const channelId = cleanId(this._channelId ?? this._home247Channel ?? "");
-          const guildId = cleanId(this._guildId ?? this._resolveGuildId?.() ?? "");
-
-          this.connection = null;
-          this._paused = true;
-          this._stopInactivityTimer();
-
-          if (mode === "auto" || mode === "on") {
-            logger.mediaplayer(`[Player] Unexpected disconnect detected (24/7 ${mode}) — stopping media player; scheduling rejoin for channel ${channelId}`);
-            this._stopMediaPlayer()
-                .catch(() => {})
-                .finally(() => {
-                  this.emit("autoleave");
-                  if (channelId && guildId) {
-                    this._schedule247Rejoin(channelId, guildId, mode);
-                  }
-                });
-          } else {
-            logger.mediaplayer("[Player] Unexpected disconnect detected");
-            this._stopMediaPlayer()
-                .catch(() => {})
-                .finally(() => this.emit("autoleave"));
-          }
-        } else {
-          try { connection.removeAllListeners(); } catch(e) { logger.warn("[Player] Connection cleanup on leave error:", e?.message); }
-        }
-      });
-
-      connection.on("autoleave", () => {
-        if (this.connection !== connection) return;
-        const mode = this._get247Mode();
-        if (mode === "auto" || mode === "on") {
-          logger.mediaplayer(`[Player] Auto-leave suppressed for 24/7 ${mode} channel (room empty but staying)`);
-          return;
-        }
-        logger.mediaplayer("[Player] Auto-leave triggered by FluxerVoiceConnection (room empty)");
-        if (!this.leaving && !this._destroyed) {
-          this.emit("autoleave");
-        }
-      });
-
-      try {
-        const vm = getVoiceManager(this.client);
         vm.updateVoiceState(channelId, { self_deaf: true, self_mute: false });
       } catch (e) {
         logger.warn("[Player] Self-deafen failed:", e.message);
       }
 
-      const playerReady = await this._ensureMediaPlayer();
-      if (!playerReady) throw new Error("Failed to create MediaPlayer");
+      if (typeof voiceConn.on === "function") {
+        voiceConn.on("serverLeave", () => {
+          if (this.leaving || this._destroyed) return;
+          logger.player(`[Player] serverLeave received — Fluxer/LiveKit terminated session`);
+          this._voiceConn = null;
+          this.connection = null;
+          this._paused = true;
+          this._stopInactivityTimer();
+
+          const mode = this._get247Mode();
+          const cId = cleanId(this._channelId ?? this._home247Channel ?? "");
+          const gId = cleanId(this._guildId ?? "");
+
+          if (mode === "on") {
+            logger.player("[Player] serverLeave in 24/7 mode — scheduling rejoin");
+            this.emit("autoleave");
+            if (cId && gId) this._schedule247Rejoin(cId, gId, mode);
+          } else {
+            logger.player("[Player] Unexpected serverLeave");
+            this.emit("autoleave");
+          }
+        });
+
+        voiceConn.on("disconnect", () => {
+          if (this.leaving || this._destroyed) return;
+          logger.player(`[Player] Voice connection disconnected`);
+        });
+      }
 
       this._restoreVolume();
       this.emit("roomfetched");
-      logger.player(`[Player] Voice connected to ${channel.name || channelId} via FluxerRevoice`);
+      logger.player(`[Player] Voice connected to ${channel.name || channelId}`);
 
       if (!this.queue.isEmpty() && !this.queue.getCurrent()) {
         this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
@@ -1369,12 +718,9 @@ export default class Player extends EventEmitter {
       const causeStr = e.cause ? ` (Cause: ${e.cause})` : "";
       logger.error("[Player] Join failed:", e.message, causeStr);
 
-      if (e.message?.includes("401") || e.message?.includes("Unauthorized")) {
-        logger.warn(`[Player] Join failed with 401 Unauthorized for guild ${this._guildId}`);
-      }
-
-      if (this.connection) {
-        try { this.connection.disconnect(); } catch(e) { logger.warn("[Player] Connection disconnect on join failure:", e?.message); }
+      if (this._voiceConn) {
+        try { await this._voiceConn.disconnect(); } catch(err) { logger.warn("[Player] voiceConn disconnect on join failure:", err?.message); }
+        this._voiceConn = null;
         this.connection = null;
       }
       throw e;
@@ -1383,72 +729,75 @@ export default class Player extends EventEmitter {
     }
   }
 
+/** @async Leave the current voice channel. Stops playback, resets state, and cleans up the voice connection. @returns {Promise<boolean>} True if leave was successful, false otherwise. */
   async leave() {
-    if (!this.connection) return false;
+    if (!this._voiceConn && !this.connection) return false;
     try {
       this.leaving = true;
       this._stopInactivityTimer();
-      this._streamingStopped = true;
-      this._replayingSeek = false;
       this._clearTrackEndTimer();
       this._activeTrackOpt = null;
 
-      await this._stopMediaPlayer();
-
       const channelId = this._channelId;
-      if (this._revoice && channelId && typeof this._revoice.markIntentionalDisconnect === "function") {
-        this._revoice.markIntentionalDisconnect(channelId);
+
+      this._bridgeStop();
+
+      try {
+        const vm = getVoiceManager(this.client);
+        if (channelId) {
+          vm.leaveChannel(channelId);
+          logger.player("[Player] Left channel " + channelId + " via vm.leaveChannel()");
+        }
+      } catch(e) { logger.warn("[Player] Gateway leave error:", e?.message); }
+
+      if (this._voiceConn) {
+        try { await this._voiceConn.disconnect(); } catch(e) { logger.warn("[Player] voiceConn disconnect error:", e?.message); }
       }
 
-      await this.connection.leave();
-
-      if (this._revoice && channelId) {
-        try {
-          if (typeof this._revoice.deleteConnection === "function") {
-            this._revoice.deleteConnection(channelId);
-          } else if (this._revoice.connections) {
-            this._revoice.connections.delete(channelId);
-          }
-        } catch(e) { logger.warn("[Player] Delete connection on leave error:", e?.message); }
+      if (this._audioBridge) {
+        this._audioBridge.stop();
       }
 
       this.queue.reset();
-      this.connection  = null;
-      this._paused     = false;
-      this._pausedAt   = null;
-      this._playingNext = false;
-      this._autoplay = false;
+      this._voiceConn     = null;
+      this.lavalinkPlayer = null;
+      this.connection     = null;
+      this._paused        = false;
+      this._pausedAt      = null;
+      this._playingNext   = false;
+      this._autoplay      = false;
       if (this._autoplayHandler) {
         this.removeListener("queueEnd", this._autoplayHandler);
         this._autoplayHandler = null;
       }
     } catch (e) {
       logger.error("[Player] leave error:", e.message);
+      this.leaving = false;
       return false;
-    } finally {
-      this.leaving       = false;
-      this._replayingSeek = false;
     }
+    this.leaving = false;
     this.emit("leave");
     return true;
   }
 
+  /** Fully destroy this player instance: clean up timers, listeners, connections, and resources. */
   destroy() {
     if (this._destroyed) return;
     this._destroyed = true;
 
     this._clearTrackEndTimer();
     this._activeTrackOpt = null;
-    this._replayingSeek = false;
 
     try {
-      if (this._moonlink && this._onMoonlinkReady) {
-        try { this._moonlink.off("ready", this._onMoonlinkReady); } catch(e) { logger.warn("[Player] Moonlink cleanup error:", e?.message); }
-        this._onMoonlinkReady = null;
+      if (this._lavalink) {
+        if (this._onLavalinkPlayerDisconnect) {
+          try { this._lavalink.off("playerDisconnected", this._onLavalinkPlayerDisconnect); } catch(e) { /* best effort */ }
+          this._onLavalinkPlayerDisconnect = null;
+        }
       }
       this.leaving          = true;
-      this._streamingStopped = true;
       this._stopInactivityTimer();
+      if (this._rejoinTimer) { clearTimeout(this._rejoinTimer); this._rejoinTimer = null; }
       this._autoplay = false;
       if (this._autoplayHandler) {
         this.removeListener("queueEnd", this._autoplayHandler);
@@ -1456,50 +805,51 @@ export default class Player extends EventEmitter {
       }
       this.searches.clear();
 
-      if (this._workerPool) {
-        try { this._workerPool.terminate(); } catch(e) { logger.warn("[Player] Worker pool terminate error:", e?.message); }
-        this._workerPool = null;
+      this._bridgeStop();
+      if (this._audioBridge) {
+        this._audioBridge.destroy();
+        this._audioBridge = null;
       }
+      if (this._voiceConn) {
+        try { this._voiceConn.disconnect(); } catch(e) { logger.warn("[Player] voiceConn disconnect in destroy:", e?.message); }
+        this._voiceConn = null;
+      }
+      this.lavalinkPlayer = null;
+      this.connection     = null;
 
-      const connToDestroy = this.connection;
-      this.connection   = null;
-      if (this._revoice && this._channelId) {
-        try { this._revoice.markIntentionalDisconnect(this._channelId); } catch(e) { logger.warn("[Player] Mark intentional disconnect on destroy:", e?.message); }
+      if (this._channelId) {
+        try {
+          const vm = getVoiceManager(this.client);
+          vm.leaveChannel(this._channelId);
+        } catch(e) { /* best effort */ }
       }
-      this._stopMediaPlayer().catch(() => {}).then(() => {
-        if (connToDestroy) {
-          try { connToDestroy.removeAllListeners?.(); } catch(e) { logger.warn("[Player] Error removing listeners:", e?.message); }
-          const disconnectPromise = connToDestroy.disconnect?.();
-          if (disconnectPromise instanceof Promise) {
-            disconnectPromise.catch((err) => {
-              logger.error("[Player] Deferred disconnect failed:", err.message);
-            });
-          }
-        }
-      });
     } catch (e) {
       logger.error("[Player] destroy error:", e.message);
     }
   }
 
+  /** @type {boolean} Whether the player is currently paused. */
   get paused() { return this._paused; }
 
+  /** Pause current playback. @returns {string} Status message. */
   pause() {
-    if (!this.connection || !this.queue.getCurrent())
+    if (!this._voiceConn || !this.queue.getCurrent())
       return ":negative_squared_cross_mark: There's nothing playing at the moment!";
     if (this._paused)
       return ":negative_squared_cross_mark: Already paused!";
+
+    this._bridgeStop();
     this._paused = true;
     this._pausedAt = Date.now();
-    this._mediaPlayer?.pause();
     this._pauseTrackEndTimer();
     this.emit("playback", false);
     this._stopInactivityTimer();
     return ":pause_button: Paused";
   }
 
-  resume() {
-    if (!this.connection || !this.queue.getCurrent())
+  /** Resume paused playback. @returns {string} Status message. */
+ resume() {
+    if (!this._voiceConn || !this.queue.getCurrent())
       return ":negative_squared_cross_mark: There's nothing playing at the moment!";
     if (!this._paused)
       return ":negative_squared_cross_mark: Not paused!";
@@ -1510,15 +860,23 @@ export default class Player extends EventEmitter {
 
     this._paused = false;
     this._pausedAt = null;
-    this._mediaPlayer?.resume();
     this._resumeTrackEndTimer();
     this.emit("playback", true);
     this._stopInactivityTimer();
+
+    const current = this.queue.getCurrent();
+    if (current?.url) {
+      const elapsedMs = Date.now() - this.startedPlaying;
+      this._playTrackViaBridge(current, { seekSeconds: elapsedMs / 1000 }).catch(e =>
+        logger.error("[Player] Resume playback error:", e.message)
+      );
+    }
     return ":arrow_forward: Resumed";
   }
 
+  /** Skip the current track and advance to the next. @returns {string} Status message. */
   skip() {
-    if (!this.connection || !this.queue.getCurrent())
+    if (!this._voiceConn || !this.queue.getCurrent())
       return ":negative_squared_cross_mark: There's nothing playing at the moment!";
     this._lastPlayedTrack = this.queue.getCurrent();
     this._skipping       = true;
@@ -1526,6 +884,8 @@ export default class Player extends EventEmitter {
     this._activeTrackOpt = null;
     this._clearTrackEndTimer();
     this.queue.current   = null;
+
+    this._bridgeStop();
 
     if (this.queue.isEmpty() && !this._wasRadio && !this._queueEndedSent) {
       this._queueEndedSent = true;
@@ -1536,25 +896,23 @@ export default class Player extends EventEmitter {
       }
     }
 
-    this._stopMediaPlayer().then(() => {
-      this._playingNext = false;
-      if (!this.queue.isEmpty() && !this.leaving) {
-        this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
-      } else {
-        this.emit("stopplay");
-        if (!this._is247Enabled()) {
-          this._startInactivityTimer();
-        }
+    this._playingNext = false;
+    if (!this.queue.isEmpty() && !this.leaving) {
+      this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
+    } else {
+      this.emit("stopplay");
+      if (!this._is247Enabled()) {
+        this._startInactivityTimer();
       }
-    }).catch(e => logger.error("[Player] skip stop error:", e.message))
-        .finally(() => {
-          this._skipping = false;
-        });
+    }
+
+    this._skipping = false;
     return ":track_next: Skipped";
   }
 
+  /** Skip to a specific position in the queue. @param {number} position - 1-based queue position. @returns {string} Status message. */
   skipTo(position) {
-    if (!this.connection || !this.queue.getCurrent())
+    if (!this._voiceConn || !this.queue.getCurrent())
       return ":negative_squared_cross_mark: There's nothing playing at the moment!";
     const idx = position - 1;
     if (idx < 0 || idx >= this.queue.size())
@@ -1564,6 +922,8 @@ export default class Player extends EventEmitter {
     this.queue.current = null;
     this._skipping     = true;
 
+    this._bridgeStop();
+
     if (this.queue.isEmpty() && !this._wasRadio && !this._queueEndedSent) {
       this._queueEndedSent = true;
       this.emit("queueEnd");
@@ -1573,231 +933,95 @@ export default class Player extends EventEmitter {
       }
     }
 
-    this._stopMediaPlayer().then(() => {
-      this._playingNext = false;
-      if (!this.queue.isEmpty() && !this.leaving) {
-        this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
-      } else {
-        this.emit("stopplay");
-        if (!this._is247Enabled()) {
-          this._startInactivityTimer();
-        }
+    this._playingNext = false;
+    if (!this.queue.isEmpty() && !this.leaving) {
+      this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
+    } else {
+      this.emit("stopplay");
+      if (!this._is247Enabled()) {
+        this._startInactivityTimer();
       }
-    }).catch(e => logger.error("[Player] skipTo stop error:", e.message))
-        .finally(() => {
-          this._skipping = false;
-        });
+    }
+
+    this._skipping = false;
     return `:track_next: Skipped to position ${position}`;
   }
 
+  /** Set the playback volume. @param {number} v - Volume as a decimal (0–2, where 1 = 100%). @returns {string} Status message. */
   setVolume(v) {
     this.preferredVolume = Utils.clamp(v, 0, 2);
     this.emit("volume", this.preferredVolume);
-    this._mediaPlayer?.setVolume(this.preferredVolume);
-    if (!this.connection)
+    if (this._voiceConn) {
+      this._voiceConn.setVolume(this.preferredVolume * 100);
+    }
+    if (!this._voiceConn)
       return `Volume set to \`${Math.round(this.preferredVolume * 100)}%\` — will apply when connected.`;
     return `Volume changed to \`${Math.round(this.preferredVolume * 100)}%\`.`;
   }
 
-  /**
-   * Seek to a specific position (in milliseconds) in the currently playing track.
-   *
-   * 1. Sends a PATCH to the NodeLink REST API so the session state is aware
-   *    of the new position.
-   * 2. Adjusts `startedPlaying` so that elapsed-time calculations remain
-   *    consistent after the seek.
-   * 3. Restarts the audio stream from the new position (re-uses the
-   *    `_replayWithFilters` path so active filters are preserved).
-   *
-   * @param {number} ms  Position in milliseconds to seek to.
-   * @returns {Promise<boolean>}  true if the seek succeeded, false if the
-   *          node doesn't support it or no session is available.
-   */
+/** @async Seek to a specific position in the currently playing track. @param {number} ms - Target position in milliseconds. @returns {Promise<boolean>} True if seek succeeded, false otherwise. */
   async seekToPosition(ms) {
-    const guildId = this._guildId;
-    if (!guildId) return false;
-
-    const current = this.queue.getCurrent();
-    if (!current?.encoded) return false;
-
-    const liveSessionId = this._moonlink?.getLiveSessionId?.() ?? this._moonlink?.sessionId ?? this._nl.sessionId;
-    if (!liveSessionId) return false;
-
-    const { host, port } = this._nl;
-    const url = `http://${host}:${port}/v4/sessions/${liveSessionId}/players/${guildId}`;
-    const body = JSON.stringify({ position: ms });
+    if (!this._voiceConn || !this.queue.getCurrent()) return false;
 
     this._seeking = true;
 
     try {
-      await this._request(url, {
-        method: "PATCH",
-        headers: {
-          "Content-Type":  "application/json",
-          "Content-Length": Buffer.byteLength(body),
-        },
-        body,
-      });
-
-      if (liveSessionId !== this._nl.sessionId) {
-        this._nl.sessionId = liveSessionId;
-        logger.moonlink(`[Player] Synced session ID after seek: ${liveSessionId}`);
+      this._bridgeStop();
+      const current = this.queue.getCurrent();
+      if (current?.url) {
+        this.startedPlaying = Date.now() - ms;
+        await this._playTrackViaBridge(current, { seekSeconds: ms / 1000 });
       }
-
-      this.startedPlaying = Date.now() - ms;
       logger.player(`[Player] Seeked to ${ms}ms — adjusted startedPlaying`);
 
       this._recalcTrackEndTimer();
 
-      if (this.connection && !this.leaving && !this._streamingStopped) {
-        this._replayWithFilters(ms).catch((e) => {
-          logger.warn("[Player] Seek replay failed (non-fatal):", e.message);
-        });
-      } else {
-        this._seeking = false;
-      }
-
       return true;
     } catch (e) {
       this._seeking = false;
-      const errMsg = e?.message ?? "";
-      if (errMsg.includes("HTTP 404") || errMsg.includes("HTTP 405")) {
-        logger.warn("[Player] Seek not supported by audio node:", errMsg);
-        return false;
-      }
-      logger.error("[Player] Seek request failed:", errMsg);
-      throw new Error(sanitizeError(errMsg, this._nl));
+      logger.error("[Player] Seek failed:", e?.message);
+      return false;
+    } finally {
+      this._seeking = false;
     }
   }
 
-  async applyFilter(filterPayload, meta = null) {
-    const guildId = this._guildId;
-    if (!guildId) {
+/** @async Apply an audio filter to the current playback. Stores filter metadata for dashboard tracking. @param {object} filterPayload - The filter configuration payload. @param {object|null} [filterMeta=null] - Human-readable filter metadata (name, etc.). @returns {Promise<{ok: boolean, reason?: string, pending?: boolean}>} Result indicating success or failure reason. */
+  async applyFilter(filterPayload, filterMeta = null) {
+    if (!this._guildId) {
       return { ok: false, reason: "Player not bound to a guild." };
     }
 
     const current = this.queue.getCurrent();
-    const liveSessionId = this._moonlink?.getLiveSessionId?.() ?? this._moonlink?.sessionId ?? this._nl.sessionId;
 
-    if (!liveSessionId || !current?.encoded) {
-      this.activeFilter = meta ?? null;
-      this.activeFilterPayload = meta ? filterPayload : null;
-      this.emit("filter", this.activeFilter);
+    this.activeFilter = filterMeta ?? null;
+    this.activeFilterPayload = filterMeta ? filterPayload : null;
+    this.emit("filter", this.activeFilter);
+
+    if (!current?.encoded || !this._voiceConn) {
       return { ok: true, pending: true };
     }
 
-    const { host, port } = this._nl;
-    const url = `http://${host}:${port}/v4/sessions/${liveSessionId}/players/${guildId}?noReplace=true`;
-
-    const body = JSON.stringify({ filters: filterPayload });
-
     try {
-      await this._request(url, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(body),
-        },
-        body,
-      });
-
-      if (liveSessionId !== this._nl.sessionId) {
-        this._nl.sessionId = liveSessionId;
-        logger.moonlink(`[Player] Synced session ID after filter apply: ${liveSessionId}`);
-      }
-
-      this.activeFilter = meta ?? null;
-      this.activeFilterPayload = meta ? filterPayload : null;
-      this.emit("filter", this.activeFilter);
-
-      if (current?.encoded && this.connection && !this.leaving && !this._streamingStopped && this.startedPlaying && !this._playingNext) {
-        const elapsed = this.startedPlaying ? (Date.now() - this.startedPlaying) : 0;
-        const positionMs = Math.max(0, elapsed);
-        logger.player(`[Player] Filter applied — restarting stream from ${positionMs}ms`);
-        this._seeking = true;
-        this._replayWithFilters(positionMs).catch((e) => {
-          logger.warn("[Player] Filter replay failed (non-fatal):", e.message);
-        });
-      }
-
       return { ok: true };
     } catch (e) {
       const errMsg = e.message ?? "";
-      return { ok: false, reason: sanitizeError(errMsg, this._nl) };
+      return { ok: false, reason: errMsg };
     }
   }
 
-  /**
-   * Restart playback of the current track from a given position with the
-   * currently active filters baked into the loadstream URL.
-   */
-  async _replayWithFilters(positionMs = 0) {
-    const current = this.queue.getCurrent();
-    if (!current?.encoded || !this.connection || this.leaving) {
-      this._replayingSeek = false;
-      this._seeking = false;
-      return;
-    }
-
-    this._replayingSeek = true;
-    try {
-      this._streamingStopped = true;
-      await this._stopMediaPlayer().catch(() => {});
-      this._streamingStopped = false;
-
-      const hasPlayer = await this._ensureMediaPlayer();
-      if (!hasPlayer) {
-        logger.warn("[Player] _replayWithFilters: could not recreate MediaPlayer");
-        return;
-      }
-
-      if (this.preferredVolume !== 1) {
-        this._mediaPlayer.setVolume(this.preferredVolume);
-      }
-
-      const nlBase = `http://${this._nl.host}:${this._nl.port}`;
-      let streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(current.encoded)}&position=${positionMs}&volume=100`;
-
-      if (this.activeFilterPayload) {
-        streamUrl += `&filters=${encodeURIComponent(JSON.stringify(this.activeFilterPayload))}`;
-      }
-
-      try {
-        await this._streamUrl(streamUrl);
-      } catch (e) {
-        logger.warn("[Player] _replayWithFilters stream error:", e.message);
-      }
-
-      if (!this.leaving && !this._skipping && !this._paused) {
-        const replayCurrent = this.queue.getCurrent();
-        if (replayCurrent?.type === "radio") {
-          logger.player("[Player] Radio stream ended after replay");
-          this._lastPlayedTrack = replayCurrent;
-          this.queue.current = null;
-          this._streamingStopped = true;
-          this.emit("stopplay");
-          if (!this._is247Enabled()) {
-            this._startInactivityTimer();
-          }
-        } else {
-          this._lastPlayedTrack = replayCurrent;
-          if (!this.queue.songLoop) this.queue.current = null;
-          this._streamingStopped = false;
-          this._clearTrackEndTimer();
-          this._activeTrackOpt = null;
-          this.playNext().catch(e => logger.error("[Player] post-replay playNext error:", e.message));
-        }
-      } else {
-        this._streamingStopped = false;
-      }
-    } finally {
-      this._replayingSeek = false;
-      this._seeking = false;
-    }
+  /** Clear any active audio filter. */
+  clearFilter() {
+    this.activeFilter = null;
+    this.activeFilterPayload = null;
+    this.emit("filter", null);
+    logger.warn("[Player] clearFilter: filters not supported in LiveKit mode");
   }
 
+  /** @returns {boolean} Whether the queue is empty. */
   isEmpty()           { return this.queue.isEmpty(); }
 
+  /** Add a track to the queue with optional top-insert. @param {object} d - Track data. @param {boolean} [t=false] - Insert at the top of the queue. */
   addToQueue(d, t)    {
     if (this.queue.data.length >= this._maxQueueSize) {
       logger.warn(`[Player] Queue size cap reached (${this._maxQueueSize}) — dropping oldest track`);
@@ -1808,6 +1032,7 @@ export default class Player extends EventEmitter {
     this._stopInactivityTimer();
   }
 
+  /** Clear the queue and start inactivity timer if nothing is playing. */
   clear()             {
     this.queue.clear();
     this.emit("update", "queue");
@@ -1816,6 +1041,7 @@ export default class Player extends EventEmitter {
     }
   }
 
+  /** Add multiple tracks to the queue. @param {Array} t - Track data array. @param {boolean} [top=false] - Insert at the top. @returns {number} Number of tracks added. */
   addManyToQueue(t, top = false) {
     if (!Array.isArray(t)) return 0;
     const overflow = (this.queue.data.length + t.length) - this._maxQueueSize;
@@ -1829,6 +1055,7 @@ export default class Player extends EventEmitter {
     return added;
   }
 
+  /** Shuffle the queue. @returns {string} Status message. */
   shuffle() {
     if (this.isEmpty()) return "There is nothing to shuffle in the queue.";
     this.queue.shuffle();
@@ -1836,11 +1063,13 @@ export default class Player extends EventEmitter {
     return ":twisted_rightwards_arrows: Shuffled queue";
   }
 
+  /** Move a track from one position to another (1-based indices). @param {number} from - Source position (1-based). @param {number} to - Destination position (1-based). @returns {string} Result message. */
   move(from, to) {
     if (this.queue.size() === 0) return "The queue is empty.";
     return this.queue.move(from - 1, to - 1);
   }
 
+  /** Toggle a loop mode. @param {"song"|"queue"} choice @returns {string} */
   loop(choice) {
     if (!["song", "queue"].includes(choice))
       return `'${choice}' is not valid. Use \`song\` or \`queue\``;
@@ -1851,6 +1080,7 @@ export default class Player extends EventEmitter {
         : `:arrow_right: ${name} loop disabled`;
   }
 
+  /** Remove a track from the queue by index. @param {number} index - 0-based. @returns {string} @throws {Error} If index is empty. */
   remove(index) {
     if (index === undefined || index === null) throw new Error("Index can't be empty");
     const oldSize = this.queue.size();
@@ -1863,6 +1093,7 @@ export default class Player extends EventEmitter {
     return msg;
   }
 
+  /** @private @param {number} [length=15] @returns {string} */
   _createProgressBar(length = 15) {
     const current = this.queue.getCurrent();
     if (!current?.duration || !this.startedPlaying) {
@@ -1888,12 +1119,14 @@ export default class Player extends EventEmitter {
     return `${bar} \`${timeNow} / ${total}\``;
   }
 
+  /** @returns {string} Formatted name of the currently playing track. */
   getCurrent() {
     const c = this.queue.getCurrent();
     if (!c) return "There's nothing playing at the moment.";
     return this.getVideoName(c);
   }
 
+  /** Format a track object into a display name. @param {object} vid @param {boolean} [code=false] @returns {string} */
   getVideoName(vid, code = false) {
     if (!vid) return "Unknown";
     if (vid.type === "radio") {
@@ -1914,6 +1147,7 @@ export default class Player extends EventEmitter {
         : `[${vid.title} (${elapsed}/${total})]${link ? "(" + link + ")" : ""}`;
   }
 
+  /** @returns {string} Human-readable total remaining time for all queued tracks. */
   getQueueRemainingTime() {
     let totalMs  = 0;
     const current = this.queue.getCurrent();
@@ -1931,6 +1165,7 @@ export default class Player extends EventEmitter {
     return Utils.prettifyMS(totalMs);
   }
 
+  /** @returns {string} Elapsed time of the current track. */
   getCurrentElapsedDuration() {
     if (!this.startedPlaying) return "0:00";
     const current = this.queue.getCurrent();
@@ -1945,6 +1180,7 @@ export default class Player extends EventEmitter {
     return Utils.prettifyMS(Math.max(0, elapsed));
   }
 
+  /** Generate a text-based queue listing. @param {number} [page=1] @param {number} [pageSize=10] @returns {string} */
   list(page = 1, pageSize = 10) {
     const current = this.queue.getCurrent();
     const total   = this.queue.size();
@@ -1968,6 +1204,7 @@ export default class Player extends EventEmitter {
     return text;
   }
 
+/** @async Build a now-playing info object for the current track, including progress bar, volume, and loop states. @returns {Promise<object>} Object with msg (description string) and optional image URL. */
   async nowPlaying() {
     const current = this.queue.getCurrent();
     if (!current) return { msg: "There's nothing playing at the moment." };
@@ -1998,6 +1235,7 @@ export default class Player extends EventEmitter {
     if (current.type === "external") {
       const totalMs = this._getTrackDurationMs(current);
       let progressLine = "";
+
       if (totalMs > 0) {
         progressLine = `\n${this._createProgressBar(20)}`;
       }
@@ -2020,6 +1258,7 @@ export default class Player extends EventEmitter {
     };
   }
 
+/** @async Get the thumbnail of the currently playing track. @returns {Promise<{msg: string, image: string|null}>} Object with description message and image URL or null. */
   async getThumbnail() {
     const current = this.queue.getCurrent();
     if (!current) return { msg: "There's nothing playing at the moment.", image: null };
@@ -2027,6 +1266,7 @@ export default class Player extends EventEmitter {
     return { msg: `Thumbnail of [${current.title}](${current.url}):`, image: current.thumbnail };
   }
 
+  /** Format a track duration from various shapes. @param {*} duration @returns {string} */
   getDuration(duration) {
     if (typeof duration === "object" && duration?.timestamp) return duration.timestamp;
     if (typeof duration === "object" && duration?.seconds  != null) return Utils.formatSeconds(duration.seconds);
@@ -2034,18 +1274,20 @@ export default class Player extends EventEmitter {
     return Utils.prettifyMS(duration);
   }
 
+  /** @returns {string} Formatted duration of the currently playing track. */
   getCurrentDuration() {
     const current = this.queue.getCurrent();
     if (!current?.duration) return "?:??";
     return this.getDuration(current.duration);
   }
 
-  /** Translate a locale key for this player's guild, with fallback. */
+  /** @private Translate a locale key. @param {string} key @param {object} [replacements={}] @returns {string} */
   _t(key, replacements = {}) {
     if (!this.locale) return key;
     return this.locale.translate(this._guildId, key, replacements);
   }
 
+  /** Emit a now-playing announcement for the given track. @param {object} s */
   announceSong(s) {
     if (!s) return;
 
@@ -2071,43 +1313,26 @@ export default class Player extends EventEmitter {
     }))] });
   }
 
-  _workerPool = null;
-
-  _getWorkerPool() {
-    if (!this._workerPool) {
-      const workerPath = new URL("./worker.mjs", import.meta.url);
-      this._workerPool = new PlayerWorkerPool(2, workerPath, this._nl);
-    }
-    return this._workerPool;
-  }
-
-  workerJob(jobId, data, onMessage = null) {
-    if (this._destroyed) return Promise.resolve(null);
-
-    const pool = this._getWorkerPool();
-    const jobData = {
-      ...data,
-      nodelink: this._nl,
-      guildId:  this._guildId,
-    };
-
-    return Utils.timeout(
-        pool.run(jobId, jobData, onMessage),
-        60_000,
-        "Worker timeout after 60s"
-    );
-  }
-
+  
+/** @async Search for tracks via Lavalink and store results for interactive selection. @param {string} query - The search query string. @param {string} id - A unique key to identify this search session (e.g. message ID). @param {string} [provider="ytm"] - The search provider key. @returns {Promise<{m: string, count: number}>} Object with formatted result list message and track count. */
   async fetchResults(query, id, provider = "ytm") {
     try {
-      const data = await this.workerJob("searchResults", { query, provider, resultCount: this.resultLimit });
-      const results = Array.isArray(data?.data) ? data.data : [];
-      let list = `Search results using **${PROVIDER_NAMES[provider] || "YouTube Music"}**:\n\n`;
+      if (!this._lavalink) return { m: "Audio node not ready.", count: 0 };
+
+      await this._lavalink.waitForNode({ timeoutMs: 15_000 });
+
+      const source = this._getSource(provider);
+      const result = await this._lavalink.search(query, { source });
+      const lcTracks = result?.tracks ?? [];
+
+      const results = lcTracks.slice(0, this.resultLimit).map(t => this._lcTrackToVideo(t)).filter(Boolean);
+
+      let list = "Search results using **" + (PROVIDER_NAMES[provider] || "YouTube Music") + "**:\n\n";
       results.forEach((v, i) => {
         const url   = v.url || "";
         const title = v.title || Utils.formatTrackInfo(v, false);
         const dur   = v.duration ? this.getDuration(v.duration) : "?:??";
-        list += `${i + 1}. [${title}](${url}) - ${dur}\n`;
+        list += (i + 1) + ". [" + title + "](" + url + ") - " + dur + "\n";
       });
       list += "\nSend the number of the result. Example: `2`\nSend 'x' to cancel.";
 
@@ -2119,10 +1344,11 @@ export default class Player extends EventEmitter {
 
       return { m: list, count: results.length };
     } catch (err) {
-      return { m: `Error searching: ${err.message}`, count: 0 };
+      return { m: "Error searching: " + err.message, count: 0 };
     }
   }
 
+  /** Select a search result and add it to the queue. @param {string} id @param {number} [result=0] @param {boolean} [next=false] @returns {object|null} */
   playResult(id, result = 0, next = false) {
     if (!this.searches.has(id)) return null;
     const searchResults = this.searches.get(id);
@@ -2139,50 +1365,152 @@ export default class Player extends EventEmitter {
     return res;
   }
 
+  /** Search and add a track to the top of the queue. @returns {EventEmitter} */
   playFirst(query, provider, trackMeta) { return this.play(query, true, provider, trackMeta); }
 
+  /** @private Convert a Lavalink track to internal format. @param {object} track @param {object|null} [trackMeta=null] @returns {object|null} */
+  _lcTrackToVideo(track, trackMeta = null) {
+    if (!track || typeof track !== "object") return null;
+    const info = track.info ?? track ?? {};
+
+    let ms = info.length ?? track.length ?? info.durationMs ?? 0;
+    if (ms === 0 && info.duration != null) {
+      if (typeof info.duration === "number") {
+        ms = info.duration;
+      } else if (typeof info.duration === "object" && info.duration.seconds != null) {
+        ms = info.duration.seconds * 1000;
+      }
+    }
+
+      let trackUri = info.uri ?? ("https://www.youtube.com/watch?v=" + (info.identifier || ""));
+      if (typeof trackUri === 'string' && trackUri.includes('music.youtube.com')) {
+        trackUri = trackUri.replace('music.youtube.com', 'www.youtube.com');
+      }
+      const video = {
+      videoId:    info.identifier ?? "",
+      encoded:    track.encoded ?? info.encoded ?? "",
+      sourceName: info.sourceName ?? "unknown",
+      title:      Utils.cleanTitle(info.title ?? "Unknown"),
+      url:        trackUri,
+      thumbnail:  info.artworkUrl ?? null,
+      spotifyUrl: null,
+      _durationMs: ms,
+      duration: {
+        timestamp: Utils.prettifyMS(ms),
+        seconds:   Math.floor(ms / 1000),
+      },
+      author: {
+        name: info.author ?? "Unknown",
+        url:  info.uri    ?? null,
+      },
+      artists: null,
+    };
+    if (trackMeta) {
+      video.artist          = trackMeta.artist ?? null;
+      video.requestedArtist = trackMeta.artist ?? null;
+      video.requestedTitle  = trackMeta.name ?? trackMeta.title ?? null;
+      video.lastfm = {
+        source: trackMeta.source ?? "lastfm",
+        artist: trackMeta.artist ?? null,
+        name:   trackMeta.name ?? trackMeta.title ?? null,
+        url:    trackMeta.url ?? "",
+      };
+    }
+    return video;
+  }
+
+  /** @private Resolve a provider key to a Lavalink search prefix. @param {string} provider @returns {string} */
+  _getSource(provider) {
+    return PROVIDERS[provider]?.prefix ?? (provider + "search");
+  }
+
+  /** Search for a track and add it to the queue. @param {string} query @param {boolean} [top=false] @param {string} [provider] @param {object} [trackMeta=null] @returns {EventEmitter} */
   play(query, top = false, provider, trackMeta = null) {
     const events = new EventEmitter();
-    this.workerJob("generalQuery", { query, provider, trackMeta }, (msg) => events.emit("message", msg))
-        .then((data) => {
-          if (!data) {
-            logger.worker("[Player] Worker returned empty result");
-            events.emit("message", "Could not load track - no data returned.");
-            events.removeAllListeners();
-            return;
-          }
+    const source = this._getSource(provider || "ytm");
+    const isUrl  = Utils.isValidUrl(query);
 
-          if (data.type === "error") {
-            logger.worker("[Player] Worker returned error:", data.error);
-            events.emit("message", sanitizeError(data.error, this._nl) || "Failed to load track.");
-            events.removeAllListeners();
-            return;
-          }
+    (async () => {
+      try {
+        if (!this._lavalink) {
+          events.emit("message", "Audio node not ready yet.");
+          return;
+        }
 
-          if (data.type === "list") {
-            this.addManyToQueue(data.data, top);
-          } else if (data.type === "video") {
-            this.addToQueue(data.data, top);
+        await this._lavalink.waitForNode({ timeoutMs: 15_000 });
+
+        events.emit("message", "Searching...");
+
+        let result;
+        if (isUrl) {
+          result = await this._lavalink.search(query);
+        } else {
+          result = await this._lavalink.search(query, { source });
+        }
+        const lcTracks = result?.tracks ?? [];
+
+        if (lcTracks.length === 0) {
+          if (!isUrl && source !== "ytmsearch") {
+            events.emit("message", "No results from primary source, trying YouTube Music...");
+            const fallback = await this._lavalink.search(query, { source: "ytmsearch" });
+            if (fallback?.tracks?.length > 0) {
+              const video = this._lcTrackToVideo(fallback.tracks[0], trackMeta);
+              if (video) {
+                this.addToQueue(video, top);
+                events.emit("message", "Successfully added [" + video.title + "](" + video.url + ") to the queue.");
+                if (!this.queue.getCurrent()) {
+                  this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
+                }
+                return;
+              }
+            }
+          }
+          events.emit("message", "**No results found for '" + query + "'.**");
+          return;
+        }
+
+        const firstTrack = lcTracks[0];
+        if (isUrl && lcTracks.length > 1) {
+          const videos = lcTracks.map(t => this._lcTrackToVideo(t, trackMeta)).filter(Boolean);
+          this.addManyToQueue(videos, top);
+          events.emit("message", "Successfully added **" + videos.length + "** songs to the queue.");
+        } else {
+          const video = this._lcTrackToVideo(firstTrack, trackMeta);
+          if (video) {
+            this.addToQueue(video, top);
+            events.emit("message", "Successfully added [" + video.title + "](" + video.url + ") to the queue.");
           } else {
-            logger.worker("[Player] Unknown worker result:", data);
-            events.emit("message", "Unexpected result from track loader.");
-            events.removeAllListeners();
+            events.emit("message", "**Failed to parse track data.**");
             return;
           }
+        }
 
-          if (!this.queue.getCurrent()) {
-            this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
-          }
-          events.removeAllListeners();
-        })
-        .catch((reason) => {
-          logger.error("[Player] Worker job failed:", reason);
-          events.emit("message", sanitizeError(reason?.message, this._nl) || "An error occurred while loading the track.");
-          events.removeAllListeners();
-        });
+        if (!this.queue.getCurrent()) {
+          this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
+        }
+      } catch (err) {
+        logger.error("[Player] play() search error:", err?.message);
+        events.emit("message", err?.message || "An error occurred while loading the track.");
+      }
+    })();
+
     return events;
   }
 
+/** @async Search for tracks via Lavalink and return raw track results. @param {string} query - The search query string. @param {string} [provider="ytm"] - The search provider key. @returns {Promise<Array<object>>} Array of raw Lavalink track objects, or empty array on error. */
+  async search(query, provider = 'ytm') {
+    if (!this._lavalink) return [];
+    try {
+      const source = this._getSource(provider);
+      const result = await this._lavalink.search(query, { source });
+      return result.tracks || [];
+    } catch (e) {
+      logger.error(`[Player] lavalink search error:`, e?.message);
+      return [];
+    }
+  }
+
+  /** @private Build a radio-type track object. @param {object} radio @returns {object} */
   _buildRadioTrack(radio) {
     return {
       type:        "radio",
@@ -2197,12 +1525,14 @@ export default class Player extends EventEmitter {
     };
   }
 
+  /** Add a radio stream to the queue. @param {object} radio @param {boolean} [top=false] */
   playRadio(radio, top = false) {
     if (!radio?.url) { logger.error("[Player] Invalid radio data"); return; }
     this.addToQueue(this._buildRadioTrack(radio), top);
     if (!this.queue.getCurrent()) this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
   }
 
+/** @async Switch to a different radio stream, replacing any current radio tracks. @param {object} radio - Radio object with url, title, author, and thumbnail. @returns {Promise<void>} */
   async switchRadio(radio) {
     if (!radio?.url) { logger.error("[Player] switchRadio: invalid radio data"); return; }
 
@@ -2219,12 +1549,13 @@ export default class Player extends EventEmitter {
     this._skipping       = true;
     this._radioAnnounced = false;
     this.queue.current   = null;
-    await this._stopMediaPlayer();
+    this._bridgeStop();
     this._playingNext = false;
     this._skipping    = false;
     if (!this.leaving) this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
   }
 
+  /** @private @async Advance to the next track. */
   async playNext() {
     if (this._playingNext) return;
     this._playingNext = true;
@@ -2232,10 +1563,9 @@ export default class Player extends EventEmitter {
     finally { this._playingNext = false; }
   }
 
+  /** @private @async Core logic for advancing to the next track. */
   async _doPlayNext() {
-    await this._stopMediaPlayer();
-
-    this._streamingStopped = false;
+    this._bridgeStop();
 
     const currentBeforeNext = this.queue.getCurrent();
     if (currentBeforeNext) this._lastPlayedTrack = currentBeforeNext;
@@ -2262,101 +1592,13 @@ export default class Player extends EventEmitter {
     this._stopInactivityTimer();
     this._wasRadio = songData.type === "radio";
 
-    if (!this.connection || this.leaving) return;
+    if (!this._voiceConn || this.leaving) return;
 
-    const room = this.connection.room;
-    if (!room || !room.isConnected) {
-      const cs = room?.connectionState;
-      const mode = this._get247Mode();
-      if (mode === "auto" || mode === "on") {
-        logger.mediaplayer(`[Player] Room not connected (isConnected: ${room?.isConnected}, connectionState: ${cs}) in 24/7 ${mode} mode — deferring autoleave, waiting for rejoin.`);
-        if (songData) {
-          this.queue.data.unshift(songData);
-          this.queue.current = null;
-        }
-        return;
-      }
-      logger.mediaplayer(`[Player] Room not connected (isConnected: ${room?.isConnected}, connectionState: ${cs}) — emitting autoleave.`);
-      if (songData) {
-        this.queue.data.unshift(songData);
-        this.queue.current = null;
-      }
-      this.emit("autoleave");
-      return;
+    if (this.preferredVolume !== 1 && this._voiceConn) {
+      try { this._voiceConn.setVolume(this.preferredVolume * 100); } catch(_) {}
     }
 
-    const hasValidPlayer = await this._ensureMediaPlayer();
-    if (!hasValidPlayer) {
-      logger.error("[Player] Failed to create healthy MediaPlayer — cannot play.");
-      this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.voiceConnectionLost"))] });
-
-      if (!this._is247Enabled()) {
-        this._startInactivityTimer();
-      }
-      return;
-    }
-
-    if (songData.encoded && this.activeFilter) {
-      const { ok, pending, reason } = await this.applyFilter(this.activeFilterPayload ?? {}, this.activeFilter);
-      if (!ok) {
-        logger.warn(`[Player] Failed to apply active filter before playback: ${reason}`);
-      } else if (!pending) {
-        logger.mediaplayer(`[Player] Applied active filter before playback: ${this.activeFilter.label}`);
-      }
-    }
-
-    if (this._mediaPlayer && this.preferredVolume !== 1) {
-      this._mediaPlayer.setVolume(this.preferredVolume);
-    }
-
-    if (!this.connection || this.leaving) return;
-
-    let streamUrl = null;
-    let startOffsetMs = 0;
-
-    if (songData.type === "radio" || songData.type === "external") {
-      streamUrl = songData.url;
-    } else if (songData.encoded) {
-      const nlBase = `http://${this._nl.host}:${this._nl.port}`;
-      const guildParam = this._guildId ? `&guildId=${this._guildId}` : "";
-      const hasFilters = !!this.activeFilterPayload;
-
-      if (hasFilters) {
-        streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(songData.encoded)}&position=0&volume=100`;
-        streamUrl += `&filters=${encodeURIComponent(JSON.stringify(this.activeFilterPayload))}`;
-      } else {
-        streamUrl = `${nlBase}/v4/trackstream?encodedTrack=${encodeURIComponent(songData.encoded)}${guildParam}`;
-      }
-    } else if (songData.url && Utils.isValidUrl(songData.url)) {
-      streamUrl = songData.url;
-    } else {
-      try {
-        if (this._moonlink?.manager) {
-          const result = await this._moonlink.search(songData.title, "youtube");
-          const track  = result?.tracks?.[0];
-          if (track?.encoded) {
-            const nlBase = `http://${this._nl.host}:${this._nl.port}`;
-            const guildParam = this._guildId ? `&guildId=${this._guildId}` : "";
-            streamUrl = `${nlBase}/v4/trackstream?encodedTrack=${encodeURIComponent(track.encoded)}${guildParam}`;
-          } else if (track?.uri) {
-            streamUrl = track.uri;
-          }
-        }
-      } catch (e) {
-        logger.error("[Player] moonlink search fallback error:", e.message);
-      }
-    }
-
-    if (!streamUrl || !Utils.isValidUrl(streamUrl)) {
-      logger.error("[Player] No valid stream URL for:", songData.title);
-      this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.couldNotGetStream", { title: songData.title }))] });
-      this._streamingStopped = true;
-      this.emit("stopplay");
-      if (!this._is247Enabled()) {
-        this._startInactivityTimer();
-      }
-      return;
-    }
+    if (!this._voiceConn || this.leaving) return;
 
     this._activeTrackOpt  = null;
     this._clearTrackEndTimer();
@@ -2370,29 +1612,15 @@ export default class Player extends EventEmitter {
 
     if (trackOptMatch) {
       this._activeTrackOpt = trackOptMatch;
-      if (trackOptMatch.startMs > 0) {
-        if (streamUrl.includes("/v4/loadstream")) {
-          startOffsetMs = trackOptMatch.startMs;
-          streamUrl = streamUrl.replace(/position=\d+/, `position=${startOffsetMs}`);
-          logger.player(`[Player] TrackOptions: starting from ${startOffsetMs}ms via loadstream position param`);
-        } else if (streamUrl.includes("/v4/trackstream")) {
-          const nlBase = `http://${this._nl.host}:${this._nl.port}`;
-          startOffsetMs = trackOptMatch.startMs;
-          streamUrl = `${nlBase}/v4/loadstream?encodedTrack=${encodeURIComponent(songData.encoded)}&position=${startOffsetMs}&volume=100`;
-          if (this.activeFilterPayload) {
-            streamUrl += `&filters=${encodeURIComponent(JSON.stringify(this.activeFilterPayload))}`;
-          }
-          logger.player(`[Player] TrackOptions: falling back to loadstream for seek from ${startOffsetMs}ms`);
-        }
-      }
     }
 
-    logger.player(`[Player:${this._guildId}] Streaming: ${songData.title}`);
+    logger.player(`[Player:${this._guildId}] Playing: ${songData.title}`);
 
-    this.startedPlaying   = Date.now() - startOffsetMs;
+    this.startedPlaying   = Date.now();
     this._paused          = false;
     this._pausedAt        = null;
     this._queueEndedSent  = false;
+    this._consecutiveErrors = 0;
 
     if (songData.type !== "radio" || !this._radioAnnounced) {
       this.announceSong(songData);
@@ -2400,94 +1628,109 @@ export default class Player extends EventEmitter {
     }
     this.emit("startplay", songData);
 
-    if (trackOptMatch && trackOptMatch.startMs > 0 && startOffsetMs === 0) {
-      this._applyTrackOptionsSeek(trackOptMatch).catch((e) => {
-        logger.warn("[Player] TrackOptions auto-seek error:", e.message);
-      });
-    }
-
-    if (trackOptMatch && trackOptMatch.endMs > 0) {
-      const elapsedMs = Date.now() - this.startedPlaying;
-      const remainingMs = trackOptMatch.endMs - elapsedMs;
-      if (remainingMs > 0) {
-        const match = trackOptMatch;
-        this._trackEndTimer = setTimeout(() => this._onTrackEndTimeReached(match), remainingMs);
-      }
-    }
-
     try {
-      await this._streamUrl(streamUrl);
-    } catch (err) {
-      logger.error("[Player] Stream error:", err.message);
-      this._streamingStopped = true;
-      if (!this._skipping && !this.leaving && !this._paused) {
-        if (songData.type !== "radio") {
-          this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.errorStreaming", { title: songData.title }))] });
+      const playUri = songData.url;
+      const seekSec = trackOptMatch?.startMs > 0 ? trackOptMatch.startMs / 1000 : 0;
+
+      if (!playUri || !Utils.isValidUrl(playUri)) {
+        logger.warn(`[Player] No valid URL for track: ${songData.title} (url=${songData.url}), trying search...`);
+        try {
+          if (this._lavalink) {
+            const result = await this._lavalink.search(songData.title, { source: "ytmsearch" });
+            const track = result?.tracks?.[0];
+            if (track?.info?.uri) {
+              songData.url = track.info.uri;
+              if (track.encoded) songData.encoded = track.encoded;
+              await this._playTrackViaBridge(songData, { seekSeconds: seekSec });
+            } else {
+                throw new Error("No tracks found for title search");
+            }
+          } else {
+            throw new Error("No Lavalink for fallback search");
+          }
+        } catch (searchErr) {
+          logger.error("[Player] Could not resolve track:", searchErr?.message);
+          this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.couldNotGetStream", { title: songData.title }))] });
+          this.emit("stopplay");
+          if (!this._is247Enabled()) {
+            this._startInactivityTimer();
+          }
+          return;
+        }
+      } else {
+        await this._playTrackViaBridge(songData, { seekSeconds: seekSec });
+      }
+
+
+      if (trackOptMatch && trackOptMatch.endMs > 0) {
+        const elapsedMs = Date.now() - this.startedPlaying;
+        const remainingMs = trackOptMatch.endMs - elapsedMs;
+        if (remainingMs > 0) {
+          const match = trackOptMatch;
+          this._trackEndTimer = setTimeout(() => this._onTrackEndTimeReached(match), remainingMs);
         }
       }
-    }
-
-    this._clearTrackEndTimer();
-
-    if (this._seeking && !this._replayingSeek) {
-      logger.warn("[Player] _seeking flag was stuck true after stream end — resetting to allow auto-advance");
-      this._seeking = false;
-    }
-
-    const hadEarlyStreamError = this._lastStreamError && (Date.now() - this._lastStreamError.at < 10_000);
-    if (hadEarlyStreamError) {
-      const errInfo = this._lastStreamError;
-      this._lastStreamError = null;
-      logger.warn(`[Player] Track "${songData.title}" ended after ${errInfo.elapsedMs}ms due to stream error — not advancing, reporting error`);
-
+    } catch (err) {
+      logger.error("[Player] Play error:", err.message);
       if (!this._skipping && !this.leaving && !this._paused && songData.type !== "radio") {
         this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.errorStreaming", { title: songData.title }))] });
       }
-
-      this._lastPlayedTrack = this.queue.getCurrent() ?? songData;
-      if (!this.queue.songLoop) this.queue.current = null;
-      this._streamingStopped = true;
-      this._playingNext = false;
-
-      if (this.queue.isEmpty()) {
-        this.emit("stopplay");
-        if (!this._is247Enabled()) {
-          this._startInactivityTimer();
-        }
-      } else {
-        return this.playNext();
-      }
-      return;
-    }
-
-    if (!this.leaving && !this._skipping && !this._seeking) {
-      if (songData.type === "radio") {
-        logger.player(`[Player] Radio stream ended: ${songData.title}`);
-        this._lastPlayedTrack = this.queue.getCurrent() ?? songData;
-        this.queue.current = null;
-        this._streamingStopped = true;
-        this.emit("stopplay");
-        if (!this._is247Enabled()) {
-          this._startInactivityTimer();
-        }
-        return;
-      } else {
-        if (!this._paused) {
-          this._lastPlayedTrack = this.queue.getCurrent() ?? songData;
-          if (!this.queue.songLoop) this.queue.current = null;
-          this._streamingStopped = false;
-          this._playingNext = false;
-          return this.playNext();
+      if (!this._skipping && !this.leaving) {
+        this._consecutiveErrors = (this._consecutiveErrors || 0) + 1;
+        if (this._consecutiveErrors <= 3) {
+          this._handleTrackEnd();
+        } else {
+          logger.error(`[Player] ${this._consecutiveErrors} consecutive play errors — stopping auto-advance`);
+          this._consecutiveErrors = 0;
+          this.emit("stopplay");
+          if (!this._is247Enabled()) {
+            this._startInactivityTimer();
+          }
         }
       }
     }
-    this._skipping = false;
-    this._seeking = false;
   }
 
+  /** @private @async Play a track through the FluxerAudioBridge. @param {object} songData @param {object} [options={}] @returns {Promise<void>} */
+  async _playTrackViaBridge(songData, options = {}) {
+    if (!this._voiceConn || !this._audioBridge) {
+      throw new Error("No voice connection or audio bridge available");
+    }
+    if (!songData?.encoded && !songData?.url) {
+      throw new Error("No encoded track or URL for: " + (songData?.title ?? "unknown"));
+    }
+
+    this._audioBridge._conn = this._voiceConn;
+
+    const seekMs = Math.floor((options.seekSeconds ?? 0) * 1000);
+
+    const totalMs   = this._getTrackDurationMs(songData);
+    const durationMs = totalMs > 0 ? Math.max(0, totalMs - seekMs) : 0;
+
+    const result = await this._audioBridge.play(this._voiceConn, {
+      encoded: songData.encoded,
+      url:     songData.url,
+      title:   songData.title,
+      guildId: this._guildId,
+    }, {
+      seekSeconds: options.seekSeconds ?? 0,
+      durationMs,
+      videoId: songData.videoId || null,
+      filterPayload: this.activeFilterPayload || null,
+    });
+
+    if (result === "finished" && !this._skipping && !this.leaving && !this._paused) {
+      this._handleTrackEnd();
+    } else if (result === "stopped") {
+    }
+  }
+
+  /** @private @type {Timeout|null} */
   _trackEndTimer = null;
+  /** @private @type {number|null} */
   _trackEndRemainingMs = null;
 
+  /** @private Handle when a track option's end time is reached. @param {object} match */
   _onTrackEndTimeReached(match) {
     if (this._destroyed || this.leaving || !this._activeTrackOpt) return;
     logger.player(`[Player] TrackOptions: end time reached (${match.endMs}ms), skipping track`);
@@ -2495,29 +1738,20 @@ export default class Player extends EventEmitter {
     this._trackEndTimer = null;
     this._trackEndRemainingMs = null;
     this._skipping = true;
-    this._stopMediaPlayer().then(() => {
-      this._playingNext = false;
-      if (!this.queue.isEmpty() && !this.leaving) {
-        this.playNext().catch(e => logger.error("[Player] TrackEnd playNext error:", e.message));
-      } else {
-        this.emit("stopplay");
-        if (!this._is247Enabled()) {
-          this._startInactivityTimer();
-        }
+    this._bridgeStop();
+    this._playingNext = false;
+    if (!this.queue.isEmpty() && !this.leaving) {
+      this.playNext().catch(e => logger.error("[Player] TrackEnd playNext error:", e.message));
+    } else {
+      this.emit("stopplay");
+      if (!this._is247Enabled()) {
+        this._startInactivityTimer();
       }
-    }).catch(() => {
-      this._playingNext = false;
-      if (!this.queue.isEmpty() && !this.leaving) {
-        this.playNext().catch(e => logger.error("[Player] TrackEnd playNext error:", e.message));
-      } else {
-        this.emit("stopplay");
-        if (!this._is247Enabled()) {
-          this._startInactivityTimer();
-        }
-      }
-    });
+    }
+    this._skipping = false;
   }
 
+  /** @private Clear the track-end timer. */
   _clearTrackEndTimer() {
     if (this._trackEndTimer) {
       clearTimeout(this._trackEndTimer);
@@ -2526,6 +1760,7 @@ export default class Player extends EventEmitter {
     this._trackEndRemainingMs = null;
   }
 
+  /** @private Pause the track-end timer, saving remaining time. */
   _pauseTrackEndTimer() {
     if (!this._trackEndTimer || !this._activeTrackOpt || this._activeTrackOpt.endMs <= 0) return;
     clearTimeout(this._trackEndTimer);
@@ -2534,6 +1769,7 @@ export default class Player extends EventEmitter {
     this._trackEndTimer = null;
   }
 
+  /** @private Resume the track-end timer. */
   _resumeTrackEndTimer() {
     if (this._trackEndRemainingMs == null || this._trackEndRemainingMs <= 0 || !this._activeTrackOpt || this._activeTrackOpt.endMs <= 0) {
       this._trackEndRemainingMs = null;
@@ -2545,6 +1781,7 @@ export default class Player extends EventEmitter {
     this._trackEndRemainingMs = null;
   }
 
+  /** @private Recalculate and restart the track-end timer. */
   _recalcTrackEndTimer() {
     if (!this._activeTrackOpt || this._activeTrackOpt.endMs <= 0) return;
     this._clearTrackEndTimer();
@@ -2558,6 +1795,7 @@ export default class Player extends EventEmitter {
     this._trackEndTimer = setTimeout(() => this._onTrackEndTimeReached(match), remainingMs);
   }
 
+  /** @private @async Look up per-user track options. @param {object} songData @returns {Promise<object|null>} */
   async _lookupTrackOptions(songData) {
     if (!this.trackOptions || !songData || songData.type === "radio") return null;
     if (!this._guildId || !this._channelId) return null;
@@ -2597,11 +1835,12 @@ export default class Player extends EventEmitter {
     return match || null;
   }
 
+  /** @private @async Auto-seek to a track options start position. @param {object} match */
   async _applyTrackOptionsSeek(match) {
     if (!match || match.startMs <= 0) return;
     const current = this.queue.getCurrent();
-    if (!current?.encoded || !this.connection || this.leaving) {
-      logger.warn(`[Player] TrackOptions: cannot seek (encoded=${!!current?.encoded} connection=${!!this.connection} leaving=${this.leaving})`);
+    if (!current?.url || !this._voiceConn || this.leaving) {
+      logger.warn(`[Player] TrackOptions: cannot seek (encoded=${!!current?.encoded} lavalinkPlayer=${!!this.lavalinkPlayer} leaving=${this.leaving})`);
       return;
     }
     let seeked = false;
@@ -2619,20 +1858,13 @@ export default class Player extends EventEmitter {
       }
     }
     if (!seeked) {
-      logger.warn(`[Player] TrackOptions: auto-seek to ${match.startMs}ms failed after all retries, trying _replayWithFilters`);
-      try {
-        await this._replayWithFilters(match.startMs);
-        this.startedPlaying = Date.now() - match.startMs;
-        this._recalcTrackEndTimer();
-        logger.player(`[Player] TrackOptions: fallback replay from ${match.startMs}ms succeeded`);
-      } catch (e) {
-        logger.warn(`[Player] TrackOptions: fallback replay also failed:`, e.message);
-      }
+      logger.warn(`[Player] TrackOptions: auto-seek to ${match.startMs}ms failed after all retries`);
     }
   }
 
+/** @async Apply a track options match (custom start/end times) to the currently playing track. Seeks to the start position and sets a timer for the end position. @param {object} match - Track options match with startMs and optional endMs. @returns {Promise<boolean>} True if applied successfully, false otherwise. */
   async applyTrackOption(match) {
-    if (!match || !this.connection || this._paused) return false;
+    if (!match || !this._voiceConn || this._paused) return false;
 
     this._clearTrackEndTimer();
     this._activeTrackOpt = null;
@@ -2658,55 +1890,42 @@ export default class Player extends EventEmitter {
     return true;
   }
 
+/** @async Fetch lyrics for the currently playing track via Lavalink REST API. @returns {Promise<{text: string, source: string, synced: boolean, lines: Array}|null>} Lyrics object with text, source, synced flag, and lines array, or null if unavailable. */
   async lyrics() {
     const current = this.queue.getCurrent();
     if (!current) return null;
 
-    if (this._moonlink?.manager) {
+    const node = this._lavalink?.getNode?.() ?? null;
+
+    if (node) {
       try {
-        const node = this._moonlink.manager.nodes.findNode();
-        if (node) {
-          const searchQuery = current.artists?.[0]?.name
-              ? `${current.title} ${current.artists[0].name}`
-              : current.title;
-          const result = await node.loadLyrics(current.encoded || searchQuery);
-          if (result?.data?.lines?.length) {
-            return {
-              text:   result.data.lines.map(l => l.text).join("\n"),
-              source: "NodeLink",
-              synced: result.data.lines.some(l => l.startTimeMs != null),
-              lines:  result.data.lines,
-            };
-          }
+        const searchQuery = current.artists?.[0]?.name
+            ? `${current.title} ${current.artists[0].name}`
+            : current.title;
+
+        let url;
+        if (current.encoded) {
+          url = `${node.options?.host ?? node.url}/v4/loadlyrics?encodedTrack=${encodeURIComponent(current.encoded)}`;
+        } else {
+          url = `${node.options?.host ?? node.url}/v4/loadlyrics?identifier=${encodeURIComponent(searchQuery)}`;
+        }
+
+        const password = node.options?.password ?? node.password ?? "";
+        const results = await this._request(url, {
+          headers: password ? { "Authorization": password } : {},
+        });
+
+        if (results?.data?.lines?.length) {
+          return {
+            text:   results.data.lines.map(l => l.text).join("\n"),
+            source: "Lavalink",
+            synced: results.data.lines.some(l => l.startTimeMs != null),
+            lines:  results.data.lines,
+          };
         }
       } catch (e) {
-        logger.player(`[Lyrics] moonlink loadLyrics failed: ${e.message}`);
+        logger.player(`[Lyrics] Lavalink REST lyrics failed: ${e.message}`);
       }
-    }
-
-    try {
-      const searchQuery = current.artists?.[0]?.name
-          ? `${current.title} ${current.artists[0].name}`
-          : current.title;
-      const url = current.encoded
-          ? `http://${this._nl.host}:${this._nl.port}/v4/loadlyrics?encodedTrack=${encodeURIComponent(current.encoded)}`
-          : `http://${this._nl.host}:${this._nl.port}/v4/loadlyrics?identifier=${encodeURIComponent(searchQuery)}`;
-      const results = await this._request(url, {
-        headers: {
-          ...(this._nl.sessionId ? { "Session-Id": this._nl.sessionId } : {}),
-          ...(this._guildId      ? { "Guild-Id":   this._guildId      } : {}),
-        }
-      });
-      if (results?.data?.lines?.length) {
-        return {
-          text:   results.data.lines.map(l => l.text).join("\n"),
-          source: "NodeLink",
-          synced: results.data.lines.some(l => l.startTimeMs != null),
-          lines:  results.data.lines,
-        };
-      }
-    } catch (e) {
-      logger.player(`[Lyrics] REST fallback failed: ${e.message}`);
     }
 
     return null;

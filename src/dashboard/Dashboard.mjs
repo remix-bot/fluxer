@@ -1,6 +1,8 @@
 /**
- * @file Dashboard.mjs — Dashboard — web dashboard backend with player status API, guild listing, and bot statistics endpoints
- * @module src.dashboard.Dashboard
+ * @module dashboard/Dashboard
+ * @description Web dashboard backend controller. Manages Redis pub/sub communication
+ * with the dashboard frontend, handles remote function calls (join, play, pause, etc.),
+ * and provides static data-conversion helpers for Discord entities.
  */
 
 import { CommandBuilder, CommandHandler, Option } from "../CommandHandler.mjs";
@@ -13,18 +15,23 @@ import { logger } from "../constants/Logger.mjs";
 import { iterateVoiceStates } from "../constants/VoiceStateResolver.mjs";
 
 /**
- * Dashboard class.
+ * @class
+ * @description Orchestrates the web dashboard: wires up Redis request/response handling,
+ * converts Discord data for the frontend, and exposes remote control functions.
  */
 export class Dashboard {
+  /** @type {boolean} Whether the dashboard is enabled. */
   enabled = false;
+  /** @type {number} Login code expiry time in milliseconds (default 6 hours). */
   expiryTime = 1000 * 60 * 60 * 6;
 
   /**
-   * @param {Remix} remix
-   * @param {Object} opts
-   * @param {boolean} opts.enabled Whether the Dashboard is enabled and connections should be attempted
-   * @param {Object} opts.redis Connection options passed directly to redis createClient
-   * @param {Object} [opts.mysql] MySQL connection config for login code verification
+   * Create a new Dashboard instance.
+   * @param {object} remix - The main bot (Remix) instance.
+   * @param {object} opts - Dashboard options.
+   * @param {boolean} [opts.enabled] - Whether the dashboard is enabled.
+   * @param {object} [opts.redis] - Redis connection options.
+   * @param {object} [opts.mysql] - MySQL connection options for the dashboard database.
    */
   constructor(remix, opts) {
     this.enabled = opts?.enabled;
@@ -129,8 +136,8 @@ export class Dashboard {
 
 
   /**
-   * Set the bot ID for multi-bot Redis namespace isolation.
-   * Updates the Redis platform string so each bot uses its own channel namespace.
+   * Set the bot ID for the Redis platform prefix.
+   * @param {string} botId - The bot's Discord user ID.
    */
   setBotId(botId) {
     if (!this.enabled || !this.redis) return;
@@ -139,10 +146,13 @@ export class Dashboard {
 
 
   /**
-   * @param {Object} params
-   * @param {string} params.func
-   * @param {any} params.data
-   * @returns {Promise<any>}
+   * Execute a remote dashboard function (e.g. join, pause, volume).
+   * @async
+   * @param {object} params - Function call parameters.
+   * @param {string} params.func - The function name to execute.
+   * @param {object} [params.data] - Additional data for the function.
+   * @param {string} [params.data.user] - The Discord user ID making the request.
+   * @returns {Promise<object>} Result object with `message` or `error`.
    */
   async runFunction(params) {
     let user;
@@ -367,10 +377,12 @@ export class Dashboard {
 
 
   /**
-   * Check if a user is a bot owner, or is in the same voice channel as the player.
-   * @param {import("@fluxerjs/core").User|null} user
-   * @param {Player} player
-   * @returns {string|null} Error message, or null if authorized
+   * Verify that the given user is allowed to control the given player.
+   * Bot owners bypass the check; otherwise the user must be in the same voice channel.
+   * @private
+   * @param {object} user - The Discord user attempting to control the player.
+   * @param {object} player - The Player instance to control.
+   * @returns {string|null} An error message if unauthorized, or null if authorized.
    */
   _authorizePlayerControl(user, player) {
     if (user && this.remix.handler?.owners?.includes?.(user.id)) return null;
@@ -400,10 +412,13 @@ export class Dashboard {
   }
 
   /**
-   * Verify the user has permission to perform an action in the target guild.
-   * @param {import("@fluxerjs/core").User} user
-   * @param {string} guildId
-   * @returns {Promise<string|null>} Error message, or null if authorized
+   * Verify that the given user is a member of the specified guild.
+   * Bot owners bypass the check.
+   * @private
+   * @async
+   * @param {object} user - The Discord user to verify.
+   * @param {string} guildId - The guild ID to check membership in.
+   * @returns {Promise<string|null>} An error message if not a member, or null if authorized.
    */
   async _authorizeUserInGuild(user, guildId) {
     if (this.remix.handler?.owners?.includes?.(user.id)) return null;
@@ -420,9 +435,10 @@ export class Dashboard {
   }
 
   /**
-   * Find a player by its channel ID (key in playerMap)
-   * @param {string} id
-   * @returns {Player|null}
+   * Look up a player by channel ID, guild ID, or player ID.
+   * @private
+   * @param {string} id - Channel ID, guild ID, or player ID.
+   * @returns {object|null} The matching Player instance, or null.
    */
   _getPlayerById(id) {
     return this.remix.players.playerMap.get(id)
@@ -434,7 +450,10 @@ export class Dashboard {
 
 
   /**
-   * @param {import("@fluxerjs/core").User} user
+   * Convert a Discord user object to a dashboard-safe plain object.
+   * @static
+   * @param {object} user - The Discord user.
+   * @returns {{ id: string, username: string, displayName: string, avatar: { url: string } }}
    */
   static convertUser(user) {
     let avatarUrl = "";
@@ -459,7 +478,10 @@ export class Dashboard {
   }
 
   /**
-   * @param {Object} vid Track object stored in the fluxer Queue
+   * Convert a video/track object to a dashboard-safe plain object.
+   * @static
+   * @param {object} vid - The video/track object from the player queue.
+   * @returns {object|null} Sanitised video data, or null if input is falsy.
    */
   static convertVideo(vid) {
     if (!vid) return null;
@@ -483,7 +505,11 @@ export class Dashboard {
   }
 
   /**
-   * @param {import("@fluxerjs/core").GuildChannel} channel
+   * Convert a Discord channel to a dashboard-safe plain object, including
+   * voice participant info for voice channels.
+   * @static
+   * @param {object} channel - The Discord channel.
+   * @returns {object} Sanitised channel data.
    */
   static convertChannel(channel) {
     const type = channel.type ?? 0;
@@ -524,7 +550,10 @@ export class Dashboard {
   }
 
   /**
-   * @param {import("@fluxerjs/core").Guild} guild
+   * Convert a Discord guild (server) to a dashboard-safe plain object with channels.
+   * @static
+   * @param {object} guild - The Discord guild.
+   * @returns {object} Sanitised server data including channels and voice channels.
    */
   static convertServer(guild) {
     const channelStore = guild.channels;
@@ -558,8 +587,10 @@ export class Dashboard {
   }
 
   /**
-   * Lightweight server summary for player payloads.
-   * @param {import("@fluxerjs/core").Guild} guild
+   * Convert a Discord guild to a lightweight summary object (no channels).
+   * @static
+   * @param {object} guild - The Discord guild.
+   * @returns {{ name: string, id: string, icon: string|null, description: string|null, ownerId: string|null }}
    */
   static convertServerSummary(guild) {
     let iconUrl = null;
@@ -578,7 +609,11 @@ export class Dashboard {
   }
 
   /**
-   * @param {Player} player
+   * Convert a Player instance to a dashboard-safe serialisable object.
+   * Includes queue, users, channel, and server info.
+   * @static
+   * @param {object} player - The Player instance.
+   * @returns {object} Sanitised player data.
    */
   static convertPlayer(player) {
     const channelId = player._channelId;
@@ -648,7 +683,10 @@ export class Dashboard {
   }
 
   /**
-   * @param {Option} opt
+   * Convert a command option to a dashboard-safe plain object.
+   * @static
+   * @param {object} opt - The command option.
+   * @returns {object} Sanitised option data.
    */
   static convertOption(opt) {
     return {
@@ -664,8 +702,11 @@ export class Dashboard {
   }
 
   /**
-   * @param {CommandBuilder} com
-   * @param {CommandHandler} commands
+   * Convert a command (and its subcommands/options) to a dashboard-safe plain object.
+   * @static
+   * @param {object} com - The command object.
+   * @param {object} commands - The CommandHandler instance (for usage generation).
+   * @returns {object} Sanitised command data.
    */
   static convertCommand(com, commands) {
     return {
@@ -684,23 +725,14 @@ export class Dashboard {
   }
 
 
+  /** @private */
   _playerUpdateTimers = new Map();
 
   /**
-   * Global player update (broadcast to all dashboard listeners on {platform}:players).
-   *
-   * Used for two purposes:
-   *  1. Lifecycle events: { type: "init" } / { type: "close" } — the backend
-   *     PlayerManager uses these to add/remove Player objects.
-   *  2. Full state broadcast: any other type — the full serialised player is
-   *     included so dashboard frontends can update their UI.
-   *
-   * Debounced: rapid successive calls for the same player are coalesced
-   * into a single publish every 500ms.
-   *
-   * @param {Object} details Must include a `type` field (e.g. "init", "close",
-   *        "startplay", "stopplay", etc.) and may include a `data` field.
-   * @param {Player} player
+   * Broadcast a player state update to the dashboard via Redis.
+   * Debounces non-init/close updates by 500ms.
+   * @param {object} details - The update payload (e.g. `{ type: 'song' }`).
+   * @param {object} player - The Player instance that changed.
    */
   playerUpdate(details, player) {
     if (!this.enabled) return;
@@ -738,20 +770,9 @@ export class Dashboard {
   }
 
   /**
-   * Per-player channel update (sent to {platform}:player_{channelId}).
-   *
-   * The backend PlayerManager.setupEvents() expects messages in the format:
-   *   { type: "<eventType>", data: <payload> }
-   *
-   * This method accepts details in that standard format directly.
-   *
-   * @param {Object} details Must include `type` and optionally `data`.
-   *   Examples:
-   *     { type: "startplay", data: convertVideo(song) }
-   *     { type: "pause", data: { elapsedTime: 12345 } }
-   *     { type: "queue", data: serialisedQueueEvent }
-   *     { type: "join", data: userId }
-   * @param {Player} player
+   * Send a lightweight update to the player-specific Redis channel.
+   * @param {object} details - The update payload.
+   * @param {object} player - The Player instance.
    */
   updatePlayer(details, player) {
     if (!this.enabled) return;
@@ -760,9 +781,9 @@ export class Dashboard {
   }
 
   /**
-   * Global user update (sent to {platform}:users).
-   * @param {Object} details
-   * @param {import("@fluxerjs/core").User} user
+   * Broadcast a user update to the global users Redis channel.
+   * @param {object} details - The update payload.
+   * @param {object} user - The Discord user.
    */
   userUpdate(details, user) {
     if (!this.enabled) return;
@@ -774,9 +795,9 @@ export class Dashboard {
   }
 
   /**
-   * Per-user channel update (sent to {platform}:user_{userId}).
-   * @param {Object} details
-   * @param {import("@fluxerjs/core").User} user
+   * Send a lightweight update to the user-specific Redis channel.
+   * @param {object} details - The update payload.
+   * @param {object} user - The Discord user.
    */
   updateUser(details, user) {
     if (!this.enabled) return;
@@ -786,13 +807,11 @@ export class Dashboard {
 
 
   /**
-   * Verify a login code submitted by a user via DM.
-   * The backend stores the code in MySQL; this method compares the supplied
-   * code against the stored (bcrypt-hashed) value.
-   *
-   * @param {string} user User ID
-   * @param {string} code Plain-text code supplied by the user
-   * @returns {Promise<string|null>} null on success, error message on failure
+   * Verify a dashboard login code for a user.
+   * @async
+   * @param {string} user - The Discord user ID.
+   * @param {string} code - The login code to verify.
+   * @returns {Promise<string|null>} An error message if verification fails, or null on success.
    */
   async confirmLogin(user, code) {
     if (!this.enabled) return "Dashboard not enabled.";

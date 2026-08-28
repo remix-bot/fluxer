@@ -1,12 +1,13 @@
 /**
- * @file thumbnail.mjs — Get the thumbnail image for the current or specified track
- * @module commands.thumbnail
+ * @module commands/thumbnail
+ * @description Display the thumbnail artwork of the currently playing track.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 
+/** @type {CommandBuilder} @description Command definition for the thumbnail command. */
 export const command = new CommandBuilder()
     .setName("thumbnail")
     .setDescription("Request the thumbnail of the currently playing song.", "commands.thumbnail")
@@ -14,8 +15,10 @@ export const command = new CommandBuilder()
     .setCategory("music");
 
 /**
- * Execute the thumbnail command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * @async
+ * Run handler for the thumbnail command.
+ * Fetches and displays the thumbnail of the currently playing track.
+ * @param {object} msg - The command message wrapper.
  * @returns {Promise<void>}
  */
 export async function run(msg) {

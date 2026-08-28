@@ -16,10 +16,6 @@
     "password": "youshallnotpass",
     "requestTimeout": 60000
   },
-  "spotify": {
-    "clientId": "",
-    "clientSecret": ""
-  },
   "lastfm": {
     "apiKey": "",
     "apiSecret": "",
@@ -30,14 +26,8 @@
     "enabled": false,
     "redis": {
       "url": "redis://redis:6379"
-    },
-    "fluxer": {
-      "id": "",
-      "secret": "",
-      "redirectUri": ""
     }
   },
-  "webPort": 80,
   "logging": {
     "enabled": true,
     "warn": true,
@@ -52,8 +42,7 @@
     "guild": true,
     "recovery": true,
     "settings": true,
-    "worker": false,
-    "moonlink": true,
+    "lavalink": true,
     "dashboard": false,
     "redis": false
   },

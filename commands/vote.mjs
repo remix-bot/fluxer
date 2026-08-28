@@ -1,6 +1,6 @@
 /**
- * @file vote.mjs — Skip-vote system — start a vote to skip the current track
- * @module commands.vote
+ * @module commands/vote
+ * @description View voting info, check voters, or browse voter lists for a server/bot on FluxerList.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -11,7 +11,7 @@ import { FLUXERLIST, buildVoteLink } from "../src/constants/API.mjs";
 import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
 import { logger } from "../src/constants/Logger.mjs";
 
-
+/** @type {CommandBuilder} @description Command definition for the vote command. */
 export const command = new CommandBuilder()
   .setName("vote")
   .setDescription("View voting info or check voters for your server/bot on FluxerList", "commands.vote")
@@ -40,6 +40,13 @@ export const command = new CommandBuilder()
       .setRequired(false)
   );
 
+/**
+ * @private
+ * Build an error embed when FluxerList is not configured.
+ * @param {Function} t - Translation function.
+ * @param {string} guildId - The guild ID for localization.
+ * @returns {object} Embed payload.
+ */
 function notConfigured(t, guildId) {
   return {
     embeds: [new EmbedBuilder()
@@ -48,6 +55,15 @@ function notConfigured(t, guildId) {
   };
 }
 
+/**
+ * @private
+ * Build an error embed when no resource ID is available for the vote lookup.
+ * @param {string} type - The resource type ("server" or "bot").
+ * @param {string} prefix - The guild command prefix.
+ * @param {Function} t - Translation function.
+ * @param {string} guildId - The guild ID for localization.
+ * @returns {object} Embed payload.
+ */
 function noResourceId(type, prefix, t, guildId) {
   return {
     embeds: [new EmbedBuilder()
@@ -57,15 +73,18 @@ function noResourceId(type, prefix, t, guildId) {
 }
 
 /**
- * Build a paginated voter list embed.
- * @param {Array<{ username: string, fluxerId: number, votedAt: string }>} voters
- * @param {number} total
- * @param {number} page
- * @param {number} limit
- * @param {"server"|"bot"} type
- * @param {string} resourceId
- * @param {boolean} expired - Whether the navigation controls have expired
- * @returns {object} Embed payload
+ * @private
+ * Build a paginated voters embed with ranked voter list.
+ * @param {Array<object>} voters - Array of voter objects.
+ * @param {number} total - Total number of voters across all pages.
+ * @param {number} page - Current page number (1-based).
+ * @param {number} limit - Voters per page.
+ * @param {string} type - Resource type ("server" or "bot").
+ * @param {string} resourceId - The server or bot ID.
+ * @param {boolean} [expired=false] - Whether navigation controls have expired.
+ * @param {Function} t - Translation function.
+ * @param {string} guildId - The guild ID for localization.
+ * @returns {object} Embed payload.
  */
 function buildVotersEmbed(voters, total, page, limit, type, resourceId, expired = false, t, guildId) {
   const totalPages = Math.max(1, Math.ceil(total / limit));
@@ -101,9 +120,11 @@ function buildVotersEmbed(voters, total, page, limit, type, resourceId, expired 
 }
 
 /**
- * Execute the vote command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @async
+ * Run handler for the vote command.
+ * Handles info, check, and voters subcommands with optional pagination.
+ * @param {object} msg - The command message wrapper.
+ * @param {object} data - Parsed command data containing action, type, id, and page options.
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {
@@ -191,6 +212,14 @@ export async function run(msg, data) {
 
       let currentPage = voterData.page;
 
+      /**
+       * @private
+       * Build a voter page embed from fetched voter data.
+       * @param {number} pageIdx - Page number (1-based).
+       * @param {object} data - Voter data from FluxerList API.
+       * @param {boolean} [expired=false] - Whether controls have expired.
+       * @returns {object} Embed payload.
+       */
       const buildPage = (pageIdx, data, expired = false) => {
         return buildVotersEmbed(data.voters, data.total, pageIdx, 20, resolvedType, id, expired, t, guildId);
       };
@@ -203,6 +232,11 @@ export async function run(msg, data) {
         await replyMsg.message.react(emoji).catch(() => {});
       }
 
+      /**
+       * @private
+       * Remove all navigation reactions from the voter list message.
+       * @returns {Promise<void>}
+       */
       const clearReactions = async () => {
         try {
           await replyMsg.message.removeAllReactions();
@@ -214,6 +248,11 @@ export async function run(msg, data) {
       };
 
       let emojiTimeout = null;
+      /**
+       * @private
+       * Reset the emoji removal timeout timer for the voter pagination session.
+       * @returns {void}
+       */
       const resetTimer = () => {
         clearTimeout(emojiTimeout);
         emojiTimeout = setTimeout(async () => {

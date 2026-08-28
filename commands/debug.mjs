@@ -1,6 +1,6 @@
 /**
- * @file debug command — Owner-only debug utilities for voice connections, ghost detection, and forced rejoins
  * @module commands/debug
+ * @description Owner-only debug command for voice diagnostics, ghost connection detection, and forced rejoin.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -15,9 +15,10 @@ const INTENTIONAL_LEAVE_TTL = 30_000;
 const MAX_DESC = 4096;
 
 /**
- * Return a human-readable label for a voice room's connection state.
- * @param {object} room - The voice room instance
- * @returns {string}
+ * Get a human-readable label for a voice room's connection state.
+ * @private
+ * @param {object|null} room - The voice room object.
+ * @returns {string} Connection state label.
  */
 function roomStateLabel(room) {
   if (!room) return "none";
@@ -33,10 +34,10 @@ function roomStateLabel(room) {
 }
 
 /**
- * Detect whether a player has a "ghost" connection — the player object exists
- * but the underlying voice room is disconnected, reconnecting, or absent.
- * @param {import("../src/Player.mjs").default} player
- * @returns {boolean}
+ * Check if a player has a ghost connection (appears in voice but WebSocket is dead).
+ * @private
+ * @param {object} player - The player instance.
+ * @returns {boolean} True if the player has a ghost connection.
  */
 function isGhostConnection(player) {
   const conn = player.connection;
@@ -58,10 +59,11 @@ function isGhostConnection(player) {
 }
 
 /**
- * Retrieve the bot's voice state from the gateway cache for a given guild.
- * @param {object} client - The Fluxer client instance
- * @param {string} guildId - The guild ID to look up
- * @returns {{ userId: string, channelId: string } | null}
+ * Get the bot's voice channel state from the Discord gateway cache.
+ * @private
+ * @param {object} client - The Discord client instance.
+ * @param {string} guildId - The guild ID to check.
+ * @returns {{ userId: string, channelId: string }|null} Bot's voice state or null.
  */
 function getBotGatewayVoiceState(client, guildId) {
   const botId = client.user?.id;
@@ -108,10 +110,11 @@ function getBotGatewayVoiceState(client, guildId) {
 }
 
 /**
- * Check whether the gateway voice state is stale compared to the player's expected channel.
- * @param {object} client - The Fluxer client instance
- * @param {import("../src/Player.mjs").default} player
- * @returns {boolean}
+ * Check if the gateway voice state is stale (mismatches the player's channel).
+ * @private
+ * @param {object} client - The Discord client instance.
+ * @param {object} player - The player instance.
+ * @returns {boolean} True if the gateway presence is stale.
  */
 function isStaleGatewayPresence(client, player) {
   const guildId = player._guildId ?? player._resolveGuildId?.();
@@ -127,11 +130,12 @@ function isStaleGatewayPresence(client, player) {
 }
 
 /**
- * Build a human-readable label for a player's guild/channel.
- * @param {object} client - The Fluxer client
- * @param {string} channelId - The channel ID
- * @param {import("../src/Player.mjs").default} player
- * @returns {string}
+ * Build a human-readable label for a player (guild name / #channel name).
+ * @private
+ * @param {object} client - The Discord client instance.
+ * @param {string} channelId - The voice channel ID.
+ * @param {object} player - The player instance.
+ * @returns {string} Formatted label string.
  */
 function buildPlayerLabel(client, channelId, player) {
   const channel = client.channels.get(channelId);
@@ -141,10 +145,12 @@ function buildPlayerLabel(client, channelId, player) {
 }
 
 /**
- * Destroy a player's stale connection and respawn a fresh player, restoring queue, loop, filters, and playback.
- * @param {object} ctx - The bot context (this)
- * @param {import("../src/Player.mjs").default} player
- * @returns {Promise<{ success: boolean, reason?: string, channelId?: string, roomConnected?: boolean, roomState?: string, resumedPlayback?: boolean }>}
+ * Force a player to leave and rejoin, restoring queue and playback state.
+ * @private
+ * @async
+ * @param {object} ctx - The bot (Remix) instance context.
+ * @param {object} player - The player to rejoin.
+ * @returns {Promise<object>} Result object with success status, room state, and details.
  */
 async function forceRejoinPlayer(ctx, player) {
   const channelId = player._channelId ?? player._home247Channel;
@@ -166,7 +172,6 @@ async function forceRejoinPlayer(ctx, player) {
 
   try {
     ctx.markIntentionalLeave?.(cleanChannelId, INTENTIONAL_LEAVE_TTL);
-    ctx.revoice?.markIntentionalDisconnect(cleanChannelId);
 
     ctx.players.playerMap.delete(cleanChannelId);
     ctx.players._unindexPlayer?.(cleanGuildId, cleanChannelId);
@@ -188,13 +193,8 @@ async function forceRejoinPlayer(ctx, player) {
 
     ctx.players._pendingJoins?.delete?.(cleanChannelId);
 
-    const revoiceConn = ctx.revoice?.connections?.get(cleanChannelId);
-    if (revoiceConn) {
-      try { await ctx.revoice._destroyStaleConnection(cleanChannelId, revoiceConn); } catch (e) { logger.warn("[Debug] revoice stale destroy:", e?.message); }
-    } else if (player.connection) {
+    if (player.connection) {
       try { player.connection.removeAllListeners(); } catch (e) { logger.warn("[Debug] connection listener removal:", e?.message); }
-      try { ctx.revoice?._leaveGateway?.(cleanChannelId, cleanGuildId); } catch (e) { logger.warn("[Debug] gateway leave:", e?.message); }
-      try { ctx.revoice?.deleteConnection?.(cleanChannelId); } catch (e) { logger.warn("[Debug] revoice delete:", e?.message); }
       try { await player.connection.disconnect(); } catch (e) { logger.warn("[Debug] connection disconnect:", e?.message); }
     }
 
@@ -247,12 +247,14 @@ async function forceRejoinPlayer(ctx, player) {
 }
 
 /**
- * Process a batch of players for rejoin, with progress updates.
- * @param {object} ctx - The bot context (this)
- * @param {Array<[string, import("../src/Player.mjs").default]>} entries - [channelId, player] pairs
- * @param {import("../src/MessageHandler.mjs").Message} statusMsg - The status message to edit with progress
- * @param {string} title - The embed title
- * @returns {Promise<Array>} Results array
+ * Process a batch of players for force-rejoin, updating a status message with progress.
+ * @private
+ * @async
+ * @param {object} ctx - The bot (Remix) instance context.
+ * @param {Array} entries - Array of [channelId, player] tuples.
+ * @param {object} statusMsg - The message to update with progress.
+ * @param {string} title - The title for the progress display.
+ * @returns {Promise<object[]>} Array of rejoin results.
  */
 async function processRejoinBatch(ctx, entries, statusMsg, title) {
   const results = [];
@@ -286,11 +288,12 @@ async function processRejoinBatch(ctx, entries, statusMsg, title) {
 }
 
 /**
- * Build the final results embed after a batch rejoin.
- * @param {Array} results - Results from processRejoinBatch
- * @param {string} title - The embed title
- * @param {string} noun - "ghost connection(s)" or "24/7 channel(s)"
- * @returns {{embeds: [EmbedBuilder]}}
+ * Build the final embed summarizing rejoin results.
+ * @private
+ * @param {object[]} results - Array of rejoin result objects.
+ * @param {string} title - The title for the embed.
+ * @param {string} noun - The noun describing the rejoin targets.
+ * @returns {object} Message payload with embed.
  */
 function buildRejoinResultEmbed(results, title, noun) {
   const resultLines = [
@@ -324,6 +327,10 @@ function buildRejoinResultEmbed(results, title, noun) {
   return { embeds: [new EmbedBuilder().setColor(finalColor).setTitle(`Debug — ${title}`).setDescription(resultLines.join("\n").slice(0, MAX_DESC))] };
 }
 
+/**
+ * @type {CommandBuilder}
+ * @description Command definition for the debug command (owner-only).
+ */
 export const command = new CommandBuilder()
     .setName("debug")
     .setDescription("A debug command for various purposes.")
@@ -336,9 +343,11 @@ export const command = new CommandBuilder()
             .setRequired(true));
 
 /**
- * Execute the debug command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * Run handler for the debug command.
+ * Routes to the appropriate debug subcommand based on the target option.
+ *
+ * @param {object} msg - The command message wrapper.
+ * @param {object} data - Parsed command data containing the target option.
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {
@@ -369,13 +378,15 @@ export async function run(msg, data) {
 }
 
 /**
- * Run a batch rejoin for players matching a filter.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {string} key - The debug key for log labels
- * @param {string} title - The display title
- * @param {string} noun - What we're rejoining (for result text)
- * @param {(player: import("../src/Player.mjs").default) => boolean} filter - Player filter
- * @param {boolean} showHintIfEmpty - Show a hint when no matches found
+ * Run a batch rejoin operation on matching players.
+ * @private
+ * @async
+ * @param {object} msg - The command message wrapper.
+ * @param {string} key - Identifier key for the rejoin type.
+ * @param {string} title - Display title for the operation.
+ * @param {string} noun - Noun describing the targets.
+ * @param {Function} filter - Function to filter which players to rejoin.
+ * @param {boolean} [showHintIfEmpty=false] - Whether to show a hint if no matches found.
  * @returns {Promise<void>}
  */
 async function runBatchRejoin(msg, key, title, noun, filter, showHintIfEmpty = false) {
@@ -426,8 +437,10 @@ async function runBatchRejoin(msg, key, title, noun, filter, showHintIfEmpty = f
 }
 
 /**
- * Run the full voice diagnostic with paginated output.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
+ * Run a full voice diagnostic, displaying player states and ghost connections.
+ * @private
+ * @async
+ * @param {object} msg - The command message wrapper.
  * @returns {Promise<void>}
  */
 async function runVoiceDiagnostic(msg) {

@@ -1,8 +1,4 @@
-/**
- * @file CommandHandler.mjs — CommandHandler — registers, resolves, and dispatches slash and prefix commands with option parsing and requirements
- * @module src.CommandHandler
- */
-
+/** @module src/CommandHandler @description Command registration, loading, parsing, and execution framework with builder pattern, subcommands, and flags. */
 import { pathToFileURL } from "node:url";
 import { logger } from "./constants/Logger.mjs";
 import { Utils } from "./Utils.mjs";
@@ -13,20 +9,16 @@ import { SettingsManager } from "./Settings.mjs";
 import path from "node:path";
 import * as fs from "node:fs";
 
-/**
- * CommandBuilder class.
- */
+/** @class CommandBuilder @description Fluent builder for constructing command definitions with name, description, options, subcommands, aliases, and requirements. */
 export class CommandBuilder {
+  /** Create a new CommandBuilder with default empty state. */
   constructor() {
     this.name = null;
     this.description = null;
     this.id = null;
     this.aliases = [];
-    /** @type {CommandBuilder[]} */
     this.subcommands = [];
-    /** @type {Option[]} */
     this.options = [];
-    /** @type {CommandRequirement[]} */
     this.requirements = [];
     this.category = "default";
     this.examples = [];
@@ -34,59 +26,78 @@ export class CommandBuilder {
     this.uid = Utils.uid();
 
     this.subcommandError = "Invalid subcommand. Try one of the following options: `$previousCmd <$cmdlist>`";
-    /** @type {CommandBuilder} */
     this.parent = null;
   }
+  /** Set the command name and add it as the primary alias. @param {string} n @returns {CommandBuilder} */
   setName(n) { this.name = n; this.aliases.push(n.toLowerCase()); return this; }
+  /** Set the command description. @param {string} d @returns {CommandBuilder} */
   setDescription(d) { this.description = d; return this; }
+  /** Set the command ID. @param {string} id @returns {CommandBuilder} */
   setId(id) { this.id = id; return this; }
+  /** @returns {string} Full command path including parent chain (e.g. "music play"). */
   get command() { return (this.parent) ? this.parent.command + " " + this.name : this.name; }
+  /** Add a permission/owner-only requirement. @param {Function} config @returns {CommandBuilder} */
   setRequirement(config) { let req = config(new CommandRequirement()); this.requirements.push(req); return this; }
+  /** Add a subcommand builder. @param {Function} config @returns {CommandBuilder} */
   addSubcommand(config) { let sub = config(new CommandBuilder()); sub.parent = this; this.subcommands.push(sub); return this; }
+  /** Add a string option. @param {Function} config @param {boolean} [flag=false] @returns {CommandBuilder} */
   addStringOption(config, flag = false) { this.options.push(config(Option.create("string", flag))); return this; }
+  /** Add a number option. @param {Function} config @param {boolean} [flag=false] @returns {CommandBuilder} */
   addNumberOption(config, flag = false) { this.options.push(config(Option.create("number", flag))); return this; }
+  /** Add a boolean option. @param {Function} config @param {boolean} [flag=false] @returns {CommandBuilder} */
   addBooleanOption(config, flag = false) { this.options.push(config(Option.create("boolean", flag))); return this; }
+  /** Add a channel option. @param {Function} config @param {boolean} [flag=false] @returns {CommandBuilder} */
   addChannelOption(config, flag = false) { this.options.push(config(Option.create("channel", flag))); return this; }
+  /** Add a user option. @param {Function} config @param {boolean} [flag=false] @returns {CommandBuilder} */
   addUserOption(config, flag = false) { this.options.push(config(Option.create("user", flag))); return this; }
+  /** Add a text (remaining-args) option. Only one is allowed per command. @param {Function} config @returns {CommandBuilder} @throws {Error} If a text option already exists. */
   addTextOption(config) {
     if (this.options.findIndex(e => e.type === "text") !== -1) throw new Error("There can only be 1 text option.");
     this.options.push(config(new Option("text")));
     return this;
   }
+  /** Add a choice option (enum-like). @param {Function} config @param {boolean} [flag=false] @returns {CommandBuilder} */
   addChoiceOption(config, flag = false) { this.options.push(config(Option.create("choice", flag))); return this; }
+  /** Add an alias. @param {string} alias @returns {CommandBuilder} */
   addAlias(alias) { if (this.aliases.findIndex(e => e === alias.toLowerCase()) !== -1) return this; this.aliases.push(alias.toLowerCase()); return this; }
+  /** Add multiple aliases. @param {...string} aliases @returns {CommandBuilder} */
   addAliases(...aliases) { aliases.forEach((a) => this.addAlias(a)); return this; }
+  /** Set the command category. @param {string} cat @returns {CommandBuilder} */
   setCategory(cat) { this.category = cat; return this; }
+  /** Add usage examples. @param {...string} examples @returns {CommandBuilder} */
   addExamples(...examples) { this.examples.push(...examples); return this; }
 }
 
-/**
- * CommandRequirement class.
- */
+/** @class CommandRequirement @description Defines permission and owner-only requirements for commands. */
 export class CommandRequirement {
+  /** @type {boolean} Whether the command is restricted to bot owners. */
   ownerOnly = false;
+  /** Create a new CommandRequirement. */
   constructor() {
     this.permissions = [];
     this.permissionError = "You don't have the needed permissions to run this command!";
     return this;
   }
+  /** @param {boolean} bool @returns {CommandRequirement} */
   setOwnerOnly(bool) { this.ownerOnly = bool; return this; }
-  /**
-   * @param {string} p Fluxer permission string (ManageChannels", "ManageGuild")
-   */
+  /** @param {string} p @returns {CommandRequirement} */
   addPermission(p) { this.permissions.push(p); return this; }
+  /** @param {...string} p @returns {CommandRequirement} */
   addPermissions(...p) { this.permissions.push(...p); return this; }
+  /** @returns {string[]} */
   getPermissions() { return (this.ownerOnly) ? [...this.permissions, "Owner-only command"] : this.permissions; }
+  /** @param {string} e @returns {CommandRequirement} */
   setPermissionError(e) { this.permissionError = e; return this; }
 }
 
-/**
- * Option class.
- */
+/** @class Option @description Represents a command option (string, number, boolean, channel, choice, flag) with validation and formatting. */
 export class Option {
+  /** @type {number} @description Maximum choices before switching to compact format. */
   static THRESHOLD = 10;
+  /** @type {number} @description Number of choice columns per line in compact format. */
   static COLS_PER_LINE = 5;
 
+  /** Format choice values in a compact multi-column layout. @param {string[]} choices @param {number} [perLine=Option.COLS_PER_LINE] @returns {string} */
   static formatChoicesCompact(choices, perLine = Option.COLS_PER_LINE) {
     const lines = [];
     for (let i = 0; i < choices.length; i += perLine) {
@@ -95,6 +106,7 @@ export class Option {
     return lines.join('\n');
   }
 
+  /** Format choice values inline, switching to compact layout above the threshold. @param {string[]} choices @returns {string} */
   static formatChoicesInline(choices) {
     if (choices.length <= Option.THRESHOLD) {
       return '`' + choices.join('`, `') + '`';
@@ -102,6 +114,7 @@ export class Option {
     return Option.formatChoicesCompact(choices, 6);
   }
 
+  /** Format choice values for a usage string, truncating with "…" if over max. @param {string[]} choices @param {number} [max=6] @returns {string} */
   static formatChoicesUsage(choices, max = 6) {
     if (choices.length <= max) return choices.join(' | ');
     return choices.slice(0, max).join(' | ') + ' | ...';
@@ -110,12 +123,10 @@ export class Option {
   userRegex = /^<@!?(?<id>\d+)>/;
   idRegex = /^(?<id>\d+)/;
 
-  /** @type {Function} */
+  /** @type {Function|null} Dynamic default value resolver. */
   dynamicDefault;
 
-  /**
-   * @param {string} [type="string"] Option value type — "string", "number", "boolean", "channel", "user", or "text"
-   */
+  /** Create a new Option. @param {string} [type="string"] */
   constructor(type = "string") {
     this.name = null;
     this.description = null;
@@ -131,33 +142,39 @@ export class Option {
     this.dynamicDefault = null;
   }
 
+  /** Factory to create an Option or Flag instance. @param {string} type @param {boolean} [flag=false] @returns {Option|Flag} */
   static create(type, flag = false) {
     return (!flag) ? new Option(type) : new Flag(type);
   }
 
+  /** Set the option name. @param {string} n @returns {Option} */
   setName(n) { this.name = n; this.aliases[0] = n; return this; }
+  /** Set the option description. @param {string} d @returns {Option} */
   setDescription(d) { this.description = d; return this; }
+  /** Set whether the option is required. @param {boolean} r @returns {Option} */
   setRequired(r) { this.required = r; return this; }
+  /** Set the option ID. @param {string} id @returns {Option} */
   setId(id) { this.id = id; return this; }
+  /** Set the option type. @param {string} t @returns {Option} */
   setType(t) { this.type = t; return this; }
+  /** Add flag aliases (e.g. "v" for "-v"). @param {...string} a @returns {Option} */
   addFlagAliases(...a) { this.aliases.push(...a); return this; }
+  /** Add a single valid choice value. @param {string} c @returns {Option} @throws {Error} If option type is not "choice". */
   addChoice(c) { if (this.type !== "choice") throw new Error(".addChoice is only available for choice options!"); this.choices.push(c); return this; }
+  /** Add multiple valid choice values. @param {...string} cs @returns {Option} @throws {Error} If option type is not "choice". */
   addChoices(...cs) { if (this.type !== "choice") throw new Error(".addChoices is only available for choice options!"); cs.forEach(c => this.addChoice(c)); return this; }
+  /** Set the default value when the option is omitted. @param {*} value @returns {Option} */
   setDefault(value) { this.defaultValue = value; return this; }
+  /** Set a dynamic default resolver function. @param {Function} callback @returns {Option} */
   setDynamicDefault(callback) { this.dynamicDefault = callback; return this; }
 
+  /** Check whether a value is considered empty/omitted. @param {*} i @returns {boolean} */
   empty(i) {
     if (i === undefined || i === null) return true;
     return (!i && !(String(i).includes("0")));
   }
 
-  /**
-   * @param {string} i
-   * @param {Client} client
-   * @param {import("@fluxerjs/core").Message} msg
-   * @param {string} [type]
-   * @returns {boolean}
-   */
+  /** Validate an input value for this option type. @param {*} i @param {object} client @param {object} msg @param {string} [type] @returns {boolean} */
   validateInput(i, client, msg, type) {
     switch (type || this.type) {
       case "text":
@@ -189,13 +206,7 @@ export class Option {
     }
   }
 
-  /**
-   * @param {string} i
-   * @param {Client} client
-   * @param {import("@fluxerjs/core").Message} msg
-   * @param {string} [type]
-   * @returns {string|number|boolean}
-   */
+  /** Format/parse an input value for this option type. @param {*} i @param {object} client @param {object} msg @param {string} [type] @returns {*} */
   formatInput(i, client, msg, type) {
     switch (type || this.type) {
       case "text":
@@ -227,6 +238,7 @@ export class Option {
     }
   }
 
+  /** Generate a type-error message for this option. @returns {string} */
   get typeError() {
     if (this.tError) return this.tError;
     switch (this.type) {
@@ -243,49 +255,42 @@ export class Option {
         return "Invalid value '$currValue'. The option `" + this.name + "` has to be of type `" + this.type + "`.\nSchematic: `$previousCmd <" + this.type + ">`";
     }
   }
+  /** Set a custom type-error message template. @param {string} e */
   set typeError(e) { this.tError = e; }
 }
 
-/**
- * Flag class.
- */
+/** @class Flag @description A flag-type option that cannot be text. Extends Option. */
 export class Flag extends Option {
-  /**
-   * @param {string} [type="string"] Flag value type — anything Option supports except "text"
-   */
+  /** Create a Flag (non-text option). @param {string} [type="string"] */
   constructor(type = "string") {
     if (type === "text") throw new Error("Flags can't be of type 'text'!");
     super(type);
   }
 }
 
-/**
- * PrefixManager class.
- */
+/** @class PrefixManager @description Manages per-guild command prefixes (falling back to config or default). */
 export class PrefixManager {
-  /** @type {SettingsManager} */
+  /** @type {RemoteSettingsManager} */
   settings;
-  /** @type {string|null} Prefix from config.json — used as fallback when DB has no value */
+  /** @type {string|null} */
   configPrefix;
-  /**
-   * @param {SettingsManager} settings Settings manager used to look up per-guild prefixes
-   * @param {string|null} [configPrefix=null] Fallback prefix from config.json when no DB value exists
-   */
+  /** @param {RemoteSettingsManager} settings @param {string|null} [configPrefix=null] */
   constructor(settings, configPrefix = null) { this.settings = settings; this.configPrefix = configPrefix; }
+  /** Get the command prefix for a guild. @param {string} guildId @returns {string} */
   getPrefix(guildId) {
     const serverPrefix = this.settings.getServer(guildId).get("prefix");
     return serverPrefix ?? this.configPrefix ?? "%";
   }
 }
 
-/**
- * HelpHandler class.
- */
+/** @class HelpHandler @description Generates paginated help text for commands. */
 export class HelpHandler {
   /** @type {CommandHandler} */
   commands;
+  /** @type {number} Commands per help page. */
   commandsPerPage = 5;
 
+  /** Default pagination handler that builds paginated help pages. @param {object} msg - Message wrapper with message data. @param {HelpHandler} helpHandler @param {Array} cmds @returns {string|null} */
   paginationHandler = (msg, helpHandler, cmds) => {
     const guildId = msg.message.guildId;
     let form = this.commands.t(guildId, "cmdHandler.help.pageStructure");
@@ -302,35 +307,39 @@ export class HelpHandler {
     return null;
   }
 
+  /** @type {Function|null} Custom help handler function override. */
   customHelpHandler = null;
 
-  /**
-   * @param {CommandBuilder[]} commands Loaded command list to generate help pages from
-   */
+  /** @param {CommandHandler} commands */
   constructor(commands) { this.commands = commands; }
 
+  /** @param {string} string @returns {string} Capitalised first letter. */
   static capitalise(string) {
     if (string.length < 1) return string;
     if (string.length === 1) return string.toUpperCase();
     return string.charAt(0).toUpperCase() + string.slice(1);
   }
 
+  /** @param {Array} [cmds] @returns {Array} Non-owner-only commands. */
   userCommands(cmds) {
     return (cmds || this.commands.commands).filter(c =>
         c.requirements.findIndex(r => r.ownerOnly) === -1
     );
   }
 
+  /** @returns {number} Total number of help pages. */
   pageNumber() {
     return Math.ceil(this.commands.commands.length / this.commandsPerPage);
   }
 
+  /** @param {object} message @returns {string|null} */
   help(message) {
     if (this.customHelpHandler) return this.customHelpHandler(message);
     if (this.paginationHandler) return this.genHelp(null, message, true);
     return this.getHelpPage(0, message);
   }
 
+  /** @param {number} n @param {object} msg @param {Array} [cmds=null] @returns {string} */
   getHelpPage(n, msg, cmds = null) {
     if (!cmds) cmds = this.commands.commands;
     if (!(this.commandsPerPage < cmds.length)) return this.genHelp(null, msg, false, cmds);
@@ -340,6 +349,7 @@ export class HelpHandler {
     return this.genHelp({ curr: n + 1, max, offset }, msg, false, commands);
   }
 
+  /** @param {object|null} page @param {object} msg @param {boolean} [paginate=false] @param {Array} [cmds=null] @returns {string} */
   genHelp(page, msg, paginate = false, cmds = null) {
     cmds = this.userCommands(cmds);
     if (this.paginationHandler && msg && paginate) return this.paginationHandler(msg, this, cmds);
@@ -357,8 +367,10 @@ export class HelpHandler {
     return this.commands.format(content, guildId);
   }
 
+  /** Get the description of a command. @param {CommandBuilder} command @returns {string} */
   commandDescription(command) { return command.description; }
 
+  /** Build a usage string for a command including options and flags. @param {CommandBuilder} cmd @param {object} msg @returns {string} */
   commandUsage(cmd, msg) {
     if (cmd.subcommands.length > 0) {
       return this.commands.format("$prefix" + cmd.command, msg.message.guildId) + " <" + cmd.subcommands.map(e => e.name).join(" | ") + "> [...]";
@@ -375,6 +387,7 @@ export class HelpHandler {
     return options.trim();
   }
 
+  /** Generate detailed help for a single command. @param {object} command @param {object} msg @returns {string} */
   getCommandHelp(command, msg) {
     const guildId = msg.message.guildId;
     let content = `${HelpHandler.capitalise(command.name)}\n`;
@@ -420,39 +433,33 @@ export class HelpHandler {
   }
 }
 
-/**
- * CommandHandler class.
- */
+/** @class CommandHandler @description Main command dispatcher. Parses incoming messages, matches commands, validates arguments, checks permissions, and emits run events. @extends {EventEmitter} */
 export class CommandHandler extends EventEmitter {
+  /** @type {Function|null} Custom handler when the bot is pinged. */
   onPing = null;
+  /** @type {boolean} Whether the bot responds to pings as a prefix. */
   pingPrefix = true;
+  /** @type {string[]} Bot owner user IDs. */
   owners = [];
 
-  /** @type {MessageHandler} */
   messages;
-  /** @type {Client} */
   client;
-  /** @type {PrefixManager} */
   prefixes;
-  /** @type {HelpHandler} */
   helpHandler;
 
   commandNames = [];
-  /** @type {CommandBuilder[]} */
   commands = [];
 
-  /** @type {import('./constants/Locale.mjs').Locale|null} */
   locale = null;
   invalidFlagError = "Invalid flag `$invalidFlag`. It doesn't match any options on this command.\n`$previousCmd $invalidFlag`";
   textWrapError = "Malformed string `$value`: Missing a closing quote character (`$quote`) after the desired string.";
 
+  /** @private @type {Map<string, number>} Per-user last command timestamps for cooldown enforcement. */
   _cmdCooldowns = new Map();
+  /** @private @type {number} Cooldown duration in milliseconds between commands per non-owner user. */
   _cmdCooldownMs = 1500;
 
-  /**
-   * @param {MessageHandler} handler MessageHandler instance to listen for incoming messages on
-   * @param {string} [prefix="%"] Default command prefix used when no per-guild prefix is set
-   */
+  /** @param {MessageHandler} handler - The message handler instance. @param {string} [prefix="%"] - Default command prefix. */
   constructor(handler, prefix = "%") {
     super();
     this.messages = handler;
@@ -466,25 +473,24 @@ export class CommandHandler extends EventEmitter {
     this.messages.onMessage(this.messageHandler.bind(this));
   }
 
+  /** Get the command prefix for a guild. @param {string} guildId @returns {string} */
   getPrefix(guildId) { return this.prefixes.getPrefix(guildId); }
+  /** Enable or disable ping-as-prefix. @param {boolean} bool */
   setPingPrefix(bool) { this.pingPrefix = bool; }
+  /** Set the prefix manager instance. @param {PrefixManager} manager */
   setPrefixManager(manager) { this.prefixes = manager; }
+  /** Set a custom help handler. @param {HelpHandler} handler */
   setHelpHandler(handler) { this.helpHandler = handler; }
-  /** @param {import('./constants/Locale.mjs').Locale} locale */
+  /** Set the locale manager. @param {object} locale */
   setLocale(locale) { this.locale = locale; }
 
-  /**
-   * Translate a locale key for a given guild.
-   * @param {string} guildId
-   * @param {string} key
-   * @param {Object} [replacements={}]
-   * @returns {string}
-   */
+  /** Translate a locale key. @param {string} guildId @param {string} key @param {object} [replacements={}] @returns {string} */
   t(guildId, key, replacements = {}) {
     if (!this.locale) return key;
     return this.locale.translate(guildId, key, replacements);
   }
 
+  /** Replace $prefix and $helpCmd placeholders in text. @param {string} text @param {string} guildId @returns {string} */
   format(text, guildId) {
     const prefix = (!guildId) ? this.prefix : this.getPrefix(guildId);
     return text
@@ -492,6 +498,7 @@ export class CommandHandler extends EventEmitter {
         .replace(/\$helpCmd/gi, this.helpCommand);
   }
 
+  /** Remove a command from the registry. @param {CommandBuilder} command */
   removeCommand(command) {
     command.aliases.forEach(a => {
       const idx = this.commandNames.indexOf(a);
@@ -501,6 +508,7 @@ export class CommandHandler extends EventEmitter {
     if (idx !== -1) this.commands.splice(idx, 1);
   }
 
+  /** @private Handle an incoming message and route to command processing. @param {Message} msg */
   messageHandler(msg) {
     if (!msg || !msg.content) return;
     const trimmed = msg.content.trim();
@@ -574,6 +582,7 @@ export class CommandHandler extends EventEmitter {
     return this.processCommand(this.commands.find(e => e.aliases.includes(args[0].toLowerCase())), args, msg);
   }
 
+  /** Parse and execute a command with its options. @param {CommandBuilder} cmd @param {string[]} args @param {Message} msg @param {string|boolean} [previous=false] @param {boolean} [external=false] @returns {object|undefined} */
   processCommand(cmd, args, msg, previous = false, external = false) {
     if (!cmd) return logger.warn("[CommandHandler.processCommand] Invalid case: `cmd` falsy.");
 
@@ -619,6 +628,7 @@ export class CommandHandler extends EventEmitter {
     const opts = [];
     const texts = [];
 
+    /** @private Collect quoted arguments spanning multiple tokens. @param {number} index @param {string} currVal @param {string[]} as @returns {{args: string[], index: number}|null} */
     const collectArguments = (index, currVal, as) => {
       const lastChar = currVal.charAt(currVal.length - 1);
       if (lastChar === '"') return { args: as, index };
@@ -733,9 +743,7 @@ export class CommandHandler extends EventEmitter {
     return commandRunData;
   }
 
-  /**
-   * Checks requirements using fluxerjs permission API.
-   */
+  /** Check whether the message author meets all command requirements (owner, permissions). @param {CommandBuilder} cmd @param {Message} msg @returns {boolean} */
   assertRequirements(cmd, msg) {
     const authorId = msg.message?.author?.id;
     const isOwner = this.owners.includes(authorId);
@@ -781,9 +789,12 @@ export class CommandHandler extends EventEmitter {
     return true;
   }
 
+  /** Validate an input for a given option type. @param {string} type @param {*} i @param {object} m @returns {boolean} */
   validateInput(type, i, m) { return (new Option()).validateInput(i, this.client, m, type); }
+  /** Format an input for a given option type. @param {string} type @param {*} i @param {object} m @returns {*} */
   formatInput(type, i, m) { return (new Option()).formatInput(i, this.client, m, type); }
 
+  /** @private Build a type-error message for an option. @param {string} guildId @param {Option} option @param {*} value @param {string} previous @returns {string} */
   _optionTypeError(guildId, option, value, previous) {
     if (option.tError) {
       return option.tError.replace(/\$previousCmd/gi, previous).replace(/\$currValue/gi, value);
@@ -802,10 +813,12 @@ export class CommandHandler extends EventEmitter {
     }).replace(/\$previousCmd/gi, previous);
   }
 
+  /** @private Build a text-wrap error message. @param {string} guildId @param {string} value @param {string} quote @returns {string} */
   _textWrapErrorMsg(guildId, value, quote) {
     return this.t(guildId, 'cmdHandler.textWrapError', { $value: value, $quote: quote });
   }
 
+  /** Register a command builder and sort the command list alphabetically. @param {CommandBuilder} builder @returns {CommandBuilder[]} */
   addCommand(builder) {
     this.commandNames.push(...builder.aliases);
     this.commands.push(builder);
@@ -818,22 +831,18 @@ export class CommandHandler extends EventEmitter {
   }
 }
 
-/**
- * CommandLoader class.
- */
+/** @class CommandLoader @description Dynamically loads command files from a directory, registers builders, and binds run handlers. */
 export class CommandLoader {
-  /** @type {CommandHandler} */
+  /** @type {CommandHandler} Reference to the command handler. */
   commands;
-  /** @type {Map<string, string>} */
+  /** @type {Map<string, string>} Command UID → file path. */
   commandFiles = new Map();
-  /** @type {Map<string, Function>} */
+  /** @type {Map<string, Function>} Command UID → run function. */
   runnables = new Map();
+  /** @type {object} Shared context (the bot instance). */
   context;
 
-  /**
-   * @param {Map<string, CommandBuilder>} commands Map that loaded commands will be registered into
-   * @param {Object} context Shared context object (client, settings, locale, etc.) passed to command factories
-   */
+  /** @param {CommandHandler} commands @param {object} context - Bot context object. */
   constructor(commands, context) {
     this.commands = commands;
     this.context = context;
@@ -865,11 +874,7 @@ export class CommandLoader {
     });
   }
 
-  /**
-   * Normalise both ESM named-export shape and legacy default-export shape.
-   * Named ESM:  export const command;  export function run;  export const exportDef
-   * Legacy CJS: module.exports = { command, run, export }
-   */
+  /** Normalize a module export to { command, run, exportDef }. @param {object} cData @returns {object} */
   canonData(cData) {
     if (cData.command !== undefined) {
       return {
@@ -886,6 +891,7 @@ export class CommandLoader {
     };
   }
 
+  /** @async Load all command files from a directory. @param {string} dir @returns {Promise<undefined[]>} */
   loadFromDir(dir) {
     const files = fs.readdirSync(dir)
         .filter(f => !f.startsWith(".") && (f.endsWith(".js") || f.endsWith(".mjs")));

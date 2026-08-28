@@ -1,19 +1,10 @@
-/**
- * @file MessageHandler.mjs — MessageHandler — wraps Fluxer messages with reply helpers, embed builders, permission checks, and voice state utilities
- * @module src.MessageHandler
- */
+/** @module src/MessageHandler @description Message creation, reaction observation, permission checking, pagination, and command help display. */
 
 import { Client, Events, EmbedBuilder, PermissionFlags } from "@fluxerjs/core";
 import { logger } from "./constants/Logger.mjs";
 import { Utils } from "./Utils.mjs";
 
-/**
- * All permissions the bot needs to function correctly, mapped to
- * human-readable names and explanations.
- * Ordered by importance — text perms first, then voice perms.
- *
- * @type {ReadonlyMap<string, { name: string, desc: string }>}
- */
+/** @type {Map<string, {name: string, desc: string}>} @description Required bot permissions with human-readable names and descriptions. */
 export const REQUIRED_BOT_PERMISSIONS = Object.freeze(new Map([
   ["ViewChannel",    { name: "View Channels",          desc: "See channels and read their content" }],
   ["SendMessages",   { name: "Send Messages",          desc: "Respond to commands and send messages" }],
@@ -26,13 +17,13 @@ export const REQUIRED_BOT_PERMISSIONS = Object.freeze(new Map([
   ["Speak",          { name: "Speak",                  desc: "Stream audio in voice channels" }],
 ]));
 
-/** Permission flag keys that are absolutely critical — bot cannot work without these. */
+/** @type {string[]} @description Permission keys that are strictly required for the bot to function. */
 export const CRITICAL_PERMISSIONS = ["ViewChannel", "SendMessages", "EmbedLinks", "Connect", "Speak"];
 
-/** Permission flag keys that are nice-to-have but bot can partially work without. */
+/** @type {string[]} @description Permission keys that are optional but improve the user experience. */
 export const OPTIONAL_PERMISSIONS = ["AddReactions", "ReadMessageHistory", "ManageMessages", "AttachFiles"];
 
-/** Parse a color value from config — accepts hex string "0xe9196c", "#e9196c", or number */
+/** Parse a color value (hex string, number) into an integer. @param {string|number} value @param {number} [fallback=0xe9196c] @returns {number} */
 export function parseColor(value, fallback = 0xe9196c) {
   if (!value) return fallback;
   if (typeof value === "number") return value;
@@ -41,31 +32,17 @@ export function parseColor(value, fallback = 0xe9196c) {
   return isNaN(n) ? fallback : n;
 }
 
-/** Global embed color — set once at startup from config */
+/** @private */
 let _globalColor = 0xe9196c;
-/**
- * setGlobalColor function.
- * @param {{*}} value
- * @returns {*}
- */
+/** Set the global embed color. @param {string|number} value */
 export function setGlobalColor(value) { _globalColor = parseColor(value); }
-/**
- * getGlobalColor function.
- * @returns {*}
- */
+/** @returns {number} The current global embed color. */
 export function getGlobalColor()      { return _globalColor; }
 
-/**
- * Strip non-digit characters from a value, returning a clean ID string.
- * Re-exported from Utils.mjs for backward compatibility.
- */
+/** Re-export of {@link cleanId} from Utils for convenience. @type {function} */
 export { cleanId } from "./Utils.mjs";
 
-/**
- * Resolve a guild ID from various message-like shapes.
- * @param {object} message
- * @returns {string|null}
- */
+/** Extract the guild ID from various message wrapper shapes. @param {object} message @returns {string|null} */
 export function getMessageGuildId(message) {
   return message?.channel?.guildId ??
     message?.channel?.guild?.id ??
@@ -78,25 +55,18 @@ export function getMessageGuildId(message) {
     null;
 }
 
-/**
- * MessageHandler class.
- */
+/** @class MessageHandler @description Handles message creation, reaction observation, permission checking, and pagination. */
 export class MessageHandler {
-  /**
-   * Fluxer.js client instance
-   * @type {Client}
-   * @public
-   */
+  /** @type {Client} */
   client;
+  /** @type {Map<string, object>} Message ID → reaction observer data. */
   observedReactions;
-  /** @type {Map<string, string[]>} */
+  /** @type {Map<string, Array>} Channel ID → user message observer callbacks. */
   observedChannels;
-  /** @type {import('./constants/Locale.mjs').Locale} */
+  /** @type {object|null} Locale manager instance. */
   locale;
 
-  /**
-   * @param {Client} client
-   */
+  /** @param {Client} client - The Discord client. */
   constructor(client) {
     this.client = client;
 
@@ -114,21 +84,16 @@ export class MessageHandler {
     });
   }
 
-  /** @param {import('./constants/Locale.mjs').Locale} locale */
+  /** Set the locale manager. @param {object} locale */
   setLocale(locale) { this.locale = locale; }
 
-  /**
-   * Translate a locale key for a given guild.
-   * @param {string} guildId
-   * @param {string} key
-   * @param {Object} [replacements={}]
-   * @returns {string}
-   */
+  /** Translate a locale key. @param {string} guildId @param {string} key @param {object} [replacements={}] @returns {string} */
   t(guildId, key, replacements = {}) {
     if (!this.locale) return key;
     return this.locale.translate(guildId, key, replacements);
   }
 
+  /** @private Register reaction add/remove event listeners. */
   setupEvents() {
     const reactionUpdate = (payload) => {
       const { userId, messageId, emoji } = payload;
@@ -148,13 +113,7 @@ export class MessageHandler {
     this.client.on(Events.MessageReactionRemove, (payload) => reactionUpdate(payload));
   }
 
-  /**
-   * Checks if the bot has the specified permissions in a specific channel.
-   *
-   * @param {string[]} permissions An array of permission flag keys to check for.
-   * @param {BaseChannel} channel The channel to check the permissions in.
-   * @returns {string[]} Missing permission flag keys.
-   */
+  /** Return the permission keys the bot is missing in a channel. @param {string[]} permissions @param {object} channel @returns {string[]} Missing permission keys. */
   checkPermissions(permissions, channel) {
     if (!channel?.guild) return [];
     const me = channel.guild.members?.me ?? null;
@@ -170,14 +129,7 @@ export class MessageHandler {
     return permissions.filter(p => !perms.has(PermissionFlags[p] ?? p));
   }
 
-  /**
-   * Check ALL required bot permissions in a channel.
-   * Returns an object with critical vs optional missing permissions
-   * so the caller can decide how severe the problem is.
-   *
-   * @param {BaseChannel} channel The channel to check.
-   * @returns {{ missing: string[], criticalMissing: string[], optionalMissing: string[] }}
-   */
+  /** Check all REQUIRED_BOT_PERMISSIONS and split into critical vs optional. @param {object} channel @returns {{missing: string[], criticalMissing: string[], optionalMissing: string[]}} */
   checkAllBotPermissions(channel) {
     const allKeys = [...REQUIRED_BOT_PERMISSIONS.keys()];
     const missing = this.checkPermissions(allKeys, channel);
@@ -188,14 +140,7 @@ export class MessageHandler {
     };
   }
 
-  /**
-   * Build a rich permission-error embed listing all missing permissions
-   * with human-readable names and explanations.
-   *
-   * @param {string[]} missingKeys Permission flag keys that are missing.
-   * @param {string} [guildId] Guild ID for locale translation.
-   * @returns {EmbedBuilder}
-   */
+  /** Build an EmbedBuilder showing missing permissions. @param {string[]} missingKeys @param {string} guildId @returns {EmbedBuilder} */
   buildPermissionEmbed(missingKeys, guildId) {
     const criticalItems = [];
     const optionalItems = [];
@@ -237,11 +182,7 @@ export class MessageHandler {
     return embed;
   }
 
-  /**
-   * @param {string[]} permissions Permissions to check for.
-   * @param {FluxerMessage} message The message to reply to in case of missing permissions.
-   * @returns {Promise<boolean>} If all permissions are given.
-   */
+  /** Check permissions; send a DM or embed if missing. @async @param {string[]} permissions @param {object} message @returns {Promise<boolean>} */
   async assertPermissions(permissions, message) {
     const guild = message.guild ?? await message.client?.guilds?.resolve?.(message.guildId);
     if (guild && !guild.members?.me) {
@@ -275,25 +216,14 @@ export class MessageHandler {
     return false;
   }
 
-  /**
-   * @callback MessageListener
-   * @param {Message} message
-   */
-  /**
-   * Listen for new messages
-   * @param {MessageListener} listener
-   */
+  /** Register a listener for all incoming messages. @param {Function} listener */
   onMessage(listener) {
     this.client.on(Events.MessageCreate, (msg) => {
       listener(new Message(msg, this));
     });
   }
 
-  /**
-   * Get a cached message by id.
-   * @param {string} id
-   * @returns {Message|null}
-   */
+  /** Get a wrapped Message from cache by ID. @param {string} id @returns {Message|null} */
   get(id) {
     for (const channel of this.client.channels.values()) {
       const msg = channel.messages?.get?.(id) ?? null;
@@ -302,12 +232,7 @@ export class MessageHandler {
     return null;
   }
 
-  /**
-   * Either gets a message from cache or fetches it.
-   * @param {string} id message id
-   * @param {string} channelId channel id
-   * @returns {Promise<Message>}
-   */
+  /** @async Get a message from cache or fetch it from the API. @param {string} id @param {string} channelId @returns {Promise<Message|null>} */
   async getOrFetch(id, channelId) {
     const cached = this.get(id);
     if (cached) return cached;
@@ -317,20 +242,13 @@ export class MessageHandler {
     return raw ? new Message(raw, this) : null;
   }
 
-  /**
-   * Get a cached channel by id.
-   * @param {string} id channel id
-   * @returns {Channel}
-   */
+  /** Get a wrapped Channel by ID. @param {string} id @returns {Channel} */
   getChannel(id) {
     const c = this.client.channels.get(id);
     return new Channel(c, this);
   }
 
-  /**
-   * @param {string} id
-   * @returns {Promise<Channel>}
-   */
+  /** @async Get a channel from cache or fetch from the API. @param {string} id @returns {Promise<Channel>} */
   async getOrFetchChannel(id) {
     const c = this.getChannel(id);
     if (c?.channel) return c;
@@ -338,6 +256,7 @@ export class MessageHandler {
     return new Channel(raw, this);
   }
 
+  /** Start observing reactions on a message. @param {object} msg @param {string[]} reactions @param {Function} cb @param {object} [user] @returns {string} Observation ID. */
   observeReactions(msg, reactions, cb, user) {
     this.observedReactions.set(msg.id, {
       reactions: reactions,
@@ -347,16 +266,12 @@ export class MessageHandler {
     });
     return msg.id;
   }
+  /** Stop observing reactions. @param {string} i - Observation ID. @returns {boolean} */
   unobserveReactions(i) {
     return this.observedReactions.delete(i);
   }
 
-  /**
-   * @param {string} userId
-   * @param {BaseChannel} channel
-   * @param {MessageListener} callback
-   * @returns {string}
-   */
+  /** Observe messages from a specific user in a channel. @param {string} userId @param {object} channel @param {Function} callback @returns {string} Observation ID. */
   observeUserMessagesChannel(userId, channel, callback) {
     const current = (this.observedChannels.get(channel.id) || []);
     const nonce = Utils.uid();
@@ -368,6 +283,7 @@ export class MessageHandler {
     this.observedChannels.set(channel.id, current);
     return userId + ";" + channel.id + ";" + nonce;
   }
+  /** @private Stop observing a user's messages in a channel. @param {string} oid */
   unobserveUserMessagesChannel(oid) {
     const [userId, channelId, nonce] = oid.split(";");
     const current = (this.observedChannels.get(channelId) || []);
@@ -378,6 +294,7 @@ export class MessageHandler {
     this.observedChannels.set(channelId, current);
   }
 
+  /** @private Build an EmbedBuilder from text with optional title, thumbnail, and icon. @param {string} [text=""] @param {object} [options={}] @param {string} [options.color] @param {string} [options.title] @param {string} [options.thumbnail] @param {string} [options.icon_url] @returns {EmbedBuilder} */
   #embedify(text = "", options = {}) {
     const color = options.color ?? getGlobalColor();
     const builder = new EmbedBuilder()
@@ -401,6 +318,7 @@ export class MessageHandler {
     return builder;
   }
 
+  /** @private Create a message payload object with an embed. @param {string} text @param {object} [options={}] @returns {{content: *, embeds: EmbedBuilder[]}} */
   #createEmbed(text, options = {}) {
     return {
       content: options.content ?? undefined,
@@ -408,12 +326,7 @@ export class MessageHandler {
     };
   }
 
-  /**
-   * @param {FluxerMessage} replyingTo
-   * @param {string|Object} message
-   * @param {boolean} mention
-   * @returns {Promise<Message>}
-   */
+  /** @async Reply to a message with permission checks. @param {object} replyingTo @param {string|object} message @param {boolean} [mention=false] @returns {Promise<Message|null>} */
   async reply(replyingTo, message, mention = false) {
     if (!(await this.assertPermissions(["SendMessages", "EmbedLinks"], replyingTo))) return null;
     let opts;
@@ -425,12 +338,7 @@ export class MessageHandler {
     return new Message(await replyingTo.reply(opts, { ping: false }), this);
   }
 
-  /**
-   * @param {FluxerMessage} replyingTo
-   * @param {string|Object} message
-   * @param {Object} options
-   * @returns {Promise<Message>}
-   */
+  /** @async Reply with an embed. @param {object} replyingTo @param {string|object} message @param {object} [options={}] @returns {Promise<Message|null>} */
   async replyEmbed(replyingTo, message, options = {}) {
     if (!(await this.assertPermissions(["SendMessages", "EmbedLinks"], replyingTo))) return null;
 
@@ -452,11 +360,7 @@ export class MessageHandler {
     return new Message(await replyingTo.reply(payload, { ping: false }), this);
   }
 
-  /**
-   * @param {BaseChannel} channel
-   * @param {string|Object} message
-   * @returns {Promise<Message>}
-   */
+  /** @async Send a message to a channel. @param {object} channel @param {string|object} message @returns {Promise<Message|null>} */
   async sendMessage(channel, message) {
     if (this.checkPermissions(["SendMessages", "EmbedLinks"], channel).length !== 0) {
       logger.warn("[MessageHandler] Missing SendMessages/EmbedLinks permission in channel", channel.id);
@@ -471,12 +375,7 @@ export class MessageHandler {
     return new Message(await channel.send(opts), this);
   }
 
-  /**
-   * @param {BaseChannel} channel
-   * @param {string|Object} content
-   * @param {Object} embedOptions
-   * @returns {Promise<Message>}
-   */
+  /** @async Send an embed to a channel. @param {object} channel @param {string|object} content @param {object} [embedOptions={}] @returns {Promise<Message|null>} */
   async sendEmbed(channel, content, embedOptions = {}) {
     if (this.checkPermissions(["SendMessages", "EmbedLinks"], channel).length !== 0) {
       return this.sendMessage(channel, typeof content === "string" ? content : content?.embedText ?? "");
@@ -493,12 +392,7 @@ export class MessageHandler {
     return new Message(await channel.send(payload), this);
   }
 
-  /**
-   * @param {FluxerMessage} message
-   * @param {string|Object} content
-   * @param {Object} embedOptions
-   * @returns {Promise<Message>}
-   */
+  /** @async Edit an existing message embed with retry on 502/503/504. @param {object} message @param {string|object} content @param {object} [embedOptions={}] @returns {Promise<Message|null>} */
   async editEmbed(message, content, embedOptions = {}) {
     const RETRYABLE = new Set([502, 503, 504]);
     const MAX_ATTEMPTS = 3;
@@ -537,11 +431,7 @@ export class MessageHandler {
     }
   }
 
-  /**
-   * Initialize paginated messages.
-   * @param {PageBuilder} builder
-   * @param {Message} msg
-   */
+  /** @async Create a paginated message with arrow reactions. @param {PageBuilder} builder @param {Message} msg @returns {Promise<void>} */
   async initPagination(builder, msg) {
     const pages = builder.createPages();
     if (pages.length === 0) return;
@@ -572,13 +462,7 @@ export class MessageHandler {
     }, 5 * 60 * 1000);
   }
 
-  /**
-   * Join a voice channel using the documented VoiceManager.join() API.
-   * Reference: https://fluxer.js.org/v/latest/guides/voice
-   *
-   * @param {string} channelId
-   * @returns {Promise<import("@fluxerjs/voice").VoiceConnectionLike>}
-   */
+  /** @async Join a voice channel using VoiceManager. @param {string} channelId @returns {Promise<object>} @throws {Error} If channel not found or not a guild channel. */
   async joinChannel(channelId) {
     const { getVoiceManager } = await import("@fluxerjs/voice");
     const channel = await this.client.channels.fetch(channelId).catch(() => null);
@@ -590,57 +474,45 @@ export class MessageHandler {
   }
 }
 
-/**
- * Channel class.
- */
+/** @class Channel @description Wrapper around a Discord channel object providing helpers for sending messages and observing users. */
 export class Channel {
-  /**
-   * The actual underlying fluxer.js channel instance
-   * @type {import("@fluxerjs/core").BaseChannel}
-   */
+  /** @type {object} The raw channel object. */
   channel;
   /** @type {MessageHandler} */
   handler;
 
-  /**
-   * @param {import("@fluxerjs/core").BaseChannel} channel
-   * @param {MessageHandler} handler
-   */
+  /** @param {object} channel @param {MessageHandler} handler */
   constructor(channel, handler) {
     this.channel = channel;
     this.handler = handler;
   }
 
-  /** @type {Guild} */
+  /** @returns {object|null} The guild this channel belongs to. */
   get server() {
     return this.channel?.guild ?? null;
   }
-  /** @type {Guild} */
+  /** @returns {object|null} Alias for server (guild). */
   get guild() {
     return this.channel?.guild ?? null;
   }
-  /** @type {boolean} */
+  /** @returns {boolean} Whether this channel is a voice channel. */
   get isVoice() {
     return this.channel?.isVoiceBased?.() ?? false;
   }
-  /** @type {string} */
+  /** @returns {string} The channel ID. */
   get id() {
     return this.channel?.id;
   }
-  /** @type {string} */
+  /** @returns {string|null} The guild ID. */
   get guildId() {
     return this.channel?.guildId ?? null;
   }
-  /** @type {string} */
+  /** @returns {string|null} Alias for guildId. */
   get serverId() {
     return this.guildId;
   }
 
-  /**
-   * @param {MessageListener} callback
-   * @param {User} user
-   * @returns {Function}
-   */
+  /** Observe messages from a specific user in this channel. @param {Function} callback @param {object} user @returns {Function} Unobserve function. */
   onMessageUser(callback, user) {
     const resolvedUserId = user?.id
         ?? user?._id
@@ -656,92 +528,67 @@ export class Channel {
     };
   }
 
-  /**
-   * @param {string|Object} content
-   * @returns {Promise<Message>}
-   */
+  /** Send a message to this channel. @param {string|object} content @returns {Promise<Message|null>} */
   sendMessage(content) {
     return this.handler.sendMessage(this.channel, content);
   }
 
-  /**
-   * @param {string|Object} content
-   * @returns {Promise<Message>}
-   */
+  /** Alias for sendMessage. @param {string|object} content @returns {Promise<Message|null>} */
   send(content) {
     return this.handler.sendMessage(this.channel, content);
   }
 
-  /**
-   * @param {string|Object} content
-   * @param {Object} embedOptions
-   * @returns {Promise<Message>}
-   */
+  /** Send an embed to this channel. @param {string|object} content @param {object} [embedOptions={}] @returns {Promise<Message|null>} */
   sendEmbed(content, embedOptions = {}) {
     return this.handler.sendEmbed(this.channel, content, embedOptions);
   }
 
-  /**
-   * @returns {Promise<import("@fluxerjs/voice").VoiceConnection>}
-   */
+  /** Join this voice channel. @async @returns {Promise<object>} @throws {Error} If not a voice channel. */
   join() {
     if (!this.isVoice) throw new Error("Cannot join a text channel. Attempting to 'join' into channel `" + this.channel?.id + "`");
     return this.handler.joinChannel(this.channel.id);
   }
 }
 
-/**
- * Message class.
- */
+/** @class Message @description Wrapper around a Discord message providing helpers for replying, editing, and reaction observation. */
 export class Message {
-  /**
-   * The actual underlying message instance
-   * @type {import("@fluxerjs/core").Message}
-   */
+  /** @type {object} */
   message;
   /** @type {MessageHandler} */
   handler;
 
-  /**
-   * @param {import("@fluxerjs/core").Message} message Underlying raw Fluxer.js message instance
-   * @param {MessageHandler} handler Owning MessageHandler, used for replies, pagination, and reaction observers
-   */
+  /** @param {object} message @param {MessageHandler} handler */
   constructor(message, handler) {
     this.message = message;
     this.handler = handler;
   }
 
-  /** @type {string} */
+  /** @returns {string} The raw message content. */
   get content() {
     return this.message.content;
   }
-  /** @type {string} */
+  /** @returns {string} The message ID. */
   get id() {
     return this.message.id;
   }
-  /** @type {User} */
+  /** @returns {object} The author object. */
   get author() {
     return this.message.author;
   }
-  /** @type {string} */
+  /** @returns {string} The author's user ID. */
   get authorId() {
     return this.message.author?.id;
   }
-  /** @type {GuildMember|null} */
+  /** @returns {object|null} The guild member, if available. */
   get member() {
     return this.message.member ?? null;
   }
-  /** @type {Channel} */
+  /** @returns {Channel} The wrapped channel this message was sent in. */
   get channel() {
     return this.handler.getChannel(this.message.channelId);
   }
 
-  /**
-   * @param {string[]} reactions
-   * @param {function} callback
-   * @param {User} [user]
-   * @returns {function} unobserve
-   */
+  /** Observe reactions on this message. @param {string[]} reactions @param {Function} callback @param {object} [user=null] @returns {Function} Unobserve function. */
   onReaction(reactions, callback, user = null) {
     const oid = this.handler.observeReactions(this.message, reactions, callback, user);
     return () => {
@@ -749,21 +596,12 @@ export class Message {
     };
   }
 
-  /**
-   * @param {string|Object} content
-   * @param {boolean} mention
-   * @returns {Promise<Message>}
-   */
+  /** Reply to this message. @param {string|object} content @param {boolean} [mention=false] @returns {Promise<Message|null>} */
   reply(content, mention = false) {
     return this.handler.reply(this.message, content, mention);
   }
 
-  /**
-   * @param {string|Object} content
-   * @param {boolean} mention
-   * @param {Object} embedOptions
-   * @returns {Promise<Message>}
-   */
+  /** Reply to this message with an embed. @param {string|object} content @param {boolean} [mention=false] @param {object} [embedOptions={}] @returns {Promise<Message|null>} */
   replyEmbed(content, mention = false, embedOptions = {}) {
     return this.handler.replyEmbed(this.message, content, {
       mention,
@@ -771,39 +609,31 @@ export class Message {
     });
   }
 
-  /**
-   * @param {string|Object} content
-   * @param {Object} embedOptions
-   * @returns {Promise<Message>}
-   */
+  /** Edit this message's embed. @param {string|object} content @param {object} [embedOptions={}] @returns {Promise<Message|null>} */
   editEmbed(content, embedOptions = {}) {
     return this.handler.editEmbed(this.message, content, embedOptions);
   }
 
-  /**
-   * @param {string|Object} content
-   * @param {Object} embedOptions
-   * @returns {Promise<Message>}
-   */
+  /** Alias for editEmbed. @param {string|object} content @param {object} [embedOptions={}] @returns {Promise<Message|null>} */
   edit(content, embedOptions = {}) {
     return this.handler.editEmbed(this.message, content, embedOptions);
   }
 }
 
-/**
- * PageBuilder class.
- */
+/** @class PageBuilder @description Splits content into pages with template-based formatting. */
 export class PageBuilder {
+  /** @type {string} Template form string with $maxPage, $currentPage, $content placeholders. */
   form = "";
+  /** @type {number} Maximum lines per page. */
   maxLinesPerPage = 2;
-  /** @type {string[]} */
+  /** @type {Array|string[]} Content lines or array items. */
   content = [];
+  /** @type {boolean} Whether pages have been created. */
   initiated = false;
+  /** @type {Array<Array>} Created page arrays. */
   pages = [];
 
-  /**
-   * @param {string|string[]} content
-   */
+  /** @param {string|Array} content - String to split by newlines or an array of items. */
   constructor(content) {
     if (!Array.isArray(content)) {
       this.content = content.split("\n");
@@ -812,18 +642,21 @@ export class PageBuilder {
     this.content = content;
   }
 
+  /** Set the template form string with $maxPage, $currentPage, $content placeholders. @param {string} form @returns {PageBuilder} */
   setForm(form) {
     this.form = form;
     this.initiated = false;
     return this;
   }
 
+  /** Set the maximum lines per page. @param {number} [maxLinesPerPage=2] @returns {PageBuilder} */
   setMaxLines(maxLinesPerPage = 2) {
     this.maxLinesPerPage = maxLinesPerPage;
     this.initiated = false;
     return this;
   }
 
+  /** Create page arrays from content. Lazily initialized; returns cached pages if already created. @returns {Array<Array>} */
   createPages() {
     if (this.initiated) return this.pages;
 
@@ -840,10 +673,7 @@ export class PageBuilder {
     return pages;
   }
 
-  /**
-   * @param {number} n
-   * @returns {string|null}
-   */
+  /** Get a formatted page string by index (0-based). @param {number} n @returns {string|null} */
   getPage(n) {
     const pages = this.createPages();
     if (!pages[n]) return null;
@@ -854,38 +684,22 @@ export class PageBuilder {
         .replace(/\$content/gi, pages[n].join("\n"));
   }
 
-  /**
-   * @param {number} n
-   * @returns {string|null}
-   */
+  /** Get raw page content by index (0-based) without template formatting. @param {number} n @returns {string|null} */
   getContent(n) {
     const pages = this.createPages();
     if (!pages[n]) return null;
     return pages[n].join("\n");
   }
 
-  /** @returns {number} */
+  /** Get the total number of pages. @returns {number} */
   size() {
     return this.pages.length;
   }
 }
 
-/**
- * RichPaginator — tabbed embed pagination with reaction controls.
- *
- * Usage:
- *   new RichPaginator(msg, handler)
- *     .setTimeout(5 * 60 * 1000)
- *     .addTab({ emoji: "🏠", title: "Home", header: "Home Page", content: "..." })
- *     .addTab({ emoji: "🎵", title: "Music", header: "Music Commands", pages: ["page1", "page2"] })
- *     .setPrevNext("⬅️", "➡️")
- *     .send();
- */
+/** @class RichPaginator @description Multi-tab paginated embed with tab and arrow navigation via reactions. */
 export class RichPaginator {
-  /**
-   * @param {Message} msg
-   * @param {MessageHandler} handler
-   */
+  /** @param {Message} msg @param {MessageHandler} handler */
   constructor(msg, handler) {
     this._msg     = msg;
     this._handler = handler;
@@ -897,24 +711,19 @@ export class RichPaginator {
     this._state   = { tab: 0, page: 0 };
   }
 
-  /** @param {number} ms */
+  /** Set the session timeout duration. @param {number} ms @returns {RichPaginator} */
   setTimeout(ms) { this._timeout = ms; return this; }
 
-  /** @param {number} color */
+  /** Set the embed color. @param {number} color @returns {RichPaginator} */
   setColor(color) { this._color = color; return this; }
 
-  /** @param {string} startTab index (0-based) */
+  /** Set the initially selected tab index. @param {number} idx @returns {RichPaginator} */
   setStartTab(idx) { this._state.tab = idx; return this; }
 
-  /** @param {string} prev @param {string} next */
+  /** Set the previous/next arrow emoji strings. @param {string} prev @param {string} next @returns {RichPaginator} */
   setPrevNext(prev, next) { this._prev = prev; this._next = next; return this; }
 
-  /**
-   * Add a tab.
-   * @param {{ emoji: string, title: string, header: string, content?: string, pages?: string[] }} tab
-   *   content — single static string (no pagination)
-   *   pages   — array of strings, one per page (enables prev/next)
-   */
+  /** Add a tab to the paginator. @param {object} tab @param {string} tab.emoji @param {string} tab.title @param {string} tab.header @param {string} [tab.content] @param {string[]} [tab.pages] @returns {RichPaginator} */
   addTab(tab) {
     this._tabs.push({
       emoji:  tab.emoji,
@@ -925,6 +734,7 @@ export class RichPaginator {
     return this;
   }
 
+  /** @private Build an embed for a given tab and sub-page. @param {number} tabIdx @param {number} pageIdx @returns {EmbedBuilder} */
   _buildEmbed(tabIdx, pageIdx) {
     const tab        = this._tabs[tabIdx];
     const totalTabs  = this._tabs.length;
@@ -943,6 +753,7 @@ export class RichPaginator {
         .setFooter({ text: footerParts.join(" ") });
   }
 
+  /** @async Send the paginated embed and start observing reactions. @returns {Promise<object|null>} The raw sent message. */
   async send() {
     if (this._tabs.length === 0) return null;
 
@@ -992,6 +803,7 @@ export class RichPaginator {
       rawMsg.edit({ embeds: [buildEmbed(state.tab, state.page)] }).catch(() => {});
     });
 
+    /** @private Clear all reactions on the paginator message. */
     const clearReactions = async () => {
       try {
         await rawMsg.removeAllReactions();
@@ -1006,6 +818,7 @@ export class RichPaginator {
       }
     };
 
+    /** @private Close the pagination session, update footer, and clear reactions. */
     const closeSession = async () => {
       unobserve();
       const currentEmbed = buildEmbed(state.tab, state.page);
@@ -1017,6 +830,7 @@ export class RichPaginator {
 
     let timer = setTimeout(closeSession, this._timeout);
 
+    /** @private Reset the inactivity timer. */
     const resetTimer = () => {
       clearTimeout(timer);
       timer = setTimeout(closeSession, this._timeout);
@@ -1032,23 +846,9 @@ export class RichPaginator {
   }
 }
 
-/**
- * QueuePaginator — rich embed pagination for the queue/list command.
- *
- * Usage:
- *   new QueuePaginator(msg, handler, client)
- *     .setTimeout(30_000)
- *     .setColor(0xe9196c)
- *     .send(buildEmbedFn, totalPages, startPage);
- *
- * buildEmbedFn(page) must return a raw embed object { color, author, title, description, footer }
- */
+/** @class QueuePaginator @description Simple two-arrow paginator for queue embeds with page count. */
 export class QueuePaginator {
-  /**
-   * @param {Message} msg
-   * @param {MessageHandler} handler
-   * @param {Client} client
-   */
+  /** @param {Message} msg @param {MessageHandler} handler @param {Client} client */
   constructor(msg, handler, client) {
     this._msg     = msg;
     this._handler = handler;
@@ -1058,17 +858,13 @@ export class QueuePaginator {
     this._next    = "➡️";
   }
 
-  /** @param {number} ms */
+  /** Set the session timeout duration. @param {number} ms @returns {QueuePaginator} */
   setTimeout(ms) { this._timeout = ms; return this; }
 
-  /** @param {string} prev @param {string} next */
+  /** Set the previous/next arrow emoji strings. @param {string} prev @param {string} next @returns {QueuePaginator} */
   setPrevNext(prev, next) { this._prev = prev; this._next = next; return this; }
 
-  /**
-   * @param {function(page: number): object} buildEmbed  - returns a raw embed object
-   * @param {number} totalPages
-   * @param {number} [startPage=1]
-   */
+  /** @async Send the paginated embed and observe arrow reactions. @param {Function} buildEmbed - Function that takes a page number and returns an EmbedBuilder. @param {number} totalPages @param {number} [startPage=1] @returns {Promise<object|null>} The raw sent message. */
   async send(buildEmbed, totalPages, startPage = 1) {
     const state   = { page: Math.max(1, Math.min(startPage, totalPages)) };
     const nativeMsg = this._msg.message ?? this._msg;
@@ -1094,6 +890,7 @@ export class QueuePaginator {
     const channelId = rawMsg.channelId ?? rawMsg.channel_id ?? rawMsg.channel?.id;
     const msgId     = rawMsg.id;
 
+    /** @private Clear all reactions on the paginator message. */
     const clearReactions = async () => {
       try {
         await rawMsg.removeAllReactions();
@@ -1106,6 +903,7 @@ export class QueuePaginator {
       }
     };
 
+    /** @private Close the pagination session, update footer, and clear reactions. */
     const closeSession = async () => {
       unobserve();
       const embed = buildEmbed(state.page);
@@ -1120,6 +918,7 @@ export class QueuePaginator {
     };
 
     let timer = setTimeout(closeSession, this._timeout);
+    /** @private Reset the inactivity timer. */
     const resetTimer = () => {
       clearTimeout(timer);
       timer = setTimeout(closeSession, this._timeout);
@@ -1138,7 +937,9 @@ export class QueuePaginator {
   }
 }
 
+/** @type {number} Maximum commands listed per page in the help paginator. */
 const HELP_CMDS_PER_PAGE = 10;
+/** @type {number} Help paginator session timeout in milliseconds. */
 const HELP_SESSION_MS    = 30 * 1000;
 
 const HELP_TABS = [
@@ -1168,6 +969,7 @@ const HELP_TABS = [
   },
 ];
 
+/** @private @param {string} prefix @returns {string} */
 function _helpHomeContent(prefix) {
   return (
       "**Welcome to the Remix help page.**\n\n" +
@@ -1182,6 +984,7 @@ function _helpHomeContent(prefix) {
   );
 }
 
+/** @private @returns {string} */
 function _helpSupportContent() {
   return (
       "If you need help with anything or encounter any issues, hop over to " +
@@ -1193,6 +996,7 @@ function _helpSupportContent() {
   );
 }
 
+/** @private Build paginated content for a help category tab. @param {object} tab @param {Array} allCmds @param {string} prefix @returns {string[]} */
 function _helpBuildCategoryPages(tab, allCmds, prefix) {
   const cmds = allCmds
       .filter(cmd => {
@@ -1219,29 +1023,16 @@ function _helpBuildCategoryPages(tab, allCmds, prefix) {
   return pages;
 }
 
-/**
- * HelpCommand class.
- */
+/** @class HelpCommand @description Rich paginated help command with tabbed navigation (Home, Music, Utilities, Support). */
 export class HelpCommand {
-  /**
-   * @param {import("./CommandHandler.mjs").CommandHandler} commandHandler
-   * @param {MessageHandler} messageHandler
-   * @param {function(msg: Message): import("./Settings.mjs").SettingsManager} getSettingsFn
-   *   Called with a Message to retrieve that guild's settings.
-   *   In index.mjs this is: (msg) => this.getSettings(msg)
-   */
+  /** @param {CommandHandler} commandHandler @param {MessageHandler} messageHandler @param {Function} getSettingsFn */
   constructor(commandHandler, messageHandler, getSettingsFn) {
     this._commands = commandHandler;
     this._messages = messageHandler;
     this._getSettings = getSettingsFn;
   }
 
-  /**
-   * Registers the help command with the CommandHandler and intercepts
-   * incoming messages whose first word is "help", "h", or "commands".
-   *
-   * Call once during bot startup, after commands have been loaded.
-   */
+  /** Register the help command, intercept invalid command replies, and intercept help aliases. */
   register() {
     if (this._registered) return;
     this._registered = true;
@@ -1314,6 +1105,7 @@ export class HelpCommand {
     });
   }
 
+  /** @private Handle a help invocation: show command detail or paginated overview. @param {Message} msg @param {string[]} args @param {string} prefix */
   _handle(msg, args, prefix) {
     const allCmds = this._commands.commands;
     const query   = (args[0] ?? "").trim();

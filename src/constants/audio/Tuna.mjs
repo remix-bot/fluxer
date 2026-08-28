@@ -1,24 +1,30 @@
-/**
- * @file Tuna.mjs — Tuna — Voicemod Tuna API client for sound effect search and download
- * @module src.constants.audio.Tuna
- */
+/** @module constants/audio/Tuna */
 
-/**
- * Tuna API client for searching and downloading sound effects
- * from the Voicemod Tuna service (tuna-api.voicemod.net).
- */
 import pkg from "follow-redirects";
 const { https } = pkg;
 
+/**
+ * Client for the Tuna (Voicemod) sound-effect API.
+ * @class
+ */
 class Tuna {
-  apiKey = null;
+  /** @private */ apiKey = null;
+
   /**
-   * @param {Object} auth Auth config
-   * @param {string} auth.key Voicemod Tuna API key
+   * @param {{ key: string }} auth - Object containing the API key.
    */
   constructor(auth) {
     this.apiKey = auth.key;
   }
+
+  /**
+   * Perform an authenticated GET request to the Tuna API.
+   * @private
+   * @async
+   * @param {string} path - API path (e.g. `"/v1/sounds/search"`).
+   * @param {Object<string, *>} [params={}] - Query-string parameters.
+   * @returns {Promise<object>} Parsed JSON response.
+   */
   get(path, params = {}) {
     return new Promise((resolve, reject) => {
       const qs = new URLSearchParams(params).toString();
@@ -49,6 +55,16 @@ class Tuna {
       req.end();
     });
   }
+
+  /**
+   * Search for sound effects. Each result item gains a `download()` method
+   * that returns the OGG audio stream.
+   * @async
+   * @param {string} query - Search term.
+   * @param {number} [page=1]
+   * @param {number} [size=10]
+   * @returns {Promise<object>} Search results with enriched `items` array.
+   */
   search(query, page = 1, size = 10) {
     return this.get("/v1/sounds/search", { size, page, search: query }).then(results => {
       results.items = results.items.map(s => {
@@ -65,6 +81,14 @@ class Tuna {
       return results;
     });
   }
+
+  /**
+   * Fetch a single sound effect by ID. The returned object gains a `download()`
+   * method that returns the OGG audio stream.
+   * @async
+   * @param {string} id - Sound ID.
+   * @returns {Promise<object>} Sound object with `download()` method.
+   */
   getSound(id) {
     return this.get("/v1/sounds/" + id).then(sound => {
       const oggPath = sound.oggPath;

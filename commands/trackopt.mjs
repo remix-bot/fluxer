@@ -1,6 +1,6 @@
 /**
- * @file trackopt.mjs — Manage per-track options — auto-seek start position and end-time timer
- * @module commands.trackopt
+ * @module commands/trackopt
+ * @description Set custom start/end times for tracks with named alias support.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -10,8 +10,10 @@ import { Utils } from "../src/Utils.mjs";
 import { logger } from "../src/constants/Logger.mjs";
 import { ERROR_COLOR } from "../src/constants/UI.mjs";
 
+/** @private @type {string} The default alias name for non-named track options. */
 const DEFAULT_ALIAS = "default";
 
+/** @type {CommandBuilder} @description Command definition for the trackopt command with subcommands. */
 export const command = new CommandBuilder()
   .setName("trackopt")
   .setDescription("Set custom start/end times for tracks. Supports named aliases — save multiple trims per track for different sections.", "commands.trackopt")
@@ -58,6 +60,12 @@ export const command = new CommandBuilder()
   )
   .addAlias("to");
 
+/**
+ * @private
+ * Extract an alias:name token from a parts array, mutating the array in place.
+ * @param {string[]} parts - Mutable array of token strings.
+ * @returns {string} The extracted alias value, or DEFAULT_ALIAS if not found.
+ */
 function extractAlias(parts) {
   for (let i = 0; i < parts.length; i++) {
     if (parts[i].toLowerCase().startsWith("alias:")) {
@@ -70,9 +78,11 @@ function extractAlias(parts) {
 }
 
 /**
- * Execute the trackopt command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @async
+ * Run handler for the trackopt command.
+ * Dispatches to set/get/play/remove/list subcommands for custom track trim options.
+ * @param {object} msg - The command message wrapper.
+ * @param {object} data - Parsed command data containing subcommand and its options.
  * @returns {Promise<void>}
  */
 export async function run(msg, data) {

@@ -1,72 +1,39 @@
+/** @module constants/Helpers247 */
+
 /**
- * @file Helpers247.mjs — Helpers247 — per-channel 24/7 mode management (on/auto/off) with guild-wide backward compatibility
- * @module src.constants.Helpers247
+ * Simplified 24/7 helpers — single mode (on/off), no per-channel modes.
+ * get247ChannelMode is used by Player.mjs, PlayerManager.mjs, GatewayHandler.mjs, leave.mjs.
+ * remove247ChannelMode and set247ChannelMode are kept as no-ops for backward compat
+ * (original files in the zip still import them).
  */
 
 /**
- * Shared 24/7 mode helpers.
- *
- * The per-channel mode map (`stay_247_modes`) stores each channel's 24/7 mode
- * independently so a guild can have channel A on "on" and channel B on "auto".
- *
- * Format in settings:
- *   stay_247_modes: { "1483577390731942416": "on", "1478011355626209606": "auto" }
- *
- * For backward compatibility, `stay_247_mode` (guild-wide string) is still
- * written when any channel is updated.  All reads go through
- * `get247ChannelMode()` which prefers the per-channel entry and falls back
- * to the guild-wide value.
- */
-
-/**
- * Get the 24/7 mode for a specific channel.
- *
- * @param {{ get: (key: string) => any }} set  ServerSettings instance
- * @param {string} channelId  Clean (digits-only) channel ID
- * @returns {"on"|"auto"|"off"}
+ * Check if a channel has 24/7 enabled.
+ * @param {object} set - ServerSettings instance
+ * @param {string} channelId
+ * @returns {"on"|"off"}
  */
 export function get247ChannelMode(set, channelId) {
   if (!set?.get) return "off";
-  const modes = set.get("stay_247_modes");
-  if (modes && typeof modes === "object" && !Array.isArray(modes)) {
-    const perChannel = modes[channelId];
-    if (perChannel === "on" || perChannel === "auto" || perChannel === "off") return perChannel;
-  }
-  const guildMode = set.get("stay_247_mode") ?? "off";
-  return guildMode;
+  const raw = set.get("stay_247");
+  if (!raw || raw === "none") return "off";
+  const channels = Array.isArray(raw)
+    ? raw.map(id => String(id).trim()).filter(Boolean)
+    : [String(raw).trim()];
+  return channels.includes(channelId) ? "on" : "off";
 }
 
 /**
- * Set the 24/7 mode for a specific channel.
- *
- * @param {{ get: (key: string) => any, set: (key: string, value: any) => void }} set
- * @param {string} channelId  Clean (digits-only) channel ID
- * @param {"on"|"auto"|"off"} mode
- */
-export function set247ChannelMode(set, channelId, mode) {
-  let modes = set.get("stay_247_modes");
-  if (!modes || typeof modes !== "object" || Array.isArray(modes)) modes = {};
-  modes[channelId] = mode;
-  set.set("stay_247_modes", modes);
-  set.set("stay_247_mode", mode);
-}
-
-/**
- * Remove a channel from the per-channel modes map.
- *
- * @param {{ get: (key: string) => any, set: (key: string, value: any) => void }} set
- * @param {string} channelId  Clean channel ID
- * @param {Set<string>} currentChannels  Current set of all 247 channels for this guild
+ * No-op: per-channel modes removed. Kept for backward compatibility.
+ * Original GatewayHandler.mjs and index.mjs still import this.
  */
 export function remove247ChannelMode(set, channelId, currentChannels) {
-  let modes = set.get("stay_247_modes");
-  if (!modes || typeof modes !== "object" || Array.isArray(modes)) return;
-  delete modes[channelId];
-  set.set("stay_247_modes", modes);
-  if (!currentChannels || currentChannels.size === 0) {
-    set.set("stay_247_mode", "off");
-  } else {
-    const firstChannel = [...currentChannels][0];
-    set.set("stay_247_mode", modes[firstChannel] ?? "auto");
-  }
+  // No-op: modes no longer exist, stay_247 array is managed directly.
+}
+
+/**
+ * No-op: per-channel modes removed. Kept for backward compatibility.
+ */
+export function set247ChannelMode(set, channelId, mode) {
+  // No-op: modes no longer exist.
 }

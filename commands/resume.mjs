@@ -1,20 +1,26 @@
 /**
- * @file resume.mjs — Resume paused playback
- * @module commands.resume
+ * @module commands/resume
+ * @description Resume paused playback in the current voice channel.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/MessageHandler.mjs";
 
+/**
+ * @type {CommandBuilder}
+ * @description Command definition for the resume command.
+ */
 export const command = new CommandBuilder()
   .setName("resume")
   .setDescription("Resume the playback in your voice channel", "commands.resume")
   .setCategory("music");
 
 /**
- * Execute the resume command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
+ * Run handler for the resume command.
+ * Resumes playback and sends a confirmation embed.
+ *
+ * @param {object} message - The command message wrapper.
  * @returns {Promise<void>}
  */
 export async function run(message) {

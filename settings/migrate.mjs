@@ -1,6 +1,8 @@
 /**
- * @file migrate.mjs — Migration script — migrates settings and 24/7 channel data between Redis and SQLite backends
- * @module settings.migrate
+ * @module settings/migrate
+ * @description One-shot migration script that copies all server settings from one
+ * RemoteSettingsManager instance to another (e.g. between databases or bot IDs).
+ * Reads `config.json` for MySQL credentials and runs once on the "ready" event.
  */
 
 import { RemoteSettingsManager } from "../src/Settings.mjs";

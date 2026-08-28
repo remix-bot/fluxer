@@ -1,6 +1,6 @@
 /**
- * @file volumedefault.mjs — Set the default volume for the server
- * @module commands.volumedefault
+ * @module commands/volumedefault
+ * @description View or set the server default volume. Requires Manage Server permission to set.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -9,7 +9,7 @@ import { getGlobalColor } from "../src/MessageHandler.mjs";
 import { PermissionFlags } from "@fluxerjs/core";
 import { MAX_VOLUME } from "../src/constants/UI.mjs";
 
-
+/** @type {CommandBuilder} @description Command definition for the volumedefault command. */
 export const command = new CommandBuilder()
     .setName("volumedefault")
     .setDescription("View or set the server default volume. (Requires Manage Server to set)", "commands.volumedefault")
@@ -22,9 +22,11 @@ export const command = new CommandBuilder()
     .addAliases("vd");
 
 /**
- * Execute the volumedefault command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * @async
+ * Run handler for the volumedefault command.
+ * Displays or persists the server's default volume setting.
+ * @param {object} message - The command message wrapper.
+ * @param {object} data - Parsed command data containing the optional volume option.
  * @returns {Promise<void>}
  */
 export async function run(message, data) {

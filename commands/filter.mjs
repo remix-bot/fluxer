@@ -1,6 +1,6 @@
 /**
- * @file filter command — Interactive audio filter picker with emoji-based toggling
  * @module commands/filter
+ * @description Interactive audio filter picker with emoji-based selection and pagination.
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -173,10 +173,10 @@ const PAGE_SIZE    = 9;
 const SESSION_MS = 60_000;
 
 /**
- * Merge multiple active filter payloads into a single Lavalink filters object.
- * Categories that overlap are overwritten by the last filter in the list.
- * The special "off" key is skipped — it carries an empty payload and is handled
- * by clearing activeKeys before this function is called.
+ * Merge filter payloads for multiple active filter keys into one combined payload.
+ * @private
+ * @param {string[]} keys - Array of active filter keys.
+ * @returns {object} Merged Lavalink filter payload.
  */
 function mergeFilterPayloads(keys) {
   const merged = {};
@@ -191,6 +191,10 @@ function mergeFilterPayloads(keys) {
   return merged;
 }
 
+/**
+ * @type {CommandBuilder}
+ * @description Command definition for the filter command.
+ */
 export const command = new CommandBuilder()
     .setName("filter")
     .setDescription(
@@ -201,13 +205,14 @@ export const command = new CommandBuilder()
     .addAliases("filters", "fx", "effect");
 
 /**
- * Build the embed for a single page of the filter picker.
- * @param {Function} t - Translation function
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {number} page - Current page index (0-based)
- * @param {string[]} activeKeys - Currently active filter keys
- * @param {object} [current] - The currently playing track
- * @returns {import("@fluxerjs/core").EmbedBuilder}
+ * Build an embed for a page of the filter picker.
+ * @private
+ * @param {Function} t - Translation function.
+ * @param {object} msg - The command message wrapper.
+ * @param {number} page - Current page index (0-based).
+ * @param {string[]} activeKeys - Array of currently active filter keys.
+ * @param {object|null} current - The currently playing track, or null.
+ * @returns {EmbedBuilder} The constructed embed.
  */
 function buildPageEmbed(t, msg, page, activeKeys, current) {
   const totalPages = Math.ceil(FILTERS.length / PAGE_SIZE);
@@ -253,9 +258,10 @@ function buildPageEmbed(t, msg, page, activeKeys, current) {
 }
 
 /**
- * Execute the filter command.
- * @param {import("../src/MessageHandler.mjs").Message} msg - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * Run handler for the filter command.
+ * Opens an interactive filter picker with emoji reactions.
+ *
+ * @param {object} msg - The command message wrapper.
  * @returns {Promise<void>}
  */
 export async function run(msg) {

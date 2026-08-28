@@ -295,6 +295,7 @@
       "specifyChannel": "⚠️ Bir ses kanalında değilsiniz. Şu kanallardayım:\n{{channels}}\n\nBelirli bir kanaldan ayrılmak için `{{prefix}}leave <#kanal>` kullanın.",
       "noPlayerInChannel": "⚠️ <#{{channel}}> kanalında çalmıyorum. Şu kanallardayım:\n{{channels}}",
       "playerNotInit": "Oynatıcı başlatılmadı.",
+      "left": "✅ Başarıyla Ayrıldı",
       "leftRejoin247": "✅ Başarıyla Ayrıldı — birkaç saniye içinde <#{{channel}}> kanalına tekrar katılınıyor.\n24/7 modunu kalıcı olarak devre dışı bırakmak için `{{prefix}}247 off` kullanın.",
       "left247On": "✅ Başarıyla Ayrıldı.\n24/7 modu **açık** — bot otomatik olarak tekrar katılmayacak. Geri getirmek için `{{prefix}}play` veya tamamen devre dışı bırakmak için `{{prefix}}247 off` kullanın.\nKayıtlı tüm kanalları görüntülemek için `{{prefix}}247` kullanın.",
       "autoRejoinHint": "⚠️ 24/7 modu etkin (auto) — birkaç saniye içinde <#{{channel}}> kanalına tekrar katılacağım.\nBeni kalıcı olarak çıkarmak için önce 24/7 modunu devre dışı bırakın: `{{prefix}}247 off`"

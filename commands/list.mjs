@@ -1,6 +1,6 @@
 /**
- * @file list.mjs — Display the current song queue with pagination
- * @module commands.list
+ * @module commands/list
+ * @description List the songs in the queue of the current voice channel with pagination.
  */
 
 import { CommandBuilder }  from "../src/CommandHandler.mjs";
@@ -10,6 +10,10 @@ import { EmbedBuilder }    from "@fluxerjs/core";
 const PAGE_SIZE  = 10;
 const SESSION_MS = 30 * 1000;
 
+/**
+ * @type {CommandBuilder}
+ * @description Command definition for the list (queue) command.
+ */
 export const command = new CommandBuilder()
     .setName("list")
     .setDescription("List the songs in the queue of your current voice channel.", "commands.list")
@@ -22,9 +26,11 @@ export const command = new CommandBuilder()
     );
 
 /**
- * Execute the list command.
- * @param {import("../src/MessageHandler.mjs").Message} message - The incoming message
- * @param {Map<string, {value: *}>} data - Slash-command options map
+ * Run handler for the list command.
+ * Displays the current queue with pagination, showing now-playing info and track list.
+ *
+ * @param {object} message - The command message wrapper.
+ * @param {object} data - Parsed command data containing the page option.
  * @returns {Promise<void>}
  */
 export async function run(message, data) {
