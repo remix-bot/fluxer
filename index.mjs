@@ -1026,7 +1026,20 @@ const isIgnorableWsCrash = (err) => {
       );
 };
 
+/**
+ * Check whether an error is the benign LiveKit "AudioSource is closed" race.
+ * Happens when a track is skipped/stopped while @fluxerjs/voice's internal
+ * WebM demuxer still has queued frames to push into the just-closed audio
+ * source. Harmless by itself — but if it ever surfaces as a synchronous
+ * uncaughtException it must NOT take the whole bot down.
+ * @param {Error} err - The error to check.
+ * @returns {boolean} True if the error is the audio stop-race.
+ */
+const isBenignAudioStopRace = (err) =>
+  String(err?.message ?? err ?? "").includes("AudioSource is closed");
+
 let _lastWsCrashLog = 0;
+let _lastAudioRaceLog = 0;
 const WS_CRASH_LOG_COOLDOWN = 30_000;
 
 process.on("unhandledRejection", (reason, p) => {
@@ -1043,12 +1056,21 @@ process.on("uncaughtException", (err, origin) => {
     }
     return;
   }
+  if (isBenignAudioStopRace(err)) {
+    const now = Date.now();
+    if (now - _lastAudioRaceLog > WS_CRASH_LOG_COOLDOWN) {
+      _lastAudioRaceLog = now;
+      logger.warn("[Error_Handling] Suppressed benign audio stop-race (AudioSource is closed) — track was skipped/stopped mid-frame.");
+    }
+    return;
+  }
   logger.error("[Error_Handling] Uncaught Exception/Catch");
   logger.error("Error:", err, origin);
   process.exit(1);
 });
 process.on("uncaughtExceptionMonitor", (err, origin) => {
   if (isIgnorableWsCrash(err)) return;
+  if (isBenignAudioStopRace(err)) return;
   logger.error("[Error_Handling] Uncaught Exception/Catch (MONITOR)");
   logger.error("Error:", err, origin);
 });
