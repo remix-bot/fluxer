@@ -773,20 +773,36 @@ export class Remix {
             ["false","0","no","off","disable"].includes(String(raw).toLowerCase().trim());
         if (disabled) return;
 
-        let ch = player.textChannel;
-        if (!ch || typeof ch.send !== "function") {
+        const chMgr = this.client?.channels ?? null;
+        const canPostById = (c) => !!c?.id && !!chMgr && typeof chMgr.send === "function";
+        const asSendable = (c) => {
+          if (!c || typeof c === "string" || typeof c.send === "function") return c;
+          if (!canPostById(c)) return c;
+          const target = { id: c.id, type: c.type };
+          target.isTextBased = () => true;
+          target.send = (options) => chMgr.send(c.id, options);
+          return target;
+        };
+        const usable = (c) => !!c && typeof c === "object" &&
+            (typeof c.send === "function" || canPostById(c));
+
+        const _tc = player.textChannel;
+        let ch = (_tc && typeof _tc === "object" && _tc.channel && typeof _tc.channel === "object")
+          ? _tc.channel
+          : _tc;
+        if (!usable(ch)) {
           const savedAnnChId = serverSettings?.get?.("announcementChannelId");
           if (savedAnnChId) {
             ch = this.client?.channels?.get?.(cleanId(savedAnnChId)) ?? null;
           }
         }
-        if (!ch || typeof ch.send !== "function") {
+        if (!usable(ch)) {
           const guild = this.client?.guilds?.get?.(cleanGuildId);
           if (guild?.systemChannelId) {
             ch = guild.channels?.get?.(guild.systemChannelId) ?? null;
           }
         }
-        if (!ch || typeof ch.send !== "function") {
+        if (!usable(ch)) {
           const guild = this.client?.guilds?.get?.(cleanGuildId);
           if (guild?.channels) {
             for (const c of (guild.channels.values?.() ?? [])) {
@@ -797,8 +813,9 @@ export class Remix {
             }
           }
         }
-        if (!ch || typeof ch.send !== "function") return;
+        if (!usable(ch)) return;
 
+        ch = asSendable(ch);
         if (!player.textChannel) player.textChannel = ch;
 
         const payload = typeof m === "object" && Array.isArray(m.embeds)

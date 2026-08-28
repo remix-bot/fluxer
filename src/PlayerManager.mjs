@@ -429,7 +429,7 @@ export class PlayerManager {
       const player = this.playerMap.get(cleanUserChannelId)
           ?? this.getPlayerByGuildAndChannel(cleanGuildId, cleanUserChannelId);
       if (player) {
-        player.textChannel = message.channel;
+        player.textChannel = message.channel?.channel ?? message.channel;
         try {
           const textChannelId = message?.channel?.id ?? message?.channel?.channel?.id ?? null;
           if (guildId && textChannelId) {
@@ -455,7 +455,7 @@ export class PlayerManager {
       if (!userChannelId) {
         if (!verifyUser) {
           const first = serverPlayers[0];
-          first[1].textChannel = message.channel;
+          first[1].textChannel = message.channel?.channel ?? message.channel;
           return first[1];
         }
         message.reply(this._t(message, "responses._common.noVoiceStrict"));
@@ -466,7 +466,7 @@ export class PlayerManager {
         getPlayerChannelId(player) === cleanUserChannelId
       );
       if (match) {
-        match[1].textChannel = message.channel;
+        match[1].textChannel = message.channel?.channel ?? message.channel;
         try {
           const textChannelId = message?.channel?.id ?? message?.channel?.channel?.id ?? null;
           if (cleanGuildId && textChannelId) {
@@ -660,7 +660,16 @@ export class PlayerManager {
     const existing = this.playerMap.get(cleanChannelId)
       ?? this.getPlayerByChannelId(cleanChannelId);
     if (existing) {
-      existing.textChannel = message.channel;
+      existing.textChannel = message.channel?.channel ?? message.channel;
+      try {
+        const textChannelId = message?.channel?.id ?? message?.channel?.channel?.id ?? null;
+        const existingGuildId = getMessageGuildId(message);
+        if (existingGuildId && textChannelId) {
+          this.settings.getServer(existingGuildId)?.set("announcementChannelId", textChannelId);
+        }
+      } catch(e) {
+        logger.warn("[PlayerManager] Failed to save announcement channel ID:", e?.message);
+      }
       message.reply(this._t(message, "responses.join.alreadyJoined", { channel: cid }));
       return existing;
     }
@@ -683,7 +692,16 @@ export class PlayerManager {
       trackOptions:       this.trackOptions ?? null,
     });
 
-    player.textChannel = message.channel;
+    player.textChannel = message.channel?.channel ?? message.channel;
+    try {
+      const textChannelId = message?.channel?.id ?? message?.channel?.channel?.id ?? null;
+      const newGuildId = getMessageGuildId(message);
+      if (newGuildId && textChannelId) {
+        this.settings.getServer(newGuildId)?.set("announcementChannelId", textChannelId);
+      }
+    } catch(e) {
+      logger.warn("[PlayerManager] Failed to save announcement channel ID:", e?.message);
+    }
     this.setupEvents(player, {
       channelId: cleanChannelId,
       guildId: cleanId(channel.guildId ?? getMessageGuildId(message)),
@@ -740,21 +758,41 @@ export class PlayerManager {
 
       const desc = this.locale?.translate(guildId, "responses.join.autoLeaveInactive", { channel: `<#${activeChannelId}>`, prefix })
           ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247\``;
-      if (typeof ch?.send === "function") {
-        ch.send({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)], allowedMentions: { parse: [] } }).catch(err => {
+      const autoleaveChMgr = this.commands?.client?.channels ?? null;
+      let leaveCh = (ch && typeof ch === "object" && typeof ch.send !== "function" && ch.id &&
+          autoleaveChMgr && typeof autoleaveChMgr.send === "function")
+        ? (() => { const t = { id: ch.id, type: ch.type }; t.send = (o) => autoleaveChMgr.send(ch.id, o); return t; })()
+        : ch;
+      if (typeof leaveCh?.send === "function") {
+        leaveCh.send({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)], allowedMentions: { parse: [] } }).catch(err => {
           if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
-            logger.warn(`[PlayerManager] Cannot send autoleave message in channel ${ch.id} — missing permissions`);
+            logger.warn(`[PlayerManager] Cannot send autoleave message in channel ${leaveCh.id} — missing permissions`);
           }
         });
       }
     });
 
     player.on("message", (m) => {
+      const unwrapChannel = (c) =>
+        (c && typeof c === "object" && c.channel && typeof c.channel === "object") ? c.channel : c;
+
+      const chMgr = this.commands?.client?.channels ?? null;
+      const canPostById = (c) => !!c?.id && !!chMgr && typeof chMgr.send === "function";
+      const asSendable = (c) => {
+        if (!c || typeof c === "string" || typeof c.send === "function") return c;
+        if (!canPostById(c)) return c;
+        const target = { id: c.id, type: c.type };
+        target.isTextBased = () => true;
+        target.send = (options) => chMgr.send(c.id, options);
+        return target;
+      };
+
       const isTextChannel = (c) => {
+        c = unwrapChannel(c);
         if (!c) return false;
         if (c.type === undefined || c.type === null) return false;
         const voiceTypes = [2, 13, "GUILD_VOICE", "GUILD_STAGE_VOICE", "STAGE", "voice", "stage"];
-        if (voiceTypes.includes(c.type)) return false;
+        if (voiceTypes.includes(c.type)) return canPostById(c);
         if (typeof c.isTextBased === "function") return c.isTextBased();
         const textTypes = [0, 5, 10, 11, 12, "GUILD_TEXT", "GUILD_ANNOUNCEMENT", "text"];
         if (textTypes.includes(c.type)) return true;
@@ -762,7 +800,7 @@ export class PlayerManager {
         return false;
       };
 
-      let ch       = player.textChannel;
+      let ch       = asSendable(unwrapChannel(player.textChannel));
       const guildId = cleanId(player._guildId ?? ch?.guildId ?? ch?.guild?.id ?? getMessageGuildId({ channel: ch }));
 
       const raw      = this.settings.getServer(guildId)?.get("songAnnouncements");
@@ -776,7 +814,7 @@ export class PlayerManager {
           const savedAnnChId = serverSettings?.get?.("announcementChannelId");
           if (savedAnnChId) {
             const resolved = this.commands?.client?.channels?.get?.(cleanId(savedAnnChId)) ?? null;
-            if (isTextChannel(resolved)) ch = resolved;
+            if (isTextChannel(resolved)) ch = asSendable(resolved);
           }
         } catch(e) {
           logger.warn("[PlayerManager] Failed to resolve announcement channel:", e?.message);
@@ -787,7 +825,7 @@ export class PlayerManager {
           const guild = this.commands?.client?.guilds?.get?.(guildId);
           if (guild?.systemChannelId) {
             const resolved = guild.channels?.get?.(guild.systemChannelId) ?? null;
-            if (isTextChannel(resolved)) ch = resolved;
+            if (isTextChannel(resolved)) ch = asSendable(resolved);
           }
         } catch(e) {
           logger.warn("[PlayerManager] Failed to resolve system channel:", e?.message);
@@ -799,7 +837,7 @@ export class PlayerManager {
           if (guild?.channels) {
             for (const c of (guild.channels.values?.() ?? [])) {
               if (isTextChannel(c)) {
-                ch = c;
+                ch = asSendable(c);
                 break;
               }
             }
@@ -818,6 +856,7 @@ export class PlayerManager {
       const payload = typeof m === "object" && Array.isArray(m.embeds)
         ? { ...m, allowedMentions: { parse: [] } }
         : { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(m)], allowedMentions: { parse: [] } };
+      ch = asSendable(ch);
       ch.send(payload).catch(err => {
         if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
           logger.warn(`[PlayerManager] Cannot send player message in channel ${ch.id} — missing permissions`);
