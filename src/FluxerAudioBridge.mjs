@@ -27,6 +27,9 @@ const WEBM_MAGIC = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
 /** @type {Buffer} @description OGG container magic bytes ("OggS"). */
 const OGG_MAGIC = Buffer.from("OggS", "ascii");
 
+/** @type {number} @description livekit TrackKind.KIND_AUDIO — publications with this kind are managed by the bridge. */
+const TRACK_KIND_AUDIO = 1;
+
 /** @extends {EventEmitter} */
 export class FluxerAudioBridge extends EventEmitter {
   _conn = null;
@@ -76,6 +79,8 @@ export class FluxerAudioBridge extends EventEmitter {
   async play(conn, trackInfo, options = {}) {
     this.stop();
     if (!conn) throw new Error("[AudioBridge] No voice connection provided");
+
+    this._unpublishStaleAudioTracks(conn);
 
     const generation = ++this._playGeneration;
     this._conn = conn;
@@ -576,11 +581,40 @@ export class FluxerAudioBridge extends EventEmitter {
 
     if (this._conn) {
       try { this._conn.stop(); } catch (_) {}
+      this._unpublishStaleAudioTracks(this._conn);
     }
 
     if (wasPlaying) {
       this.emit("stopped");
       logger.player("[AudioBridge] Playback stopped");
+    }
+  }
+
+  /**
+   * @param {object} conn - Fluxer voice connection
+   * @param {string|null} [keepSid=null] - Track SID to keep (currently active publication)
+   * @private
+   */
+  _unpublishStaleAudioTracks(conn, keepSid = null) {
+    try {
+      const room = conn?.room;
+      const participant = room?.localParticipant;
+      if (!room?.isConnected || typeof participant?.unpublishTrack !== "function") return;
+
+      const publications = participant.trackPublications;
+      if (!publications || typeof publications.entries !== "function") return;
+
+      for (const [sid, pub] of publications.entries()) {
+        if (keepSid && sid === keepSid) continue;
+        if (pub?.kind !== TRACK_KIND_AUDIO) continue;
+        try {
+          const p = participant.unpublishTrack(sid, true);
+          if (p?.catch) p.catch(() => {});
+          logger.player("[AudioBridge] Unpublished stale audio track: " + sid);
+        } catch (_) {}
+      }
+    } catch (_) {
+      // Never let cleanup break playback.
     }
   }
 
