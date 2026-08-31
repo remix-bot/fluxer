@@ -1134,7 +1134,7 @@ export default class Player extends EventEmitter {
           ? `[Radio]: ${vid.title} - ${vid.author?.url || ""}`
           : `[Radio] [${vid.title} by ${vid.author?.name || "Unknown"}](${vid.author?.url || ""})`;
     }
-    if (vid.type === "external") {
+    if (vid.type === "external" || vid.type === "stream") {
       return code
           ? `${vid.title} - ${vid.url}`
           : `[${vid.title}](${vid.url})`;
@@ -1232,7 +1232,7 @@ export default class Player extends EventEmitter {
       }
     }
 
-    if (current.type === "external") {
+    if (current.type === "external" || current.type === "stream") {
       const totalMs = this._getTrackDurationMs(current);
       let progressLine = "";
 
@@ -1304,11 +1304,18 @@ export default class Player extends EventEmitter {
         ? s.artists.map(a => a.url ? `[${a.name}](${a.url})` : a.name).join(" & ")
         : s.author?.url
             ? `[${s.author.name}](${s.author.url})`
-            : s.author?.name || "Unknown";
+            : s.author?.name || null;
+
+    if (!author && (s.type === "external" || s.type === "stream")) {
+      const desc = "🎵 Now playing [" + Utils.escapeMarkdown(s.title) + "](" + (s.url || "") + ") in <#" + (this._channelId || "") + ">";
+      this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] });
+      return;
+    }
+
     this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses.play.nowPlaying", {
       title:   Utils.escapeMarkdown(s.title),
       url:     s.spotifyUrl || s.url,
-      author:  author,
+      author:  author || "Unknown",
       channel: this._channelId || "",
     }))] });
   }
@@ -1555,6 +1562,64 @@ export default class Player extends EventEmitter {
     if (!this.leaving) this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
   }
 
+  /** @private Build a direct-URL track object. @param {string} url @param {string} [title] @param {string} [artist] @param {string} [trackType="external"] @returns {object} */
+  _buildExternalTrack(url, title = null, artist = null, trackType = "external") {
+    const displayTitle = title || this._extractFilenameFromUrl(url);
+    return {
+      type:      trackType,
+      title:     displayTitle,
+      url:       url,
+      artist:    artist || null,
+      thumbnail: null,
+    };
+  }
+
+  /** @private Extract a display filename from a URL. @param {string} url @returns {string} */
+  _extractFilenameFromUrl(url) {
+    try {
+      const pathname = new URL(url).pathname;
+      const filename = pathname.split("/").pop();
+      if (filename && filename.includes(".")) {
+        return decodeURIComponent(filename.replace(/\.[^.]+$/, "")) || "Stream";
+      }
+    } catch (_) {}
+    return "External Stream";
+  }
+
+  /**
+   * Play a direct audio URL (MP3, OGG, AAC, stream, etc.) without Lavalink search.
+   * The bridge handles decoding via Lavalink if needed. No FFmpeg required.
+   * @param {string} url - Direct HTTP(S) audio URL.
+   * @param {string} [title] - Optional display title.
+   * @param {string} [artist] - Optional artist name.
+   * @param {boolean} [top=false] - Insert at top of queue.
+   * @param {string} [trackType="external"] - Track type: "external" (no pre-resolve) or "stream" (Lavalink pre-resolve).
+   * @returns {EventEmitter} Emitter that emits "message" events with status strings.
+   */
+  playExternal(url, title = null, artist = null, top = false, trackType = "external") {
+    const events = new EventEmitter();
+
+    (async () => {
+      try {
+        const track = this._buildExternalTrack(url, title, artist, trackType);
+        this.addToQueue(track, top);
+        events.emit("message", "Added **[" + track.title + "](" + url + ")** to the queue.");
+
+        if (!this.queue.getCurrent()) {
+          this.playNext().catch(e => {
+            logger.error("[Player] playExternal playNext error:", e.message);
+            events.emit("message", "Error playing stream: " + e.message);
+          });
+        }
+      } catch (err) {
+        logger.error("[Player] playExternal error:", err?.message);
+        events.emit("message", "Error: " + (err?.message || "Failed to add external stream."));
+      }
+    })();
+
+    return events;
+  }
+
   /** @private @async Advance to the next track. */
   async playNext() {
     if (this._playingNext) return;
@@ -1691,13 +1756,45 @@ export default class Player extends EventEmitter {
     }
   }
 
-  /** @private @async Play a track through the FluxerAudioBridge. @param {object} songData @param {object} [options={}] @returns {Promise<void>} */
+  /** @private @async Play a track through the FluxerAudioBridge. For radio/external tracks
+   * without an encoded payload, attempts Lavalink URL resolution first so MP3/AAC
+   * streams can use the loadstream pipeline instead of the limited direct-URL path.
+   * @param {object} songData @param {object} [options={}] @returns {Promise<void>} */
   async _playTrackViaBridge(songData, options = {}) {
     if (!this._voiceConn || !this._audioBridge) {
       throw new Error("No voice connection or audio bridge available");
     }
     if (!songData?.encoded && !songData?.url) {
       throw new Error("No encoded track or URL for: " + (songData?.title ?? "unknown"));
+    }
+
+    if (!songData.encoded && songData.url && songData.url.startsWith("http") && this._lavalink && songData.type !== "external") {
+      try {
+        const nlInfo = this._lavalink.getNodeLinkInfo?.();
+        if (nlInfo) {
+          const protocol = nlInfo.secure ? "https" : "http";
+          const baseUrl = protocol + "://" + nlInfo.host + ":" + nlInfo.port;
+          const headers = { "Authorization": nlInfo.password };
+          if (nlInfo.sessionId) headers["Session-Id"] = nlInfo.sessionId;
+          if (this._guildId) headers["Guild-Id"] = this._guildId;
+
+          const loadtracksUrl = baseUrl + "/v4/loadtracks?identifier=" + encodeURIComponent(songData.url);
+          logger.player(`[Player] Pre-resolving ${songData.type || "external"} URL via Lavalink...`);
+
+          const body = await this._request(loadtracksUrl, { headers });
+          const track = body?.data?.tracks?.[0] ?? body?.tracks?.[0] ?? body?.data;
+          const encoded = track?.encoded ?? track?.data;
+
+          if (encoded && typeof encoded === "string") {
+            songData.encoded = encoded;
+            logger.player("[Player] Lavalink pre-resolve succeeded — track now has encoded payload");
+          } else {
+            logger.player("[Player] Lavalink pre-resolve: no encoded track returned, bridge will try direct URL");
+          }
+        }
+      } catch (e) {
+        logger.warn("[Player] Lavalink pre-resolve failed (bridge will try direct URL): " + e.message);
+      }
     }
 
     this._audioBridge._conn = this._voiceConn;

@@ -1,7 +1,7 @@
-/** @module src/FluxerAudioBridge @description Audio bridge for streaming Lavalink/NodeLink audio through Fluxer voice connections. 100% in-process — Opus encoding via prism-media (native/WASM), WebM muxing via WebMOpusMuxer. No FFmpeg processes. */
+/** @module src/FluxerAudioBridge @description Audio bridge for streaming Lavalink/NodeLink audio through Fluxer voice connections. 100% in-process — Opus encoding via prism-media (native/WASM), WebM muxing via WebMOpusMuxer. No FFmpeg processes. Supports MP3/AAC/radio streams via Lavalink resolve-through. */
 
 import { logger } from "./constants/Logger.mjs";
-import { WebMOpusMuxer } from "./constants/audio/WebMOpusMuxer.mjs";
+import { WebMOpusMuxer, OPUS_FRAME_MS } from "./constants/audio/WebMOpusMuxer.mjs";
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import http from "node:http";
@@ -12,6 +12,15 @@ const { Encoder: PrismOpusEncoder, OggDemuxer: PrismOggDemuxer } = prismMedia.op
 
 /** @type {number} @description Maximum number of HTTP redirect hops to follow. */
 const MAX_REDIRECTS = 5;
+
+/** @type {number} @description Timeout (ms) for HTTP requests to Lavalink REST endpoints (trackstream, loadtracks JSON). */
+const REST_REQUEST_TIMEOUT_MS = 15_000;
+
+/** @type {number} @description Timeout (ms) to wait for the first byte from loadstream (Lavalink may need time to resolve HLS/external streams). */
+const LOADSTREAM_CONNECT_TIMEOUT_MS = 60_000;
+
+/** @type {number} @description Idle timeout (ms) once loadstream data is flowing — if no data arrives for this long, abort. */
+const LOADSTREAM_IDLE_TIMEOUT_MS = 30_000;
 
 /** @type {number} @description PCM sample rate expected from NodeLink loadstream (48kHz stereo s16le). */
 const PCM_RATE = 48000;
@@ -91,10 +100,9 @@ export class FluxerAudioBridge extends EventEmitter {
     this._usedTrackstream = false;
 
     const seekMs = Math.floor((options.seekSeconds ?? 0) * 1000);
-    const durationMs = options.durationMs || 0;
+    let durationMs = options.durationMs || 0;
 
     try {
-      // --- Route 1: trackstream passthrough (no re-encode at all) ---
       if (seekMs === 0 && !options.filterPayload && trackInfo.encoded && this._lavalink) {
         try {
           const direct = await this._getTrackstreamUrl(trackInfo);
@@ -115,7 +123,38 @@ export class FluxerAudioBridge extends EventEmitter {
             }
             return "stopped";
           }
-          logger.player("[AudioBridge] trackstream format not opus/webm (" + (direct?.format || "?") + "), using loadstream");
+          if (direct?.url && this._lavalink && trackInfo.url && trackInfo.url.startsWith("http")) {
+            logger.player("[AudioBridge] trackstream format " + (direct.format || "?") + " — resolving original source URL via Lavalink for fresh encoded track...");
+            const freshEncoded = await this._resolveUrlViaLavalink(trackInfo.url, trackInfo.guildId);
+            if (freshEncoded) {
+              trackInfo.encoded = freshEncoded;
+              logger.player("[AudioBridge] Fresh encoded track obtained — retrying trackstream for webm/opus...");
+              try {
+                const freshDirect = await this._getTrackstreamUrl(trackInfo);
+                if (freshDirect?.url && /webm|opus/i.test(freshDirect.format || "")) {
+                  this._usedTrackstream = true;
+                  logger.player("[AudioBridge] Fresh trackstream is webm/opus — zero-copy passthrough: " + (trackInfo.title || "unknown"));
+                  await conn.play(freshDirect.url);
+                  if (generation !== this._playGeneration) return "stopped";
+                  if (durationMs > 0) await this._waitDuration(durationMs);
+                  if (generation !== this._playGeneration) return "stopped";
+                  if (this._playing && !this._stopped) {
+                    this._playing = false;
+                    logger.player("[AudioBridge] Track finished naturally (fresh trackstream passthrough)");
+                    return "finished";
+                  }
+                  return "stopped";
+                }
+                logger.player("[AudioBridge] Fresh trackstream also " + (freshDirect?.format || "?") + ", falling through to loadstream");
+              } catch (e2) {
+                logger.player("[AudioBridge] Fresh trackstream failed, falling through to loadstream: " + e2.message);
+              }
+            } else {
+              logger.player("[AudioBridge] Could not resolve source URL via Lavalink, using original encoded track for loadstream");
+            }
+          } else {
+            logger.player("[AudioBridge] trackstream format not opus/webm (" + (direct?.format || "?") + "), falling through to loadstream");
+          }
         } catch (e) {
           logger.warn("[AudioBridge] Trackstream failed, falling back to loadstream: " + e.message);
           this._playing = true;
@@ -124,7 +163,6 @@ export class FluxerAudioBridge extends EventEmitter {
         }
       }
 
-      // --- Route 2: loadstream (PCM -> in-process Opus encode -> WebM) ---
       if (trackInfo.encoded && this._lavalink) {
         const loaded = await this._streamFromLoadstream(trackInfo, seekMs, options.filterPayload);
         if (generation !== this._playGeneration) {
@@ -137,17 +175,19 @@ export class FluxerAudioBridge extends EventEmitter {
 
         if (routed.kind === "webm") {
           logger.player("[AudioBridge] Playing loadstream webm/opus passthrough: " + (trackInfo.title || "unknown") +
-            (seekMs > 0 ? " [seek: " + seekMs + "ms]" : ""));
+              (seekMs > 0 ? " [seek: " + seekMs + "ms]" : ""));
           this._stream = routed.stream;
           await conn.play(routed.stream);
         } else if (routed.kind === "ogg") {
           logger.player("[AudioBridge] Playing loadstream ogg/opus (remux to webm): " + (trackInfo.title || "unknown"));
-          this._stream = await this._remuxOggToWebM(routed.stream);
+          const oggResult = await this._remuxOggToWebM(routed.stream);
+          this._stream = oggResult;
+          if (durationMs <= 0) durationMs = oggResult.getDurationMs();
           await conn.play(this._stream);
         } else {
           logger.player("[AudioBridge] Playing via loadstream PCM -> in-process Opus: " + (trackInfo.title || "unknown") +
-            (seekMs > 0 ? " [seek: " + seekMs + "ms]" : "") +
-            (options.filterPayload ? " [filters]" : ""));
+              (seekMs > 0 ? " [seek: " + seekMs + "ms]" : "") +
+              (options.filterPayload ? " [filters]" : ""));
           this._stream = this._buildPcmPipeline(routed.stream);
           await conn.play(this._stream);
         }
@@ -164,9 +204,8 @@ export class FluxerAudioBridge extends EventEmitter {
         return "stopped";
       }
 
-      // --- Route 3: direct URL fallback (magic sniff: webm passthrough / ogg remux) ---
       if (trackInfo.url && trackInfo.url.startsWith("http")) {
-        logger.player("[AudioBridge] Fetching directly: " + trackInfo.url.substring(0, 80) + "...");
+        logger.player("[AudioBridge] Route 3: Fetching directly: " + trackInfo.url.substring(0, 80) + "...");
         const response = await fetch(trackInfo.url, {
           headers: { "User-Agent": "Mozilla/5.0 (compatible; Bot/1.0)" },
           redirect: "follow",
@@ -179,15 +218,90 @@ export class FluxerAudioBridge extends EventEmitter {
 
         const routed = await this._routeByMagic(stream);
         if (routed.kind === "webm") {
+          logger.player("[AudioBridge] Route 3a: webm/opus passthrough: " + (trackInfo.title || "unknown"));
           this._stream = routed.stream;
           await conn.play(routed.stream);
         } else if (routed.kind === "ogg") {
-          this._stream = await this._remuxOggToWebM(routed.stream);
+          logger.player("[AudioBridge] Route 3b: ogg/opus remux to webm: " + (trackInfo.title || "unknown"));
+          const oggResult = await this._remuxOggToWebM(routed.stream);
+          this._stream = oggResult;
           await conn.play(this._stream);
+          if (generation !== this._playGeneration) return "stopped";
+
+          await new Promise(r => {
+            if (this._stream.readableEnded) return r();
+            const done = () => { this._stream.off("end", done); this._stream.off("close", done); r(); };
+            this._stream.once("end", done);
+            this._stream.once("close", done);
+          });
+          if (generation !== this._playGeneration) return "stopped";
+
+          const fullDurationMs = oggResult.getDurationMs();
+          const elapsedMs = Date.now() - this._startedAt;
+          const remainingMs = Math.max(0, fullDurationMs - elapsedMs);
+          logger.player("[AudioBridge] Route 3b: OGG " + fullDurationMs + "ms total, " + elapsedMs + "ms elapsed, waiting " + remainingMs + "ms more");
+
+          if (remainingMs > 0) await this._awaitEnd(remainingMs);
+          if (generation !== this._playGeneration) return "stopped";
+
+          if (this._playing && !this._stopped) {
+            this._playing = false;
+            logger.player("[AudioBridge] Track finished naturally (direct URL, OGG remux)");
+            return "finished";
+          }
+          return "stopped";
         } else {
+          stream.destroy();
+          this._sourceStream = null;
+          logger.player("[AudioBridge] Route 3c: Direct stream is " + routed.kind + " (MP3/AAC?) — resolving through Lavalink...");
+
+          if (this._lavalink) {
+            const encoded = await this._resolveUrlViaLavalink(trackInfo.url, trackInfo.guildId);
+            if (encoded) {
+              trackInfo.encoded = encoded;
+              logger.player("[AudioBridge] Route 3c: Got encoded track from Lavalink, retrying via loadstream...");
+              const loaded = await this._streamFromLoadstream(trackInfo, 0, null);
+              if (generation !== this._playGeneration) {
+                loaded.stream.destroy();
+                return "stopped";
+              }
+
+              const routed2 = await this._routeByMagic(loaded.stream);
+              this._sourceStream = loaded.stream;
+
+              if (routed2.kind === "webm") {
+                logger.player("[AudioBridge] Route 3c (Lavalink): webm/opus passthrough");
+                this._stream = routed2.stream;
+                await conn.play(routed2.stream);
+              } else if (routed2.kind === "ogg") {
+                logger.player("[AudioBridge] Route 3c (Lavalink): ogg/opus remux to webm");
+                const oggResult3c = await this._remuxOggToWebM(routed2.stream);
+                this._stream = oggResult3c;
+                if (durationMs <= 0) durationMs = oggResult3c.getDurationMs();
+                await conn.play(this._stream);
+              } else {
+                logger.player("[AudioBridge] Route 3c (Lavalink): PCM -> Opus -> WebM");
+                this._stream = this._buildPcmPipeline(routed2.stream);
+                await conn.play(this._stream);
+              }
+              if (generation !== this._playGeneration) return "stopped";
+
+              await this._awaitEnd(durationMs);
+              if (generation !== this._playGeneration) return "stopped";
+
+              if (this._playing && !this._stopped) {
+                this._playing = false;
+                logger.player("[AudioBridge] Track finished naturally (Route 3c Lavalink resolve)");
+                return "finished";
+              }
+              return "stopped";
+            }
+          }
+
           throw new Error(
-            "[AudioBridge] Direct URL is not WebM/Opus or Ogg/Opus (" + routed.kind + "). " +
-            "Resolve the track through the Lavalink node instead — in-process playback has no FFmpeg decoder."
+              "[AudioBridge] Direct URL is not WebM/Opus or Ogg/Opus (" + routed.kind + "). " +
+              "Lavalink resolve also failed or is unavailable. " +
+              "Make sure your Lavalink/NodeLink node is running and can decode this stream format."
           );
         }
         if (generation !== this._playGeneration) return "stopped";
@@ -225,36 +339,35 @@ export class FluxerAudioBridge extends EventEmitter {
    * @private
    */
   _awaitEnd(durationMs) {    return new Promise((resolve, reject) => {
-      this._endResolve = resolve;
-      this._endReject = reject;
-      const failFast = (err) => {
-        if (this._playing && !this._stopped) {
-          this._playing = false;
-          reject(err);
-        } else {
-          resolve();
-        }
-      };
-
-      if (durationMs > 0) {
-        this._durationTimer = setTimeout(resolve, durationMs);
+    this._endResolve = resolve;
+    this._endReject = reject;
+    const failFast = (err) => {
+      if (this._playing && !this._stopped) {
+        this._playing = false;
+        reject(err);
       } else {
-        // No duration info (radio/live): wait until the WebM stream is fully consumed.
-        const stream = this._stream;
-        if (!stream) return resolve();
-        const onEnd = () => resolve();
-        stream.once("end", onEnd);
-        stream.once("close", onEnd);
-        stream.once("error", failFast);
+        resolve();
       }
+    };
 
-      if (this._sourceStream) {
-        this._sourceStream.once("error", failFast);
-      }
-      if (this._encoder) {
-        this._encoder.once("error", failFast);
-      }
-    });
+    if (durationMs > 0) {
+      this._durationTimer = setTimeout(resolve, durationMs);
+    } else {
+      const stream = this._stream;
+      if (!stream) return resolve();
+      const onEnd = () => resolve();
+      stream.once("end", onEnd);
+      stream.once("close", onEnd);
+      stream.once("error", failFast);
+    }
+
+    if (this._sourceStream) {
+      this._sourceStream.once("error", failFast);
+    }
+    if (this._encoder) {
+      this._encoder.once("error", failFast);
+    }
+  });
   }
 
   /**
@@ -312,7 +425,6 @@ export class FluxerAudioBridge extends EventEmitter {
           resolve(buf.subarray(0, n));
           return;
         }
-        waitForMore();
       };
       const onReadable = () => { cleanup(); tryRead(); };
       const onEnd = () => { cleanup(); tryRead(); };
@@ -346,7 +458,7 @@ export class FluxerAudioBridge extends EventEmitter {
     } catch (e) {
       pcmStream.destroy();
       throw new Error(
-        "No Opus encoder available (" + e.message + "). Install one: npm install @discordjs/opus (or opusscript)"
+          "No Opus encoder available (" + e.message + "). Install one: npm install @discordjs/opus (or opusscript)"
       );
     }
     try { encoder.setBitrate(OPUS_BITRATE); } catch (_) {}
@@ -369,7 +481,7 @@ export class FluxerAudioBridge extends EventEmitter {
   /**
    * Remux an Ogg/Opus stream into WebM/Opus (packet-level, no re-encode).
    * @param {Readable} oggStream
-   * @returns {Promise<WebMOpusMuxer>}
+   * @returns {Promise<{stream: WebMOpusMuxer, getDurationMs: function}>}
    * @private
    */
   async _remuxOggToWebM(oggStream) {
@@ -377,7 +489,8 @@ export class FluxerAudioBridge extends EventEmitter {
     const muxer = new WebMOpusMuxer();
     oggStream.on("error", (err) => demuxer.destroy(err));
     demuxer.on("error", (err) => muxer.destroy(err));
-    // Wait for the OpusHead so we reject non-Opus OGG early with a clear error.
+    let frameCount = 0;
+    demuxer.on("data", () => { frameCount++; });
     const headPromise = new Promise((resolve, reject) => {
       demuxer.once("head", () => resolve());
       demuxer.once("error", (err) => reject(new Error("OGG demux: " + err.message)));
@@ -385,7 +498,9 @@ export class FluxerAudioBridge extends EventEmitter {
     });
     oggStream.pipe(demuxer).pipe(muxer);
     await headPromise;
-    return muxer;
+    const wrapper = Object.create(muxer);
+    wrapper.getDurationMs = () => frameCount * OPUS_FRAME_MS;
+    return wrapper;
   }
 
   /**
@@ -454,12 +569,60 @@ export class FluxerAudioBridge extends EventEmitter {
   }
 
   /**
+   * Resolve a direct audio URL through Lavalink's /v4/loadtracks to get an encoded track.
+   * This allows MP3/AAC radio streams and direct audio URLs to be played through
+   * the loadstream pipeline without any FFmpeg dependency.
+   * @param {string} url - The HTTP(S) audio stream URL to resolve.
+   * @param {string} [guildId] - Optional guild ID for the request.
+   * @returns {Promise<string|null>} The encoded track string, or null if resolution failed.
+   * @private
+   */
+  async _resolveUrlViaLavalink(url, guildId) {
+    try {
+      const nlInfo = this._lavalink.getNodeLinkInfo?.();
+      if (!nlInfo) {
+        logger.warn("[AudioBridge] _resolveUrlViaLavalink: no NodeLink info");
+        return null;
+      }
+
+      const protocol = nlInfo.secure ? "https" : "http";
+      const baseUrl = protocol + "://" + nlInfo.host + ":" + nlInfo.port;
+
+      const headers = { "Authorization": nlInfo.password };
+      if (nlInfo.sessionId) headers["Session-Id"] = nlInfo.sessionId;
+      if (guildId) headers["Guild-Id"] = guildId;
+
+      const params = "identifier=" + encodeURIComponent(url);
+      const loadtracksUrl = baseUrl + "/v4/loadtracks?" + params;
+
+      logger.player("[AudioBridge] Resolving URL via Lavalink /v4/loadtracks: " + url.substring(0, 80) + "...");
+
+      const body = await this._httpGetJson(loadtracksUrl, headers, 0, 30_000);
+
+      const track = body?.data?.tracks?.[0] ?? body?.tracks?.[0] ?? body?.data;
+      const encoded = track?.encoded ?? track?.data;
+
+      if (encoded && typeof encoded === "string") {
+        logger.player("[AudioBridge] Lavalink resolved URL to encoded track successfully");
+        return encoded;
+      }
+
+      const loadType = body?.loadType ?? body?.data?.loadType;
+      logger.warn("[AudioBridge] Lavalink loadtracks returned no playable track (loadType=" + loadType + ")");
+      return null;
+    } catch (e) {
+      logger.warn("[AudioBridge] _resolveUrlViaLavalink failed: " + e.message);
+      return null;
+    }
+  }
+
+  /**
    * @param {string} url
    * @param {object} [headers]
    * @returns {Promise<object>}
    * @private
    */
-  _httpGetJson(url, headers = {}, _redirectCount = 0) {
+  _httpGetJson(url, headers = {}, _redirectCount = 0, timeoutMs = REST_REQUEST_TIMEOUT_MS) {
     return new Promise((resolve, reject) => {
       if (_redirectCount >= MAX_REDIRECTS) {
         return reject(new Error("Too many redirects (" + _redirectCount + ")"));
@@ -479,7 +642,7 @@ export class FluxerAudioBridge extends EventEmitter {
           res.resume();
           let loc = res.headers.location;
           if (loc.startsWith("/")) loc = urlObj.protocol + "//" + urlObj.host + loc;
-          return this._httpGetJson(loc, headers, _redirectCount + 1).then(resolve, reject);
+          return this._httpGetJson(loc, headers, _redirectCount + 1, timeoutMs).then(resolve, reject);
         }
         if (res.statusCode !== 200) {
           let body = "";
@@ -502,9 +665,9 @@ export class FluxerAudioBridge extends EventEmitter {
       });
 
       req.on("error", reject);
-      req.setTimeout(15_000, () => {
+      req.setTimeout(timeoutMs, () => {
         req.destroy();
-        reject(new Error("trackstream timeout (15s)"));
+        reject(new Error("REST request timeout (" + timeoutMs / 1000 + "s)"));
       });
       req.end();
     });
@@ -525,6 +688,18 @@ export class FluxerAudioBridge extends EventEmitter {
 
       const urlObj = new URL(url);
       const client = urlObj.protocol === "https:" ? https : http;
+      let firstByte = true;
+      let connectTimer = null;
+      let idleTimer = null;
+
+      const resetIdleTimeout = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          req.destroy();
+          reject(new Error("loadstream idle timeout (" + LOADSTREAM_IDLE_TIMEOUT_MS / 1000 + "s no data)"));
+        }, LOADSTREAM_IDLE_TIMEOUT_MS);
+        idleTimer.unref?.();
+      };
 
       const req = client.request({
         protocol: urlObj.protocol,
@@ -535,6 +710,7 @@ export class FluxerAudioBridge extends EventEmitter {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; Bot/1.0)", ...headers },
       }, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
           res.resume();
           let nextHeaders = headers;
           let loc = res.headers.location;
@@ -549,6 +725,7 @@ export class FluxerAudioBridge extends EventEmitter {
           return this._httpRequestStream(loc, nextHeaders, _redirectCount + 1).then(resolve, reject);
         }
         if (res.statusCode !== 200) {
+          if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
           let body = "";
           res.on("data", (chunk) => { body += chunk; });
           res.on("end", () => {
@@ -557,15 +734,26 @@ export class FluxerAudioBridge extends EventEmitter {
           return;
         }
 
+        if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+        resetIdleTimeout();
+        res.once("data", () => resetIdleTimeout());
+
         logger.player("[AudioBridge] loadstream response: " + res.statusCode + " content-type=" + (res.headers["content-type"] || "?"));
         resolve({ stream: res, inputFormat: res.headers["content-type"] || null });
       });
 
-      req.on("error", reject);
-      req.setTimeout(30_000, () => {
-        req.destroy();
-        reject(new Error("loadstream timeout (30s)"));
+      req.on("error", (err) => {
+        if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+        if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+        reject(err);
       });
+
+      connectTimer = setTimeout(() => {
+        req.destroy();
+        reject(new Error("loadstream connect timeout (" + LOADSTREAM_CONNECT_TIMEOUT_MS / 1000 + "s — Lavalink took too long to start stream)"));
+      }, LOADSTREAM_CONNECT_TIMEOUT_MS);
+      connectTimer.unref?.();
+
       req.end();
     });
   }
@@ -614,7 +802,6 @@ export class FluxerAudioBridge extends EventEmitter {
         } catch (_) {}
       }
     } catch (_) {
-      // Never let cleanup break playback.
     }
   }
 

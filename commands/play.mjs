@@ -95,6 +95,60 @@ function parseLastFmTrackQuery(raw) {
   return null;
 }
 
+/** @type {RegExp} Known music-service URL patterns that should go through Lavalink search. */
+const KNOWN_SERVICE_HOSTS = /(?:youtu(?:be\.com|\.be)|youtube\.com|music\.youtube\.com|open\.spotify\.com|soundcloud\.com|deezer\.com|music\.apple\.com|tidal\.com|bandcamp\.com|last\.fm|mixcloud\.com|tunein\.com)/i;
+
+/** Audio file extensions for formats the bridge handles natively (no Lavalink needed). */
+const NATIVE_AUDIO_EXTENSIONS = /\.(?:opus|webm|ogg)(?:\?|$)/i;
+
+/** Audio file extensions that indicate any direct audio URL (broader set). */
+const AUDIO_EXTENSIONS = /\.(?:mp3|m4a|aac|ogg|opus|flac|wav|wma|webm|stream|m3u8|pls)(?:\?|$)/i;
+
+/** Common stream/radio content-type paths or patterns. */
+const STREAM_PATH_HINTS = /\/(?:stream|live|radio|audio|playlist|play|listen|mp3|aac|ogg)/i;
+
+/**
+ * Check if a URL points to an audio format the FluxerAudioBridge handles natively
+ * (Opus, WebM, OGG) — no Lavalink resolution needed, goes straight to playExternal.
+ * @param {string} str
+ * @returns {boolean}
+ */
+function isNativeAudioUrl(str) {
+  if (!str || typeof str !== "string") return false;
+  const trimmed = str.trim();
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return false;
+  try {
+    const url = new URL(trimmed);
+    if (KNOWN_SERVICE_HOSTS.test(url.hostname)) return false;
+    return NATIVE_AUDIO_EXTENSIONS.test(url.pathname);
+  } catch (_) {}
+  return false;
+}
+
+/**
+ * Check if a URL looks like a direct audio stream/file rather than a music-service page.
+ * Excludes known service URLs (YouTube, Spotify, etc.) which should use Lavalink search.
+ *
+ * @param {string} str - The raw query string.
+ * @returns {boolean} True if this looks like a direct audio URL.
+ */
+function isDirectAudioUrl(str) {
+  if (!str || typeof str !== "string") return false;
+  const trimmed = str.trim();
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return false;
+  try {
+    const url = new URL(trimmed);
+    if (KNOWN_SERVICE_HOSTS.test(url.hostname)) return false;
+    if (AUDIO_EXTENSIONS.test(url.pathname)) return true;
+    if (STREAM_PATH_HINTS.test(url.pathname) && !url.pathname.includes(".html") && !url.pathname.includes(".php")) {
+      return true;
+    }
+    if (/:80\d{0,2}\//.test(trimmed) || /:8\d{3}\//.test(trimmed)) return true;
+  } catch (_) {}
+  return false;
+}
+
+
 /**
  * @type {CommandBuilder}
  * @description Command definition for the play command.
@@ -106,6 +160,7 @@ export const command = new CommandBuilder()
     .setDescription(
         "Play a song or playlist from a URL or search query.\n" +
         "Supports YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, and more.\n" +
+        "Also accepts direct audio URLs (MP3, OGG, AAC, radio streams).\n" +
         "Default search: YouTube Music. Use `-p <provider>` or inline prefix e.g. `sp: blinding lights`.",
         "commands.play"
     )
@@ -115,6 +170,8 @@ export const command = new CommandBuilder()
         "$prefixplay dz: get lucky",
         "$prefixplay -p yt take over league of legends",
         "$prefixplay https://open.spotify.com/track/...",
+        "$prefixplay https://example.com/stream.mp3",
+        "$prefixplay https://radio.example.com:8000/live",
         "$prefixplay https://www.last.fm/music/Drake/_/Make+Them+Cry",
         "$prefixplay lastfm:loved",
         "$prefixplay lastfm:soda pop",
@@ -150,6 +207,44 @@ export async function run(message, data) {
   const flagProvider = data.get("provider")?.value;
   const { provider: inlineProvider, query } = parseInlineProvider(rawQuery);
   const provider = inlineProvider ?? flagProvider ?? "ytm";
+
+  if (isNativeAudioUrl(rawQuery)) {
+    const p = await this.getPlayer(message, true, true, true);
+    if (!p) return;
+
+    const statusEmbed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setDescription(":mag_right: Loading direct stream...");
+    let statusMsg = null;
+    try { statusMsg = await message.reply({ embeds: [statusEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
+
+    const messages = p.playExternal(rawQuery);
+    messages.on("message", d => {
+      const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
+      if (statusMsg) { statusMsg.edit({ embeds: [embed] }).catch(() => {}); }
+      else { message.reply({ embeds: [embed] }).catch(() => {}); }
+    });
+    return;
+  }
+
+  if (isDirectAudioUrl(rawQuery)) {
+    const p = await this.getPlayer(message, true, true, true);
+    if (!p) return;
+
+    const statusEmbed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setDescription(":mag_right: Resolving stream via Lavalink...");
+    let statusMsg = null;
+    try { statusMsg = await message.reply({ embeds: [statusEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
+
+    const messages = p.playExternal(rawQuery, null, null, false, "stream");
+    messages.on("message", d => {
+      const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
+      if (statusMsg) { statusMsg.edit({ embeds: [embed] }).catch(() => {}); }
+      else { message.reply({ embeds: [embed] }).catch(() => {}); }
+    });
+    return;
+  }
 
   if (isLastFmUrl(rawQuery) || isLastFmUrl(query)) {
     const lfUrl = isLastFmUrl(rawQuery) ? rawQuery : query;
