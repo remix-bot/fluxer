@@ -45,6 +45,7 @@ export class FluxerAudioBridge extends EventEmitter {
   _stream = null;
   _encoder = null;
   _sourceStream = null;
+  _sourceReq = null;
   _playing = false;
   _stopped = false;
   _startedAt = 0;
@@ -172,6 +173,7 @@ export class FluxerAudioBridge extends EventEmitter {
 
         const routed = await this._routeByMagic(loaded.stream);
         this._sourceStream = loaded.stream;
+        this._sourceReq = loaded.req || null;
 
         if (routed.kind === "webm") {
           logger.player("[AudioBridge] Playing loadstream webm/opus passthrough: " + (trackInfo.title || "unknown") +
@@ -268,6 +270,7 @@ export class FluxerAudioBridge extends EventEmitter {
 
               const routed2 = await this._routeByMagic(loaded.stream);
               this._sourceStream = loaded.stream;
+              this._sourceReq = loaded.req || null;
 
               if (routed2.kind === "webm") {
                 logger.player("[AudioBridge] Route 3c (Lavalink): webm/opus passthrough");
@@ -664,6 +667,9 @@ export class FluxerAudioBridge extends EventEmitter {
         });
       });
 
+      req.on("socket", (socket) => {
+        socket.on("error", () => {});
+      });
       req.on("error", reject);
       req.setTimeout(timeoutMs, () => {
         req.destroy();
@@ -677,7 +683,7 @@ export class FluxerAudioBridge extends EventEmitter {
    * @param {string} url
    * @param {object} [headers]
    * @param {number} [_redirectCount=0]
-   * @returns {Promise<{stream: Readable, inputFormat: string|null}>}
+   * @returns {Promise<{stream: Readable, inputFormat: string|null, req: http.ClientRequest}>}
    * @private
    */
   _httpRequestStream(url, headers = {}, _redirectCount = 0) {
@@ -739,7 +745,11 @@ export class FluxerAudioBridge extends EventEmitter {
         res.once("data", () => resetIdleTimeout());
 
         logger.player("[AudioBridge] loadstream response: " + res.statusCode + " content-type=" + (res.headers["content-type"] || "?"));
-        resolve({ stream: res, inputFormat: res.headers["content-type"] || null });
+        resolve({ stream: res, inputFormat: res.headers["content-type"] || null, req });
+      });
+
+      req.on("socket", (socket) => {
+        socket.on("error", () => {});
       });
 
       req.on("error", (err) => {
@@ -850,9 +860,13 @@ export class FluxerAudioBridge extends EventEmitter {
         try { s.destroy(); } catch (_) {}
       }
     }
+    if (this._sourceReq) {
+      try { this._sourceReq.destroy(); } catch (_) {}
+    }
     this._stream = null;
     this._encoder = null;
     this._sourceStream = null;
+    this._sourceReq = null;
   }
 
   /** Stop playback, release the voice connection, and remove all listeners. */

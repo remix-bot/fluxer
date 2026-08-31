@@ -1055,6 +1055,13 @@ const isIgnorableWsCrash = (err) => {
 const isBenignAudioStopRace = (err) =>
   String(err?.message ?? err ?? "").includes("AudioSource is closed");
 
+/**
+ * @param {Error} err - The error to check.
+ * @returns {boolean} True if the error is the stream abort race.
+ */
+const isBenignStreamAbortRace = (err) =>
+  err?.code === "ECONNRESET" && String(err?.message ?? "").includes("aborted");
+
 let _lastWsCrashLog = 0;
 let _lastAudioRaceLog = 0;
 const WS_CRASH_LOG_COOLDOWN = 30_000;
@@ -1081,6 +1088,14 @@ process.on("uncaughtException", (err, origin) => {
     }
     return;
   }
+  if (isBenignStreamAbortRace(err)) {
+    const now = Date.now();
+    if (now - _lastAudioRaceLog > WS_CRASH_LOG_COOLDOWN) {
+      _lastAudioRaceLog = now;
+      logger.warn("[Error_Handling] Suppressed benign stream abort race (aborted/ECONNRESET) — loadstream was destroyed mid-transfer.");
+    }
+    return;
+  }
   logger.error("[Error_Handling] Uncaught Exception/Catch");
   logger.error("Error:", err, origin);
   process.exit(1);
@@ -1088,6 +1103,7 @@ process.on("uncaughtException", (err, origin) => {
 process.on("uncaughtExceptionMonitor", (err, origin) => {
   if (isIgnorableWsCrash(err)) return;
   if (isBenignAudioStopRace(err)) return;
+  if (isBenignStreamAbortRace(err)) return;
   logger.error("[Error_Handling] Uncaught Exception/Catch (MONITOR)");
   logger.error("Error:", err, origin);
 });
