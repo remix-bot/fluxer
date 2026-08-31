@@ -19,8 +19,5 @@
     "dev": "node --inspect index.mjs --trace-warnings",
     "start": "node index.mjs",
     "migrate": "node settings/migrate.mjs"
-  },
-  "optionalDependencies": {
-    "@discordjs/opus": "^0.10.0"
   }
 }
