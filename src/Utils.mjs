@@ -184,7 +184,9 @@ export class Utils {
     if (str === null || str === undefined || str === "") return false;
     if (typeof str === "number") return !isNaN(str) && isFinite(str);
     if (typeof str !== "string") return false;
-    return !isNaN(str) && isFinite(str);
+    const trimmed = str.trim();
+    if (trimmed === "") return false;
+    return !isNaN(trimmed) && isFinite(trimmed);
   }
 
   /**

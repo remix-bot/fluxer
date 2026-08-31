@@ -193,9 +193,10 @@ export class Locale {
 
     for (const [placeholder, val] of Object.entries(replacements)) {
       const escaped = placeholder.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const replacement = String(val ?? "");
       value = value.replace(
         new RegExp(`\\{\\{${escaped}\\}\\}`, "g"),
-        String(val ?? "")
+        () => replacement
       );
     }
 

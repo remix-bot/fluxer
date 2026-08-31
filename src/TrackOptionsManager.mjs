@@ -136,6 +136,9 @@ export class TrackOptionsManager {
     const identifier = TrackOptionsManager.makeTrackIdentifier(track);
     if (!identifier) return null;
 
+    const safeStartMs = Number.isFinite(startMs) ? Math.max(0, Math.trunc(startMs)) : 0;
+    const safeEndMs = Number.isFinite(endMs) ? Math.max(0, Math.trunc(endMs)) : 0;
+
     const safeAlias = TrackOptionsManager.sanitizeAlias(alias);
     const title = (track.title || "").slice(0, 512);
     const bi = this._botIdInsert();
@@ -143,11 +146,11 @@ export class TrackOptionsManager {
     try {
       await this._query(
         `INSERT INTO track_options (user_id, track_identifier, track_title, alias, start_ms, end_ms${bi.col})
-         VALUES (${mysql.escape(userId)}, ${mysql.escape(identifier)}, ${mysql.escape(title)}, ${mysql.escape(safeAlias)}, ${startMs}, ${endMs}${bi.val})
-         ON DUPLICATE KEY UPDATE start_ms = ${startMs}, end_ms = ${endMs}, track_title = ${mysql.escape(title)}`
+         VALUES (${mysql.escape(userId)}, ${mysql.escape(identifier)}, ${mysql.escape(title)}, ${mysql.escape(safeAlias)}, ${safeStartMs}, ${safeEndMs}${bi.val})
+         ON DUPLICATE KEY UPDATE start_ms = ${safeStartMs}, end_ms = ${safeEndMs}, track_title = ${mysql.escape(title)}`
       );
       this._cache.delete(`${userId}:${identifier}:${safeAlias}`);
-      return { identifier, startMs, endMs, alias: safeAlias };
+      return { identifier, startMs: safeStartMs, endMs: safeEndMs, alias: safeAlias };
     } catch (err) {
       logger.error("[TrackOptions] set error:", err.message);
       return null;
