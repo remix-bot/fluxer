@@ -71,7 +71,7 @@ export async function run(msg, data) {
             }
           }
 
-          const resolved = await p.workerJob("generalQuery", {
+          const resolved = await p.generalQuery({
             query,
             provider: "yt",
           });

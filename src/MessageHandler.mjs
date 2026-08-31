@@ -809,12 +809,16 @@ export class RichPaginator {
         await rawMsg.removeAllReactions();
         return;
       } catch (e) {
+        if (String(e?.message ?? e).includes("Message wasn't found") || e?.code === 10008) return;
         logger.warn("[RichPaginator] removeAllReactions failed:", e?.message ?? e);
       }
       for (const emoji of allReactions) {
         try {
           await rawMsg.removeReaction(emoji);
-        } catch(e) { logger.warn("[MessageHandler] Error:", e?.message); }
+        } catch(e) {
+          if (String(e?.message ?? e).includes("Message wasn't found") || e?.code === 10008) return;
+          logger.warn("[MessageHandler] Error:", e?.message);
+        }
       }
     };
 
@@ -895,10 +899,15 @@ export class QueuePaginator {
       try {
         await rawMsg.removeAllReactions();
       } catch (e) {
+        // Message deleted — nothing left to clean up.
+        if (String(e?.message ?? e).includes("Message wasn't found") || e?.code === 10008) return;
         for (const emoji of [prev, next]) {
           try {
             await rawMsg.removeReaction(emoji);
-          } catch(e) { logger.warn("[MessageHandler] Error:", e?.message); }
+          } catch(e) {
+            if (String(e?.message ?? e).includes("Message wasn't found") || e?.code === 10008) return;
+            logger.warn("[MessageHandler] Error:", e?.message);
+          }
         }
       }
     };

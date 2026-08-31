@@ -1320,7 +1320,22 @@ export default class Player extends EventEmitter {
     }))] });
   }
 
-  
+
+  /** @async Resolve a free-text query to track data via Lavalink, for internal consumers (autoplay, Last.fm). @param {{query: string, provider?: string, trackMeta?: object}} opts - Query, optional provider key, optional track metadata to attach. @returns {Promise<{type: "video"|"list"|"error", data?: object}|null>} Resolved track shape, or null on failure. */
+  async generalQuery({ query, provider = "yt", trackMeta = null }) {
+    try {
+      if (!this._lavalink) return { type: "error", data: "Audio node not ready." };
+      await this._lavalink.waitForNode({ timeoutMs: 15_000 });
+      const result = await this._lavalink.search(query, { source: this._getSource(provider) });
+      const tracks = (result?.tracks ?? []).map(t => this._lcTrackToVideo(t, trackMeta)).filter(Boolean);
+      if (!tracks.length) return null;
+      return tracks.length === 1 ? { type: "video", data: tracks[0] } : { type: "list", data: tracks };
+    } catch (err) {
+      logger.warn("[Player] generalQuery failed:", err?.message);
+      return { type: "error", data: err?.message ?? String(err) };
+    }
+  }
+
 /** @async Search for tracks via Lavalink and store results for interactive selection. @param {string} query - The search query string. @param {string} id - A unique key to identify this search session (e.g. message ID). @param {string} [provider="ytm"] - The search provider key. @returns {Promise<{m: string, count: number}>} Object with formatted result list message and track count. */
   async fetchResults(query, id, provider = "ytm") {
     try {
@@ -2000,17 +2015,11 @@ export default class Player extends EventEmitter {
             ? `${current.title} ${current.artists[0].name}`
             : current.title;
 
-        let url;
-        if (current.encoded) {
-          url = `${node.options?.host ?? node.url}/v4/loadlyrics?encodedTrack=${encodeURIComponent(current.encoded)}`;
-        } else {
-          url = `${node.options?.host ?? node.url}/v4/loadlyrics?identifier=${encodeURIComponent(searchQuery)}`;
-        }
+        const path = current.encoded
+          ? `/loadlyrics?encodedTrack=${encodeURIComponent(current.encoded)}`
+          : `/loadlyrics?identifier=${encodeURIComponent(searchQuery)}`;
 
-        const password = node.options?.password ?? node.password ?? "";
-        const results = await this._request(url, {
-          headers: password ? { "Authorization": password } : {},
-        });
+        const results = await node.request(path);
 
         if (results?.data?.lines?.length) {
           return {

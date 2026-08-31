@@ -112,7 +112,7 @@ function buildLastFmTrackMeta(track) {
  * @returns {Promise<object[]|null>} Array of resolved track data, or null on failure.
  */
 async function resolveLastFmTrack(player, track, resolveProvider = "yt") {
-  const data = await player.workerJob("generalQuery", {
+  const data = await player.generalQuery({
     query: track.query,
     provider: resolveProvider,
     trackMeta: buildLastFmTrackMeta(track),
