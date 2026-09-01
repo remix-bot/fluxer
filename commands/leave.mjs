@@ -121,7 +121,7 @@ export async function run(msg, data) {
         ? raw.map(id => cleanId(id)).some(id => id === activeChannelId || id === homeChannelId)
         : [cleanId(raw)].some(id => id === activeChannelId || id === homeChannelId));
 
-  this.markIntentionalLeave(activeChannelId);
+  if (!was247) this.markIntentionalLeave(activeChannelId);
   this.players.playerMap.delete(activeChannelId);
   this.players._unindexPlayer(player._guildId, activeChannelId);
   if (activeChannelId !== targetChannelId) this.players.playerMap.delete(targetChannelId);
@@ -136,6 +136,19 @@ export async function run(msg, data) {
   await player.leave().catch(() => {});
   player.destroy();
 
-  const label247 = was247 ? " (24/7 still saved — use `" + this.handler.getPrefix(cleanGuildId) + "247` to disable it.)" : "";
+  if (was247) {
+    const rejoinDelay = this.config?.timers?.leave247RejoinDelay
+        ?? this.config?.timers?.rejoin247Delay
+        ?? 3_000;
+    setTimeout(() => {
+      this.gatewayHandler?._rejoinChannel?.(cleanGuildId, targetChannelId).catch(err => {
+        logger.warn(`[Leave] 24/7 rejoin failed for channel ${targetChannelId}:`, err?.message);
+      });
+    }, rejoinDelay);
+  }
+
+  const label247 = was247
+    ? " (rejoining in " + Math.round(rejoinDelay / 1000) + "s — 24/7 is still saved. Use `" + this.handler.getPrefix(cleanGuildId) + "247` to disable it.)"
+    : "";
   msg.reply(this.t(msg, "responses.leave.left") + label247);
 }
