@@ -754,7 +754,10 @@ export class CommandHandler extends EventEmitter {
       if (req.ownerOnly && !isOwner) return false;
       if (req.permissions.length > 0 && !isOwner) {
         const guild = msg.message?.guild ?? null;
-        if (!guild) continue;
+        if (!guild) {
+          this.replyHandler(this.t(permGuildId, "cmdBuilder.requirement.permission"), msg);
+          return false;
+        }
 
         const member = guild.members.get(authorId) ?? null;
         if (member?.permissions) {
