@@ -114,25 +114,13 @@ export async function run(msg, data) {
   const activeChannelId = cleanId(player._channelId) || targetChannelId;
   const homeChannelId = cleanId(player._home247Channel) || activeChannelId;
 
-  // If this channel has 24/7 enabled, remove it from the saved list first.
-  // This prevents the disconnect handler from scheduling an auto-rejoin loop.
   const set = this.getSettings(msg);
   const raw = set?.get("stay_247");
-  const ch247 = (!raw || raw === "none")
-      ? new Set()
-      : Array.isArray(raw)
-          ? new Set(raw.map(id => cleanId(id)).filter(Boolean))
-          : new Set([cleanId(raw)]);
+  const was247 = !!raw && raw !== "none" &&
+      (Array.isArray(raw)
+        ? raw.map(id => cleanId(id)).some(id => id === activeChannelId || id === homeChannelId)
+        : [cleanId(raw)].some(id => id === activeChannelId || id === homeChannelId));
 
-  const was247 = ch247.has(activeChannelId) || ch247.has(homeChannelId);
-
-  if (was247) {
-    const target = ch247.has(activeChannelId) ? activeChannelId : homeChannelId;
-    ch247.delete(target);
-    set.set("stay_247", ch247.size > 0 ? [...ch247] : "none");
-  }
-
-  // Mark as intentional leave so the disconnect handler doesn't also try to rejoin
   this.markIntentionalLeave(activeChannelId);
   this.players.playerMap.delete(activeChannelId);
   this.players._unindexPlayer(player._guildId, activeChannelId);
@@ -148,6 +136,6 @@ export async function run(msg, data) {
   await player.leave().catch(() => {});
   player.destroy();
 
-  const label247 = was247 ? " 24/7 disabled." : "";
+  const label247 = was247 ? " (24/7 still saved — use `" + this.handler.getPrefix(cleanGuildId) + "247` to disable it.)" : "";
   msg.reply(this.t(msg, "responses.leave.left") + label247);
 }

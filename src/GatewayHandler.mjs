@@ -1316,6 +1316,17 @@ export class GatewayHandler {
    */
   async rejoin247Channels() {
     this._bootRecoveryActive = true;
+    try {
+      await this._rejoin247ChannelsInner();
+    } catch (err) {
+      logger.warn("[BootRecovery] 24/7 boot recovery crashed:", err?.message ?? err);
+    } finally {
+      this._bootRecoveryActive = false;
+    }
+  }
+
+  /** @private Inner boot-recovery loop. The flag reset is handled by the caller's finally block. */
+  async _rejoin247ChannelsInner() {
     const { remix } = this;
     const channelsToRejoin = [];
 
@@ -1429,8 +1440,6 @@ export class GatewayHandler {
     logger.voice247(
         `[BootRecovery] Boot recovery complete. ${channelsToRejoin.length} channel(s) processed.`
     );
-
-    this._bootRecoveryActive = false;
   }
 
   /**
