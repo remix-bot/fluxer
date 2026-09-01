@@ -141,7 +141,8 @@ export class Dashboard {
    */
   setBotId(botId) {
     if (!this.enabled || !this.redis) return;
-    this.redis.platform = `fluxer_${botId}`;
+    this.redis.platform = `fluxer`;
+    this.redis.readyMessage();
   }
 
 
