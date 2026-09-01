@@ -15,9 +15,9 @@ export const command = new CommandBuilder()
     .addAliases("l", "stop")
     .setCategory("music")
     .addChannelOption(o =>
-      o.setName("channel")
-        .setDescription("The voice channel to leave (defaults to your current channel)")
-        .setRequired(false)
+        o.setName("channel")
+            .setDescription("The voice channel to leave (defaults to your current channel)")
+            .setRequired(false)
     );
 
 
@@ -118,8 +118,8 @@ export async function run(msg, data) {
   const raw = set?.get("stay_247");
   const was247 = !!raw && raw !== "none" &&
       (Array.isArray(raw)
-        ? raw.map(id => cleanId(id)).some(id => id === activeChannelId || id === homeChannelId)
-        : [cleanId(raw)].some(id => id === activeChannelId || id === homeChannelId));
+          ? raw.map(id => cleanId(id)).some(id => id === activeChannelId || id === homeChannelId)
+          : [cleanId(raw)].some(id => id === activeChannelId || id === homeChannelId));
 
   if (!was247) this.markIntentionalLeave(activeChannelId);
   this.players.playerMap.delete(activeChannelId);
@@ -136,10 +136,10 @@ export async function run(msg, data) {
   await player.leave().catch(() => {});
   player.destroy();
 
+  const rejoinDelay = this.config?.timers?.leave247RejoinDelay
+      ?? this.config?.timers?.rejoin247Delay
+      ?? 3_000;
   if (was247) {
-    const rejoinDelay = this.config?.timers?.leave247RejoinDelay
-        ?? this.config?.timers?.rejoin247Delay
-        ?? 3_000;
     setTimeout(() => {
       this.gatewayHandler?._rejoinChannel?.(cleanGuildId, targetChannelId).catch(err => {
         logger.warn(`[Leave] 24/7 rejoin failed for channel ${targetChannelId}:`, err?.message);
@@ -148,7 +148,7 @@ export async function run(msg, data) {
   }
 
   const label247 = was247
-    ? " (rejoining in " + Math.round(rejoinDelay / 1000) + "s — 24/7 is still saved. Use `" + this.handler.getPrefix(cleanGuildId) + "247` to disable it.)"
-    : "";
+      ? " (rejoining in " + Math.round(rejoinDelay / 1000) + "s — 24/7 is still saved. Use `" + this.handler.getPrefix(cleanGuildId) + "247` to disable it.)"
+      : "";
   msg.reply(this.t(msg, "responses.leave.left") + label247);
 }
