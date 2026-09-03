@@ -4,6 +4,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
+    "@discordjs/opus": "^0.10.0",
     "@fluxerjs/core": "^2.2.0",
     "@fluxerjs/util": "^2.2.0",
     "@fluxerjs/voice": "^2.2.0",

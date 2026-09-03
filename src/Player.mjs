@@ -875,7 +875,8 @@ export default class Player extends EventEmitter {
     return ":arrow_forward: Resumed";
   }
 
-  /** Skip the current track and advance to the next. @returns {string} Status message. */
+  /** Skip the current track and advance to the next. Emits "trackSkip" with the skipped
+   *  track so autoplay (when enabled) can replenish the queue with a new song. @returns {string} Status message. */
   skip() {
     if (!this._voiceConn || !this.queue.getCurrent())
       return ":negative_squared_cross_mark: There's nothing playing at the moment!";
@@ -887,6 +888,8 @@ export default class Player extends EventEmitter {
     this.queue.current   = null;
 
     this._bridgeStop();
+
+    this.emit("trackSkip", this._lastPlayedTrack);
 
     if (this.queue.isEmpty() && !this._wasRadio && !this._queueEndedSent) {
       this._queueEndedSent = true;
@@ -924,6 +927,8 @@ export default class Player extends EventEmitter {
     this._skipping     = true;
 
     this._bridgeStop();
+
+    this.emit("trackSkip", this._lastPlayedTrack);
 
     if (this.queue.isEmpty() && !this._wasRadio && !this._queueEndedSent) {
       this._queueEndedSent = true;
@@ -1322,12 +1327,17 @@ export default class Player extends EventEmitter {
   }
 
 
-  /** @async Resolve a free-text query to track data via Lavalink, for internal consumers (autoplay, Last.fm). @param {{query: string, provider?: string, trackMeta?: object}} opts - Query, optional provider key, optional track metadata to attach. @returns {Promise<{type: "video"|"list"|"error", data?: object}|null>} Resolved track shape, or null on failure. */
+  /** @async Resolve a free-text query or URL to track data via Lavalink, for internal consumers (autoplay, Last.fm).
+   *  URL queries are loaded directly (like play()) instead of being prefixed with a search
+   *  source, so playlist/mix URLs resolve to their full track lists. @param {{query: string, provider?: string, trackMeta?: object}} opts - Query, optional provider key, optional track metadata to attach. @returns {Promise<{type: "video"|"list"|"error", data?: object}|null>} Resolved track shape, or null on failure. */
   async generalQuery({ query, provider = "yt", trackMeta = null }) {
     try {
       if (!this._lavalink) return { type: "error", data: "Audio node not ready." };
       await this._lavalink.waitForNode({ timeoutMs: 15_000 });
-      const result = await this._lavalink.search(query, { source: this._getSource(provider) });
+      const isUrl = typeof query === "string" && Utils.isValidUrl(query);
+      const result = isUrl
+        ? await this._lavalink.search(query)
+        : await this._lavalink.search(query, { source: this._getSource(provider) });
       const tracks = (result?.tracks ?? []).map(t => this._lcTrackToVideo(t, trackMeta)).filter(Boolean);
       if (!tracks.length) return null;
       return tracks.length === 1 ? { type: "video", data: tracks[0] } : { type: "list", data: tracks };
@@ -1636,12 +1646,15 @@ export default class Player extends EventEmitter {
     return events;
   }
 
-  /** @private @async Advance to the next track. */
+  /** @private @async Advance to the next track. Guarded against overlapping runs: a
+   *  generation counter ensures an older run's cleanup never clears the in-flight
+   * flag of a newer run (which previously allowed double-advances). */
   async playNext() {
     if (this._playingNext) return;
     this._playingNext = true;
+    const generation = (this._playNextGeneration = (this._playNextGeneration ?? 0) + 1);
     try { await this._doPlayNext(); }
-    finally { this._playingNext = false; }
+    finally { if (generation === this._playNextGeneration) this._playingNext = false; }
   }
 
   /** @private @async Core logic for advancing to the next track. */
@@ -1853,9 +1866,20 @@ export default class Player extends EventEmitter {
     this._skipping = true;
     this._bridgeStop();
     this._playingNext = false;
+    this._lastPlayedTrack = this.queue.getCurrent() ?? this._lastPlayedTrack;
+    this.emit("trackSkip", this._lastPlayedTrack);
     if (!this.queue.isEmpty() && !this.leaving) {
       this.playNext().catch(e => logger.error("[Player] TrackEnd playNext error:", e.message));
     } else {
+      this.queue.current = null;
+      if (!this._wasRadio && !this._queueEndedSent) {
+        this._queueEndedSent = true;
+        this.emit("queueEnd");
+        if (!this._autoplay) {
+          const prefix = this._getPrefix?.(this._guildId) ?? "%";
+          this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.queueEnded", { prefix }))], system: true });
+        }
+      }
       this.emit("stopplay");
       if (!this._is247Enabled()) {
         this._startInactivityTimer();

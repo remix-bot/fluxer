@@ -1,6 +1,6 @@
 /**
  * @module commands/autoplay
- * @description Toggle autoplay mode — automatically keeps the music going when the queue ends.
+ * @description Toggle autoplay mode — keeps the music going forever:
  */
 
 import { CommandBuilder } from "../src/CommandHandler.mjs";
@@ -120,7 +120,6 @@ function storePool(p, videoId, candidates) {
 
 /**
  * Resolve a query via the player's Lavalink search and return all acceptable
- * candidates from the results (unshuffled, top-first).
  * @param {object} p - The player instance.
  * @param {string} query - The search query or URL.
  * @param {string} provider - Provider shorthand key ("yt", "ytm", ...).
@@ -154,7 +153,8 @@ async function pickFromQuery(p, query, provider = "ytm") {
  * @returns {Promise<object|null>} The chosen track, or null if all strategies failed.
  */
 async function pickAutoplayTrack(p, ctx, lastTrack) {
-  const artist = lastTrack?.lastfm?.artist ?? lastTrack?.requestedArtist ?? lastTrack?.artist ?? lastTrack?.artists?.[0]?.name ?? null;
+  const artist = lastTrack?.lastfm?.artist ?? lastTrack?.requestedArtist ?? lastTrack?.artist
+    ?? lastTrack?.artists?.[0]?.name ?? lastTrack?.author?.name ?? null;
   const name   = lastTrack?.lastfm?.name   ?? lastTrack?.requestedTitle   ?? lastTrack?.title   ?? lastTrack?.name ?? null;
   const videoId = extractVideoId(lastTrack);
 
@@ -220,29 +220,60 @@ async function pickAutoplayTrack(p, ctx, lastTrack) {
 }
 
 /**
+ * Serialized track picking. All autoplay picks go through a per-player promise
+ * chain so concurrent triggers (e.g. a skip firing "trackSkip" + "queueEnd" at
+ * the same time) never race each other into picking the same track twice.
+ * The picked track is recorded in history immediately after selection.
+ * @param {object} p - The player instance.
+ * @param {object} ctx - The bot context.
+ * @param {object|null} lastTrack - Track to base the recommendation on.
+ * @returns {Promise<object|null>} The chosen track, or null.
+ */
+function pickSerialized(p, ctx, lastTrack) {
+  const run = async () => {
+    try {
+      const track = await pickAutoplayTrack(p, ctx, lastTrack);
+      if (track) rememberTrack(p, track);
+      return track;
+    } catch (e) {
+      logger.warn("[Autoplay] Pick error:", e?.message);
+      return null;
+    }
+  };
+  const prev = p._autoplayPickChain ?? Promise.resolve();
+  const next = prev.then(run, run);
+  // Keep the chain alive even if a caller lets a rejection slip through.
+  p._autoplayPickChain = next.catch(() => {});
+  return next;
+}
+
+/**
  * Fill the queue ahead while autoplay is enabled. Debounced and guarded so it
+ * never runs concurrently or hammers Lavalink when events arrive in bursts.
  * @param {object} p - The player instance.
  * @param {object} ctx - The bot context.
  * @returns {Promise<void>}
  */
 async function fillQueue(p, ctx) {
   if (!p._autoplay || p._destroyed || p._autoplayFilling) return;
-  const now = Date.now();
-  if (now - (p._autoplayLastFillAt ?? 0) < FILL_COOLDOWN_MS) return;
-  p._autoplayLastFillAt = now;
+  // Loop modes mean the user's own queue repeats forever — don't grow it.
+  if (p.queue?.loop || p.queue?.songLoop) return;
 
   const current = p.queue?.getCurrent();
   if (!current) return; // queueEnd handler owns the "nothing playing" case.
   const upcoming = p.queue?.data?.length ?? 0;
   if (upcoming >= QUEUE_KEEP_AHEAD) return;
 
+  const now = Date.now();
+  if (now - (p._autoplayLastFillAt ?? 0) < FILL_COOLDOWN_MS) return;
+  p._autoplayLastFillAt = now;
+
   p._autoplayFilling = true;
   try {
     while (p._autoplay && !p._destroyed && (p.queue?.data?.length ?? 0) < QUEUE_KEEP_AHEAD) {
       const last = p.queue?.data?.at?.(-1) ?? p._lastPlayedTrack ?? current;
-      const track = await pickAutoplayTrack(p, ctx, last);
-      if (!track) break;
-      rememberTrack(p, track);
+      const track = await pickSerialized(p, ctx, last);
+      if (!track || !p._autoplay || p._destroyed) break;
       p.addToQueue(track, false);
     }
   } catch (e) {
@@ -253,7 +284,8 @@ async function fillQueue(p, ctx) {
 }
 
 /**
- * Build the queueEnd handler: pick and immediately play a similar track.
+ * Build the queueEnd handler: the last song just ended and nothing is queued —
+ * pick a similar track, add it, and start playing it right away.
  * @param {object} p - The player instance.
  * @param {object} ctx - The bot context.
  * @returns {Function} The handler.
@@ -270,14 +302,14 @@ function buildQueueEndHandler(p, ctx) {
       p._stopInactivityTimer();
       rememberTrack(p, lastTrack);
 
-      const track = await pickAutoplayTrack(p, ctx, lastTrack);
-      if (track) {
-        rememberTrack(p, track);
+      const track = await pickSerialized(p, ctx, lastTrack);
+      if (track && p._autoplay && !p._destroyed) {
         p.addToQueue(track, false);
+        logger.player(`[Autoplay] Queue ended — added and playing: ${track.title}`);
         if (!p.queue.getCurrent()) {
           p.playNext().catch(() => {});
         }
-      } else if (!p._is247Enabled()) {
+      } else if (!track && !p.queue?.getCurrent() && p.queue?.isEmpty() && !p._is247Enabled() && p._autoplay) {
         p._startInactivityTimer();
       }
     } catch (err) {
@@ -290,16 +322,54 @@ function buildQueueEndHandler(p, ctx) {
 }
 
 /**
- * Attach autoplay listeners (queueEnd + pre-fill hooks) to a player.
+ * Build the trackSkip handler: a song was skipped — add a new similar song to
+ * the queue so the music never runs dry. This fires on every skip (command,
+ * control panel, dashboard, custom end-time cut) while autoplay is enabled.
+ * @param {object} p - The player instance.
+ * @param {object} ctx - The bot context.
+ * @returns {Function} The handler.
+ */
+function buildTrackSkipHandler(p, ctx) {
+  return async (skippedTrack) => {
+    try {
+      if (!p._autoplay || p._destroyed) return;
+      // Loop modes mean the user wants their own queue repeated — don't grow it.
+      if (p.queue?.loop || p.queue?.songLoop) return;
+
+      const basis = skippedTrack ?? p._lastPlayedTrack;
+      if (!basis) return;
+      rememberTrack(p, basis); // never re-pick the song that was just skipped
+
+      const track = await pickSerialized(p, ctx, basis);
+      if (!track || !p._autoplay || p._destroyed) return;
+
+      p.addToQueue(track, false);
+      logger.player(`[Autoplay] Skipped — replenished queue with: ${track.title}`);
+    } catch (e) {
+      logger.warn("[Autoplay] Skip-refill error:", e?.message);
+    }
+  };
+}
+
+/**
+ * Attach autoplay listeners (queueEnd, trackSkip + pre-fill hooks) to a player.
+ * Exported so other modules (e.g. debug rebuilds) can restore autoplay state.
+ * Note: the pre-fill hooks onto "startplay" — the Player never re-emits its
+ * Queue's "queue" events as "queue" on itself, so listening for "queue" here
+ * would be a dead listener and the keep-ahead fill would only run on manual
+ * queue edits.
  * @param {object} p - The player instance.
  * @param {object} ctx - The bot context.
  * @returns {void}
  */
-function attachAutoplay(p, ctx) {
+export function attachAutoplay(p, ctx) {
   detachAutoplay(p);
 
   p._autoplayHandler = buildQueueEndHandler(p, ctx);
   p.on("queueEnd", p._autoplayHandler);
+
+  p._autoplaySkipHandler = buildTrackSkipHandler(p, ctx);
+  p.on("trackSkip", p._autoplaySkipHandler);
 
   p._autoplayFillHandler = () => { fillQueue(p, ctx).catch(() => {}); };
   p.on("startplay", p._autoplayFillHandler);
@@ -312,10 +382,14 @@ function attachAutoplay(p, ctx) {
  * @param {object} p - The player instance.
  * @returns {void}
  */
-function detachAutoplay(p) {
+export function detachAutoplay(p) {
   if (p._autoplayHandler) {
     p.removeListener("queueEnd", p._autoplayHandler);
     p._autoplayHandler = null;
+  }
+  if (p._autoplaySkipHandler) {
+    p.removeListener("trackSkip", p._autoplaySkipHandler);
+    p._autoplaySkipHandler = null;
   }
   if (p._autoplayFillHandler) {
     p.removeListener("startplay", p._autoplayFillHandler);
@@ -342,7 +416,11 @@ export async function run(msg, data) {
     p._autoplayHistory = p._autoplayHistory ?? [];
     attachAutoplay(p, this);
 
-    fillQueue(p, this).catch(() => {});
+    if (!p.queue.getCurrent() && p.queue.isEmpty() && p._lastPlayedTrack) {
+      p._autoplayHandler().catch(() => {});
+    } else {
+      fillQueue(p, this).catch(() => {});
+    }
 
     return msg.reply({
       embeds: [new EmbedBuilder()
@@ -355,6 +433,7 @@ export async function run(msg, data) {
     p._autoplayMixPools?.clear();
     p._autoplayPreferredPoolVid = null;
     p._autoplayLastFillAt = 0;
+    p._autoplayPickChain = null;
 
     return msg.reply({
       embeds: [new EmbedBuilder()

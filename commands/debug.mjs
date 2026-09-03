@@ -230,7 +230,16 @@ async function forceRejoinPlayer(ctx, player) {
       } catch (e) { logger.warn("[Debug] queue restore:", e?.message); }
     }
 
-    if (wasAutoplay) newPlayer._autoplay = true;
+    if (wasAutoplay) {
+      newPlayer._autoplay = true;
+      newPlayer._autoplayHistory = player._autoplayHistory ?? [];
+      try {
+        const { attachAutoplay } = await import("./autoplay.mjs");
+        attachAutoplay(newPlayer, ctx);
+      } catch (e) {
+        logger.warn("[Debug] autoplay re-attach failed:", e?.message);
+      }
+    }
 
     const newRoom = newPlayer.connection?.room;
     return {
