@@ -24,6 +24,12 @@ const HISTORY_SIZE = 30;
 /** Sanity bounds for candidate durations (ms) — skip hour-long mixes and jingles. */
 const MIN_DURATION_MS = 45_000;
 const MAX_DURATION_MS = 15 * 60_000;
+/** Resolved mix candidate pools older than this are discarded. */
+const MIX_POOL_TTL_MS = 5 * 60_000;
+/** Max mix pools cached per player (LRU-style eviction). */
+const MAX_MIX_POOLS = 4;
+/** Minimum time between fill runs — absorbs event bursts without extra Lavalink searches. */
+const FILL_COOLDOWN_MS = 1_200;
 
 /**
  * Extract a YouTube video ID from a track's videoId field or URL.
@@ -62,13 +68,69 @@ function rememberTrack(p, track) {
  */
 function isCandidateOk(p, t) {
   if (!t) return false;
-  const ms = Number(t._durationMs ?? t.duration?.seconds * 1000 ?? 0);
+  const ms = Number(t._durationMs) || (Number(t.duration?.seconds) * 1000) || 0;
   if (ms && (ms < MIN_DURATION_MS || ms > MAX_DURATION_MS)) return false;
   const vid = extractVideoId(t);
   if (vid && (p._autoplayHistory ?? []).some(h => h.vid === vid)) return false;
   const title = String(t?.title ?? "").toLowerCase().trim();
   if (title && (p._autoplayHistory ?? []).some(h => h.title && h.title === title)) return false;
   return true;
+}
+
+/**
+ * Take a random acceptable candidate from a cached mix pool, if one exists and
+ * is fresh. Candidates already picked are excluded via the autoplay history.
+ * @param {object} p - The player instance.
+ * @param {string} videoId - The video ID the pool was resolved from.
+ * @returns {object|null} An acceptable track from the pool, or null.
+ */
+function takeFromPool(p, videoId) {
+  const pools = p._autoplayMixPools;
+  if (!pools) return null;
+  const pool = pools.get(videoId);
+  if (!pool) return null;
+  if (Date.now() - pool.ts > MIX_POOL_TTL_MS) {
+    pools.delete(videoId);
+    return null;
+  }
+  const ok = pool.tracks.filter(t => isCandidateOk(p, t));
+  if (!ok.length) {
+    pools.delete(videoId);
+    return null;
+  }
+  return ok[Math.floor(Math.random() * Math.min(PICK_POOL, ok.length))];
+}
+
+/**
+ * Store resolved mix candidates on the player for reuse across picks.
+ * @param {object} p - The player instance.
+ * @param {string} videoId - The video ID the candidates were resolved from.
+ * @param {Array<object>} candidates - Acceptable candidate tracks.
+ * @returns {void}
+ */
+function storePool(p, videoId, candidates) {
+  if (!videoId || !candidates.length) return;
+  const pools = p._autoplayMixPools ?? new Map();
+  if (!p._autoplayMixPools) p._autoplayMixPools = pools;
+  if (pools.size >= MAX_MIX_POOLS) {
+    pools.delete(pools.keys().next().value);
+  }
+  pools.set(videoId, { tracks: candidates, ts: Date.now() });
+}
+
+/**
+ * Resolve a query via the player's Lavalink search and return all acceptable
+ * candidates from the results (unshuffled, top-first).
+ * @param {object} p - The player instance.
+ * @param {string} query - The search query or URL.
+ * @param {string} provider - Provider shorthand key ("yt", "ytm", ...).
+ * @returns {Promise<Array<object>>} Acceptable candidate tracks.
+ */
+async function resolveCandidates(p, query, provider = "ytm") {
+  const resolved = await p.generalQuery({ query, provider });
+  const list = resolved?.type === "list" ? (resolved.data ?? [])
+    : resolved?.type === "video" && resolved.data ? [resolved.data] : [];
+  return list.filter(t => isCandidateOk(p, t));
 }
 
 /**
@@ -80,16 +142,12 @@ function isCandidateOk(p, t) {
  * @returns {Promise<object|null>} An acceptable track, or null.
  */
 async function pickFromQuery(p, query, provider = "ytm") {
-  const resolved = await p.generalQuery({ query, provider });
-  const list = resolved?.type === "list" ? (resolved.data ?? [])
-    : resolved?.type === "video" && resolved.data ? [resolved.data] : [];
-  const ok = list.filter(t => isCandidateOk(p, t));
+  const ok = await resolveCandidates(p, query, provider);
   if (!ok.length) return null;
   return ok[Math.floor(Math.random() * Math.min(PICK_POOL, ok.length))];
 }
 
 /**
- * Pick the next autoplay track using the strategy chain.
  * @param {object} p - The player instance.
  * @param {object} ctx - The bot context (needs .lastfm).
  * @param {object|null} lastTrack - The last played internal track.
@@ -100,11 +158,27 @@ async function pickAutoplayTrack(p, ctx, lastTrack) {
   const name   = lastTrack?.lastfm?.name   ?? lastTrack?.requestedTitle   ?? lastTrack?.title   ?? lastTrack?.name ?? null;
   const videoId = extractVideoId(lastTrack);
 
+  if (p._autoplayPreferredPoolVid) {
+    const pooled = takeFromPool(p, p._autoplayPreferredPoolVid);
+    if (pooled) return pooled;
+    p._autoplayPreferredPoolVid = null;
+  }
+
   if (videoId) {
+    const cached = takeFromPool(p, videoId);
+    if (cached) {
+      p._autoplayPreferredPoolVid = videoId;
+      return cached;
+    }
+
     try {
       const mixUrl = `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`;
-      const track = await pickFromQuery(p, mixUrl, "yt");
-      if (track) return track;
+      const candidates = await resolveCandidates(p, mixUrl, "yt");
+      if (candidates.length) {
+        storePool(p, videoId, candidates);
+        p._autoplayPreferredPoolVid = videoId;
+        return candidates[Math.floor(Math.random() * Math.min(PICK_POOL, candidates.length))];
+      }
     } catch (e) { logger.warn("[Autoplay] Mix strategy failed:", e?.message); }
   }
 
@@ -115,7 +189,10 @@ async function pickAutoplayTrack(p, ctx, lastTrack) {
       for (let i = 0; i < Math.min(4, similar.length); i++) {
         const pick = similar[Math.floor(Math.random() * Math.min(3, similar.length))];
         const track = await pickFromQuery(p, `${pick.name} ${pick.artist}`.trim(), "ytm");
-        if (track) return track;
+        if (track) {
+          p._autoplayPreferredPoolVid = null;
+          return track;
+        }
       }
     } catch (e) { logger.warn("[Autoplay] Last.fm strategy failed:", e?.message); }
   }
@@ -123,13 +200,19 @@ async function pickAutoplayTrack(p, ctx, lastTrack) {
   if (artist) {
     try {
       const track = await pickFromQuery(p, `${artist} songs`, "ytm");
-      if (track) return track;
+      if (track) {
+        p._autoplayPreferredPoolVid = null;
+        return track;
+      }
     } catch (e) { logger.warn("[Autoplay] Artist strategy failed:", e?.message); }
   }
   if (name) {
     try {
       const track = await pickFromQuery(p, `${name}`, "ytm");
-      if (track) return track;
+      if (track) {
+        p._autoplayPreferredPoolVid = null;
+        return track;
+      }
     } catch (_) {}
   }
 
@@ -138,13 +221,16 @@ async function pickAutoplayTrack(p, ctx, lastTrack) {
 
 /**
  * Fill the queue ahead while autoplay is enabled. Debounced and guarded so it
- * never runs concurrently or fights the queueEnd handler.
  * @param {object} p - The player instance.
  * @param {object} ctx - The bot context.
  * @returns {Promise<void>}
  */
 async function fillQueue(p, ctx) {
   if (!p._autoplay || p._destroyed || p._autoplayFilling) return;
+  const now = Date.now();
+  if (now - (p._autoplayLastFillAt ?? 0) < FILL_COOLDOWN_MS) return;
+  p._autoplayLastFillAt = now;
+
   const current = p.queue?.getCurrent();
   if (!current) return; // queueEnd handler owns the "nothing playing" case.
   const upcoming = p.queue?.data?.length ?? 0;
@@ -216,7 +302,7 @@ function attachAutoplay(p, ctx) {
   p.on("queueEnd", p._autoplayHandler);
 
   p._autoplayFillHandler = () => { fillQueue(p, ctx).catch(() => {}); };
-  p.on("queue", p._autoplayFillHandler);
+  p.on("startplay", p._autoplayFillHandler);
   p.on("update", p._autoplayFillHandler);
   p.on("playback", p._autoplayFillHandler);
 }
@@ -232,7 +318,7 @@ function detachAutoplay(p) {
     p._autoplayHandler = null;
   }
   if (p._autoplayFillHandler) {
-    p.removeListener("queue", p._autoplayFillHandler);
+    p.removeListener("startplay", p._autoplayFillHandler);
     p.removeListener("update", p._autoplayFillHandler);
     p.removeListener("playback", p._autoplayFillHandler);
     p._autoplayFillHandler = null;
@@ -266,6 +352,9 @@ export async function run(msg, data) {
   } else {
     detachAutoplay(p);
     p._autoplayHistory = [];
+    p._autoplayMixPools?.clear();
+    p._autoplayPreferredPoolVid = null;
+    p._autoplayLastFillAt = 0;
 
     return msg.reply({
       embeds: [new EmbedBuilder()

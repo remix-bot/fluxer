@@ -9,6 +9,9 @@ import { REQUIRED_BOT_PERMISSIONS } from "./MessageHandler.mjs";
 import { cleanId } from "./Utils.mjs";
 import { iterateVoiceStates, hasHumansInChannel, getChannelsWithHumans } from "./constants/VoiceStateResolver.mjs";
 
+const RAW_GATEWAY_INTEREST =
+    /"(?:t|op)":\s*(?:"(?:VOICE_STATE_UPDATE|VOICE_SERVER_UPDATE|GUILD_CREATE|READY|RESUMED)"|(?:7|9|10|12)\b)/;
+
 /** @class GatewayHandler @description Handles all Discord gateway events relevant to voice state tracking, 24/7 mode, boot recovery, presence rotation, and permission checks. Key responsibilities include voice state cache seeding and updates, bot move-away detection with 24/7 rejoin scheduling, boot recovery with sequential rejoin of 24/7 channels, inactivity timer management on human join/leave, and guild create/delete handling with startup grace period. */
 export class GatewayHandler {
   /**
@@ -366,6 +369,7 @@ export class GatewayHandler {
       if (wsObj && wsObj !== remix._rawGatewayWsObj) {
         remix._rawGatewayHandler = (data) => {
           try {
+            if (typeof data === "string" && !RAW_GATEWAY_INTEREST.test(data)) return;
             const payload = typeof data === "string" ? JSON.parse(data) : data;
 
             if (payload?.op === GatewayOpcodes.GatewayError || payload?.op === 12) {

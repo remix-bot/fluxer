@@ -227,6 +227,8 @@ export async function run(msg) {
     }
   };
 
+  let editFailures = 0;
+
   /**
    * @private
    * Rebuild and edit the player panel embed with updated state.
@@ -235,7 +237,14 @@ export async function run(msg) {
    */
   const refresh = (extra = {}) => {
     const embed = buildEmbed(extra);
-    message.edit({ embeds: [embed] }).catch(() => {});
+    message.edit({ embeds: [embed] })
+        .then(() => { editFailures = 0; })
+        .catch(() => {
+          if (++editFailures >= 3) {
+            clearInterval(updateInterval);
+            updateInterval = null;
+          }
+        });
     lastState = extra;
   };
 
@@ -300,6 +309,11 @@ export async function run(msg) {
   };
 
   updateInterval = setInterval(() => {
+    if (player._destroyed || player.leaving) {
+      clearInterval(updateInterval);
+      updateInterval = null;
+      return;
+    }
     if (!player.paused && player.queue.getCurrent()) {
       refresh(lastState);
     }

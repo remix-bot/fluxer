@@ -211,6 +211,7 @@ export default class Player extends EventEmitter {
     super();
 
     this.queue        = new Queue();
+    this.queue.on("queue", (...args) => this.emit("queue", ...args));
     this.client       = opts.client;
     this.config       = opts.config ?? {};
     this.settings     = opts.settings ?? null;
