@@ -756,7 +756,7 @@ export class PlayerManager {
 
       const prefix = this.commands.getPrefix(guildId);
 
-      const desc = this.locale?.translate(guildId, "responses.join.autoLeaveInactive", { channel: `<#${activeChannelId}>`, prefix })
+      const desc = this.locale?.translate(guildId, "responses.join.autoLeaveInactive", { channel: activeChannelId, prefix })
           ?? `Left channel <#${activeChannelId}> because of inactivity.\nIf you want me to stay in voice, use \`${prefix}247\``;
       const autoleaveChMgr = this.commands?.client?.channels ?? null;
       let leaveCh = (ch && typeof ch === "object" && typeof ch.send !== "function" && ch.id &&

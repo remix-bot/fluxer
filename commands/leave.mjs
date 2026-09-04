@@ -121,7 +121,10 @@ export async function run(msg, data) {
           ? raw.map(id => cleanId(id)).some(id => id === activeChannelId || id === homeChannelId)
           : [cleanId(raw)].some(id => id === activeChannelId || id === homeChannelId));
 
-  if (!was247) this.markIntentionalLeave(activeChannelId);
+  const rejoinDelay = this.config?.timers?.rejoin247Delay ?? 3_000;
+
+  this.markIntentionalLeave(activeChannelId, was247 ? rejoinDelay + 1_000 : null);
+
   this.players.playerMap.delete(activeChannelId);
   this.players._unindexPlayer(player._guildId, activeChannelId);
   if (activeChannelId !== targetChannelId) this.players.playerMap.delete(targetChannelId);
@@ -136,13 +139,10 @@ export async function run(msg, data) {
   await player.leave().catch(() => {});
   player.destroy();
 
-  const rejoinDelay = this.config?.timers?.leave247RejoinDelay
-      ?? this.config?.timers?.rejoin247Delay
-      ?? 3_000;
   if (was247) {
     setTimeout(() => {
-      this.gatewayHandler?._rejoinChannel?.(cleanGuildId, targetChannelId).catch(err => {
-        logger.warn(`[Leave] 24/7 rejoin failed for channel ${targetChannelId}:`, err?.message);
+      this.gatewayHandler?._rejoinChannel?.(cleanGuildId, activeChannelId).catch(err => {
+        logger.warn(`[Leave] 24/7 rejoin failed for channel ${activeChannelId}:`, err?.message);
       });
     }, rejoinDelay);
   }

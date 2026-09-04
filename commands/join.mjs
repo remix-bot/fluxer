@@ -31,9 +31,10 @@ export const command = new CommandBuilder()
  *
  * @param {string} rawArg - The raw argument string from the command.
  * @param {object} ctx - The bot context (Remix instance).
+ * @param {object} message - The command message (used to resolve the guild ID for name lookups).
  * @returns {string|null} The resolved channel ID, or null if not found.
  */
-function resolveChannelId(rawArg, ctx) {
+function resolveChannelId(rawArg, ctx, message) {
   if (!rawArg) return null;
   const mentionMatch = rawArg.match(/^<(#|&)?(\d+)>$/);
   const idMatch = rawArg.match(/^(\d{15,})$/);
@@ -41,8 +42,8 @@ function resolveChannelId(rawArg, ctx) {
   if (mentionMatch) return mentionMatch[2];
   if (idMatch) return idMatch[1];
 
-  // Try name-based lookup
-  const guildId = cleanId(getMessageGuildId(ctx._currentMessage));
+  // Try name-based lookup — use the actual message to resolve the guild ID
+  const guildId = cleanId(getMessageGuildId(message));
   if (!guildId) return null;
 
   const allChannels = [...(ctx.client?.channels?.values?.() ?? [])];
@@ -65,7 +66,7 @@ export async function run(message, data) {
   const rawArg = data?.get?.("channel")?.value?.trim?.() ?? null;
 
   if (rawArg) {
-    const resolvedId = resolveChannelId(rawArg, this);
+    const resolvedId = resolveChannelId(rawArg, this, message);
     if (!resolvedId) {
       const embed = new EmbedBuilder().setColor(getGlobalColor())
           .setDescription(this.t(message, "responses.join.voiceChannelNotFound"));
@@ -74,7 +75,7 @@ export async function run(message, data) {
     return this.players.initPlayer(message, resolvedId);
   }
 
-  // No argument — auto-detect the user’s current voice channel
+  // No argument — auto-detect the user's current voice channel
   const { channelId: cid } = await this.players.checkVoiceChannels(message);
   if (!cid) {
     const prefix = this.handler.getPrefix(getMessageGuildId(message));
