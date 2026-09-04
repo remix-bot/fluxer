@@ -1474,18 +1474,59 @@ export default class Player extends EventEmitter {
 
         events.emit("message", "Searching...");
 
+        const ytId = Utils.extractYouTubeId(query);
+        const canonicalYtUrl = ytId ? Utils.normalizeYouTubeUrl(query) : null;
+        const searchQuery = (isUrl && canonicalYtUrl) ? canonicalYtUrl : query;
+
         let result;
-        if (isUrl) {
-          result = await this._lavalink.search(query);
-        } else {
-          result = await this._lavalink.search(query, { source });
+        try {
+          if (isUrl) {
+            result = await this._lavalink.search(searchQuery);
+          } else {
+            result = await this._lavalink.search(searchQuery, { source });
+          }
+        } catch (searchErr) {
+          logger.warn("[Player] URL/primary search failed:", searchErr?.message);
+          result = null;
+          if (!isUrl) throw searchErr;
         }
-        const lcTracks = result?.tracks ?? [];
+        let lcTracks = result?.tracks ?? [];
+
+        if (isUrl && lcTracks.length === 0 && ytId) {
+          const directBlocked = "YouTube blocked direct loading for this video (`Sign in to confirm you're not a bot`) — trying search fallback...";
+
+          if (searchQuery !== query) {
+            events.emit("message", "Retrying with original URL...");
+            try {
+              const retry = await this._lavalink.search(query);
+              lcTracks = retry?.tracks ?? [];
+            } catch (_) { lcTracks = []; }
+          }
+
+          if (lcTracks.length === 0) {
+            events.emit("message", directBlocked);
+            const title = await Utils.fetchYouTubeOEmbedTitle(ytId);
+            if (title) {
+              logger.player(`[Player] oEmbed fallback: resolved title "${title}" for ${ytId}`);
+              for (const fallbackSource of ["ytsearch", "ytmsearch"]) {
+                try {
+                  const fb = await this._lavalink.search(title, { source: fallbackSource });
+                  if (fb?.tracks?.length > 0) {
+                    lcTracks = fb.tracks;
+                    break;
+                  }
+                } catch (_) { /* try next source */ }
+              }
+            } else {
+              logger.warn("[Player] oEmbed fallback: could not resolve title for " + ytId);
+            }
+          }
+        }
 
         if (lcTracks.length === 0) {
           if (!isUrl && source !== "ytmsearch") {
             events.emit("message", "No results from primary source, trying YouTube Music...");
-            const fallback = await this._lavalink.search(query, { source: "ytmsearch" });
+            const fallback = await this._lavalink.search(searchQuery, { source: "ytmsearch" });
             if (fallback?.tracks?.length > 0) {
               const video = this._lcTrackToVideo(fallback.tracks[0], trackMeta);
               if (video) {

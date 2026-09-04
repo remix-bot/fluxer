@@ -205,6 +205,82 @@ export class Utils {
   }
 
   /**
+   * Extract an 11-character YouTube video ID from any common YouTube URL form
+   * (youtu.be short links, watch?v=, /shorts/, /embed/, /live/, music.youtube.com).
+   * Tracking parameters (si, feature, utm_*) are irrelevant — only the ID matters.
+   * @param {string} str - Candidate URL or raw ID.
+   * @returns {string|null} The video ID, or null if none could be extracted.
+   */
+  static extractYouTubeId(str) {
+    if (!str || typeof str !== "string") return null;
+    const trimmed = str.trim();
+
+    if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) return trimmed;
+
+    let url;
+    try { url = new URL(trimmed); } catch (_) { return null; }
+
+    const host = url.hostname.replace(/^www\./i, "").toLowerCase();
+    if (host === "youtu.be") {
+      const id = url.pathname.split("/").filter(Boolean)[0] ?? "";
+      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+    }
+    if (host === "youtube.com" || host === "music.youtube.com" || host === "youtube-nocookie.com") {
+      const v = url.searchParams.get("v");
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v;
+      const parts = url.pathname.split("/").filter(Boolean);
+      const idx = parts.findIndex(p => ["shorts", "embed", "live", "v"].includes(p.toLowerCase()));
+      if (idx !== -1 && parts[idx + 1] && /^[A-Za-z0-9_-]{11}$/.test(parts[idx + 1])) {
+        return parts[idx + 1];
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Build the canonical YouTube watch URL from any YouTube URL form.
+   * Strips share/tracking parameters (si, feature, utm_*, etc.) which some
+   * audio nodes mishandle and which break NodeLink's resolver cache reuse.
+   * @param {string} str - Candidate URL.
+   * @returns {string|null} Canonical URL like https://www.youtube.com/watch?v=<id>, or null.
+   */
+  static normalizeYouTubeUrl(str) {
+    const id = Utils.extractYouTubeId(str);
+    return id ? "https://www.youtube.com/watch?v=" + id : null;
+  }
+
+  /**
+   * Fetch a YouTube video's title via the public oEmbed endpoint.
+   * oEmbed is served from YouTube's edge and is NOT subject to the
+   * "Sign in to confirm you're not a bot" gating that blocks datacenter-IP
+   * player/stream requests — so it works even when NodeLink's YouTube
+   * source is bot-blocked. Used as a last-resort fallback to search by title.
+   * @param {string} videoIdOrUrl - Video ID or any YouTube URL form.
+   * @param {number} [timeoutMs=5000] - Request timeout in milliseconds.
+   * @returns {Promise<string|null>} The video title, or null on failure.
+   */
+  static async fetchYouTubeOEmbedTitle(videoIdOrUrl, timeoutMs = 5000) {
+    const id = Utils.extractYouTubeId(videoIdOrUrl);
+    if (!id) return null;
+    try {
+      const target = "https://www.youtube.com/watch?v=" + id;
+      const res = await fetch(
+          "https://www.youtube.com/oembed?url=" + encodeURIComponent(target) + "&format=json",
+          {
+            headers: { "User-Agent": "Mozilla/5.0 (compatible; RemixBot/1.0)" },
+            signal: AbortSignal.timeout(timeoutMs),
+          }
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      const title = typeof data?.title === "string" ? data.title.trim() : "";
+      return title || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
    * Clamp a number between a minimum and maximum value.
    * @param {number} num - The number to clamp.
    * @param {number} min - Minimum value.
