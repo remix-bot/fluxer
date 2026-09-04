@@ -254,9 +254,11 @@ function buildQueueEndHandler(p, ctx) {
   return async () => {
     if (!p._autoplay || p._destroyed) return;
     if (p.queue?.getCurrent() || !(p.queue?.isEmpty?.() ?? true)) return;
+    if (p._autoplayQueueEndPicking) return;
+    p._autoplayQueueEndPicking = true;
 
     const lastTrack = p._lastPlayedTrack;
-    if (!lastTrack) return;
+    if (!lastTrack) { p._autoplayQueueEndPicking = false; return; }
 
     try {
       p._stopInactivityTimer();
@@ -277,6 +279,8 @@ function buildQueueEndHandler(p, ctx) {
       if (!p.queue?.getCurrent() && p.queue?.isEmpty() && !p._is247Enabled()) {
         p._startInactivityTimer();
       }
+    } finally {
+      p._autoplayQueueEndPicking = false;
     }
   };
 }
@@ -347,6 +351,7 @@ export async function run(msg, data) {
     p._autoplayMixPools?.clear();
     p._autoplayPreferredPoolVid = null;
     p._autoplayPickChain = null;
+    p._autoplayQueueEndPicking = false;
 
     return msg.reply({
       embeds: [new EmbedBuilder()
