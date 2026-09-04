@@ -166,16 +166,6 @@ async function pickAutoplayTrack(p, ctx, lastTrack) {
       p._autoplayPreferredPoolVid = videoId;
       return cached;
     }
-
-    try {
-      const mixUrl = `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`;
-      const candidates = await resolveCandidates(p, mixUrl, "yt");
-      if (candidates.length) {
-        storePool(p, videoId, candidates);
-        p._autoplayPreferredPoolVid = videoId;
-        return candidates[Math.floor(Math.random() * Math.min(PICK_POOL, candidates.length))];
-      }
-    } catch (e) { logger.warn("[Autoplay] Mix strategy failed:", e?.message); }
   }
 
   const lf = ctx?.lastfm;
@@ -210,6 +200,18 @@ async function pickAutoplayTrack(p, ctx, lastTrack) {
         return track;
       }
     } catch (_) {}
+  }
+
+  if (videoId) {
+    try {
+      const mixUrl = `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`;
+      const candidates = await resolveCandidates(p, mixUrl, "yt");
+      if (candidates.length) {
+        storePool(p, videoId, candidates);
+        p._autoplayPreferredPoolVid = videoId;
+        return candidates[Math.floor(Math.random() * Math.min(PICK_POOL, candidates.length))];
+      }
+    } catch (e) { logger.warn("[Autoplay] Mix strategy failed:", e?.message); }
   }
 
   return null;
