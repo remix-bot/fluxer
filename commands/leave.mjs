@@ -3,10 +3,10 @@
  * @description Make the bot leave a voice channel, with 24/7 cleanup and player destruction.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { logger } from "../src/constants/Logger.mjs";
-import { getGlobalColor, cleanId } from "../src/MessageHandler.mjs";
+import { logger } from "../src/core/Logger.mjs";
+import { getGlobalColor, cleanId } from "../src/ui/index.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the leave/stop command. */
 export const command = new CommandBuilder()
@@ -25,7 +25,7 @@ export const command = new CommandBuilder()
  * Resolve the guild ID from a player, its map key, or the channel object.
  * @param {Player} player - The player instance.
  * @param {string} mapKey - The key under which the player is stored in playerMap.
- * @param {import('@fluxerjs/core').Client} client - The Discord/Fluxer client.
+ * @param {import('@fluxerjs/core').Client} client - The Fluxer client.
  * @returns {string} Cleaned guild ID, or empty string if unresolvable.
  */
 function resolvePlayerGuildId(player, mapKey, client) {

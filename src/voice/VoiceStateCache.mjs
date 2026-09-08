@@ -1,0 +1,589 @@
+/** @module src/voice/VoiceStateCache */
+
+import { logger } from "../core/Logger.mjs";
+import { cleanId } from "../utils/Utils.mjs";
+
+/**
+ * LRU-backed cache mapping users (and bots) to their voice-channel locations.
+ * Supports O(1) lookups by guild+user or guild+channel and implements the
+ * Map-like interface (`get`, `set`, `delete`, `has`, `forEach`, `entries`, `keys`, `values`).
+ * @class
+ */
+export class VoiceStateCache {
+  /**
+   * @param {object} [opts]
+   * @param {number} [opts.maxUsers=50000] - Max cached human user entries.
+   * @param {number} [opts.maxBots=10000]  - Max cached bot user entries.
+   */
+  constructor(opts = {}) {
+    this.userLocations = new Map();
+    this.channelMembers = new Map();
+
+    this.botLocations = new Map();
+    this.botChannelMembers = new Map();
+
+    this._maxUsers = opts.maxUsers ?? 50_000;
+    this._maxBots  = opts.maxBots  ?? 10_000;
+    this._lruUserKeys = [];
+    this._lruBotKeys = [];
+  }
+
+  /**
+   * Build a composite user key for storage.
+   * @param {string} guildId
+   * @param {string} userId
+   * @returns {string}
+   */
+  static userKey(guildId, userId) {
+    return `${cleanId(guildId)}:${cleanId(userId)}`;
+  }
+
+  /**
+   * Build a composite channel key for storage.
+   * @param {string} guildId
+   * @param {string} channelId
+   * @returns {string}
+   */
+  static channelKey(guildId, channelId) {
+    return `${cleanId(guildId)}:${cleanId(channelId)}`;
+  }
+
+  /**
+   * Update (or remove) a user's voice-channel location in the cache.
+   * When `channelId` is provided the user is added; when `null`/falsy the user is removed.
+   * Automatically evicts LRU entries when capacity is exceeded.
+   * @param {{ guildId: string, userId: string, channelId: string|null, isBot?: boolean }} opts
+   */
+  updateUser({ guildId, userId, channelId, isBot = false }) {
+    const cleanGuild   = cleanId(guildId);
+    const cleanUser    = cleanId(userId);
+    const cleanChannel = channelId ? cleanId(channelId) : null;
+    if (!cleanGuild || !cleanUser) return;
+
+    const locations   = isBot ? this.botLocations   : this.userLocations;
+    const channelIdx  = isBot ? this.botChannelMembers : this.channelMembers;
+    const maxEntries  = isBot ? this._maxBots        : this._maxUsers;
+    const lruKeys     = isBot ? this._lruBotKeys     : this._lruUserKeys;
+    const uKey        = VoiceStateCache.userKey(cleanGuild, cleanUser);
+
+    const prev = locations.get(uKey);
+    if (prev) {
+      const prevCKey = VoiceStateCache.channelKey(prev.guildId, prev.channelId);
+      const prevSet  = channelIdx.get(prevCKey);
+      if (prevSet) {
+        prevSet.delete(cleanUser);
+        if (prevSet.size === 0) channelIdx.delete(prevCKey);
+      }
+    }
+
+    if (cleanChannel) {
+      const cKey = VoiceStateCache.channelKey(cleanGuild, cleanChannel);
+      let set = channelIdx.get(cKey);
+      if (!set) { set = new Set(); channelIdx.set(cKey, set); }
+      set.add(cleanUser);
+
+      locations.delete(uKey);
+      locations.set(uKey, { channelId: cleanChannel, guildId: cleanGuild, userId: cleanUser });
+
+      const lruIdx = lruKeys.indexOf(uKey);
+      if (lruIdx !== -1) lruKeys.splice(lruIdx, 1);
+      lruKeys.push(uKey);
+
+      while (locations.size > maxEntries) {
+        let evicted = false;
+        for (let i = 0; i < lruKeys.length; i++) {
+          const evictKey = lruKeys[i];
+          if (evictKey === uKey) continue;
+
+          const evictEntry = locations.get(evictKey);
+          if (evictEntry) {
+            const evictCKey = VoiceStateCache.channelKey(evictEntry.guildId, evictEntry.channelId);
+            const evictSet  = channelIdx.get(evictCKey);
+            if (evictSet) {
+              evictSet.delete(evictEntry.userId);
+              if (evictSet.size === 0) channelIdx.delete(evictCKey);
+            }
+            locations.delete(evictKey);
+          }
+          lruKeys.splice(i, 1);
+          evicted = true;
+          break;
+        }
+        if (!evicted) break;
+      }
+    } else {
+      locations.delete(uKey);
+      const idx = lruKeys.indexOf(uKey);
+      if (idx !== -1) lruKeys.splice(idx, 1);
+    }
+  }
+
+  /**
+   * Check whether any human users are cached in the given channel.
+   * @param {string} guildId
+   * @param {string} channelId
+   * @returns {boolean}
+   */
+  hasHumansInChannel(guildId, channelId) {
+    const cKey = VoiceStateCache.channelKey(guildId, channelId);
+    const set  = this.channelMembers.get(cKey);
+    return set ? set.size > 0 : false;
+  }
+
+  /**
+   * Get the count of human users cached in the given channel.
+   * @param {string} guildId
+   * @param {string} channelId
+   * @returns {number}
+   */
+  getHumanCount(guildId, channelId) {
+    const cKey = VoiceStateCache.channelKey(guildId, channelId);
+    const set  = this.channelMembers.get(cKey);
+    return set ? set.size : 0;
+  }
+
+  /**
+   * Get the array of human user IDs cached in the given channel.
+   * @param {string} guildId
+   * @param {string} channelId
+   * @returns {string[]}
+   */
+  getHumansInChannel(guildId, channelId) {
+    const cKey = VoiceStateCache.channelKey(guildId, channelId);
+    const set  = this.channelMembers.get(cKey);
+    return set ? [...set] : [];
+  }
+
+  /**
+   * Get the channel ID a human user is currently in, or `null`.
+   * @param {string} guildId
+   * @param {string} userId
+   * @returns {string|null}
+   */
+  getUserChannel(guildId, userId) {
+    const uKey = VoiceStateCache.userKey(guildId, userId);
+    const loc  = this.userLocations.get(uKey);
+    return loc ? loc.channelId : null;
+  }
+
+  /**
+   * Check whether a human user exists in the cache for the given guild.
+   * @param {string} guildId
+   * @param {string} userId
+   * @returns {boolean}
+   */
+  hasUser(guildId, userId) {
+    return this.userLocations.has(VoiceStateCache.userKey(guildId, userId));
+  }
+
+  /**
+   * Get the full location record for a human user.
+   * @param {string} guildId
+   * @param {string} userId
+   * @returns {{ channelId: string, guildId: string, userId: string }|undefined}
+   */
+  getUserLocation(guildId, userId) {
+    return this.userLocations.get(VoiceStateCache.userKey(guildId, userId));
+  }
+
+  /**
+   * Seed a user into the cache only if not already present.
+   * @param {string} guildId
+   * @param {string} userId
+   * @param {string} channelId
+   * @param {boolean} [isBot=false]
+   */
+  seedUser(guildId, userId, channelId, isBot = false) {
+    const uKey = VoiceStateCache.userKey(guildId, userId);
+    const locations = isBot ? this.botLocations : this.userLocations;
+    if (locations.has(uKey)) return;
+    this.updateUser({ guildId, userId, channelId, isBot });
+  }
+
+  /**
+   * Remove all cached entries (human and bot) for a given guild.
+   * @param {string} guildId
+   */
+  removeGuild(guildId) {
+    const cleanGuild = cleanId(guildId);
+    const prefix = cleanGuild + ":";
+
+
+    const userKeysToRemove = [];
+    for (const [uKey, loc] of this.userLocations) {
+      if (uKey.startsWith(prefix)) userKeysToRemove.push(uKey);
+    }
+    for (const uKey of userKeysToRemove) {
+      const loc = this.userLocations.get(uKey);
+      if (loc) {
+        const cKey = VoiceStateCache.channelKey(loc.guildId, loc.channelId);
+        const set  = this.channelMembers.get(cKey);
+        if (set) { set.delete(loc.userId); if (set.size === 0) this.channelMembers.delete(cKey); }
+      }
+      this.userLocations.delete(uKey);
+    }
+    const channelKeysToRemove = [];
+    for (const [cKey] of this.channelMembers) {
+      if (cKey.startsWith(prefix)) channelKeysToRemove.push(cKey);
+    }
+    for (const cKey of channelKeysToRemove) this.channelMembers.delete(cKey);
+    this._lruUserKeys = this._lruUserKeys.filter(k => !k.startsWith(prefix));
+
+    const botKeysToRemove = [];
+    for (const [uKey, loc] of this.botLocations) {
+      if (uKey.startsWith(prefix)) botKeysToRemove.push(uKey);
+    }
+    for (const uKey of botKeysToRemove) {
+      const loc = this.botLocations.get(uKey);
+      if (loc) {
+        const cKey = VoiceStateCache.channelKey(loc.guildId, loc.channelId);
+        const set  = this.botChannelMembers.get(cKey);
+        if (set) { set.delete(loc.userId); if (set.size === 0) this.botChannelMembers.delete(cKey); }
+      }
+      this.botLocations.delete(uKey);
+    }
+    const botChannelKeysToRemove = [];
+    for (const [cKey] of this.botChannelMembers) {
+      if (cKey.startsWith(prefix)) botChannelKeysToRemove.push(cKey);
+    }
+    for (const cKey of botChannelKeysToRemove) this.botChannelMembers.delete(cKey);
+    this._lruBotKeys = this._lruBotKeys.filter(k => !k.startsWith(prefix));
+  }
+
+  /**
+   * Remove all cached entries (human and bot) for a specific channel.
+   * @param {string} guildId
+   * @param {string} channelId
+   */
+  removeChannel(guildId, channelId) {
+    const cKey = VoiceStateCache.channelKey(guildId, channelId);
+
+    const humanSet = this.channelMembers.get(cKey);
+    if (humanSet) {
+      for (const userId of humanSet) {
+        const uKey = VoiceStateCache.userKey(guildId, userId);
+        const loc  = this.userLocations.get(uKey);
+        if (loc && loc.channelId === cleanId(channelId)) {
+          this.userLocations.delete(uKey);
+        }
+      }
+      this.channelMembers.delete(cKey);
+    }
+
+    const botSet = this.botChannelMembers.get(cKey);
+    if (botSet) {
+      for (const userId of botSet) {
+        const uKey = VoiceStateCache.userKey(guildId, userId);
+        const loc  = this.botLocations.get(uKey);
+        if (loc && loc.channelId === cleanId(channelId)) {
+          this.botLocations.delete(uKey);
+        }
+      }
+      this.botChannelMembers.delete(cKey);
+    }
+  }
+
+  /**
+   * Remove specific users from a guild's cache.
+   * @param {string} guildId
+   * @param {string[]} userIds
+   * @param {boolean} [botsOnly=false] - If `true`, only purge bot entries.
+   */
+  purgeUsersInGuild(guildId, userIds, botsOnly = false) {
+    const cleanGuild = cleanId(guildId);
+
+    if (!botsOnly) {
+      for (const userId of userIds) {
+        const uKey = VoiceStateCache.userKey(cleanGuild, userId);
+        const loc  = this.userLocations.get(uKey);
+        if (loc) {
+          const cKey = VoiceStateCache.channelKey(loc.guildId, loc.channelId);
+          const set  = this.channelMembers.get(cKey);
+          if (set) { set.delete(loc.userId); if (set.size === 0) this.channelMembers.delete(cKey); }
+          this.userLocations.delete(uKey);
+        }
+      }
+    }
+
+    for (const userId of userIds) {
+      const uKey = VoiceStateCache.userKey(cleanGuild, userId);
+      const loc  = this.botLocations.get(uKey);
+      if (loc) {
+        const cKey = VoiceStateCache.channelKey(loc.guildId, loc.channelId);
+        const set  = this.botChannelMembers.get(cKey);
+        if (set) { set.delete(loc.userId); if (set.size === 0) this.botChannelMembers.delete(cKey); }
+        this.botLocations.delete(uKey);
+      }
+    }
+  }
+
+  /**
+   * Number of cached human users.
+   * @type {number}
+   */
+  get observedVoiceUsersSize() { return this.userLocations.size; }
+
+  /**
+   * Number of cached bot users.
+   * @type {number}
+   */
+  get observedVoiceBotsSize() { return this.botLocations.size; }
+
+  /**
+   * Iterate over all cached human user entries as `[userId, { channelId, guildId }]` pairs.
+   * @yields {[string, { channelId: string, guildId: string }]}
+   */
+  *iterateHumanUsers() {
+    for (const [uKey, loc] of this.userLocations) {
+      yield [loc.userId, { channelId: loc.channelId, guildId: loc.guildId }];
+    }
+  }
+
+  /**
+   * Iterate over all cached bot user entries as `[compositeKey, { channelId, guildId }]` pairs.
+   * @yields {[string, { channelId: string, guildId: string }]}
+   */
+  *iterateBotUsers() {
+    for (const [uKey, loc] of this.botLocations) {
+      yield [uKey, { channelId: loc.channelId, guildId: loc.guildId }];
+    }
+  }
+
+  /**
+   * Get the location record for a human user. If `guildId` is omitted, performs a linear scan.
+   * @param {string} userId
+   * @param {string|null} [guildId]
+   * @returns {{ channelId: string, guildId: string }|undefined}
+   */
+  getHumanUser(userId, guildId = null) {
+    if (guildId) {
+      return this.userLocations.get(VoiceStateCache.userKey(guildId, userId));
+    }
+    const cleanUser = cleanId(userId);
+    for (const [uKey, loc] of this.userLocations) {
+      if (loc.userId === cleanUser) return { channelId: loc.channelId, guildId: loc.guildId };
+    }
+    return undefined;
+  }
+
+  /**
+   * Set a human user's voice location via `updateUser`.
+   * @param {string} userId
+   * @param {{ guildId: string, channelId: string }} info
+   */
+  setHumanUser(userId, info) {
+    const guildId = info.guildId;
+    const channelId = info.channelId;
+    if (guildId && channelId) {
+      this.updateUser({ guildId, userId, channelId, isBot: false });
+    }
+  }
+
+  /**
+   * Set a bot user's voice location via `updateUser`.
+   * @param {string} compositeKey - `guildId:userId` composite key.
+   * @param {{ guildId: string, channelId: string }} info
+   */
+  setBotUser(compositeKey, info) {
+    const guildId = info.guildId;
+    const channelId = info.channelId;
+    const userId = compositeKey.split(":").pop();
+    if (guildId && channelId && userId) {
+      this.updateUser({ guildId, userId, channelId, isBot: true });
+    }
+  }
+
+  /**
+   * Remove a human user from the cache. If `guildId` is omitted, scans all entries.
+   * @param {string} userId
+   * @param {string|null} [guildId]
+   */
+  deleteHumanUser(userId, guildId = null) {
+    if (guildId) {
+      this.updateUser({ guildId, userId, channelId: null, isBot: false });
+    } else {
+      const cleanUser = cleanId(userId);
+      for (const [uKey, loc] of this.userLocations) {
+        if (loc.userId === cleanUser) {
+          this.updateUser({ guildId: loc.guildId, userId: cleanUser, channelId: null, isBot: false });
+        }
+      }
+    }
+  }
+
+  /**
+   * Remove a bot user from the cache by its composite key.
+   * @param {string} compositeKey - `guildId:userId` composite key.
+   */
+  deleteBotUser(compositeKey) {
+    const parts = compositeKey.split(":");
+    const guildId = parts[0];
+    const userId  = parts[1];
+    if (guildId && userId) {
+      this.updateUser({ guildId, userId, channelId: null, isBot: true });
+    }
+  }
+
+  /**
+   * Check whether a human user exists in the cache. If `guildId` is omitted, scans all entries.
+   * @param {string} userId
+   * @param {string|null} [guildId]
+   * @returns {boolean}
+   */
+  hasHumanUser(userId, guildId = null) {
+    if (guildId) {
+      return this.userLocations.has(VoiceStateCache.userKey(guildId, userId));
+    }
+    const cleanUser = cleanId(userId);
+    for (const [uKey, loc] of this.userLocations) {
+      if (loc.userId === cleanUser) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Check whether a bot user exists in the cache by composite key.
+   * @param {string} compositeKey - `guildId:userId` composite key.
+   * @returns {boolean}
+   */
+  hasBotUser(compositeKey) {
+    return this.botLocations.has(compositeKey);
+  }
+
+  /**
+   * Implement the iterable protocol over human user entries.
+   * @yields {[string, { channelId: string, guildId: string }]}
+   */
+  *[Symbol.iterator]() {
+    for (const [uKey, loc] of this.userLocations) {
+      yield [loc.userId, { channelId: loc.channelId, guildId: loc.guildId }];
+    }
+  }
+
+  /**
+   * Number of cached human users (Map-like `.size`).
+   * @type {number}
+   */
+  get size() { return this.userLocations.size; }
+
+  /**
+   * Map-like `has` — checks if a human user is cached.
+   * @param {string} userId
+   * @param {string} [guildId]
+   * @returns {boolean}
+   */
+  has(userId, guildId) {
+    if (guildId !== undefined) {
+      return this.userLocations.has(VoiceStateCache.userKey(guildId, userId));
+    }
+    const cleanUser = cleanId(userId);
+    for (const [, loc] of this.userLocations) {
+      if (loc.userId === cleanUser) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Map-like `get` — retrieve a human user's location.
+   * @param {string} userId
+   * @param {string} [guildId]
+   * @returns {{ channelId: string, guildId: string }|undefined}
+   */
+  get(userId, guildId) {
+    if (guildId !== undefined) {
+      const loc = this.userLocations.get(VoiceStateCache.userKey(guildId, userId));
+      return loc ? { channelId: loc.channelId, guildId: loc.guildId } : undefined;
+    }
+    const cleanUser = cleanId(userId);
+    for (const [, loc] of this.userLocations) {
+      if (loc.userId === cleanUser) return { channelId: loc.channelId, guildId: loc.guildId };
+    }
+    return undefined;
+  }
+
+  /**
+   * Map-like `set` — upsert a human user's location.
+   * @param {string} userId
+   * @param {{ guildId: string, channelId: string }} info
+   */
+  set(userId, info) {
+    const guildId   = info?.guildId;
+    const channelId = info?.channelId;
+    if (guildId && channelId) {
+      this.updateUser({ guildId, userId, channelId, isBot: false });
+    }
+  }
+
+  /**
+   * Map-like `delete` — remove a human user. If `guildId` is omitted, removes all matching entries.
+   * @param {string} userId
+   * @param {string} [guildId]
+   */
+  delete(userId, guildId) {
+    if (guildId !== undefined) {
+      this.updateUser({ guildId, userId, channelId: null, isBot: false });
+    } else {
+      const cleanUser = cleanId(userId);
+      const toRemove = [];
+      for (const [uKey, loc] of this.userLocations) {
+        if (loc.userId === cleanUser) toRemove.push(loc);
+      }
+      for (const loc of toRemove) {
+        this.updateUser({ guildId: loc.guildId, userId: cleanUser, channelId: null, isBot: false });
+      }
+    }
+  }
+
+  /**
+   * Map-like `forEach` — iterate over human user entries.
+   * @param {function(string, { channelId: string, guildId: string }, VoiceStateCache): void} fn
+   */
+  forEach(fn) {
+    for (const [userId, info] of this) {
+      fn(userId, info, this);
+    }
+  }
+
+  /**
+   * Map-like `entries` iterator.
+   * @yields {[string, { channelId: string, guildId: string }]}
+   */
+  *entries() {
+    yield* this;
+  }
+
+  /**
+   * Map-like `keys` iterator.
+   * @yields {string}
+   */
+  *keys() {
+    for (const [userId] of this) {
+      yield userId;
+    }
+  }
+
+  /**
+   * Map-like `values` iterator.
+   * @yields {{ channelId: string, guildId: string }}
+   */
+  *values() {
+    for (const [, info] of this) {
+      yield info;
+    }
+  }
+
+  /**
+   * Diagnostic statistics for the cache.
+   * @type {{ humanUsers: number, botUsers: number, humanChannels: number, botChannels: number, lruUserKeysLen: number, lruBotKeysLen: number }}
+   */
+  get stats() {
+    return {
+      humanUsers: this.userLocations.size,
+      botUsers: this.botLocations.size,
+      humanChannels: this.channelMembers.size,
+      botChannels: this.botChannelMembers.size,
+      lruUserKeysLen: this._lruUserKeys.length,
+      lruBotKeysLen: this._lruBotKeys.length,
+    };
+  }
+}

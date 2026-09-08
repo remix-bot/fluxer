@@ -3,10 +3,10 @@
  * @description Get or change the playback volume for the current voice channel.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { MAX_VOLUME } from "../src/constants/UI.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
+import { MAX_VOLUME } from "../src/utils/UI.mjs";
 
 
 /**

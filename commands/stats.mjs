@@ -5,11 +5,11 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { CommandBuilder } from "../src/CommandHandler.mjs";
-import { Utils } from "../src/Utils.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
+import { Utils } from "../src/utils/Utils.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { logger } from "../src/constants/Logger.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
+import { logger } from "../src/core/Logger.mjs";
 
 /**
  * @type {CommandBuilder}
@@ -33,6 +33,9 @@ const RATE_LIMIT_MAX_RETRIES = 2;
 const RATE_LIMIT_MAX_WAIT_MS = 15_000;
 /** Where the warm cache is persisted (cwd-relative, same convention as ./storage/defaults.json). */
 const CACHE_FILE = path.join(process.cwd(), "storage", "stats-cache.json");
+/** Last-resort label for the gateway line when locale files lack the key
+ *  (customized deployments keep their own locale files across updates). */
+const GATEWAY_FALLBACK_LABEL = "\u{1F310}  **Gateway**";
 
 let cache = { guilds: null, users: null, scrobbles: null, linkedUsers: null, updatedAt: 0 };
 let lastPing        = null;
@@ -181,6 +184,23 @@ function withBudget(promise, ms, fallback) {
 }
 
 /**
+ * Read the gateway heartbeat ACK latency from the WebSocket manager
+ * (`client.ws.ping`). Returns -1 when unavailable (not logged in yet, or
+ * no heartbeat ACK received yet).
+ * @private
+ * @param {object} client - The client instance.
+ * @returns {number} Gateway latency in ms, or -1.
+ */
+function readGatewayPing(client) {
+  try {
+    const ping = client?.ws?.ping;
+    return typeof ping === "number" && Number.isFinite(ping) ? ping : -1;
+  } catch (_) {
+    return -1;
+  }
+}
+
+/**
  * Run a message send/edit action, transparently retrying when the REST
  * library throws a 429 RateLimitError. Waits exactly as long as the API
  * asks for (capped), so bursts in a busy channel degrade to a short delay
@@ -237,6 +257,22 @@ function getLivePlayerCount(playerMap) {
 }
 
 /**
+ * Translate with a hardcoded fallback. Locale lookups that miss (custom or
+ * outdated locale files make translate() return the raw dot-notation key)
+ * render the readable fallback instead of an ugly key path in the embed.
+ * @private
+ * @param {Function} t - Translation function.
+ * @param {object} msg - The command message wrapper.
+ * @param {string} key - Locale key.
+ * @param {string} fallback - Label used when the key is missing.
+ * @returns {string}
+ */
+function tOr(t, msg, key, fallback) {
+  const value = t(msg, key);
+  return value === key ? fallback : value;
+}
+
+/**
  * Build the stats embed with all bot information.
  * @private
  * @param {Function} t - Translation function.
@@ -247,7 +283,8 @@ function getLivePlayerCount(playerMap) {
  * @param {number} s.playerCount - Number of active players.
  * @param {number} s.scrobbleCount - Total Last.fm scrobbles.
  * @param {number} s.linkedUsers - Number of Last.fm linked users.
- * @param {number} s.ping - Bot response ping in ms.
+ * @param {number} s.ping - Bot response ping in ms (REST reply round trip).
+ * @param {number} s.gatewayPing - Gateway heartbeat ACK latency in ms (-1 if unknown).
  * @param {string} s.uptime - Formatted uptime string.
  * @param {string} s.comHash - Git commit hash.
  * @param {string} s.comLink - Git commit link URL.
@@ -276,6 +313,7 @@ function buildEmbed(t, msg, s, pending = []) {
 
   description.push(
       `${t(msg, "responses.stats.ping")} — ${field("ping", `${num(s.ping)}ms`)}`,
+      s.gatewayPing >= 0 ? `${tOr(t, msg, "responses.stats.gateway", GATEWAY_FALLBACK_LABEL)} — \`${num(s.gatewayPing)}ms\`` : null,
       `${t(msg, "responses.stats.uptime")} — \`${s.uptime}\``,
       `${t(msg, "responses.stats.build")} — [\`${s.comHash}\`](${s.comLink})`,
       s.reason ? `${t(msg, "responses.stats.lastRestart")} — \`${s.reason}\`` : null,
@@ -330,6 +368,7 @@ export async function run(message) {
     linkedUsers:   lastfmEnabled ? (cache.linkedUsers ?? 0) : 0,
     lastfmEnabled,
     ping:          lastPing ?? 0,
+    gatewayPing:   readGatewayPing(this.client),
     uptime:        Utils.prettifyMS(Math.round(process.uptime()) * 1000),
     comHash:       this.comHash,
     comLink:       this.comLink,
@@ -374,6 +413,7 @@ export async function run(message) {
         scrobbleCount: lastfmEnabled ? (cache.scrobbles ?? 0) : 0,
         linkedUsers:   lastfmEnabled ? (cache.linkedUsers ?? 0) : 0,
         ping:          lastPing ?? 0,
+        gatewayPing:   readGatewayPing(this.client),
       };
 
       const stillPending = [];

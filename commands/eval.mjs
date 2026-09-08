@@ -3,12 +3,12 @@
  * @description Owner-only command to evaluate arbitrary JavaScript code and display the result.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { logger } from "../src/constants/Logger.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
+import { logger } from "../src/core/Logger.mjs";
 import { inspect } from "node:util";
-import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
+import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/utils/UI.mjs";
 
 /** @private @type {string[]} Property name substrings that indicate sensitive/secret data. */
 const RESTRICTED = [
@@ -88,7 +88,7 @@ function removeSensitive(obj, level = 0, visited = new WeakSet()) {
  * @private
  * @async
  * Sanitize a value for safe display: await promises, redact sensitive keys,
- * inspect with node:util, and escape Discord markup characters.
+ * inspect with node:util, and escape markup characters.
  * @param {*} value - The raw eval result.
  * @returns {Promise<string>} The sanitized output string.
  */

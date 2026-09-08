@@ -5,9 +5,9 @@
  * Reads `config.json` for MySQL credentials and runs once on the "ready" event.
  */
 
-import { RemoteSettingsManager } from "../src/Settings.mjs";
+import { RemoteSettingsManager } from "../src/db/Settings.mjs";
 import fs from "node:fs";
-import { logger } from "../src/constants/Logger.mjs";
+import { logger } from "../src/core/Logger.mjs";
 
 const config = JSON.parse(fs.readFileSync(new URL("../config.json", import.meta.url)));
 

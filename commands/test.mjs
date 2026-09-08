@@ -3,10 +3,10 @@
  * @description Owner-only diagnostic command to display voice channel user counts.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { logger } from "../src/constants/Logger.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
+import { logger } from "../src/core/Logger.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the test command (owner-only). */
 export const command = new CommandBuilder()

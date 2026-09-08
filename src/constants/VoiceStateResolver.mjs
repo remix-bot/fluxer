@@ -5,7 +5,7 @@ import { logger } from "./Logger.mjs";
 /**
  * Iterate over a guild's voice states, normalising different data shapes.
  * Yields objects with `{ userId, channelId, isBot }` for each member in a voice channel.
- * @param {object} guild - Discord guild object with a `voice_states` property.
+ * @param {object} guild - Fluxer guild object with a `voice_states` property.
  * @yields {{ userId: string, channelId: string, isBot: boolean }}
  */
 export function* iterateVoiceStates(guild) {
@@ -49,7 +49,7 @@ export function* iterateVoiceStates(guild) {
  * @param {object} opts
  * @param {string} opts.guildId
  * @param {string} opts.channelId
- * @param {object} [opts.client] - Discord client with `guilds`.
+ * @param {object} [opts.client] - Fluxer client with `guilds`.
  * @param {VoiceStateCache} [opts.voiceCache]
  * @param {Map} [opts.observedVoiceUsers]
  * @param {object} [opts.room] - LiveKit room with `remoteParticipants`.
@@ -112,7 +112,7 @@ export function hasHumansInChannel({ guildId, channelId, client, voiceCache, obs
 
 /**
  * Get the set of channel IDs that contain at least one human user.
- * @param {object} guild - Discord guild object.
+ * @param {object} guild - Fluxer guild object.
  * @returns {Set<string>}
  */
 export function getChannelsWithHumans(guild) {
@@ -125,7 +125,7 @@ export function getChannelsWithHumans(guild) {
 
 /**
  * Get the list of user IDs present in a specific voice channel.
- * @param {object} guild - Discord guild object.
+ * @param {object} guild - Fluxer guild object.
  * @param {string} channelId
  * @returns {string[]}
  */

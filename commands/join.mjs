@@ -6,9 +6,9 @@
  * 24/7 handling, event binding, and permission checks.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor, cleanId, getMessageGuildId } from "../src/MessageHandler.mjs";
+import { getGlobalColor, cleanId, getMessageGuildId } from "../src/ui/index.mjs";
 
 /**
  * @type {CommandBuilder}

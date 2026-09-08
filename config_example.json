@@ -62,7 +62,7 @@
   "dashboard": {
     "enabled": false,
     "redis": {
-      "url": "redis://localhost:6379"
+      "url": "redis://127.0.0.1:6379"
     },
     "Comment": "Optional dashboard backend. When enabled, the bot speaks Redis RPC (request/response/info channels) with an external web frontend. Login codes are verified (bcrypt) from the MySQL login_codes table. Keep Redis network-isolated — the RPC channel has no shared secret."
   },
@@ -116,5 +116,13 @@
     "searchSessionTimeout":  30000,
     "playerSessionTimeout":  300000,
     "intentionalLeaveTTL":    8000
+  },
+  "sharding-Comment": "Optional process-level sharding (@fluxerjs/sharding 3.0, beta). Only read by 'node shard.mjs' / 'npm run shard' — plain 'npm start' ignores this block entirely. totalShards: total gateway shards (use an explicit number, never 'auto'); shardsPerProcess: how many shards each child process runs; respawn: restart dead children; spawnTimeout: ms to wait for a child's ready IPC; spawnDelay: ms between successive spawns. The FLUXER_TOTAL_SHARDS / FLUXER_SHARDS_PER_PROCESS env vars override the first two (handy for Docker). Sharding only matters at ~2500+ guilds; leave at defaults otherwise. Caveats: DMs only reach shard 0, and the dashboard is single-process-first.",
+  "sharding": {
+    "totalShards": 1,
+    "shardsPerProcess": 1,
+    "respawn": true,
+    "spawnTimeout": 30000,
+    "spawnDelay": 5000
   }
 }

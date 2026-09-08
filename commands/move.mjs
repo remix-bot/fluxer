@@ -3,7 +3,7 @@
  * @description Move a track from one position to another in the queue.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the move command. */
 export const command = new CommandBuilder()

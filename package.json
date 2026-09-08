@@ -4,10 +4,10 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@discordjs/opus": "^0.10.0",
-    "@fluxerjs/core": "^2.2.0",
-    "@fluxerjs/util": "^2.2.0",
-    "@fluxerjs/voice": "^2.2.0",
+    "@fluxerjs/core": "^3.0.0",
+    "@fluxerjs/sharding": "^3.0.0",
+    "@fluxerjs/util": "^3.0.0",
+    "@fluxerjs/voice": "^3.0.0",
     "bcryptjs": "^3.0.3",
     "ffprobe-static": "^3.1.0",
     "lavalink-client": "^2.10.3",
@@ -19,6 +19,7 @@
   "scripts": {
     "dev": "node --inspect index.mjs --trace-warnings",
     "start": "node index.mjs",
+    "shard": "node shard.mjs",
     "migrate": "node settings/migrate.mjs"
   }
 }

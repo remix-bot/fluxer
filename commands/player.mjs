@@ -1,55 +1,23 @@
 /**
  * @module commands/player
  * @description Create an interactive player control panel with live progress, reaction controls,
- * and embedded lyrics viewer.
+ * and embedded lyrics viewer. The panel embed construction, display constants and the lyrics
+ * viewer live in commands/player/; run() below owns the session lifecycle (timers, player
+ * event wiring and the control-reaction dispatcher).
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
-import { Utils } from "../src/Utils.mjs";
-import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
-import { logger } from "../src/constants/Logger.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
+import { Utils } from "../src/utils/Utils.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
+import { EMOJI_REMOVE_TIMEOUT } from "../src/utils/UI.mjs";
+import { logger } from "../src/core/Logger.mjs";
+import { CONTROLS, buildPlayerEmbed, openLyricsViewer, clearLyricsReactions } from "./player/index.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the player command. */
 export const command = new CommandBuilder()
     .setName("player")
     .setDescription("Create an interactive player control panel with live progress", "commands.player")
     .setCategory("music");
-
-/** @private @type {Object.<string, string>} Emoji indicators for player states. */
-const STATES = {
-  playing: "🎵",
-  paused: "⏸️",
-  stopped: "🔇",
-  loading: "⏳"
-};
-
-/** @private @type {Object.<string, {emoji: string, action: string, desc: string}>} Available control button definitions. */
-const CONTROLS = {
-  prev: { emoji: "⏮️", action: "previous", desc: "Previous" },
-  play: { emoji: "▶️", action: "resume", desc: "Play" },
-  pause: { emoji: "⏸️", action: "pause", desc: "Pause" },
-  stop: { emoji: "⏹️", action: "stop", desc: "Stop" },
-  next: { emoji: "⏭️", action: "skip", desc: "Skip" },
-  loop: { emoji: "🔁", action: "loop", desc: "Loop" },
-  shuffle: { emoji: "🔀", action: "shuffle", desc: "Shuffle" },
-  volDown: { emoji: "🔉", action: "voldown", desc: "Volume Down" },
-  volUp: { emoji: "🔊", action: "volup", desc: "Volume Up" },
-  lyrics: { emoji: "📜", action: "lyrics", desc: "Lyrics" },
-  filter: { emoji: "🎛️", action: "filter", desc: "Audio Filters" },
-  close: { emoji: "❌", action: "close", desc: "Close" }
-};
-
-/** @private @type {Object.<string, string>} Progress bar character set. */
-const PROGRESS = {
-  filled: "▰",
-  empty: "▱",
-  indicator: "●",
-  start: "▏",
-  end: "▕"
-};
-
 
 /**
  * @async
@@ -73,89 +41,7 @@ export async function run(msg) {
   const allControls = controlsLayout.flat();
   const controlEmojis = allControls.map(c => c.emoji);
 
-  /**
-   * @private
-   * Build the player panel embed with current state, progress, volume, and loop info.
-   * @param {object} [state={}] - Optional state override with a message field.
-   * @returns {EmbedBuilder} The constructed embed builder.
-   */
-  const buildEmbed = (state = {}) => {
-    const current = player.queue.getCurrent();
-    const isPlaying = !player.paused && current;
-    const statusEmoji = isPlaying ? STATES.playing : player.paused ? STATES.paused : STATES.stopped;
-
-    let progressBar = "";
-    let timeDisplay = "`0:00 / 0:00`";
-
-    if (current?.duration && player.startedPlaying) {
-      const elapsed = Date.now() - player.startedPlaying;
-      const totalMs = typeof current.duration === "object"
-          ? (current.duration.seconds ?? 0) * 1000
-          : current.duration;
-
-      const bar = Utils.progressBar(elapsed, totalMs, 20, PROGRESS.filled, PROGRESS.empty, isPlaying ? PROGRESS.indicator : PROGRESS.filled);
-      progressBar = PROGRESS.start + bar + PROGRESS.end;
-
-      const elapsedStr = Utils.prettifyMS(elapsed);
-      const totalStr = Utils.prettifyMS(totalMs);
-      timeDisplay = `\`${elapsedStr} / ${totalStr}\``;
-    } else {
-      progressBar = PROGRESS.start + PROGRESS.empty.repeat(20) + PROGRESS.end;
-    }
-
-    const volPercent = Math.round((player.preferredVolume ?? 1) * 100);
-    const volBars = Math.ceil(volPercent / 10);
-    const volumeBar = "█".repeat(volBars) + "░".repeat(10 - volBars);
-
-    const queueSize = player.queue.size();
-    const loopStatus = player.queue.songLoop ? this.t(msg, "responses.player.loopSong") : player.queue.loop ? this.t(msg, "responses.player.loopQueue") : this.t(msg, "responses.player.loopOff");
-
-    let filterStatus = this.t(msg, "responses.player.filterOff");
-    if (player.activeFilter) {
-      if (player.activeFilter.label.includes("+")) {
-        filterStatus = `🔥 **${player.activeFilter.label}**`;
-      } else {
-        filterStatus = `${player.activeFilter.emoji ?? "🎛️"} **${player.activeFilter.label}**`;
-      }
-    }
-
-    const nowPlaying = current
-        ? `[${Utils.truncate(current.title, 45)}](${current.spotifyUrl || current.url})`
-        : this.t(msg, "responses.filter.nothingPlayingInline");
-
-    const description = [
-      `${statusEmoji} ${this.t(msg, "responses.player.nowPlayingLabel")}`,
-      `${nowPlaying}`,
-      ``,
-      `${progressBar}`,
-      `${timeDisplay}`,
-      ``,
-      this.t(msg, "responses.player.volumeLabel", { volume: volPercent }) + " " + volumeBar,
-      `${this.t(msg, "responses.player.queueLabel", { count: queueSize })} | Loop: ${loopStatus} | Filter: ${filterStatus}`,
-      ``,
-      state.message ? `💬 *${state.message}*` : `💡 *${this.t(msg, "responses.player.reactHint")}*`,
-      ``,
-      this.t(msg, "responses.player.sessionExpires", { minutes: Math.ceil(timeout / 60000) })
-    ].join("\n");
-
-    const avatarUrl = typeof msg.author?.avatarURL === "function"
-        ? msg.author.avatarURL()
-        : msg.author?.avatarURL ?? null;
-
-    const builder = new EmbedBuilder()
-        .setColor(getGlobalColor())
-        .setTitle(this.t(msg, "responses.player.title"))
-        .setDescription(description)
-        .setFooter({
-          text: this.t(msg, "responses.player.requestedBy", { username: msg.author?.username || "Unknown" }),
-          iconURL: avatarUrl
-        });
-    if (typeof builder.setTimestamp === "function") builder.setTimestamp();
-    if (current?.thumbnail) builder.setThumbnail(current.thumbnail);
-    return builder;
-  };
-
-  const message = await msg.reply({ embeds: [buildEmbed()] });
+  const message = await msg.reply({ embeds: [buildPlayerEmbed(this, msg, player, timeout)] });
   if (!message?.message) return;
 
   for (const row of controlsLayout) {
@@ -172,9 +58,8 @@ export async function run(msg) {
   let emojiRemoveTimeout;
   let lastState = {};
 
-  let activeLyricsMsg = null;
-  let lyricsUnobserve = null;
-  let lyricsEmojiTimeout = null;
+  /** @private @type {object} Shared lyrics-viewer session state (cleaned up by closeSession). */
+  const lyrics = { activeLyricsMsg: null, unobserve: null, emojiTimeout: null };
 
   /**
    * @private
@@ -202,29 +87,10 @@ export async function run(msg) {
     clearTimeout(emojiRemoveTimeout);
     emojiRemoveTimeout = setTimeout(async () => {
       await clearReactions();
-      const disabledEmbed = buildEmbed({ message: this.t(msg, "responses.player.controlsDisabled") });
+      const disabledEmbed = buildPlayerEmbed(this, msg, player, timeout, { message: this.t(msg, "responses.player.controlsDisabled") });
       disabledEmbed.footer = { text: this.t(msg, "responses._common.controlsExpired") };
       await message.edit({ embeds: [disabledEmbed] }).catch(() => {});
     }, EMOJI_REMOVE_TIMEOUT);
-  };
-
-  /**
-   * @private
-   * Remove navigation reactions from a lyrics message.
-   * @param {object} lyricsMsg - The wrapped lyrics message with a .message property.
-   * @returns {Promise<void>}
-   */
-  const clearLyricsReactions = async (lyricsMsg) => {
-    if (!lyricsMsg?.message) return;
-    try {
-      await lyricsMsg.message.removeAllReactions();
-    } catch (e) {
-      for (const emoji of ["⬅️", "➡️", "❌"]) {
-        try {
-          await lyricsMsg.message.removeReaction(emoji);
-        } catch(e) { logger.warn("[Player] Error:", e?.message); }
-      }
-    }
   };
 
   let editFailures = 0;
@@ -236,7 +102,7 @@ export async function run(msg) {
    * @returns {void}
    */
   const refresh = (extra = {}) => {
-    const embed = buildEmbed(extra);
+    const embed = buildPlayerEmbed(this, msg, player, timeout, extra);
     message.edit({ embeds: [embed] })
         .then(() => { editFailures = 0; })
         .catch(() => {
@@ -275,17 +141,17 @@ export async function run(msg) {
     player.off("filter",    onFilter);
     player.off("autoleave", onAutoLeave);
 
-    if (lyricsUnobserve) {
-      lyricsUnobserve();
-      clearTimeout(lyricsEmojiTimeout);
+    if (lyrics.unobserve) {
+      lyrics.unobserve();
+      clearTimeout(lyrics.emojiTimeout);
     }
-    if (activeLyricsMsg) {
-      await clearLyricsReactions(activeLyricsMsg);
+    if (lyrics.activeLyricsMsg) {
+      await clearLyricsReactions(lyrics.activeLyricsMsg);
     }
 
     await clearReactions();
 
-    const closedEmbed = buildEmbed({
+    const closedEmbed = buildPlayerEmbed(this, msg, player, timeout, {
       message: this.t(msg, "responses.player.sessionClosed", { reason: reason !== "timeout" ? ` • ${reason}` : "" })
     });
     closedEmbed.setColor(getGlobalColor());
@@ -431,122 +297,7 @@ export async function run(msg) {
           break;
 
         case "lyrics":
-          reply = this.t(msg, "responses.player.fetchingLyrics");
-          refresh({ message: reply });
-
-          try {
-            if (lyricsUnobserve) {
-              lyricsUnobserve();
-              clearTimeout(lyricsEmojiTimeout);
-              if (activeLyricsMsg) await clearLyricsReactions(activeLyricsMsg);
-            }
-
-            const lyricsResult = await player.lyrics();
-            if (!lyricsResult) {
-              reply = this.t(msg, "responses.player.noLyricsFound");
-              shouldUpdate = true;
-              break;
-            }
-
-            const syncBadge = lyricsResult.synced ? " ⏱️ Synced" : "";
-            const lines = lyricsResult.text.split('\n');
-            const totalLines = lines.length;
-            const LINES_PER_PAGE = 25;
-            const totalPages = Math.ceil(totalLines / LINES_PER_PAGE);
-
-            const pages = [];
-            for (let i = 0; i < totalLines; i += LINES_PER_PAGE) {
-              pages.push(lines.slice(i, i + LINES_PER_PAGE).join('\n'));
-            }
-
-            let currentPage = 0;
-
-            const buildLyricsContent = (pageIdx, expired = false, closed = false) => {
-              const title = Utils.truncate(
-                  player.queue.getCurrent()?.title?.replace(/\(Official.*?\)/gi, '').trim() ?? '',
-                  50
-              );
-              const footerText = closed
-                  ? `👋 Lyrics closed • NodeLink • ${totalLines} lines`
-                  : expired
-                      ? `⌛ Controls expired • NodeLink • ${totalLines} lines`
-                      : `NodeLink • ${totalLines} lines total${lyricsResult.synced ? ' • Synced' : ''}`;
-              const desc = [
-                `**${title}**${syncBadge} • Page ${pageIdx + 1}/${totalPages}`,
-                ``,
-                '```',
-                pages[pageIdx],
-                totalPages > 1 && !expired && !closed ? `\n\n💡 ⬅️ ➡️ Navigate • ❌ Close` : '',
-                '```'
-              ].join('\n');
-              return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).setFooter({ text: footerText })] };
-            };
-
-            activeLyricsMsg = await msg.reply(buildLyricsContent(0));
-
-            if (activeLyricsMsg?.message && totalPages > 1) {
-              const navEmojis = ["⬅️", "➡️", "❌"];
-              for (const emoji of navEmojis) {
-                await activeLyricsMsg.message.react(emoji).catch(() => {});
-              }
-
-              const resetLyricsTimer = () => {
-                clearTimeout(lyricsEmojiTimeout);
-                lyricsEmojiTimeout = setTimeout(async () => {
-                  await clearLyricsReactions(activeLyricsMsg);
-                  await activeLyricsMsg.edit(buildLyricsContent(currentPage, true, false)).catch(() => {});
-                }, EMOJI_REMOVE_TIMEOUT);
-              };
-
-              lyricsUnobserve = activeLyricsMsg.onReaction(navEmojis, async (e) => {
-                if (e.emoji_id === "❌") {
-                  lyricsUnobserve();
-                  clearTimeout(lyricsEmojiTimeout);
-                  await clearLyricsReactions(activeLyricsMsg);
-                  await activeLyricsMsg.edit(buildLyricsContent(currentPage, false, true)).catch(() => {});
-                  return;
-                }
-
-                resetLyricsTimer();
-
-                if (e.emoji_id === "⬅️") {
-                  currentPage = currentPage > 0 ? currentPage - 1 : totalPages - 1;
-                } else if (e.emoji_id === "➡️") {
-                  currentPage = currentPage < totalPages - 1 ? currentPage + 1 : 0;
-                }
-
-                await activeLyricsMsg.edit(buildLyricsContent(currentPage));
-              });
-
-              resetLyricsTimer();
-            } else if (activeLyricsMsg?.message) {
-              await activeLyricsMsg.message.react("❌").catch(() => {});
-
-              const resetLyricsTimer = () => {
-                clearTimeout(lyricsEmojiTimeout);
-                lyricsEmojiTimeout = setTimeout(async () => {
-                  await clearLyricsReactions(activeLyricsMsg);
-                  await activeLyricsMsg.edit(buildLyricsContent(0, true, false)).catch(() => {});
-                }, EMOJI_REMOVE_TIMEOUT);
-              };
-
-              lyricsUnobserve = activeLyricsMsg.onReaction(["❌"], async (e) => {
-                if (e.emoji_id === "❌") {
-                  lyricsUnobserve();
-                  clearTimeout(lyricsEmojiTimeout);
-                  await clearLyricsReactions(activeLyricsMsg);
-                  await activeLyricsMsg.edit(buildLyricsContent(0, false, true)).catch(() => {});
-                }
-              });
-
-              resetLyricsTimer();
-            }
-
-            reply = this.t(msg, "responses.player.lyricsDisplayed", { lines: totalLines, pages: totalPages });
-
-          } catch (err) {
-            reply = this.t(msg, "responses.player.lyricsError", { error: Utils.truncate(err.message, 50) });
-          }
+          reply = await openLyricsViewer(this, msg, player, refresh, lyrics);
           shouldUpdate = true;
           break;
 

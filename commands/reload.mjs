@@ -3,9 +3,9 @@
  * @description Owner-only command to hot-reload commands, source modules, or audio modules at runtime.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";

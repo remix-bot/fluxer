@@ -3,9 +3,9 @@
  * @description Resume paused playback in the current voice channel.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
 
 /**
  * @type {CommandBuilder}

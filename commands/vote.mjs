@@ -3,13 +3,13 @@
  * @description View voting info, check voters, or browse voter lists for a server/bot on FluxerList.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { Utils } from "../src/Utils.mjs";
-import { FLUXERLIST, buildVoteLink } from "../src/constants/API.mjs";
-import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
-import { logger } from "../src/constants/Logger.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
+import { Utils } from "../src/utils/Utils.mjs";
+import { FLUXERLIST, buildVoteLink } from "../src/utils/API.mjs";
+import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/utils/UI.mjs";
+import { logger } from "../src/core/Logger.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the vote command. */
 export const command = new CommandBuilder()

@@ -3,12 +3,12 @@
  * @description Display synced or unsynced lyrics for the currently playing track from NodeLink.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
-import { logger } from "../src/constants/Logger.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
+import { logger } from "../src/core/Logger.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { Utils } from "../src/Utils.mjs";
-import { EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
+import { Utils } from "../src/utils/Utils.mjs";
+import { EMOJI_REMOVE_TIMEOUT } from "../src/utils/UI.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the lyrics command. */
 export const command = new CommandBuilder()

@@ -4,14 +4,14 @@
  * Supports YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, and Last.fm integration.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { logger } from "../src/constants/Logger.mjs";
-import { PROVIDER_CHOICES, parseInlineProvider } from "../src/constants/providers.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
+import { logger } from "../src/core/Logger.mjs";
+import { PROVIDER_CHOICES, parseInlineProvider } from "../src/music/providers.mjs";
 import { playLastFmCategory } from "./lastfm.mjs";
-import { parseLastFmUrl, isLastFmUrl } from "../src/LastFmManager.mjs";
-import { ERROR_COLOR } from "../src/constants/UI.mjs";
+import { parseLastFmUrl, isLastFmUrl } from "../src/services/lastfm/LastFmManager.mjs";
+import { ERROR_COLOR } from "../src/utils/UI.mjs";
 
 const LASTFM_PLAY_CATEGORIES = ["loved", "top", "recent", "albums"];
 

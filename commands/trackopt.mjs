@@ -3,12 +3,12 @@
  * @description Set custom start/end times for tracks with named alias support.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { Utils } from "../src/Utils.mjs";
-import { logger } from "../src/constants/Logger.mjs";
-import { ERROR_COLOR } from "../src/constants/UI.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
+import { Utils } from "../src/utils/Utils.mjs";
+import { logger } from "../src/core/Logger.mjs";
+import { ERROR_COLOR } from "../src/utils/UI.mjs";
 
 /** @private @type {string} The default alias name for non-named track options. */
 const DEFAULT_ALIAS = "default";

@@ -21,4 +21,8 @@ if [ "$1" = "node" ] && [ "$2" = "index.mjs" ]; then
   echo "[Docker] Starting Remix bot..."
 fi
 
+if [ "$1" = "node" ] && [ "$2" = "shard.mjs" ]; then
+  echo "[Docker] Starting Remix bot (sharded supervisor)..."
+fi
+
 exec "$@"

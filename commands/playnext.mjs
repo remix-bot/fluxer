@@ -4,10 +4,10 @@
  * Supports inline provider prefixes and flag-based provider selection.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { PROVIDER_CHOICES, parseInlineProvider } from "../src/constants/providers.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
+import { PROVIDER_CHOICES, parseInlineProvider } from "../src/music/providers.mjs";
 
 
 /**

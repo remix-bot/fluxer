@@ -3,7 +3,7 @@
  * @description Remove a specific track from the queue by its position.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the remove command. */
 export const command = new CommandBuilder()

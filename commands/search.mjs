@@ -3,12 +3,12 @@
  * @description Search for tracks across providers and pick one to play via reaction selection.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
-import { Message, getGlobalColor } from "../src/MessageHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
+import { Message, getGlobalColor } from "../src/ui/index.mjs";
 import { EmbedBuilder }   from "@fluxerjs/core";
-import { PROVIDER_CHOICES, PROVIDER_NAMES, parseInlineProvider } from "../src/constants/providers.mjs";
-import { NUMBER_EMOJIS, CANCEL_EMOJI } from "../src/constants/UI.mjs";
-import { logger } from "../src/constants/Logger.mjs";
+import { PROVIDER_CHOICES, PROVIDER_NAMES, parseInlineProvider } from "../src/music/providers.mjs";
+import { NUMBER_EMOJIS, CANCEL_EMOJI } from "../src/utils/UI.mjs";
+import { logger } from "../src/core/Logger.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the search command. */
 export const command = new CommandBuilder()

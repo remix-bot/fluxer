@@ -565,6 +565,7 @@
       "scrobbles": "🎵  **Scrobbles**",
       "linkedUsers": "🔗  **Verknüpfte Last.fm**",
       "ping": "🏓  **Ping**",
+      "gateway": "🌐  **Gateway**",
       "uptime": "⏱️  **Uptime**",
       "build": "🔧  **Build**",
       "lastRestart": "🪛  **Letzter Neustart**",

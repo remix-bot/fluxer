@@ -3,11 +3,11 @@
  * @description Owner-only command to list all servers the bot is in with pagination.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { EMOJI_REMOVE_TIMEOUT } from "../src/constants/UI.mjs";
-import { logger } from "../src/constants/Logger.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
+import { EMOJI_REMOVE_TIMEOUT } from "../src/utils/UI.mjs";
+import { logger } from "../src/core/Logger.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the servers command (owner-only). */
 export const command = new CommandBuilder()

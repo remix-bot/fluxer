@@ -3,12 +3,12 @@
  * @description Interactive audio filter picker with emoji-based selection and pagination.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder }   from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
-import { Utils }          from "../src/Utils.mjs";
-import { PREV_EMOJI, NEXT_EMOJI, CANCEL_EMOJI } from "../src/constants/UI.mjs";
-import { logger } from "../src/constants/Logger.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
+import { Utils }          from "../src/utils/Utils.mjs";
+import { PREV_EMOJI, NEXT_EMOJI, CANCEL_EMOJI } from "../src/utils/UI.mjs";
+import { logger } from "../src/core/Logger.mjs";
 
 const NAV_EMOJIS = [PREV_EMOJI, NEXT_EMOJI, CANCEL_EMOJI];
 

@@ -1,8 +1,9 @@
-node_modules/
-storage/data
 config.json
-settings.json
-remix-settings.json
-test_data/
-*.code-workspace
-.idea/
+.env
+storage/stats-cache.json
+storage/locales/user/
+*.log
+logs/
+.DS_Store
+Thumbs.db
+.idea

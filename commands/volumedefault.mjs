@@ -3,11 +3,11 @@
  * @description View or set the server default volume. Requires Manage Server permission to set.
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/MessageHandler.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
 import { PermissionFlags } from "@fluxerjs/core";
-import { MAX_VOLUME } from "../src/constants/UI.mjs";
+import { MAX_VOLUME } from "../src/utils/UI.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the volumedefault command. */
 export const command = new CommandBuilder()

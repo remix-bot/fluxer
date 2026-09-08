@@ -36,7 +36,7 @@ USER remix
 EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD pgrep -f "node index.mjs" >/dev/null 2>&1 || exit 1
+  CMD pgrep -f "node .*index.mjs" >/dev/null 2>&1 || pgrep -f "node .*shard.mjs" >/dev/null 2>&1 || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker/docker-entrypoint.sh"]
 

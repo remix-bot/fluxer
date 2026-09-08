@@ -3,8 +3,8 @@
  * @description Force the bot to leave a voice channel (requires ManageChannels permission).
  */
 
-import { CommandBuilder } from "../src/CommandHandler.mjs";
-import { cleanId } from "../src/MessageHandler.mjs";
+import { CommandBuilder } from "../src/commands/index.mjs";
+import { cleanId } from "../src/ui/index.mjs";
 
 /**
  * @type {CommandBuilder}

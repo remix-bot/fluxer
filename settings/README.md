@@ -5,7 +5,7 @@ Per-guild settings for Remix, backed by MySQL.
 ## How it works
 
 - Defaults live in `storage/defaults.json`. Every guild starts from this template.
-- `src/Settings.mjs` contains the implementation:
+- `src/db/Settings.mjs` contains the implementation:
   - `SettingsManager` — defines the setting keys, their defaults and descriptions.
   - `ServerSettings` — per-guild view; `get`/`set`/`reset` operate in memory and persist with an 80 ms debounced write.
   - `RemoteSettingsManager` — loads every guild row from the MySQL `settings` table (`id` primary key + `data` JSON column) and writes individual keys back with `JSON_SET`.
@@ -22,7 +22,7 @@ Per-guild settings for Remix, backed by MySQL.
 
 | File | Purpose |
 | :--- | :--- |
-| `Settings.mjs` | Re-export of `src/Settings.mjs` classes |
+| `Settings.mjs` | Re-export of `src/db/Settings.mjs` classes |
 | `migrate.mjs` | One-shot tool that clones every guild row from one settings table/bot ID to another (`npm run migrate`) |
 | `runnables.mjs` | Validators applied when a setting changes (e.g. `prefix` must be ≤ 5 chars with no whitespace, `pfp` only accepts `default`) |
 
