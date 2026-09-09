@@ -433,6 +433,7 @@ class GatewayHandler {
    */
   onReady() {
     this._lastReadyAt = Date.now();
+    this._graceStartedAt = Date.now();
     this.seedVoiceStatesFromGuilds();
     this.seedGuildsFromRest().catch(e => logger.warn("[onReady] seedGuildsFromRest error:", e.message));
     this.attachRawListener();

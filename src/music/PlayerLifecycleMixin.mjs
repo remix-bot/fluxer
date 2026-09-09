@@ -14,7 +14,7 @@
 import Player from "./player/index.mjs";
 import { cleanId } from "../utils/Utils.mjs";
 import { logger } from "../core/Logger.mjs";
-import { get247ChannelMode } from "../utils/Helpers247.mjs";
+import { get247ChannelMode, isPlayerConnectionDead, detachPlayerFromManager } from "../utils/Helpers247.mjs";
 import { EmbedBuilder, PermissionFlags } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { getGlobalColor, getMessageGuildId } from "../ui/index.mjs";
@@ -296,18 +296,30 @@ const PlayerLifecycleMixin = {
     const existing = this.playerMap.get(cleanChannelId)
       ?? this.getPlayerByChannelId(cleanChannelId);
     if (existing) {
-      existing.textChannel = message.channel?.channel ?? message.channel;
-      try {
-        const textChannelId = message?.channel?.id ?? message?.channel?.channel?.id ?? null;
-        const existingGuildId = getMessageGuildId(message);
-        if (existingGuildId && textChannelId) {
-          this.settings.getServer(existingGuildId)?.set("announcementChannelId", textChannelId);
+      if (isPlayerConnectionDead(existing)) {
+        // Zombie in the map (e.g. 24/7 player whose voice session died):
+        // returning it would make !play silently do nothing. Evict it and
+        // fall through to spawn a fresh live player.
+        logger.voice247(
+            `[PlayerManager] Existing player for ${cleanChannelId} has a dead connection — evicting before initPlayer.`
+        );
+        const remix = this.commands?.client?._remix ?? null;
+        detachPlayerFromManager(remix ?? { players: this }, existing, cleanChannelId);
+        try { existing.destroy(); } catch (_) {}
+      } else {
+        existing.textChannel = message.channel?.channel ?? message.channel;
+        try {
+          const textChannelId = message?.channel?.id ?? message?.channel?.channel?.id ?? null;
+          const existingGuildId = getMessageGuildId(message);
+          if (existingGuildId && textChannelId) {
+            this.settings.getServer(existingGuildId)?.set("announcementChannelId", textChannelId);
+          }
+        } catch(e) {
+          logger.warn("[PlayerManager] Failed to save announcement channel ID:", e?.message);
         }
-      } catch(e) {
-        logger.warn("[PlayerManager] Failed to save announcement channel ID:", e?.message);
+        message.reply(this._t(message, "responses.join.alreadyJoined", { channel: cid }));
+        return existing;
       }
-      message.reply(this._t(message, "responses.join.alreadyJoined", { channel: cid }));
-      return existing;
     }
     if (this._pendingJoins.has(cleanChannelId)) {
       message.reply(this._t(message, "responses.join.joining"));

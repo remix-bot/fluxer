@@ -13,7 +13,7 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { getGlobalColor, PageBuilder } from "../ui/index.mjs";
 import { cleanId } from "../utils/Utils.mjs";
-import { remove247ChannelMode } from "../utils/Helpers247.mjs";
+import { remove247ChannelMode, isPlayerConnectionDead, detachPlayerFromManager } from "../utils/Helpers247.mjs";
 import { logger } from "./Logger.mjs";
 import { Dashboard } from "../dashboard/Dashboard.mjs";
 
@@ -158,12 +158,77 @@ const BotVoiceMixin = {
   markIntentionalLeave(channelId, ttlMs = null) {
     const cleanChId = cleanId(channelId);
     if (!cleanChId) return;
+    // A user-initiated leave must also cancel any rejoin already armed for
+    // this channel — otherwise the bot would come back 3s after !leave.
+    this.cancel247Rejoin?.(cleanChId);
     if (ttlMs === null) ttlMs = this.config?.timers?.intentionalLeaveTTL ?? 10_000;
     const existing = this.intentionalLeaves.get(cleanChId);
     if (existing) clearTimeout(existing);
     this.intentionalLeaves.set(cleanChId, setTimeout(() => {
       this.intentionalLeaves.delete(cleanChId);
     }, ttlMs));
+  },
+
+  /**
+   * Arm a BOT-LEVEL 24/7 rejoin timer for a channel. The timer lives on the
+   * Remix context (not on any Player instance), so it survives player
+   * destruction — the previous per-player timer was cancelled by the very
+   * destroy() that the recovery required. Deduplicates per channel and
+   * respects intentional leaves at arm-time and at fire-time.
+   * @this {import('./Bot.mjs').Remix}
+   * @param {string} channelId - The channel to rejoin.
+   * @param {string} guildId - The guild ID (for the rejoin call).
+   * @param {number|null} [delayMs=null] - Delay override (default: config.timers.rejoin247Delay or 3s).
+   */
+  schedule247Rejoin(channelId, guildId, delayMs = null) {
+    const cleanCh = cleanId(channelId);
+    const cleanG  = cleanId(guildId);
+    if (!cleanCh || !cleanG) return;
+
+    if (this.intentionalLeaves.has(cleanCh)) {
+      logger.voice247(`[247] Rejoin for ${cleanCh} not armed — intentional leave registered`);
+      return;
+    }
+
+    if (!this._247RejoinTimers) this._247RejoinTimers = new Map();
+    if (this._247RejoinTimers.has(cleanCh)) return; // already armed — keep the earliest
+
+    const delay = delayMs ?? this.config?.timers?.rejoin247Delay ?? 3_000;
+    logger.voice247(`[247] Arming bot-level rejoin for ${cleanCh} (guild ${cleanG}) in ${delay / 1000}s`);
+
+    const timer = setTimeout(() => {
+      this._247RejoinTimers?.delete(cleanCh);
+      if (this.intentionalLeaves.has(cleanCh)) {
+        logger.voice247(`[247] Rejoin for ${cleanCh} cancelled — intentional leave registered`);
+        return;
+      }
+      try {
+        const p = this.gatewayHandler?._rejoinChannel?.(cleanG, cleanCh);
+        if (p && typeof p.catch === "function") {
+          p.catch(err => logger.warn(`[247] Rejoin failed for channel ${cleanCh}:`, err?.message ?? err));
+        }
+      } catch (err) {
+        logger.warn(`[247] Rejoin failed for channel ${cleanCh}:`, err?.message ?? err);
+      }
+    }, delay);
+
+    this._247RejoinTimers.set(cleanCh, timer);
+  },
+
+  /**
+   * Cancel a pending bot-level 24/7 rejoin timer for a channel.
+   * @this {import('./Bot.mjs').Remix}
+   * @param {string} channelId - The channel ID.
+   */
+  cancel247Rejoin(channelId) {
+    const cleanCh = cleanId(channelId);
+    if (!cleanCh || !this._247RejoinTimers) return;
+    const timer = this._247RejoinTimers.get(cleanCh);
+    if (timer) {
+      clearTimeout(timer);
+      this._247RejoinTimers.delete(cleanCh);
+      logger.voice247(`[247] Cancelled pending rejoin for ${cleanCh}`);
+    }
   },
 
   /**
@@ -184,7 +249,17 @@ const BotVoiceMixin = {
 
     const existing = this.players.playerMap.get(cleanChannelId)
         ?? this.players.getPlayerByGuildAndChannel(cleanGuildId, cleanChannelId);
-    if (existing) return existing;
+    if (existing) {
+      if (!isPlayerConnectionDead(existing)) return existing;
+      // A connection-less zombie (e.g. a 24/7 player whose LiveKit session
+      // died without a serverLeave reaching us) is worse than useless: it
+      // blocks rejoins AND swallows !play. Evict it and spawn a live one.
+      logger.voice247(
+          `[_spawnPlayer] Existing player for ${cleanChannelId} has a dead connection — evicting and respawning.`
+      );
+      detachPlayerFromManager(this, existing, cleanChannelId);
+      try { existing.destroy(); } catch (_) {}
+    }
 
     if (!this.lavalink) throw new Error("Audio node not ready yet — try again in a moment");
 

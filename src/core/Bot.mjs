@@ -218,6 +218,8 @@ class Remix {
       }
     }, 60_000);
     this.intentionalLeaves = new Map();
+    /** Bot-level 24/7 rejoin timers (channelId → Timeout). Owned by Remix, not by Players. */
+    this._247RejoinTimers = new Map();
 
     this.gatewayHandler = new GatewayHandler(this);
     this.gatewayHandler.setupEventHandlers();

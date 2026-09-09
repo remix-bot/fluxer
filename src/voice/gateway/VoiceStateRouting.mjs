@@ -11,7 +11,7 @@
  */
 
 import { logger } from "../../core/Logger.mjs";
-import { get247ChannelMode } from "../../utils/Helpers247.mjs";
+import { get247ChannelMode, isPlayerConnectionDead } from "../../utils/Helpers247.mjs";
 import { VoiceStateCache } from "../VoiceStateCache.mjs";
 import { cleanId } from "../../utils/Utils.mjs";
 
@@ -313,12 +313,16 @@ const VoiceStateRouting = {
           const homeCh = cleanId(existingPlayer._home247Channel ?? "");
           if (homeCh && homeCh !== cleanOld) remix.players.playerMap.delete(homeCh);
           try { existingPlayer.destroy(); } catch (_) {}
-          const rejoinDelay = this.T.rejoin247Delay ?? 3_000;
-          setTimeout(() => {
-            this._rejoinChannel(cleanId(guildId), cleanOld).catch(err => {
-              logger.warn(`[247] Failed to rejoin ${cleanOld} after move-away:`, err.message);
-            });
-          }, rejoinDelay);
+          if (typeof remix.schedule247Rejoin === "function") {
+            remix.schedule247Rejoin(cleanOld, cleanId(guildId));
+          } else {
+            const rejoinDelay = this.T.rejoin247Delay ?? 3_000;
+            setTimeout(() => {
+              this._rejoinChannel(cleanId(guildId), cleanOld).catch(err => {
+                logger.warn(`[247] Failed to rejoin ${cleanOld} after move-away:`, err.message);
+              });
+            }, rejoinDelay);
+          }
         } else if (newChannelSaved || newChannelPendingSpawn) {
           // New channel is already 24/7 or being spawned — keep both, don't rekey.
           logger.voice247(
@@ -362,11 +366,31 @@ const VoiceStateRouting = {
 
         if (this._inStartupGrace) {
           const bootPlayer = remix.players.playerMap.get(cleanOld);
-          if (bootPlayer && !bootPlayer._destroyed) {
+          const playerAlive = !!bootPlayer && !bootPlayer._destroyed && !isPlayerConnectionDead(bootPlayer);
+          if (playerAlive) {
             logger.voiceState(
                 `[VoiceState] Bot disconnected from ${cleanOld} during startup grace — ` +
                 `player still active, ignoring stale disconnect.`
             );
+            return;
+          }
+
+          // Player missing or already dead. The old code just dropped the
+          // event ("deferring until grace period ends" — nothing ever
+          // replayed it), so a 24/7 channel killed during boot never came
+          // back. Arm a deferred bot-level rejoin for just after the grace
+          // window instead.
+          const graceSet = remix.settingsMgr.getServer(guildId);
+          const graceMode = graceSet ? get247ChannelMode(graceSet, cleanOld) : "off";
+          if (graceMode === "on" && typeof remix.schedule247Rejoin === "function") {
+            const graceStarted = this._graceStartedAt ?? Date.now();
+            const graceRemaining = Math.max(0, this._startupDeleteGraceMs - (Date.now() - graceStarted));
+            const rejoinDelay = remix.config?.timers?.rejoin247Delay ?? this.T.rejoin247Delay ?? 3_000;
+            logger.voice247(
+                `[VoiceState] Bot disconnected from ${cleanOld} during startup grace with a dead player — ` +
+                `arming deferred 24/7 rejoin in ${Math.round((graceRemaining + rejoinDelay) / 1000)}s.`
+            );
+            remix.schedule247Rejoin(cleanOld, cleanGuild, graceRemaining + rejoinDelay);
           } else {
             logger.voiceState(
                 `[VoiceState] Bot disconnected from ${cleanOld} during startup grace — ` +
@@ -409,11 +433,15 @@ const VoiceStateRouting = {
               }
             }
             const rejoinDelay = this.T.rejoin247Delay ?? 3_000;
-            setTimeout(() => {
-              this._rejoinChannel(cleanGuild, cleanOld).catch(err => {
-                logger.warn(`[VoiceState] Failed to rejoin ${cleanOld} after disconnect:`, err.message);
-              });
-            }, rejoinDelay);
+            if (typeof remix.schedule247Rejoin === "function") {
+              remix.schedule247Rejoin(cleanOld, cleanGuild);
+            } else {
+              setTimeout(() => {
+                this._rejoinChannel(cleanGuild, cleanOld).catch(err => {
+                  logger.warn(`[VoiceState] Failed to rejoin ${cleanOld} after disconnect:`, err.message);
+                });
+              }, rejoinDelay);
+            }
           } else {
             const leavePlayer = remix.players.playerMap.get(cleanOld);
             if (leavePlayer && !leavePlayer.leaving && !leavePlayer._destroyed) {

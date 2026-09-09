@@ -15,7 +15,7 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../../ui/index.mjs";
 import { Utils, cleanId } from "../../utils/Utils.mjs";
 import { logger } from "../../core/Logger.mjs";
-import { get247ChannelMode } from "../../utils/Helpers247.mjs";
+import { get247ChannelMode, detachPlayerFromManager } from "../../utils/Helpers247.mjs";
 import { hasHumansInChannel } from "../../voice/VoiceStateResolver.mjs";
 import { FluxerAudioBridge } from "../audio/FluxerAudioBridge.mjs";
 import { applyMixins } from "../../utils/mixins.mjs";
@@ -108,8 +108,6 @@ class Player extends EventEmitter {
   _isJoining           = false;
   /** @private @type {boolean} */
   _destroyed           = false;
-  /** @private @type {Timeout|null} */
-  _rejoinTimer         = null;
 
   /**
    * @param {string} token - Bot authentication token (used internally).
@@ -317,51 +315,45 @@ class Player extends EventEmitter {
   }
 
   /**
-   * Schedule a 24/7 rejoin after a delay. Guards against destroyed players,
-   * registered intentional leaves, and pending/duplicate joins.
-   * @param {string} channelId - The channel to rejoin.
+   * 24/7 serverLeave recovery: remove this (now connection-less) player
+   * from every manager index, schedule a BOT-LEVEL rejoin, notify listeners,
+   * and destroy the player.
+   *
+   * Why bot-level: the old design kept the rejoin timer on the dying player
+   * (`this._rejoinTimer`), so `destroy()` — which cleared that timer — and
+   * the rejoin scheduler fought each other; and when the player survived,
+   * `_rejoinChannel` skipped the rejoin because the zombie was still in the
+   * playerMap. Either way the channel never came back. The rejoin now lives
+   * on the Remix context (`ctx.schedule247Rejoin`), which survives this
+   * instance's destruction.
+   *
+   * @param {string} channelId - The 24/7 channel to rejoin.
    * @param {string} guildId - The guild ID.
-   * @param {string} mode - The 24/7 mode ("on").
    * @private
    */
-  _schedule247Rejoin(channelId, guildId, mode) {
+  _detachAndSchedule247Rejoin(channelId, guildId) {
     const ctx = this.client?._remix;
-    if (!ctx) {
-      logger.warn(`[Player] Cannot schedule 24/7 rejoin for ${channelId} — no bot context`);
+    if (typeof ctx?.schedule247Rejoin !== "function") {
+      logger.warn(`[Player] No bot-level rejoin scheduler for ${channelId} — falling back to autoleave`);
+      this.emit("autoleave");
       return;
     }
 
-    if (ctx.players?._pendingJoins?.has?.(channelId)) {
-      logger.voice247(`[Player] 24/7 rejoin skipped for ${channelId} — join already pending`);
-      return;
-    }
+    // 1) Detach from playerMap (active + home keys) so rejoin paths no
+    //    longer see a "player already here" and skip.
+    detachPlayerFromManager(ctx, this, channelId);
 
-    if (ctx.players?.playerMap?.has(channelId)) {
-      const existing = ctx.players.playerMap.get(channelId);
-      if (existing && !existing._destroyed && existing !== this) {
-        logger.voice247(`[Player] 24/7 rejoin skipped for ${channelId} — another player already exists`);
-        return;
-      }
-    }
+    // 2) Arm the ctx-level rejoin BEFORE destroying ourselves — the timer
+    //    must outlive this instance.
+    ctx.schedule247Rejoin(channelId, guildId);
 
-    const rejoinDelay = ctx.config?.timers?.rejoin247Delay ?? 3_000;
-    logger.voice247(`[Player] Scheduling 24/7 ${mode} rejoin for channel ${channelId} (guild ${guildId}) in ${rejoinDelay / 1000}s`);
+    // 3) Notify (dashboard close/stopplay); the manager-level autoleave
+    //    listeners suppress the actual leave for 24/7 channels, so this is
+    //    notification-only.
+    this.emit("autoleave");
 
-    this._rejoinTimer = setTimeout(() => {
-      this._rejoinTimer = null;
-      if (this._destroyed) {
-        logger.voice247(`[Player] 24/7 rejoin cancelled — player destroyed`);
-        return;
-      }
-      if (ctx.intentionalLeaves?.has(channelId)) {
-        logger.voice247(`[Player] 24/7 rejoin cancelled — intentional leave registered`);
-        return;
-      }
-
-      ctx.gatewayHandler?._rejoinChannel?.(guildId, channelId).catch(err => {
-        logger.warn(`[Player] 24/7 rejoin failed for channel ${channelId}:`, err?.message);
-      });
-    }, rejoinDelay);
+    // 4) Finally destroy the dead instance.
+    this.destroy();
   }
 
   /**
@@ -543,10 +535,14 @@ class Player extends EventEmitter {
           const cId = cleanId(this._channelId ?? this._home247Channel ?? "");
           const gId = cleanId(this._guildId ?? "");
 
-          if (mode === "on") {
-            logger.player("[Player] serverLeave in 24/7 mode — scheduling rejoin");
-            this.emit("autoleave");
-            if (cId && gId) this._schedule247Rejoin(cId, gId, mode);
+          if (mode === "on" && cId && gId) {
+            // 24/7: the voice session is gone but the commitment stands.
+            // Detach this now-dead player (a zombie in the map makes every
+            // rejoin path bail with "already has a player"), arm a
+            // bot-level rejoin that survives our own destroy, notify, then
+            // destroy ourselves.
+            logger.player("[Player] serverLeave in 24/7 mode — detaching and scheduling rejoin");
+            this._detachAndSchedule247Rejoin(cId, gId);
           } else {
             logger.player("[Player] Unexpected serverLeave");
             this.emit("autoleave");
@@ -666,7 +662,6 @@ class Player extends EventEmitter {
       }
       this.leaving          = true;
       this._stopInactivityTimer();
-      if (this._rejoinTimer) { clearTimeout(this._rejoinTimer); this._rejoinTimer = null; }
       this._autoplay = false;
       if (this._autoplayHandler) {
         this.removeListener("queueEnd", this._autoplayHandler);

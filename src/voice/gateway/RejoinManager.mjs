@@ -11,6 +11,7 @@
 
 import { logger } from "../../core/Logger.mjs";
 import { cleanId } from "../../utils/Utils.mjs";
+import { isPlayerConnectionDead, detachPlayerFromManager } from "../../utils/Helpers247.mjs";
 import { GatewayHandler } from "./GatewayHandler.mjs";
 
 /**
@@ -85,9 +86,20 @@ const RejoinManager = {
 
     const existing = remix.players.playerMap.get(cleanChannelId);
     if (existing && !existing._destroyed) {
-      logger.voice247(`[Rejoin] Channel ${cleanChannelId} already has a player — skipping.`);
-      this._rejoinAttempts.delete(cleanChannelId);
-      return;
+      if (!isPlayerConnectionDead(existing)) {
+        logger.voice247(`[Rejoin] Channel ${cleanChannelId} already has a live player — skipping.`);
+        this._rejoinAttempts.delete(cleanChannelId);
+        return;
+      }
+      // Ghost/zombie player: object alive in the map but its voice session
+      // is long gone (serverLeave / dead socket). It used to block this
+      // rejoin with "already has a player" — the #1 reason 24/7 silently
+      // died. Evict it and respawn a live connection.
+      logger.voice247(
+          `[Rejoin] Existing player for ${cleanChannelId} has a dead connection — evicting before rejoin.`
+      );
+      detachPlayerFromManager(remix, existing, cleanChannelId);
+      try { existing.destroy(); } catch (_) {}
     }
 
     if (remix.players._pendingJoins?.has?.(cleanChannelId)) {
