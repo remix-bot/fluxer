@@ -101,9 +101,17 @@ export async function run(msg, data) {
       const id = cleanId(p._channelId ?? mapKey);
       return id ? `<#${id}>` : "\`unknown\`";
     });
+    if (!client?.channels?.get?.(targetChannelId)) {
+      return msg.reply(
+          this.t(msg, "responses.leave.specifyChannel", {
+            channels: channelList.map(c => `• ${c}`).join("\n"),
+            prefix: this.handler.getPrefix(msg.message?.guildId ?? msg.channel?.guild?.id)
+          })
+      );
+    }
     return msg.reply(
         this.t(msg, "responses.leave.noPlayerInChannel", {
-          channel: `<#${targetChannelId}>`,
+          channel: targetChannelId,
           channels: channelList.map(c => `• ${c}`).join("\n")
         })
     );

@@ -287,7 +287,7 @@ const PlayerLifecycleMixin = {
 
     if (!botHasVoicePermissions(this.commands?.client, cid)) {
       message.reply(
-          this._t(message, "responses.join.joinFailedPerms", { channel: `<#${cleanId(cid)}>` })
+          this._t(message, "responses.join.joinFailedPerms", { channel: cleanId(cid) })
       );
       return null;
     }
@@ -539,7 +539,7 @@ const PlayerLifecycleMixin = {
           errorMsg = this._t(message, "responses.join.joinFailedGeneric");
         }
       } else if (errCode === "PERMISSION") {
-        errorMsg = this._t(message, "responses.join.joinFailedPerms", { channel: `<#${cleanChannelId}>` });
+        errorMsg = this._t(message, "responses.join.joinFailedPerms", { channel: cleanChannelId });
       } else if (errCode === "NOT_FOUND") {
         errorMsg = this._t(message, "responses.join.joinFailedNotFound");
       } else if (errCode === "TIMEOUT") {
