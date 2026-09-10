@@ -123,7 +123,7 @@ function build247PanelDescription(set, ctx, guildId, justToggledId = null) {
       : panelKey("autoRecoveryDisabledLine");
 
   if (channels.length === 0) {
-    return "\u274C 24/7 is **disabled**\n\n" +
+    return panelKey("disabledLine") + "\n\n" +
         panelKey("allChannelsDisabled") + "\n\n" +
         panelKey("disabledHint", { prefix }) + "\n\n" +
         recoveryLine;
@@ -141,7 +141,8 @@ function build247PanelDescription(set, ctx, guildId, justToggledId = null) {
 
   return (channels.length === 1 && allConnected
           ? panelKey("enabledLine") + "\n\n"
-          : "\u2705 24/7 active in " + channels.length + " channel(s):\n\n") +
+          : panelKey(channels.length === 1 ? "activeChannels_one"
+              : "activeChannels_other", { count: channels.length }) + "\n\n") +
       lines.join("\n") +
       "\n\n" + recoveryLine;
 }
@@ -269,7 +270,7 @@ export async function handle247Toggle(ctx, message, set, guildId) {
   if (channels.has(id)) {
     await disable247(ctx, set, guildId, userChannelId);
     return message.reply(embed(
-        panelKey("confirmDisabled", { channel: id }) + "\n\n" +
+        panelKey("confirmDisabled", { channel: "<#" + id + ">" }) + "\n\n" +
         build247PanelDescription(set, ctx, guildId, null),
         { title: panelKey("title") }
     ));
@@ -277,7 +278,7 @@ export async function handle247Toggle(ctx, message, set, guildId) {
 
   await enable247(ctx, set, guildId, userChannelId);
   return message.reply(embed(
-      panelKey("confirmEnabled", { channel: id }) + "\n\n" +
+      panelKey("confirmEnabled", { channel: "<#" + id + ">" }) + "\n\n" +
       build247PanelDescription(set, ctx, guildId, id),
       { title: panelKey("title") }
   ));

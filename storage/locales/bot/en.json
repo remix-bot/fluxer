@@ -663,7 +663,10 @@
         "footerLine": "{{prefix}}247 · toggle · {{prefix}}247 off · disable all",
         "confirmEnabled": "✅ 24/7 enabled in {{channel}} — the bot will stay connected and auto-rejoin if disconnected.",
         "confirmDisabled": "❌ 24/7 disabled in {{channel}} — the bot will leave when idle.",
-        "confirmDisabledAll": "❌ 24/7 disabled for all channels in this server — the bot will leave when idle."
+        "confirmDisabledAll": "❌ 24/7 disabled for all channels in this server — the bot will leave when idle.",
+        "disabledLine": "❌ 24/7 is **disabled**",
+        "activeChannels_one": "✅ 24/7 active in {{count}} channel:",
+        "activeChannels_other": "✅ 24/7 active in {{count}} channels:"
       }
     },
     "shuffle": {
