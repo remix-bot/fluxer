@@ -142,9 +142,9 @@ class Remix {
     const client = new Client({
       waitForGuilds: true,
       cache: {
-        guilds: 2_000,
-        channels: 5_000,
-        users: 10_000,
+        guilds: 10_000,
+        channels: 100_000,
+        users: 200_000,
         members: 5_000,
         messages: 20,
       },

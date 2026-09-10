@@ -5,6 +5,7 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { cleanId } from "../src/ui/index.mjs";
+import { resolveChannelCached } from "../src/utils/Helpers247.mjs";
 
 /**
  * @type {CommandBuilder}
@@ -33,7 +34,7 @@ export const command = new CommandBuilder()
  */
 export async function run(msg, data) {
   const cid = cleanId(data.get("channelId").value);
-  const targetChannel = this.client.channels.get(cid);
+  const targetChannel = await resolveChannelCached(this.client, cid);
   if (!targetChannel) return msg.reply(this.t(msg, "responses.forceleave.channelNotFound"));
   if (cleanId(msg.message?.guildId) !== cleanId(targetChannel.guildId))
     return msg.reply(this.t(msg, "responses.forceleave.wrongServer"));

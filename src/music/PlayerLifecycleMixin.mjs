@@ -14,7 +14,7 @@
 import Player from "./player/index.mjs";
 import { cleanId } from "../utils/Utils.mjs";
 import { logger } from "../core/Logger.mjs";
-import { get247ChannelMode, isPlayerConnectionDead, detachPlayerFromManager } from "../utils/Helpers247.mjs";
+import { get247ChannelMode, isPlayerConnectionDead, detachPlayerFromManager, resolveChannelCached } from "../utils/Helpers247.mjs";
 import { EmbedBuilder, PermissionFlags } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { getGlobalColor, getMessageGuildId } from "../ui/index.mjs";
@@ -265,9 +265,9 @@ const PlayerLifecycleMixin = {
     }
   },
 
-  /** Create a new Player, join the voice channel, and set up events. @async @this {import('./PlayerManager.mjs').PlayerManager} @param {object} message @param {string} cid @returns {Promise<Player|null>} The spawned player, or null on failure. */
+  /** Create a new Player, join the voice channel, and set up events. The target channel is resolved cache-first with a REST fallback (the channels cache is FIFO-bounded, so a miss does not prove the channel is gone). @async @this {import('./PlayerManager.mjs').PlayerManager} @param {object} message @param {string} cid @returns {Promise<Player|null>} The spawned player, or null on failure. */
   async initPlayer(message, cid) {
-    const channel = this.commands.client?.channels?.get(cid);
+    const channel = await resolveChannelCached(this.commands.client, cid);
 
     if (!channel) {
       message.reply(

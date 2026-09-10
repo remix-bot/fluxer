@@ -109,9 +109,13 @@ const RejoinManager = {
       return;
     }
 
-    const channel = remix.client?.channels?.get?.(cleanChannelId);
+    const { channel, definitive } = await this._resolve247Channel(cleanChannelId);
     if (!channel) {
-      logger.voice247(`[Rejoin] Channel ${cleanChannelId} no longer exists — skipping.`);
+      if (definitive) {
+        logger.voice247(`[Rejoin] Channel ${cleanChannelId} no longer exists — skipping.`);
+      } else {
+        logger.warn(`[Rejoin] Channel ${cleanChannelId} could not be resolved (network) — skipping this attempt; a later sweep will retry.`);
+      }
       this._rejoinAttempts.delete(cleanChannelId);
       return;
     }

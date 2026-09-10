@@ -76,7 +76,10 @@ const Watchdog247 = {
    * Resolve a channel by ID with a REST fallback. The channels cache is
    * FIFO-bounded (OOM fix), so a cache miss does NOT mean the channel was
    * deleted — only a REST fetch that definitively fails (404-style) proves
-   * deletion. Network errors keep the setting intact.
+   * deletion. Network errors keep the setting intact. Note the SDK's
+   * ChannelManager.fetch THROWS a FluxerError (code CHANNEL_NOT_FOUND) on a
+   * real 404 instead of returning null, so thrown errors are inspected:
+   * 404-style errors are definitive, everything else is treated as transient.
    * @this {GatewayHandler}
    * @param {string} channelId - The channel ID to resolve.
    * @returns {Promise<{channel: object|null, definitive: boolean}>}
@@ -95,8 +98,11 @@ const Watchdog247 = {
       const fetched = await this.remix?.client?.channels?.fetch?.(clean);
       if (fetched) return { channel: fetched, definitive: false };
       return { channel: null, definitive: true };
-    } catch (_) {
-      return { channel: null, definitive: false };
+    } catch (err) {
+      const gone = err?.code === "CHANNEL_NOT_FOUND"
+          || err?.statusCode === 404 || err?.status === 404
+          || /\b404\b|not found|unknown channel/i.test(String(err?.message ?? ""));
+      return { channel: null, definitive: gone };
     }
   },
 

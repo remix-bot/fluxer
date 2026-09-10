@@ -13,7 +13,7 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { getGlobalColor, PageBuilder } from "../ui/index.mjs";
 import { cleanId } from "../utils/Utils.mjs";
-import { remove247ChannelMode, isPlayerConnectionDead, detachPlayerFromManager } from "../utils/Helpers247.mjs";
+import { remove247ChannelMode, isPlayerConnectionDead, detachPlayerFromManager, resolveChannelCached } from "../utils/Helpers247.mjs";
 import { logger } from "./Logger.mjs";
 import { Dashboard } from "../dashboard/Dashboard.mjs";
 
@@ -258,7 +258,7 @@ const BotVoiceMixin = {
 
     if (!this.lavalink) throw new Error("Audio node not ready yet — try again in a moment");
 
-    const channel = this.client?.channels?.get?.(cleanChannelId);
+    const channel = await resolveChannelCached(this.client, cleanChannelId);
     if (!channel) throw new Error("Channel not found");
     if (channel.type !== 2) throw new Error("Not a voice channel");
 

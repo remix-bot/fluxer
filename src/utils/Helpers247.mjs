@@ -74,6 +74,43 @@ export function set247ChannelMode(set, channelId, mode) {
 }
 
 /**
+ * Resolve a channel by ID with a REST fallback. The client's channels cache
+ * is FIFO-bounded (OOM fix): on large fleets the bound can still be exceeded
+ * transiently, so a cache miss does NOT prove the channel is gone — the bot
+ * may simply have evicted it while caching traffic from other guilds. This
+ * helper tries the cache first and, on a miss, REST-fetches the channel
+ * (which also re-caches it for subsequent lookups).
+ *
+ * Used by PlayerManager.initPlayer (%join/%play), Remix._spawnPlayer (24/7
+ * boot recovery + rejoin) and the forceleave command. The watchdog's
+ * _resolve247Channel() wraps the same idea but also distinguishes
+ * definitive 404s from transient network errors for pruning decisions.
+ *
+ * @param {object|null} client - Bot client (needs channels.get/channels.fetch).
+ * @param {string} channelId - The channel ID to resolve.
+ * @returns {Promise<object|null>} The channel object, or null when it cannot
+ *          be resolved from cache or REST.
+ */
+export async function resolveChannelCached(client, channelId) {
+  const clean = cleanId(channelId);
+  if (!clean) return null;
+
+  const channels = client?.channels ?? null;
+  const cached = channels?.get?.(clean) ?? null;
+  if (cached) return cached;
+
+  if (channels && typeof channels.fetch === "function") {
+    try {
+      return (await channels.fetch(clean)) ?? null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Evict a player from every manager index (playerMap active + home keys,
  * guild index, pending scrobble timers) WITHOUT destroying it. Shared by the
  * serverLeave rejoin path, the rejoin self-healing path and _spawnPlayer's
