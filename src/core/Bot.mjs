@@ -141,7 +141,13 @@ class Remix {
 
     const client = new Client({
       waitForGuilds: true,
-      cache: { guilds: false, channels: false, users: false, members: false },
+      cache: {
+        guilds: 2_000,
+        channels: 5_000,
+        users: 10_000,
+        members: 5_000,
+        messages: 20,
+      },
       ...config["fluxer.js"],
       presence: presenceContents.length === 0 ? undefined : buildRuntimePresence(presenceContents[0]),
     });

@@ -6,7 +6,8 @@
       "Comment": "REST client options. 'timeout' is ms before a request to api.fluxer.app is aborted (default: 15000). Raise if you see DOMException AbortError in logs.",
       "timeout": 30000,
       "retries": 3
-    }
+    },
+    "Comment": "Client options passed to @fluxerjs/core 3.0. NOTE: cache limits live here. The built-in defaults are bounded (guilds 2000, channels 5000, users 10000, members 5000, messages 20). Do NOT set cache values to false \u2014 in 3.0 `false` means UNBOUNDED, not disabled, and will OOM the bot on large guild counts. To override, e.g. \"cache\": { \"users\": 20000 }."
   },
   "prefix": "your desired prefix (such as %)",
   "presenceInterval": null,
@@ -16,17 +17,26 @@
       "text": "Ping for Prefix | Hosted by https://kyun.sh/",
       "emoji_name": "Remix",
       "emoji_id": "1487652011819025844",
-      "activity": { "name": "kyun.sh", "type": 2 }
+      "activity": {
+        "name": "kyun.sh",
+        "type": 2
+      }
     },
     {
       "text": "Ping for Prefix",
-      "emoji_name": "🎧",
-      "activity": { "name": "music", "type": 2 }
+      "emoji_name": "\ud83c\udfa7",
+      "activity": {
+        "name": "music",
+        "type": 2
+      }
     },
     {
       "text": "Ping for Prefix | By RedTech & NoLogicAlan",
-      "emoji_name": "🎶",
-      "activity": { "name": "RedTech & NoLogicAlan", "type": 2 }
+      "emoji_name": "\ud83c\udfb6",
+      "activity": {
+        "name": "RedTech & NoLogicAlan",
+        "type": 2
+      }
     }
   ],
   "nodelink": {
@@ -40,7 +50,7 @@
     "message": "If you have radio stations you'd like to connect, add them to the array below. Radio stations must be rendered like following:",
     "station": {
       "name": "zamrock",
-      "detailedName": "ᘔᗩᗰᘔᗩᗰᖴOᖴᒪIᖴE",
+      "detailedName": "\u1614\u15e9\u15f0\u1614\u15e9\u15f0\u15b4O\u15b4\u14aaI\u15b4E",
       "thumbnail": "https://zamrock.net/wp-content/uploads/2024/06/Zamrock_rd_logo_0004-1.gif",
       "url": "url to stream from; this will be kept private",
       "description": "Genre: Zamrock, provided by [Zamrock.net](https://zamrock.net/)",
@@ -48,7 +58,13 @@
         "name": "Zamrock",
         "url": "https://zamrock.net"
       },
-      "keyWords": ["radio", "zamrock", "psychedelic", "blues", "rock"]
+      "keyWords": [
+        "radio",
+        "zamrock",
+        "psychedelic",
+        "blues",
+        "rock"
+      ]
     }
   },
   "radio": [],
@@ -64,7 +80,7 @@
     "redis": {
       "url": "redis://127.0.0.1:6379"
     },
-    "Comment": "Optional dashboard backend. When enabled, the bot speaks Redis RPC (request/response/info channels) with an external web frontend. Login codes are verified (bcrypt) from the MySQL login_codes table. Keep Redis network-isolated — the RPC channel has no shared secret."
+    "Comment": "Optional dashboard backend. When enabled, the bot speaks Redis RPC (request/response/info channels) with an external web frontend. Login codes are verified (bcrypt) from the MySQL login_codes table. Keep Redis network-isolated \u2014 the RPC channel has no shared secret."
   },
   "lastfm": {
     "Comment": "Last.fm integration: auto-scrobble songs, play loved/top/recent tracks. Register at https://www.last.fm/api/account/create",
@@ -82,7 +98,10 @@
     "serverSlug": "remix-hq",
     "botSlug": "remix"
   },
-  "owners": ["user id for owner-only commands", "another user id"],
+  "owners": [
+    "user id for owner-only commands",
+    "another user id"
+  ],
   "playerAFKTimeout": 60000,
   "Comment2": "The above specifies the time in ms after which a player goes inactive; Optional.",
   "customStatsFooter": "Text shown in the footer of the $prefixstats embed; optional.",
@@ -90,34 +109,34 @@
   "logging": {
     "Comment": "Control which log categories appear in the console. Set 'enabled' to false to silence everything except errors. Set any category to false to silence just that group.",
     "enabled": true,
-    "player":      true,
-    "inactivity":  true,
-    "aloneCheck":  true,
-    "voiceState":  true,
-    "voice247":    true,
-    "voice":       false,
+    "player": true,
+    "inactivity": true,
+    "aloneCheck": true,
+    "voiceState": true,
+    "voice247": true,
+    "voice": false,
     "mediaplayer": false,
-    "commands":    true,
-    "guild":       true,
-    "recovery":    false,
-    "settings":    true,
-    "lavalink":    true,
-    "dashboard":   false,
-    "redis":       false
+    "commands": true,
+    "guild": true,
+    "recovery": false,
+    "settings": true,
+    "lavalink": true,
+    "dashboard": false,
+    "redis": false
   },
   "timers": {
     "Comment": "All timing values in milliseconds (ms). 1000ms = 1 second, 60000ms = 1 minute.",
-    "inactivityTimeout":    180000,
-    "aloneCheckInterval":    10000,
-    "aloneCheckDebounce":      400,
-    "rejoin247Delay":         2000,
-    "leave247RejoinDelay":    3000,
-    "playerUpdateInterval":   5000,
-    "searchSessionTimeout":  30000,
-    "playerSessionTimeout":  300000,
-    "intentionalLeaveTTL":    8000
+    "inactivityTimeout": 180000,
+    "aloneCheckInterval": 10000,
+    "aloneCheckDebounce": 400,
+    "rejoin247Delay": 2000,
+    "leave247RejoinDelay": 3000,
+    "playerUpdateInterval": 5000,
+    "searchSessionTimeout": 30000,
+    "playerSessionTimeout": 300000,
+    "intentionalLeaveTTL": 8000
   },
-  "sharding-Comment": "Optional process-level sharding (@fluxerjs/sharding 3.0, beta). Only read by 'node shard.mjs' / 'npm run shard' — plain 'npm start' ignores this block entirely. totalShards: total gateway shards (use an explicit number, never 'auto'); shardsPerProcess: how many shards each child process runs; respawn: restart dead children; spawnTimeout: ms to wait for a child's ready IPC; spawnDelay: ms between successive spawns. The FLUXER_TOTAL_SHARDS / FLUXER_SHARDS_PER_PROCESS env vars override the first two (handy for Docker). Sharding only matters at ~2500+ guilds; leave at defaults otherwise. Caveats: DMs only reach shard 0, and the dashboard is single-process-first.",
+  "sharding-Comment": "Optional process-level sharding (@fluxerjs/sharding 3.0, beta). Only read by 'node shard.mjs' / 'npm run shard' \u2014 plain 'npm start' ignores this block entirely. totalShards: total gateway shards (use an explicit number, never 'auto'); shardsPerProcess: how many shards each child process runs; respawn: restart dead children; spawnTimeout: ms to wait for a child's ready IPC; spawnDelay: ms between successive spawns. The FLUXER_TOTAL_SHARDS / FLUXER_SHARDS_PER_PROCESS env vars override the first two (handy for Docker). Sharding only matters at ~2500+ guilds; leave at defaults otherwise. Caveats: DMs only reach shard 0, and the dashboard is single-process-first.",
   "sharding": {
     "totalShards": 1,
     "shardsPerProcess": 1,
