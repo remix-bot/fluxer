@@ -99,8 +99,6 @@ const respawn          = shardingCfg.respawn !== false;
 const spawnTimeout     = cfgPositiveInt(shardingCfg, "spawnTimeout", 30_000);
 const spawnDelay       = Math.max(0, Number(shardingCfg.spawnDelay) >= 0 ? Number(shardingCfg.spawnDelay) : 5_000);
 
-// Absolute path to the bot entry — robust regardless of cwd (fork resolves
-// relative paths against cwd, but the manager may be started from anywhere).
 const entryFile = fileURLToPath(new URL("./index.mjs", import.meta.url));
 
 const manager = new ShardingManager(entryFile, {

@@ -229,11 +229,6 @@ const SearchMixin = {
           if (!isUrl) throw searchErr;
         }
         let lcTracks = result?.tracks ?? [];
-        // Set when the only results we have came from the oEmbed title-search
-        // fallback. That path resolves a SINGLE video (direct URL load was
-        // bot-blocked), so its result list is a search page — NOT a playlist.
-        // Bulk-queueing it would queue a bunch of "related" songs instead of
-        // the one requested video (original fluxer bug reported by users).
         let fromTitleFallback = false;
 
         if (isUrl && lcTracks.length === 0 && ytId) {
@@ -288,9 +283,6 @@ const SearchMixin = {
           return;
         }
 
-        // Pick the track to queue. For a title-search fallback, prefer the
-        // result that is the exact video the user requested (search may rank
-        // covers/remixes first); otherwise take the first result.
         let firstTrack = lcTracks[0];
         if (fromTitleFallback && ytId) {
           firstTrack = lcTracks.find(t => (t?.info?.identifier ?? t?.identifier) === ytId) ?? lcTracks[0];
@@ -299,8 +291,6 @@ const SearchMixin = {
           }
         }
 
-        // Only a genuine playlist/mix URL load may bulk-queue. A title-search
-        // fallback for a single video must queue exactly one track.
         if (isUrl && !fromTitleFallback && lcTracks.length > 1) {
           const videos = lcTracks.map(t => this._lcTrackToVideo(t, trackMeta)).filter(Boolean);
           this.addManyToQueue(videos, top);

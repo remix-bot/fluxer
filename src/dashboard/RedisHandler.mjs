@@ -21,7 +21,7 @@ import { logger } from "../core/Logger.mjs";
  * @returns {number} Delay in ms before the next reconnect attempt.
  */
 const DEFAULT_RETRY_STRATEGY = (retries) => {
-  if (!Number.isFinite(retries)) return 15_000; // defensive: wrong-shape argument
+  if (!Number.isFinite(retries)) return 15_000;
   return retries < 10 ? Math.min(retries * 500, 5_000) : 15_000;
 };
 
@@ -49,8 +49,6 @@ export class RedisHandler {
   constructor(opts = {}) {
     this.platform = opts.platform ?? "fluxer";
 
-    // `url` (and any explicit socket options) come from config; the retry
-    // strategy is always pinned so misconfig can never cause a hot retry loop.
     const { platform: _platform, ...clientOpts } = { ...opts };
     clientOpts.socket = {
       ...(clientOpts.socket ?? {}),
@@ -77,9 +75,6 @@ export class RedisHandler {
    * @async
    */
   async _connect() {
-    // Connect both clients CONCURRENTLY. The previous sequential awaits made
-    // the subscriber wait behind the main client's retry loop: while Redis was
-    // down, the subscriber never even attempted to connect.
     this.client.connect()
       .then(() => {
         if (this._destroyed) return;
@@ -183,8 +178,6 @@ export class RedisHandler {
     this._destroyed = true;
     if (this._pingInterval) { clearInterval(this._pingInterval); this._pingInterval = null; }
     if (this._readyTimer) { clearTimeout(this._readyTimer); this._readyTimer = null; }
-    // quit() waits for a live connection; on a still-connecting/down client it
-    // would pend forever (bot shutdown hang). Hard-disconnect instead.
     try {
       if (this.subscriber?.isReady) await this.subscriber.quit();
       else this.subscriber?.disconnect();

@@ -158,8 +158,6 @@ const BotVoiceMixin = {
   markIntentionalLeave(channelId, ttlMs = null) {
     const cleanChId = cleanId(channelId);
     if (!cleanChId) return;
-    // A user-initiated leave must also cancel any rejoin already armed for
-    // this channel — otherwise the bot would come back 3s after !leave.
     this.cancel247Rejoin?.(cleanChId);
     if (ttlMs === null) ttlMs = this.config?.timers?.intentionalLeaveTTL ?? 10_000;
     const existing = this.intentionalLeaves.get(cleanChId);
@@ -191,7 +189,7 @@ const BotVoiceMixin = {
     }
 
     if (!this._247RejoinTimers) this._247RejoinTimers = new Map();
-    if (this._247RejoinTimers.has(cleanCh)) return; // already armed — keep the earliest
+    if (this._247RejoinTimers.has(cleanCh)) return;
 
     const delay = delayMs ?? this.config?.timers?.rejoin247Delay ?? 3_000;
     logger.voice247(`[247] Arming bot-level rejoin for ${cleanCh} (guild ${cleanG}) in ${delay / 1000}s`);
@@ -251,9 +249,6 @@ const BotVoiceMixin = {
         ?? this.players.getPlayerByGuildAndChannel(cleanGuildId, cleanChannelId);
     if (existing) {
       if (!isPlayerConnectionDead(existing)) return existing;
-      // A connection-less zombie (e.g. a 24/7 player whose LiveKit session
-      // died without a serverLeave reaching us) is worse than useless: it
-      // blocks rejoins AND swallows !play. Evict it and spawn a live one.
       logger.voice247(
           `[_spawnPlayer] Existing player for ${cleanChannelId} has a dead connection — evicting and respawning.`
       );

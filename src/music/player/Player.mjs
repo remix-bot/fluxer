@@ -339,20 +339,12 @@ class Player extends EventEmitter {
       return;
     }
 
-    // 1) Detach from playerMap (active + home keys) so rejoin paths no
-    //    longer see a "player already here" and skip.
     detachPlayerFromManager(ctx, this, channelId);
 
-    // 2) Arm the ctx-level rejoin BEFORE destroying ourselves — the timer
-    //    must outlive this instance.
     ctx.schedule247Rejoin(channelId, guildId);
 
-    // 3) Notify (dashboard close/stopplay); the manager-level autoleave
-    //    listeners suppress the actual leave for 24/7 channels, so this is
-    //    notification-only.
     this.emit("autoleave");
 
-    // 4) Finally destroy the dead instance.
     this.destroy();
   }
 
@@ -510,14 +502,6 @@ class Player extends EventEmitter {
       this._assertSelfDeaf(vm, channelId);
 
       if (typeof voiceConn.on === "function") {
-        // Self-deaf keeper: Fluxer's VoiceManager answers every
-        // requestVoiceStateSync event (emitted by conn.stop()/stopVideo(),
-        // which the audio bridge triggers on EVERY play() and stop()) with a
-        // gateway VoiceStateUpdate that resets self_deaf to false — silently
-        // un-deafening the bot the moment the first track starts and again on
-        // every skip/stop/track-end. The manager registers its own sync
-        // listener inside registerConnection() (before join() resolved), so
-        // this listener runs AFTER it and our re-deafen state update wins.
         voiceConn.on("requestVoiceStateSync", () => {
           if (this.leaving || this._destroyed) return;
           this._assertSelfDeaf(vm, channelId);
@@ -536,11 +520,6 @@ class Player extends EventEmitter {
           const gId = cleanId(this._guildId ?? "");
 
           if (mode === "on" && cId && gId) {
-            // 24/7: the voice session is gone but the commitment stands.
-            // Detach this now-dead player (a zombie in the map makes every
-            // rejoin path bail with "already has a player"), arm a
-            // bot-level rejoin that survives our own destroy, notify, then
-            // destroy ourselves.
             logger.player("[Player] serverLeave in 24/7 mode — detaching and scheduling rejoin");
             this._detachAndSchedule247Rejoin(cId, gId);
           } else {
@@ -981,8 +960,6 @@ class Player extends EventEmitter {
   }
 }
 
-// Attach the split-out concerns: playback advancement (PlaybackMixin), search
-// & queue-filling (SearchMixin), and user-facing rendering (DisplayMixin).
 applyMixins(Player, PlaybackMixin, SearchMixin, DisplayMixin);
 
 export { Player as default, Player, Queue };

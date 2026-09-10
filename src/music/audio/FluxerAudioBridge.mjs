@@ -414,6 +414,4 @@ export class FluxerAudioBridge extends EventEmitter {
   }
 }
 
-// Attach the split-out concerns: stream pipeline building/routing
-// (StreamPipeline) and Lavalink REST HTTP helpers (HttpStreams).
 applyMixins(FluxerAudioBridge, StreamPipeline, HttpStreams);

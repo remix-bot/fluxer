@@ -117,15 +117,11 @@ class GatewayHandler {
     const client = remix.client;
 
     try {
-      // Fluxer 3.0 + sharding: the ws manager exposes shards via getShards()
-      // (2.2 used a `shards` Map property) and a sharded child owns several
-      // shards — track the raw socket of EVERY local shard, not just shard 0.
       const wsObjs = ShardingUtils.localShardSockets(client);
 
       if (!remix._rawGatewayWsObjs) remix._rawGatewayWsObjs = new Set();
       const attached = remix._rawGatewayWsObjs;
 
-      // Detach listeners from sockets that went away (reconnects).
       for (const old of attached) {
         if (wsObjs.includes(old)) continue;
         try {
@@ -142,8 +138,6 @@ class GatewayHandler {
 
       let attachedNew = false;
 
-      // Create the shared raw-socket handlers once (stateless parsers
-      // shared by every local shard socket).
       if (!remix._rawGatewayHandler) {
         remix._rawGatewayHandler = (data) => {
           try {
@@ -249,7 +243,6 @@ class GatewayHandler {
         attachedNew = true;
       }
 
-      // Legacy singular field kept in sync (first socket) for compatibility.
       remix._rawGatewayWsObj = wsObjs[0] ?? null;
       this.wsListenerAttached = attached.size > 0;
       if (attachedNew) {
@@ -294,12 +287,6 @@ class GatewayHandler {
         }];
       }
 
-      // Fluxer 3.0: client.ws is a throwing getter when the gateway is not
-      // connected (2.2 exposed a plain optional). The raw opcode-3 payload
-      // below stays in wire format (custom_status) because it bypasses
-      // ClientUser.setPresence() and hits the shard directly.
-      // Sharded children fan the update out to every gateway shard in this
-      // process (presence is per shard); single process = shard 0 as before.
       try {
         if (client.ws?.send) {
           for (const id of ShardingUtils.localShardIds(client)) {
@@ -596,8 +583,6 @@ class GatewayHandler {
   }
 }
 
-// Attach the split-out concerns: voice-state routing (VoiceStateRouting),
-// guild sync & seeding (GuildSync), and 24/7 rejoin management (RejoinManager).
 applyMixins(GatewayHandler, VoiceStateRouting, GuildSync, RejoinManager);
 
 export { GatewayHandler };

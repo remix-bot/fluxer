@@ -224,6 +224,4 @@ export class PlayerManager {
 
 }
 
-// Attach the split-out concerns: dashboard event wiring (PlayerEventsMixin)
-// and voice-channel detection / player lifecycle (PlayerLifecycleMixin).
 applyMixins(PlayerManager, PlayerEventsMixin, PlayerLifecycleMixin);

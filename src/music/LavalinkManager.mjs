@@ -179,8 +179,6 @@ export class LavalinkManager extends EventEmitter {
         }
       }
 
-      // Fluxer 3.0 sharding: gateway payloads are guild-scoped — route to the
-      // shard that owns this guild (single process: always shard 0, as before).
       const targetShardId = ShardingUtils.shardIdForGuild(this._client, guildId);
 
       if (typeof this._client?.ws?.send === "function") {
@@ -211,16 +209,12 @@ export class LavalinkManager extends EventEmitter {
 
     const attachRawWs = () => {
       try {
-        // Fluxer 3.0 + sharding: getShards() replaces the 2.2 `shards` Map
-        // property, and a sharded child owns several shards — track the raw
-        // socket of EVERY local shard, not just shard 0.
         const wsObjs = ShardingUtils.localShardSockets(client);
         if (wsObjs.length === 0) return;
 
         if (!this._rawWsObjs) this._rawWsObjs = new Set();
         const attached = this._rawWsObjs;
 
-        // Detach listeners from sockets that went away (reconnects).
         for (const old of attached) {
           if (wsObjs.includes(old)) continue;
           try {
@@ -246,7 +240,6 @@ export class LavalinkManager extends EventEmitter {
           attached.delete(old);
         }
 
-        // Create the shared handlers once (stateless parsers).
         if (!this._rawWsHandler) {
         const botId = this._client?.user?.id;
         let _vsuLogCooldown = 0;
@@ -319,7 +312,6 @@ export class LavalinkManager extends EventEmitter {
           attached.add(wsObj);
         }
 
-        // Legacy singular field kept in sync (first socket).
         this._rawWsObj = wsObjs[0] ?? null;
       } catch (e) {
         logger.warn("[LavalinkManager] Raw WS setup error:", e.message);

@@ -309,7 +309,6 @@ const PlaybackMixin = {
     if (result === "finished" && !this._skipping && !this.leaving && !this._paused) {
       this._handleTrackEnd();
     } else if (result === "stopped") {
-      // Stopped intentionally (skip/seek/stop) — nothing to do.
     }
   },
 

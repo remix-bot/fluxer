@@ -65,14 +65,12 @@ export function get247ChannelMode(set, channelId) {
  * Original GatewayHandler.mjs and index.mjs still import this.
  */
 export function remove247ChannelMode(set, channelId, currentChannels) {
-  // No-op: modes no longer exist, stay_247 array is managed directly.
 }
 
 /**
  * No-op: per-channel modes removed. Kept for backward compatibility.
  */
 export function set247ChannelMode(set, channelId, mode) {
-  // No-op: modes no longer exist.
 }
 
 /**

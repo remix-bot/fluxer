@@ -42,7 +42,6 @@ function resolveChannelId(rawArg, ctx, message) {
   if (mentionMatch) return mentionMatch[2];
   if (idMatch) return idMatch[1];
 
-  // Try name-based lookup — use the actual message to resolve the guild ID
   const guildId = cleanId(getMessageGuildId(message));
   if (!guildId) return null;
 
@@ -75,7 +74,6 @@ export async function run(message, data) {
     return this.players.initPlayer(message, resolvedId);
   }
 
-  // No argument — auto-detect the user's current voice channel
   const { channelId: cid } = await this.players.checkVoiceChannels(message);
   if (!cid) {
     const prefix = this.handler.getPrefix(getMessageGuildId(message));

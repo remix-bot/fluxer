@@ -558,19 +558,13 @@ export class MessageHandler {
     const { getVoiceManager } = await import("@fluxerjs/voice");
     const channel = await this.client.channels.fetch(channelId).catch(() => null);
     if (!channel) throw new Error("Voice channel not found.");
-    // Fluxer 3.0: isGuild() is ChannelType-based and replaces the 2.2
-    // 'guildId' own-property duck check; the fallback keeps custom/stub
-    // channel objects working.
+
     const isGuildChannel = channel.isGuild?.() ?? ("guildId" in channel);
     if (!isGuildChannel) throw new Error("Cannot join a non-guild voice channel.");
     const vm = getVoiceManager(this.client);
     if (!vm) throw new Error("VoiceManager not available.");
     const voiceConn = await vm.join(channel);
-    // Self-deafen raw joins too (Player.join does this for playback
-    // sessions): a music bot never listens, and Fluxer's VoiceManager resets
-    // self_deaf on every requestVoiceStateSync (fired by conn.stop()) — the
-    // re-assert listener keeps the deafened state for the connection's
-    // lifetime. Best effort: updateVoiceState no-ops without connection_id.
+
     const deafen = () => {
       try {
         vm.updateVoiceState(channel.id, { self_deaf: true, self_mute: false });

@@ -91,10 +91,6 @@ const RejoinManager = {
         this._rejoinAttempts.delete(cleanChannelId);
         return;
       }
-      // Ghost/zombie player: object alive in the map but its voice session
-      // is long gone (serverLeave / dead socket). It used to block this
-      // rejoin with "already has a player" — the #1 reason 24/7 silently
-      // died. Evict it and respawn a live connection.
       logger.voice247(
           `[Rejoin] Existing player for ${cleanChannelId} has a dead connection — evicting before rejoin.`
       );

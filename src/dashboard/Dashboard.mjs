@@ -234,12 +234,8 @@ class Dashboard {
   }
 }
 
-// Attach the split-out concerns: the remote RPC handler methods (runFunction,
-// confirmLogin and the authorization helpers) from RpcHandlersMixin.
 applyMixins(Dashboard, RpcHandlersMixin);
 
-// Re-attach the static conversion helpers (convertUser, convertChannel,
-// convertPlayer, …) so external `Dashboard.convertX(...)` call sites keep working.
 Object.assign(Dashboard, Serializers);
 
 export { Dashboard };

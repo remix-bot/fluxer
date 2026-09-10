@@ -346,7 +346,6 @@ export class QueuePaginator {
       try {
         await rawMsg.removeAllReactions();
       } catch (e) {
-        // Message deleted — nothing left to clean up.
         if (String(e?.message ?? e).includes("Message wasn't found") || e?.code === 10008) return;
         for (const emoji of [prev, next]) {
           try {

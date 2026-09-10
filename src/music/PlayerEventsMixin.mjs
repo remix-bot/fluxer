@@ -14,10 +14,6 @@ import { cleanId } from "../utils/Utils.mjs";
 import { getMessageGuildId } from "../ui/index.mjs";
 import { Dashboard } from "../dashboard/Dashboard.mjs";
 
-// Module-level ID helpers from the original PlayerManager.mjs. They live in
-// this module (not the base file) because it is the shared leaf of the three
-// PlayerManager modules, which keeps the import graph acyclic:
-// PlayerManager.mjs → PlayerEventsMixin.mjs ← PlayerLifecycleMixin.mjs.
 /** @private @param {Player} player @param {object|null} [fallbackChannel=null] @returns {string} Cleaned guild ID. */
 function getPlayerGuildId(player, fallbackChannel = null) {
   return cleanId(

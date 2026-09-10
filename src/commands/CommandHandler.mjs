@@ -286,10 +286,6 @@ export class CommandHandler extends EventEmitter {
       return this.processCommand(cmd.subcommands[idx], args.slice(1), msg, previous + this.format(" " + cmd.subcommands[idx].name), external);
     }
 
-    // `error === true` → internal invocation: the error reply was already
-    // sent by _parseOptions and, exactly like the original monolith, the
-    // command must NOT run (no "run" emission). A string is the external-
-    // mode error, returned to the caller as before.
     const { opts, error } = this._parseOptions(cmd, args, msg, previous, external);
     if (error) return (error === true) ? undefined : error;
 

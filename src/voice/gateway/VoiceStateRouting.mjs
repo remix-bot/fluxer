@@ -271,7 +271,6 @@ const VoiceStateRouting = {
     const guildId = vsuGuildId;
 
     if (newChannelId && guildId && oldChannelId && oldChannelId !== newChannelId) {
-      // During boot recovery, ignore move events — the recovery loop handles rejoining.
       if (this._bootRecoveryActive) {
         logger.voice247(
             `[247] Ignoring bot move ${cleanId(oldChannelId)} → ${cleanId(newChannelId)} during boot recovery.`
@@ -282,7 +281,6 @@ const VoiceStateRouting = {
         const cleanNew = cleanId(newChannelId);
         const cleanOld = cleanId(oldChannelId);
 
-        // Check if old channel is a saved 24/7 channel
         const oldIs247 = (() => {
           try {
             const set = remix.settingsMgr.getServer(guildId);
@@ -290,7 +288,6 @@ const VoiceStateRouting = {
           } catch (_) { return false; }
         })();
 
-        // Check if new channel is a saved 24/7 channel or has a pending spawn
         const newChannelSaved = (() => {
           try {
             const set = remix.settingsMgr.getServer(guildId);
@@ -302,9 +299,6 @@ const VoiceStateRouting = {
         const existingPlayer = remix.players.playerMap.get(cleanOld);
 
         if (oldIs247 && existingPlayer) {
-          // Old channel is 24/7 — bot physically moved away, so the voice
-          // connection to old channel is dead. Destroy the old player and
-          // schedule a fresh rejoin so it gets a new live connection.
           logger.voice247(
               `[247] Bot moved away from 24/7 channel ${cleanOld} → ${cleanNew}. ` +
               `Destroying stale player, scheduling rejoin for ${cleanOld}.`
@@ -324,13 +318,11 @@ const VoiceStateRouting = {
             }, rejoinDelay);
           }
         } else if (newChannelSaved || newChannelPendingSpawn) {
-          // New channel is already 24/7 or being spawned — keep both, don't rekey.
           logger.voice247(
               `[247] Keeping both channels ${cleanOld} and ${cleanNew} ` +
               `(saved=${newChannelSaved} pending=${newChannelPendingSpawn})`
           );
         } else if (existingPlayer && cleanNew !== cleanOld) {
-          // Neither channel is 24/7 — safe to rekey the player.
           const targetChannel = client.channels.get(cleanNew)
               ?? client.channels.get?.(cleanNew)
               ?? null;
@@ -351,8 +343,6 @@ const VoiceStateRouting = {
           }
         }
 
-        // Simplified 24/7: stay_247 list only changes via !247 command.
-        // Do NOT auto-add/remove channels on bot move.
       } catch (e) {
         logger.warn("[247] Bot move handler failed:", e.message);
       }
@@ -375,11 +365,6 @@ const VoiceStateRouting = {
             return;
           }
 
-          // Player missing or already dead. The old code just dropped the
-          // event ("deferring until grace period ends" — nothing ever
-          // replayed it), so a 24/7 channel killed during boot never came
-          // back. Arm a deferred bot-level rejoin for just after the grace
-          // window instead.
           const graceSet = remix.settingsMgr.getServer(guildId);
           const graceMode = graceSet ? get247ChannelMode(graceSet, cleanOld) : "off";
           if (graceMode === "on" && typeof remix.schedule247Rejoin === "function") {

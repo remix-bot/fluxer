@@ -240,7 +240,6 @@ function pickSerialized(p, ctx, lastTrack) {
   };
   const prev = p._autoplayPickChain ?? Promise.resolve();
   const next = prev.then(run, run);
-  // Keep the chain alive even if a caller lets a rejection slip through.
   p._autoplayPickChain = next.catch(() => {});
   return next;
 }

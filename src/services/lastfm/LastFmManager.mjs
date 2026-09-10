@@ -275,13 +275,6 @@ export class LastFmManager {
   }
 }
 
-// Attach the split-out concerns: user-session storage (UserStoreMixin),
-// scrobbling (ScrobblingMixin), track/artist/album/tag queries
-// (TrackQueriesMixin), per-user chart queries (UserQueriesMixin) and
-// server/guild statistics (ServerStatsMixin).
 applyMixins(LastFmManager, UserStoreMixin, ScrobblingMixin, TrackQueriesMixin, UserQueriesMixin, ServerStatsMixin);
 
-// Keep the old import surface: commands used to import the URL helpers from
-// this module when it was a single file. (The class itself is exported by its
-// declaration above.)
 export { parseLastFmUrl, isLastFmUrl } from "./urlUtils.mjs";

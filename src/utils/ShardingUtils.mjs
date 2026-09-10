@@ -51,7 +51,6 @@ export function shardIdForGuild(client, guildId) {
       if (Number.isInteger(id) && id >= 0) return id;
     }
   } catch {
-    // fall through to the single-process default
   }
   return 0;
 }
@@ -74,7 +73,6 @@ export function getLocalShards(client) {
       return [...map.entries()].filter(([id]) => Number.isInteger(id));
     }
   } catch {
-    // Fluxer 3.0: client.ws throws before login — treat as "no shards yet".
   }
   return [];
 }

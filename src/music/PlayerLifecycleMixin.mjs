@@ -21,8 +21,6 @@ import { getGlobalColor, getMessageGuildId } from "../ui/index.mjs";
 import { hasHumansInChannel, iterateVoiceStates } from "../voice/VoiceStateResolver.mjs";
 import { getPlayerChannelId } from "./PlayerEventsMixin.mjs";
 
-// Module-level join/permission helpers from the original PlayerManager.mjs
-// (only initPlayer below uses them, so they stay private to this module).
 /** @private Check whether the bot has required voice permissions in a channel. @param {object} client @param {string} channelId @returns {boolean} True if the bot can connect, speak, and use VAD. */
 function botHasVoicePermissions(client, channelId) {
   try {
@@ -297,9 +295,6 @@ const PlayerLifecycleMixin = {
       ?? this.getPlayerByChannelId(cleanChannelId);
     if (existing) {
       if (isPlayerConnectionDead(existing)) {
-        // Zombie in the map (e.g. 24/7 player whose voice session died):
-        // returning it would make !play silently do nothing. Evict it and
-        // fall through to spawn a fresh live player.
         logger.voice247(
             `[PlayerManager] Existing player for ${cleanChannelId} has a dead connection — evicting before initPlayer.`
         );

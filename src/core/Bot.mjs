@@ -139,10 +139,6 @@ class Remix {
       intentionalLeaveTTL: timers.intentionalLeaveTTL  ?? 10_000,
     };
 
-    // Fluxer 3.0: ClientOptions.presence is the normalized PresenceUpdateOptions
-    // shape (customStatus/emojiName/emojiId) — the 2.2 wire format
-    // (custom_status) is no longer read here. buildRuntimePresence() outputs
-    // exactly the normalized shape, so the initial presence reuses it.
     const client = new Client({
       waitForGuilds: true,
       cache: { guilds: false, channels: false, users: false, members: false },
@@ -350,11 +346,6 @@ class Remix {
           logger.commands(`Modules loaded (${succeeded} succeeded, ${failed} failed).`);
         });
 
-    // Fluxer.js 3.0 sharding (opt-in, root `shard.mjs`): a child forked by a
-    // ShardingManager attaches the child-side ShardClientUtil BEFORE login —
-    // it applies FLUXER_SHARD_IDS/FLUXER_SHARD_COUNT to the client options
-    // and routes IDENTIFYs through the parent's shared per-IP budget — then
-    // reports readiness so the supervisor's spawn() promise resolves.
     const startLogin = async () => {
       if (ShardingUtils.isShardedProcess()) {
         try {
@@ -364,8 +355,7 @@ class Remix {
             `[Startup] Sharding child attached — ${ShardingUtils.describeSharding(client)}.`
           );
         } catch (e) {
-          // Fatal: without the shard slice this child would identify as shard 0
-          // like every other child and thrash the gateway sessions.
+   
           logger.error(
             "[Startup] FATAL: running under a ShardingManager but the sharding attach failed:",
             e?.message
@@ -402,7 +392,6 @@ class Remix {
           .filter(id => id.length >= 15 && id.length <= 22);
 
       if (cleaned.length > 1) {
-        // Only 1 channel per guild supported. Keep first, drop the rest.
         serverSettings.set("stay_247", cleaned.slice(0, 1));
         logger.settings(
           `[settings] Trimmed stay_247 for guild ${guildId}: had ${cleaned.length} channels, kept first 1.`
@@ -547,9 +536,6 @@ class Remix {
         if (shard.ws) attachToSocket(shard.ws, `Shard ${id} socket`);
       };
 
-      // Fluxer 3.0: the ws manager exposes shards via getShards() (2.2 used a
-      // `shards` Map property) and a sharded child owns several of them —
-      // attach to every shard connected in this process, not just shard 0.
       for (const [id, shard] of ShardingUtils.getLocalShards(this.client)) {
         attachToShard(shard, id);
       }
@@ -583,7 +569,6 @@ class Remix {
   }
 }
 
-// Attach channel/voice operations (spawn, leave, shared servers, helpers).
 applyMixins(Remix, BotVoiceMixin);
 
 export { Remix };

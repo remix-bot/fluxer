@@ -128,8 +128,6 @@ async function enable247(ctx, set, guildId, channelId) {
   const channels = get247Channels(set);
   if (channels.has(id)) return;
 
-  // Platform only supports 1 voice channel per bot per guild.
-  // If another channel already has 24/7, disable it first.
   if (channels.size >= MAX_247_CHANNELS) {
     for (const oldId of channels) {
       if (oldId !== id) {

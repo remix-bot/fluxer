@@ -66,7 +66,6 @@ function _stormGate(level, tag, args) {
   const st = _stormGuard.get(key);
   if (st === undefined) {
     if (_stormGuard.size >= STORM_MAX_KEYS) {
-      // Evict the oldest key to bound memory.
       _stormGuard.delete(_stormGuard.keys().next().value);
     }
     _stormGuard.set(key, { n: 0, start: now });

@@ -8,7 +8,6 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { getMessageGuildId } from "../src/ui/index.mjs";
-// kept verbatim from the original file (unused there as well):
 import { logger } from "../src/core/Logger.mjs";
 import {
   SHORTCUTS, BOOL_SETTINGS, VALID_LOCALES, setValidLocales,
