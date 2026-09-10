@@ -652,7 +652,18 @@
         "allChannelsLabel": "❌ All Channels",
         "allChannelsDisabled": "24/7 mode **disabled** for all channels in this server.\nThe bot will leave voice after inactivity.",
         "noChannelsSavedShort": "No channels saved",
-        "joinFailed": "⚠️ 24/7 {{mode}} saved, but failed to join <#{{channel}}>.\nError: `{{error}}`\n\nTry `{{prefix}}join` or `{{prefix}}play` later."
+        "joinFailed": "⚠️ 24/7 {{mode}} saved, but failed to join <#{{channel}}>.\nError: `{{error}}`\n\nTry `{{prefix}}join` or `{{prefix}}play` later.",
+        "statusConnected": "🟢 Connected",
+        "statusReconnecting": "🟡 Reconnecting",
+        "statusOffline": "🔴 Offline",
+        "autoRecoveryLine": "♻️ Auto-recovery active — saved channels are checked every {{seconds}}s",
+        "autoRecoveryDisabledLine": "♻️ Auto-recovery standing by",
+        "enabledLine": "✅ 24/7 is **enabled** — the bot stays connected and auto-rejoins if disconnected.",
+        "disabledHint": "Join a voice channel and use `{{prefix}}247` to enable.",
+        "footerLine": "{{prefix}}247 · toggle · {{prefix}}247 off · disable all",
+        "confirmEnabled": "✅ 24/7 enabled in {{channel}} — the bot will stay connected and auto-rejoin if disconnected.",
+        "confirmDisabled": "❌ 24/7 disabled in {{channel}} — the bot will leave when idle.",
+        "confirmDisabledAll": "❌ 24/7 disabled for all channels in this server — the bot will leave when idle."
       }
     },
     "shuffle": {

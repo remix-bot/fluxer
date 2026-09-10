@@ -60,12 +60,12 @@ function uintPayload(value) {
 export function buildOpusHead(sampleRate, channels) {
   const buf = Buffer.alloc(19);
   buf.write("OpusHead", 0, "ascii");
-  buf.writeUInt8(1, 8);          // version
+  buf.writeUInt8(1, 8);
   buf.writeUInt8(channels, 9);
-  buf.writeUInt16LE(0, 10);      // pre-skip (we encode ourselves; no trimming)
+  buf.writeUInt16LE(0, 10);
   buf.writeUInt32LE(sampleRate, 12);
-  buf.writeInt16LE(0, 16);       // output gain
-  buf.writeUInt8(0, 18);         // mapping family (mono/stereo)
+  buf.writeInt16LE(0, 16);
+  buf.writeUInt8(0, 18);
   return buf;
 }
 
@@ -79,41 +79,38 @@ export function buildOpusHead(sampleRate, channels) {
  */
 function buildHeader(sampleRate, channels) {
   const ebml = element("1a45dfa3", Buffer.concat([
-    element("4286", uintPayload(1)),                      // EBMLVersion
-    element("42f7", uintPayload(1)),                      // EBMLReadVersion
-    element("42f2", uintPayload(4)),                      // EBMLMaxIDLength
-    element("42f3", uintPayload(8)),                      // EBMLMaxSizeLength
-    element("4282", Buffer.from("webm", "ascii")),        // DocType
-    element("4287", uintPayload(2)),                      // DocTypeVersion
-    element("4285", uintPayload(2)),                      // DocTypeReadVersion
+    element("4286", uintPayload(1)),
+    element("42f7", uintPayload(1)),
+    element("42f2", uintPayload(4)),
+    element("42f3", uintPayload(8)),
+    element("4282", Buffer.from("webm", "ascii")),
+    element("4287", uintPayload(2)),
+    element("4285", uintPayload(2)),
   ]));
 
   const info = element("1549a966", Buffer.concat([
-    element("2ad7b1", uintPayload(1000000)),              // TimecodeScale (1ms)
-    element("4d80", Buffer.from("fluxer-remix", "ascii")),// MuxingApp
-    element("5741", Buffer.from("fluxer-remix", "ascii")),// WritingApp
+    element("2ad7b1", uintPayload(1000000)),
+    element("4d80", Buffer.from("fluxer-remix", "ascii")),
+    element("5741", Buffer.from("fluxer-remix", "ascii")),
   ]));
 
   const floatBuf = Buffer.alloc(4);
   floatBuf.writeFloatBE(sampleRate, 0);
   const audio = element("e1", Buffer.concat([
-    element("b5", floatBuf),                               // SamplingFrequency
-    element("9f", uintPayload(channels)),                  // Channels
+    element("b5", floatBuf),
+    element("9f", uintPayload(channels)),
   ]));
 
   const trackEntry = element("ae", Buffer.concat([
-    element("d7", uintPayload(1)),                         // TrackNumber (must be 1 — demuxer masks data[0] & 0xF)
-    element("73c5", uintPayload(1)),                       // TrackUID
-    element("83", uintPayload(2)),                         // TrackType: audio
-    element("86", Buffer.from("A_OPUS", "ascii")),         // CodecID
-    element("63a2", buildOpusHead(sampleRate, channels)),  // CodecPrivate: OpusHead
+    element("d7", uintPayload(1)),
+    element("73c5", uintPayload(1)),
+    element("83", uintPayload(2)),
+    element("86", Buffer.from("A_OPUS", "ascii")),
+    element("63a2", buildOpusHead(sampleRate, channels)),
     audio,
   ]));
   const tracks = element("1654ae6b", trackEntry);
 
-  // Streaming Segment size: a huge finite vint (0x01 + 7x0xFF = 2^56-1). The
-  // canonical all-0xFF unknown-size marker is misparsed by prism-media's
-  // vintLength (it reads 0xFF as a 1-byte vint), so we use this equivalent form.
   const segmentStart = Buffer.concat([
     Buffer.from("18538067", "hex"),
     Buffer.from([0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]),

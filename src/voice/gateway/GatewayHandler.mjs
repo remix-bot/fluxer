@@ -18,6 +18,7 @@ import { applyMixins } from "../../utils/mixins.mjs";
 import VoiceStateRouting from "./VoiceStateRouting.mjs";
 import GuildSync from "./GuildSync.mjs";
 import RejoinManager from "./RejoinManager.mjs";
+import Watchdog247 from "./Watchdog247.mjs";
 
 const RAW_GATEWAY_INTEREST =
     /"(?:t|op)":\s*(?:"(?:VOICE_STATE_UPDATE|VOICE_SERVER_UPDATE|GUILD_CREATE|READY|RESUMED)"|(?:7|9|10|12)\b)/;
@@ -446,6 +447,7 @@ class GatewayHandler {
     }, this._startupDeleteGraceMs);
 
     this.rejoin247Channels();
+    this.start247Watchdog();
   }
 
   /**
@@ -492,6 +494,16 @@ class GatewayHandler {
       return;
     }
 
+    try {
+      const lava = remix.lavalink;
+      if (lava?.hasConnectedNode && !lava.hasConnectedNode() && lava.waitForNode) {
+        logger.voice247("[BootRecovery] Waiting up to 90s for the Lavalink node to connect...");
+        await lava.waitForNode({ timeoutMs: 90_000, intervalMs: 2_000 }).catch(() => {
+          logger.warn("[BootRecovery] Lavalink still not connected — attempting rejoins anyway (watchdog will retry).");
+        });
+      }
+    } catch (_) { /* best effort */ }
+
     logger.voice247(
         `[BootRecovery] Found ${channelsToRejoin.length} 24/7 channel(s) to rejoin: ` +
         channelsToRejoin.map(c => `${c.channelId}(${c.mode})`).join(", ")
@@ -520,25 +532,20 @@ class GatewayHandler {
         continue;
       }
 
-      const channelObj = remix.client?.channels?.get?.(channelId);
-      if (!channelObj) {
+      const { channel: channelObj, definitive } = await this._resolve247Channel(channelId);
+      if (!channelObj && definitive) {
         logger.warn(
             `[BootRecovery] Channel ${channelId} in guild ${guildId} no longer exists — ` +
             `removing from 24/7 settings to prevent repeated failures.`
         );
-        try {
-          const set = remix.settingsMgr.getServer(guildId);
-          if (set) {
-            const raw = set.get("stay_247");
-            const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
-            const filtered = arr.filter(id => id && id !== "none" && cleanId(id) !== channelId);
-            const remainingSet = new Set(filtered.map(id => cleanId(id)));
-            remove247ChannelMode(set, channelId, remainingSet);
-            set.set("stay_247", filtered.length > 0 ? filtered : "none");
-          }
-        } catch (cleanupErr) {
-          logger.warn(`[BootRecovery] Failed to auto-remove missing channel ${channelId} from 24/7:`, cleanupErr?.message);
-        }
+        this._prune247Channel(guildId, channelId);
+        continue;
+      }
+      if (!channelObj && !definitive) {
+        logger.warn(
+            `[BootRecovery] Channel ${channelId} could not be resolved (cache miss + REST failure) — ` +
+            `keeping the 24/7 setting; the watchdog will retry later.`
+        );
         continue;
       }
       if (channelObj.type !== 2) {
@@ -583,6 +590,6 @@ class GatewayHandler {
   }
 }
 
-applyMixins(GatewayHandler, VoiceStateRouting, GuildSync, RejoinManager);
+applyMixins(GatewayHandler, VoiceStateRouting, GuildSync, RejoinManager, Watchdog247);
 
 export { GatewayHandler };

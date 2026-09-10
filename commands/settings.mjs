@@ -176,8 +176,7 @@ export async function run(message, data) {
   if (cmd === "getSettings") {
     if (settingKey) {
       if (settingKey === "stay_247") {
-        const channels = get247Channels(set);
-        return message.reply(build247Panel(set, this, guildId, channels.size > 0));
+        return message.reply(build247Panel(set, this, guildId, null));
       }
       const val   = set.get(settingKey);
       const desc  = this.settingsMgr.descriptions?.[settingKey];

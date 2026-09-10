@@ -105,11 +105,16 @@ export async function handleShortcut(ctx, message, settingKey, valueTokens) {
     const mode = rawValue.toLowerCase().trim();
     if (mode === "off" || mode === "false" || mode === "disable" || mode === "0") {
       const loc = tWrap(ctx, guildId);
+      const panelKey = (k, vars = {}) => loc("responses.settings.247Panel." + k, vars);
       if (!guildId) return message.reply(embed(loc("responses.settings.noServer")));
       const { channelId } = await ctx.players.checkVoiceChannels(message);
       if (channelId) {
         await disable247(ctx, set, guildId, channelId);
-        return message.reply(build247Panel(set, ctx, guildId, cleanId(channelId)));
+        return message.reply(embed(
+            panelKey("confirmDisabled", { channel: "<#" + cleanId(channelId) + ">" }) + "\n\n" +
+            loc("responses.settings.247Disabled", { channel: cleanId(channelId), prefix: ctx.handler.getPrefix(guildId) }),
+            { title: panelKey("title") }
+        ));
       }
       for (const [chId, player] of [...ctx.players.playerMap.entries()]) {
         if (cleanId(player?._guildId ?? "") === cleanId(guildId)) {
@@ -122,7 +127,11 @@ export async function handleShortcut(ctx, message, settingKey, valueTokens) {
         }
       }
       save247Channels(set, new Set());
-      return message.reply(build247Panel(set, ctx, guildId, null));
+      return message.reply(embed(
+          panelKey("confirmDisabledAll") + "\n\n" +
+          loc("responses.settings.247DisabledAll"),
+          { title: panelKey("title") }
+      ));
     }
     return handle247Toggle(ctx, message, set, guildId);
   }

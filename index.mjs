@@ -132,6 +132,18 @@ const saveAndExit = async () => {
   } catch (e) {
     logger.error("[Shutdown] Failed to close Dashboard DB:", e.message);
   }
+  try {
+    remix.gatewayHandler?.stop247Watchdog?.();
+  } catch (e) {
+    logger.warn("[Shutdown] Watchdog stop error:", e?.message);
+  }
+  try {
+    if (remix.settingsMgr?.shutdown) {
+      await remix.settingsMgr.shutdown();
+    }
+  } catch (e) {
+    logger.error("[Shutdown] Settings flush failed:", e.message);
+  }
   process.exit(0);
 };
 

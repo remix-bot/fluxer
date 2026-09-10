@@ -194,13 +194,24 @@ export class RemoteSettingsManager extends SettingsManager {
   }
 
   /**
-   * Stop all pending debounced writes. Call before process exit.
+   * Stop accepting new writes and flush any pending debounced writes to the
+   * database. Call before process exit — previously this DISCARDED pending
+   * writes, which could lose a 24/7 toggle made within the 80ms debounce
+   * window of a shutdown.
    * @returns {Promise<void>}
    */
   async shutdown() {
+    if (this._shuttingDown) return;
     this._shuttingDown = true;
+    const pendingServers = [...this._debounceTimers.keys()]
+        .map(id => this.guilds.get(id))
+        .filter(Boolean);
     for (const [, timer] of this._debounceTimers) clearTimeout(timer);
     this._debounceTimers.clear();
+    if (pendingServers.length > 0) {
+      logger.info("Settings", `Flushing ${pendingServers.length} pending write(s) on shutdown...`);
+    }
+    await Promise.allSettled(pendingServers.map(server => this._doSave(server)));
   }
 
   /**
@@ -355,6 +366,20 @@ export class RemoteSettingsManager extends SettingsManager {
   }
 
   /**
+   * Internal flag-free save of the full settings blob. Used by remoteSave
+   * and by the shutdown flush (which runs after _shuttingDown is set).
+   * @param {ServerSettings} server - The guild settings instance.
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _doSave(server) {
+    const escapedData = mysql.escape(JSON.stringify(server.data));
+    const escapedId = mysql.escape(server.id);
+    const r = await this.query(`UPDATE settings SET data = ${escapedData} WHERE id=${escapedId}${this._botIdWhere()}`);
+    if (r.error) logger.error('[Settings] save error:', r.error);
+  }
+
+  /**
    * Persist a single key change via MySQL JSON_SET. Falls back to a full blob save for arrays/objects.
    * @param {ServerSettings} server - The guild settings instance.
    * @param {string} key - The changed key.
@@ -381,10 +406,7 @@ export class RemoteSettingsManager extends SettingsManager {
    */
   async remoteSave(server) {
     if (this._shuttingDown) return;
-    const escapedData = mysql.escape(JSON.stringify(server.data));
-    const escapedId = mysql.escape(server.id);
-    const r = await this.query(`UPDATE settings SET data = ${escapedData} WHERE id=${escapedId}${this._botIdWhere()}`);
-    if (r.error) logger.error('[Settings] remoteSave error:', r.error);
+    return this._doSave(server);
   }
 
   /**
@@ -432,7 +454,9 @@ export class RemoteSettingsManager extends SettingsManager {
 
   /**
    * Queue a debounced database write for a single key change (80ms delay per guild).
-   * If the guild is not yet cached, it is added and a CREATE is issued.
+ * If the guild is not yet cached, it is added and a CREATE is issued.
+   * Critical keys (stay_247) flush immediately instead of debouncing — a
+   * 24/7 toggle must survive even an instant crash/restart.
    * @param {ServerSettings} server - The guild settings instance.
    * @param {string} key - The changed key.
    */
@@ -444,6 +468,12 @@ export class RemoteSettingsManager extends SettingsManager {
     }
     const s = this.guilds.get(server.id);
     s.data[key] = server.data[key];
+    if (key === 'stay_247') {
+      const existing = this._debounceTimers.get(server.id);
+      if (existing) { clearTimeout(existing); this._debounceTimers.delete(server.id); }
+      this.remoteSave(s).catch(e => logger.error('[Settings] immediate save error:', e.message));
+      return;
+    }
     const existing = this._debounceTimers.get(server.id);
     if (existing) clearTimeout(existing);
     this._debounceTimers.set(server.id, setTimeout(() => {
