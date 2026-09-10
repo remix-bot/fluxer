@@ -45,7 +45,7 @@ export class TrackOptionsManager {
           user_id VARCHAR(32) NOT NULL,
           track_identifier VARCHAR(512) NOT NULL,
           track_title VARCHAR(512) NOT NULL DEFAULT '',
-          alias VARCHAR(${MAX_ALIAS_LEN}) NOT NULL DEFAULT '${DEFAULT_ALIAS}',
+          alias VARCHAR(${MAX_ALIAS_LEN}) NOT NULL DEFAULT ${mysql.escape(DEFAULT_ALIAS)},
           start_ms INT UNSIGNED NOT NULL DEFAULT 0,
           end_ms INT UNSIGNED NOT NULL DEFAULT 0,
           bot_id VARCHAR(32) NOT NULL DEFAULT '',
@@ -68,7 +68,7 @@ export class TrackOptionsManager {
     try {
       const cols = await this._query(`SHOW COLUMNS FROM track_options LIKE 'alias'`);
       if (cols && cols.length > 0) return;
-      await this._query(`ALTER TABLE track_options ADD COLUMN alias VARCHAR(${MAX_ALIAS_LEN}) NOT NULL DEFAULT '${DEFAULT_ALIAS}' AFTER track_title`);
+      await this._query(`ALTER TABLE track_options ADD COLUMN alias VARCHAR(${MAX_ALIAS_LEN}) NOT NULL DEFAULT ${mysql.escape(DEFAULT_ALIAS)} AFTER track_title`);
       await this._query(`ALTER TABLE track_options DROP INDEX uq_user_track_bot`);
       await this._query(`ALTER TABLE track_options ADD UNIQUE KEY uq_user_track_alias_bot (user_id, track_identifier, alias, bot_id)`);
       logger.player("[TrackOptions] Migrated table — added alias column.");
@@ -82,10 +82,10 @@ export class TrackOptionsManager {
     this.botId = id;
   }
 
-  /** @private Execute a raw SQL query. @param {string} q @returns {Promise<Array>} */
-  _query(q) {
+  /** @private Execute a raw SQL query. @param {string} q @param {Array} [params] @returns {Promise<Array>} */
+  _query(q, params = []) {
     return new Promise((resolve, reject) => {
-      this.db.query(q, (error, results) => {
+      this.db.query(q, params, (error, results) => {
         if (error) return reject(error);
         resolve(results);
       });
