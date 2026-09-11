@@ -2,18 +2,25 @@
  * @module src/music/bilibili/BilibiliResolver
  * @description Bilibili video resolution: URL detection (BV/av ids, b23.tv /
  * bili2233.cn short links, ?p= page selection), the public web API client
- * with a self-managed device fingerprint, DASH audio-stream selection (with
- * a progressive mp4 fallback for anonymous playback), and internal track
- * building.
+ * for fully anonymous playback (no login cookies, ever), best-audio-stream
+ * selection and internal track building.
  *
- * Bilibili's risk control (HTTP 412 / code -412) blocks browser-style
- * requests that lack a device fingerprint, so the module bootstraps one per
- * process: the finger/spi endpoint mints a fresh buvid3/buvid4 pair and a
- * homepage GET contributes b_nut. A user cookie from config (SESSDATA etc.)
- * is sanitized — placeholder-looking or malformed values are dropped with a
- * log line instead of poisoning the request trust level — and layered on top
- * of the fingerprint, and every fingerprint-blocked request refreshes the
- * fingerprint and retries once before surfacing the config-cookie hint.
+ * Anonymous access strategy (empirically verified against the live API):
+ * - Every request carries a self-managed device fingerprint: the finger/spi
+ *   endpoint mints a fresh buvid3/buvid4 pair and a homepage GET contributes
+ *   b_nut. Risk-control blocks (HTTP 412 / code -412) trigger one shared
+ *   fingerprint refresh and retry before giving up on an endpoint.
+ * - Requests prefer the WBI-signed endpoints (`/x/web-interface/wbi/view`,
+ *   `/x/player/wbi/playurl`): the mixin key is derived from the anonymous
+ *   nav payload's img/sub keys, and signed calls survive IP blocks that
+ *   reject the legacy unsigned endpoints outright.
+ * - Every API failure on the WBI path falls back to the legacy unsigned
+ *   endpoint once, so a bad key never breaks playback.
+ * - playurl asks for the DASH manifest (fnval=16) plus try_look=1 — anonymous
+ *   callers receive real DASH audio streams (typically up to ~170 kbps AAC),
+ *   a big step up from the old progressive-only fallback. When a video has no
+ *   DASH audio, the html5 platform variant (platform=html5&high_quality=1)
+ *   yields a progressive mp4 instead.
  *
  * The audio URLs Bilibili hands out only respond to requests carrying a
  * bilibili Referer and a browser User-Agent, so the raw CDN URL is never
@@ -21,6 +28,7 @@
  * local proxy in {@link module:src/music/bilibili/BilibiliProxy}.
  */
 
+import crypto from "node:crypto";
 import { Utils } from "../../utils/Utils.mjs";
 import { logger } from "../../core/Logger.mjs";
 
@@ -31,10 +39,16 @@ export const BILIBILI_REFERER = "https://www.bilibili.com/";
 /** @type {string} @description Page origin paired with the Referer on browser-style requests. */
 const BILIBILI_ORIGIN = "https://www.bilibili.com";
 
-/** @type {string} @description Video metadata endpoint (bvid= or aid=). */
+/** @type {string} @description Anonymous nav endpoint carrying the WBI img/sub keys. */
+const API_NAV = "https://api.bilibili.com/x/web-interface/nav";
+/** @type {string} @description Video metadata endpoint — legacy (unsigned). */
 const API_VIEW = "https://api.bilibili.com/x/web-interface/view";
-/** @type {string} @description Playback URL endpoint (DASH manifest when fnval=16). */
+/** @type {string} @description Video metadata endpoint — WBI-signed (preferred). */
+const API_VIEW_WBI = "https://api.bilibili.com/x/web-interface/wbi/view";
+/** @type {string} @description Playback URL endpoint — legacy (unsigned). */
 const API_PLAYURL = "https://api.bilibili.com/x/player/playurl";
+/** @type {string} @description Playback URL endpoint — WBI-signed (preferred). */
+const API_PLAYURL_WBI = "https://api.bilibili.com/x/player/wbi/playurl";
 /** @type {string} @description Device-fingerprint endpoint returning a fresh buvid3/buvid4 pair. */
 const API_FINGER_SPI = "https://api.bilibili.com/x/frontend/finger/spi";
 /** @type {string} @description Homepage used to pick up buvid3/b_nut/buvid4 Set-Cookie values. */
@@ -57,6 +71,8 @@ const SHORTLINK_TIMEOUT_MS = 10_000;
 const BOOTSTRAP_TIMEOUT_MS = 10_000;
 /** @type {number} @description Cool-down (ms) before retrying a risk-control-blocked request. */
 const BLOCK_RETRY_DELAY_MS = 1_200;
+/** @type {number} @description Cool-down (ms) before retrying after a WBI signature rejection. */
+const WBI_RETRY_DELAY_MS = 250;
 /** @type {number} @description Minimum spacing (ms) between fingerprint refreshes. */
 const REFRESH_MIN_INTERVAL_MS = 2_500;
 /** @type {number} @description Maximum number of multi-page parts queued from one video. */
@@ -104,17 +120,27 @@ const CDN_HEADERS = {
 /** @type {string} @description Error hint shown when Bilibili risk control blocks the server IP. */
 const BLOCKED_HINT =
     "Bilibili blocked this server's requests (risk control, HTTP 412). " +
-    "The bot manages its device fingerprint automatically, so a persistent block means Bilibili flagged " +
-    "this hosting IP: copy your browser's cookie header into config.json -> bilibili.cookie " +
-    "(SESSDATA is the part that matters — buvid3/buvid4/b_nut are auto-generated, placeholder values are ignored) " +
-    "and restart the bot. Shared-hosting IPs may stay blocked; a different egress IP may be required.";
+    "The bot manages its device fingerprint and WBI request signatures automatically, so a persistent block means " +
+    "Bilibili flagged this hosting IP: a different egress IP (VPN or proxy) may be required. " +
+    "This bot plays Bilibili fully anonymously, so there is no cookie workaround.";
 
-/** @type {RegExp} @description Values that are clearly config-example placeholders rather than real cookies. */
-const PLACEHOLDER_RE =
-    /your[_\- ]|_here\b|\bplaceholder\b|\bexample\b|\bsample\b|\bdummy\b|\bfake\b|change[_\-]?me|\bfixme\b|\btodo\b|\bxxx\b|^\.{2,}$|^<[^>]*>$|\{\{|\}\}/i;
+/**
+ * @type {Array<number>} @description Permutation used to derive the WBI mixin
+ * key from the nav payload's img+sub keys. Only the first 32 positions are
+ * ever read (the mixin key is the first 32 characters of the permuted
+ * string); these 32 entries are the empirically verified prefix of the
+ * published table.
+ */
+const MIXIN_TAB = [
+  46, 47, 18, 2, 53, 8, 23, 32, 15, 50,
+  10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
+  33, 9, 42, 19, 29, 28, 14, 39, 12, 38,
+  41, 13,
+];
 
-/** @type {Map<string,string>|null} @description Sanitized cookie pairs from config (SESSDATA etc.). */
-let _userCookiePairs = null;
+/** @type {RegExp} @description Characters stripped from values before WBI signing (per the published algorithm). */
+const WBI_FILTER_RE = /[!'()*]/g;
+
 /** @type {object|null} @description Auto-managed device fingerprint (buvid3/buvid4/b_nut). */
 let _fingerprint = null;
 /** @type {Promise|null} @description Memoized bootstrap run (best effort, never rejects). */
@@ -123,70 +149,25 @@ let _bootstrapPromise = null;
 let _refreshPromise = null;
 /** @type {number} @description Timestamp (ms) of the last fingerprint refresh trigger. */
 let _refreshGate = 0;
+/** @type {{mixinKey: string, imgKey: string, subKey: string}|null} @description Cached WBI signing keys. */
+let _wbiKeys = null;
+/** @type {Promise|null} @description Memoized WBI key load. */
+let _wbiPromise = null;
 
 /**
- * Whether a cookie value is plausible for its (known) name. Unknown cookie
- * names only need a sane length and no control characters; known Bilibili
- * cookie names get their real format so garbage (e.g. a placeholder pasted
- * from a config example) never rides along on a request.
+ * Whether a device-cookie value is plausible (used when harvesting
+ * Set-Cookie values from the homepage bootstrap).
  * @param {string} name
  * @param {string} value
  * @returns {boolean}
  */
-function plausibleCookieValue(name, value) {
+function plausibleDeviceValue(name, value) {
   if (value.length > 512 || /[\x00-\x1f\x7f]/.test(value)) return false;
   switch (name) {
-    case "buvid3":       return /^[A-Za-z0-9-]{16,}$/.test(value);
-    case "b_nut":        return /^[0-9]{9,11}$/.test(value);
-    case "buvid4":       return /^[A-Za-z0-9-+=]{20,}$/.test(value);
-    case "SESSDATA":     return /^[A-Za-z0-9,.*%_+-]{16,}$/.test(value);
-    case "bili_jct":
-    case "DedeUserIDCKMd5": return /^[0-9a-fA-F]{32}$/.test(value);
-    case "DedeUserID":   return /^[0-9]{3,20}$/.test(value);
-    default:             return value.length >= 4;
-  }
-}
-
-/**
- * Sanitize a user-supplied cookie string: split on ";", drop pairs whose
- * name or value is malformed, obviously a placeholder, or implausible for a
- * known Bilibili cookie name (those would lower the request trust level
- * instead of raising it). Real browser cookie headers pass untouched.
- * @param {string|null} str
- * @returns {{pairs: Map<string,string>, dropped: Array<string>}}
- */
-function sanitizeCookieString(str) {
-  const pairs = new Map();
-  const dropped = [];
-  if (!str || typeof str !== "string") return { pairs, dropped };
-  for (const chunk of str.split(";")) {
-    const pair = chunk.trim();
-    if (!pair) continue;
-    const eq = pair.indexOf("=");
-    const name = eq > 0 ? pair.slice(0, eq).trim() : "";
-    const value = eq > 0 ? pair.slice(eq + 1).trim() : "";
-    if (!/^[A-Za-z0-9_-]{1,64}$/.test(name)) { dropped.push(pair.slice(0, 24) || "(empty)"); continue; }
-    if (!value || PLACEHOLDER_RE.test(value) || !plausibleCookieValue(name, value)) { dropped.push(name); continue; }
-    pairs.set(name, value);
-  }
-  return { pairs, dropped };
-}
-
-/**
- * Set a user-provided cookie string (from config.json -> bilibili.cookie).
- * Valid pairs (SESSDATA, bili_jct, DedeUserID, ...) are layered on top of
- * the auto-managed device fingerprint; placeholder-looking or malformed
- * values are dropped with a log line instead of poisoning every request.
- * @param {string|null} cookie
- */
-export function setBilibiliCookie(cookie) {
-  const { pairs, dropped } = sanitizeCookieString(cookie);
-  _userCookiePairs = pairs.size ? pairs : null;
-  if (dropped.length) {
-    logger.warn("[Bilibili] cookie: ignoring " + dropped.join(", ")
-        + " (placeholder-looking or malformed; buvid3/buvid4/b_nut are generated automatically)");
-  } else if (_userCookiePairs) {
-    logger.player("[Bilibili] cookie: using " + [..._userCookiePairs.keys()].join(", ") + " from config");
+    case "buvid3": return /^[A-Za-z0-9-]{16,}$/.test(value);
+    case "b_nut":  return /^[0-9]{9,11}$/.test(value);
+    case "buvid4": return /^[A-Za-z0-9-+=]{20,}$/.test(value);
+    default:       return false;
   }
 }
 
@@ -236,9 +217,9 @@ function bootstrapFingerprint() {
             if (eq > 0) jar[pair.slice(0, eq).trim()] = pair.slice(eq + 1).trim();
           }
           try { res.body?.cancel?.(); } catch (_) {}
-          if (!fp.buvid3 && plausibleCookieValue("buvid3", jar.buvid3 ?? "")) fp.buvid3 = jar.buvid3;
-          if (plausibleCookieValue("b_nut", jar.b_nut ?? "")) fp.b_nut = jar.b_nut;
-          if (!fp.buvid4 && plausibleCookieValue("buvid4", jar.buvid4 ?? "")) fp.buvid4 = jar.buvid4;
+          if (!fp.buvid3 && plausibleDeviceValue("buvid3", jar.buvid3 ?? "")) fp.buvid3 = jar.buvid3;
+          if (!fp.b_nut && plausibleDeviceValue("b_nut", jar.b_nut ?? "")) fp.b_nut = jar.b_nut;
+          if (!fp.buvid4 && plausibleDeviceValue("buvid4", jar.buvid4 ?? "")) fp.buvid4 = jar.buvid4;
         } catch (_) {}
         return null;
       })(),
@@ -253,14 +234,16 @@ function bootstrapFingerprint() {
 }
 
 /**
- * Clear the memoized device fingerprint and pending refresh state so the
- * next request bootstraps a fresh one (used by tests to isolate scenarios).
+ * Clear the memoized device fingerprint, WBI keys and pending refresh state
+ * so the next request bootstraps everything fresh (used by tests).
  */
 export function resetBilibiliFingerprint() {
   _bootstrapPromise = null;
   _fingerprint = null;
   _refreshPromise = null;
   _refreshGate = 0;
+  _wbiKeys = null;
+  _wbiPromise = null;
 }
 
 /**
@@ -275,9 +258,9 @@ function refreshFingerprint() {
 
 /**
  * Shared cool-down + refresh for risk-control-blocked requests: one short
- * pause, then a single fingerprint refresh no matter how many requests were
- * blocked at the same time (the refresh is rate-limited so parallel queue
- * loads cannot hammer the fingerprint endpoint).
+ * pause, then a single fingerprint refresh (and WBI key invalidation) no
+ * matter how many requests were blocked at the same time — the refresh is
+ * rate-limited so parallel queue loads cannot hammer the endpoints.
  * @returns {Promise<null>}
  */
 function refreshAfterBlock() {
@@ -287,6 +270,8 @@ function refreshAfterBlock() {
     _refreshPromise = (async () => {
       await new Promise((r) => setTimeout(r, BLOCK_RETRY_DELAY_MS));
       logger.warn("[Bilibili] risk control block (412) — refreshing device fingerprint and retrying once");
+      _wbiKeys = null;
+      _wbiPromise = null;
       await refreshFingerprint();
     })();
   }
@@ -294,32 +279,22 @@ function refreshAfterBlock() {
 }
 
 /**
- * The cookie sent on Bilibili requests: sanitized config pairs first, then
- * fingerprint fill-ins for any device cookies the config did not validly
- * provide. Returns null when neither source has anything.
+ * The device-fingerprint cookie sent on Bilibili requests (buvid3/b_nut/
+ * buvid4 only — no login cookies exist in this module by design).
  * @returns {string|null}
  */
 function effectiveCookie() {
+  if (!_fingerprint) return null;
   const parts = [];
-  const seen = new Set();
-  if (_userCookiePairs) {
-    for (const [name, value] of _userCookiePairs) {
-      parts.push(name + "=" + value);
-      seen.add(name);
-    }
-  }
-  if (_fingerprint) {
-    for (const name of ["buvid3", "b_nut", "buvid4"]) {
-      if (!seen.has(name) && _fingerprint[name]) parts.push(name + "=" + _fingerprint[name]);
-    }
+  for (const name of ["buvid3", "b_nut", "buvid4"]) {
+    if (_fingerprint[name]) parts.push(name + "=" + _fingerprint[name]);
   }
   return parts.length ? parts.join("; ") : null;
 }
 
 /**
  * Build the header set for Bilibili API requests: the browser-exact UA /
- * Referer / Origin / Sec-Fetch set plus the effective cookie (config pairs
- * layered over the auto-managed device fingerprint).
+ * Referer / Origin / Sec-Fetch set plus the device fingerprint cookie.
  * @returns {Promise<object>}
  */
 async function biliRequestHeaders() {
@@ -331,9 +306,7 @@ async function biliRequestHeaders() {
 }
 
 /**
- * Build the header set the local proxy forwards to Bilibili CDN hosts. Same
- * trust rules as the API headers: the sanitized config cookie layered over
- * the auto-managed device fingerprint.
+ * Build the header set the local proxy forwards to Bilibili CDN hosts.
  * @returns {Promise<object>}
  */
 export async function buildBilibiliCdnHeaders() {
@@ -342,6 +315,73 @@ export async function buildBilibiliCdnHeaders() {
   const cookie = effectiveCookie();
   if (cookie) headers.Cookie = cookie;
   return headers;
+}
+
+/**
+ * Load the WBI signing keys: the anonymous nav endpoint reports code -101
+ * ("not logged in") but still carries data.wbi_img with the img/sub key
+ * pair, from which the mixin key is derived through the published
+ * permutation table. Keys are cached for the process lifetime and only
+ * invalidated reactively (signature rejections / risk-control blocks).
+ * @returns {Promise<{mixinKey: string, imgKey: string, subKey: string}>}
+ * @throws {Error} when nav is unreachable or carries no wbi_img payload.
+ */
+async function loadWbiKeys() {
+  if (_wbiKeys) return _wbiKeys;
+  if (_wbiPromise) return _wbiPromise;
+  _wbiPromise = (async () => {
+    const headers = await biliRequestHeaders();
+    const res = await fetch(API_NAV, {
+      headers,
+      redirect: "follow",
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    });
+    if (res.status !== 200) {
+      try { res.body?.cancel?.(); } catch (_) {}
+      throw new Error("WBI nav HTTP " + res.status);
+    }
+    const body = await res.json();
+    const img = body?.data?.wbi_img?.img_url;
+    const sub = body?.data?.wbi_img?.sub_url;
+    if (typeof img !== "string" || typeof sub !== "string" || !img || !sub) {
+      throw new Error("WBI nav payload has no wbi_img (code " + body?.code + ")");
+    }
+    const imgKey = new URL(img).pathname.split("/").pop().split(".")[0];
+    const subKey = new URL(sub).pathname.split("/").pop().split(".")[0];
+    const raw = imgKey + subKey;
+    if (raw.length < 32) throw new Error("WBI keys too short");
+    const mixinKey = MIXIN_TAB.map((i) => raw[i]).join("").slice(0, 32);
+    if (mixinKey.length !== 32) throw new Error("WBI mixin key derivation failed");
+    _wbiKeys = { mixinKey, imgKey, subKey };
+    logger.player("[Bilibili] WBI signing keys ready (anonymous)");
+    return _wbiKeys;
+  })().catch((e) => {
+    _wbiPromise = null;
+    throw e;
+  });
+  return _wbiPromise;
+}
+
+/**
+ * Sign API params for a WBI endpoint: values are sanitized, `wts` is added,
+ * pairs are sorted by key, and `w_rid` is the MD5 of the query string plus
+ * the mixin key — the published web-client algorithm.
+ * @param {object} params
+ * @returns {string} The signed query string (w_rid included).
+ */
+function signWbiParams(params) {
+  const keys = _wbiKeys;
+  if (!keys) throw new Error("WBI keys not loaded");
+  const merged = { ...params, wts: Math.floor(Date.now() / 1000) };
+  const clean = {};
+  for (const [k, v] of Object.entries(merged)) {
+    clean[k] = String(v).replace(WBI_FILTER_RE, "");
+  }
+  const qs = Object.keys(clean).sort()
+      .map((k) => encodeURIComponent(k) + "=" + encodeURIComponent(clean[k]))
+      .join("&");
+  const wRid = crypto.createHash("md5").update(qs + keys.mixinKey, "utf8").digest("hex");
+  return qs + "&w_rid=" + wRid;
 }
 
 /**
@@ -360,45 +400,110 @@ function describeApiError(code, message) {
 }
 
 /**
- * GET a Bilibili API endpoint and return its `data` payload, mapping HTTP
- * status and body error codes to readable messages. Risk-control blocks
- * (HTTP 412 or body code -412) refresh the device fingerprint and retry
- * exactly once before surfacing the config-cookie hint.
+ * One raw GET against api.bilibili.com.
  * @param {string} url
- * @returns {Promise<object>}
+ * @returns {Promise<{status: number, body: object|null}>}
+ * @throws {Error} on network failure.
+ */
+async function rawGet(url) {
+  const headers = await biliRequestHeaders();
+  const res = await fetch(url, { headers, redirect: "follow", signal: AbortSignal.timeout(API_TIMEOUT_MS) });
+  if (res.status !== 200) {
+    try { res.body?.cancel?.(); } catch (_) {}
+    return { status: res.status, body: null };
+  }
+  let body;
+  try {
+    body = await res.json();
+  } catch (_) {
+    return { status: -1, body: null };
+  }
+  return { status: 200, body };
+}
+
+/**
+ * Read one JSON API response: HTTP 200 + body code 0 returns `data`.
+ * @param {{status: number, body: object|null}} r
+ * @returns {object} The `data` payload.
+ * @throws {Error} with a user-readable message for HTTP/transport/API errors.
+ */
+function unwrap(r) {
+  if (r.status !== 200) throw new Error("Bilibili API HTTP " + r.status);
+  const body = r.body;
+  if (!body) throw new Error("Bilibili API returned invalid JSON");
+  if (body.code !== 0) throw new Error(describeApiError(body.code, body.message));
+  if (!body.data) throw new Error("Bilibili API returned no data");
+  return body.data;
+}
+
+/**
+ * GET a Bilibili API endpoint anonymously and return its `data` payload.
+ * The WBI-signed endpoint is tried first (it survives IP blocks that reject
+ * legacy unsigned calls); risk-control blocks and signature rejections
+ * trigger one refresh + retry; hard WBI failures fall back to the legacy
+ * unsigned endpoint, whose own errors are surfaced to the user.
+ * @param {string} wbiUrl - Full WBI endpoint base URL.
+ * @param {string} legacyUrl - Full legacy endpoint base URL.
+ * @param {object} params - Query parameters (signed for WBI, plain for legacy).
+ * @returns {Promise<object>} The endpoint's `data` payload.
  * @throws {Error} with a user-readable message on network/HTTP/API errors.
  */
-async function biliJson(url) {
-  for (let attempt = 0; ; attempt++) {
-    const headers = await biliRequestHeaders();
-    let res;
+async function biliApiGet(wbiUrl, legacyUrl, params) {
+  // --- WBI-signed attempt (with one reactive refresh + retry) ---
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let keys;
     try {
-      res = await fetch(url, { headers, redirect: "follow", signal: AbortSignal.timeout(API_TIMEOUT_MS) });
+      keys = await loadWbiKeys();
+    } catch (_) {
+      break; // no keys -> legacy path
+    }
+    let r;
+    try {
+      r = await rawGet(wbiUrl + "?" + signWbiParams(params));
+    } catch (e) {
+      if (attempt === 0) continue; // transient network error -> retry once with fresh signature (wts changes)
+      break; // legacy path
+    }
+    if (r.status === 412 || r.body?.code === -412) {
+      if (attempt === 0) { await refreshAfterBlock(); continue; }
+      break; // blocked even signed -> try legacy
+    }
+    if (r.body?.code === -403) {
+      // Either a WBI signature rejection or a region-locked video: refresh
+      // the keys once; if it persists, the legacy endpoint below decides.
+      if (attempt === 0) {
+        _wbiKeys = null;
+        _wbiPromise = null;
+        await new Promise((r2) => setTimeout(r2, WBI_RETRY_DELAY_MS));
+        continue;
+      }
+      break; // legacy decides (region-locked videos fail there too)
+    }
+    if (r.status === 200 && r.body) {
+      if (r.body.code === 0) {
+        if (r.body.data) return r.body.data;
+        break; // code 0 without data -> legacy path
+      }
+      // A definite business error is trustworthy — surface it directly.
+      throw new Error(describeApiError(r.body.code, r.body.message));
+    }
+    break; // unexpected status -> legacy path
+  }
+
+  // --- Legacy unsigned attempt (with one fingerprint refresh + retry) ---
+  const qs = new URLSearchParams(params).toString();
+  for (let attempt = 0; ; attempt++) {
+    let r;
+    try {
+      r = await rawGet(legacyUrl + "?" + qs);
     } catch (e) {
       throw new Error("Bilibili API unreachable: " + (e?.cause?.message || e?.message || String(e)));
     }
-    if (res.status === 412) {
-      try { res.body?.cancel?.(); } catch (_) {}
+    if (r.status === 412 || r.body?.code === -412) {
       if (attempt === 0) { await refreshAfterBlock(); continue; }
       throw new Error(BLOCKED_HINT);
     }
-    if (res.status !== 200) {
-      try { res.body?.cancel?.(); } catch (_) {}
-      throw new Error("Bilibili API HTTP " + res.status);
-    }
-    let body;
-    try {
-      body = await res.json();
-    } catch (_) {
-      throw new Error("Bilibili API returned invalid JSON");
-    }
-    if (body.code === -412) {
-      if (attempt === 0) { await refreshAfterBlock(); continue; }
-      throw new Error(BLOCKED_HINT);
-    }
-    if (body.code !== 0) throw new Error(describeApiError(body.code, body.message));
-    if (!body.data) throw new Error("Bilibili API returned no data");
-    return body.data;
+    return unwrap(r);
   }
 }
 
@@ -484,37 +589,39 @@ async function normalizeBilibiliUrl(str) {
 }
 
 /**
- * Fetch video metadata for a parsed reference.
+ * Fetch video metadata for a parsed reference (WBI-signed view, legacy
+ * fallback).
  * @param {{kind: string, id: string}} ref
  * @returns {Promise<object>} The view API `data` payload.
  */
 export async function fetchBilibiliView(ref) {
   const params = ref.kind === "bvid" ? { bvid: ref.id } : { aid: String(ref.id) };
-  return biliJson(API_VIEW + "?" + new URLSearchParams(params));
+  return biliApiGet(API_VIEW_WBI, API_VIEW, params);
 }
 
 /**
- * Fetch the playback manifest for one video page. Default mode requests the
- * DASH manifest (fnval=16); html5 mode requests the anonymous-friendly
- * progressive mp4 (durl) used as a second chance when no DASH audio stream
- * is available (DASH requires a login cookie).
+ * Fetch the playback manifest for one video page (WBI-signed playurl,
+ * legacy fallback). Both modes carry try_look=1, the anonymous
+ * watch-anyway flag. Default mode requests the DASH manifest (fnval=16),
+ * which anonymously includes real DASH audio streams; html5 mode requests
+ * the progressive mp4 (durl) used when a video has no DASH audio.
  * @param {{bvid?: string, aid?: number|string, cid: number|string}} meta
- * @param {{html5?: boolean}} [opts]
+ * @param {{mode?: "dash"|"html5"}} [opts]
  * @returns {Promise<object>} The playurl API `data` payload.
  */
 export async function fetchBilibiliPlayUrl(meta, opts = {}) {
-  const params = opts.html5
-      ? { cid: String(meta.cid), platform: "html5", high_quality: "1" }
-      : { cid: String(meta.cid), fnval: "16", fourk: "1" };
+  const params = opts.mode === "html5"
+      ? { cid: String(meta.cid), platform: "html5", high_quality: "1", try_look: "1" }
+      : { cid: String(meta.cid), fnval: "16", fourk: "1", try_look: "1" };
   if (meta.bvid) params.bvid = meta.bvid;
   else if (meta.aid != null) params.aid = String(meta.aid);
-  return biliJson(API_PLAYURL + "?" + new URLSearchParams(params));
+  return biliApiGet(API_PLAYURL_WBI, API_PLAYURL, params);
 }
 
 /**
  * Pick the best DASH audio stream from a playurl payload: all audio
- * variants (plain, flac, dolby when a login cookie unlocks them) are
- * candidates and the highest-bandwidth entry wins.
+ * variants are candidates and the highest-bandwidth entry wins. Anonymous
+ * calls return the regular AAC tiers here (empirically up to ~170 kbps).
  * @param {object} data - playurl `data` payload.
  * @returns {object|null} The chosen audio stream entry, or null.
  */
@@ -530,22 +637,25 @@ export function pickBestAudioStream(data) {
 }
 
 /**
- * Pick the progressive (non-DASH) fallback stream from a playurl payload: a
- * single-segment durl mp4/flv whose audio the node can decode directly.
- * Zero or multiple segments yield null — multi-segment progressive streams
- * cannot be chained through one proxy URL.
+ * Pick the progressive (non-DASH) fallback streams from a playurl payload:
+ * the durl entries (mp4/flv) whose audio the node can decode directly.
+ * All segments are returned — a single segment is served through the plain
+ * proxy URL, multiple segments through the list/concatenating proxy mode.
  * @param {object} data - playurl `data` payload.
- * @returns {{url: string, backupUrls: Array<string>}|null}
+ * @returns {{segments: Array<{url: string, size: number, backupUrls: Array<string>}>}|null}
  */
-export function pickProgressiveStream(data) {
+export function pickProgressiveSegments(data) {
   const durl = Array.isArray(data?.durl) ? data.durl : null;
-  if (!durl || durl.length !== 1) return null;
-  const seg = durl[0];
-  if (typeof seg?.url !== "string" || !seg.url.startsWith("http")) return null;
-  const backupUrls = Array.isArray(seg.backup_url)
-      ? seg.backup_url.filter(u => typeof u === "string" && u.startsWith("http"))
-      : [];
-  return { url: seg.url, backupUrls };
+  if (!durl || !durl.length) return null;
+  const segments = [];
+  for (const seg of durl) {
+    if (typeof seg?.url !== "string" || !seg.url.startsWith("http")) return null;
+    const backupUrls = Array.isArray(seg.backup_url)
+        ? seg.backup_url.filter(u => typeof u === "string" && u.startsWith("http"))
+        : [];
+    segments.push({ url: seg.url, size: Math.floor(Number(seg.size) || 0), backupUrls });
+  }
+  return segments.length ? { segments } : null;
 }
 
 /**

@@ -365,7 +365,7 @@
       "loadError": "حدث خطأ أثناء تحميل المقطع.",
       "searchingProvider": "جارٍ البحث في {{provider}}...",
       "bilibiliResolving": "📺 جارٍ تحليل فيديو Bilibili...",
-      "bilibiliNoAudio": "❌ لا يوجد صوت قابل للتشغيل لـ **{{title}}** — قد يكون الفيديو مقفلًا جغرافيًا أو مدفوعًا أو يتطلب كوكيز تسجيل الدخول (config.json → bilibili.cookie).",
+      "bilibiliNoAudio": "❌ لا يوجد صوت قابل للتشغيل لـ **{{title}}** — قد يكون الفيديو مقفلًا جغرافيًا أو مدفوعًا أو محذوفًا.",
       "bilibiliError": "❌ Bilibili: {{message}}",
       "bilibiliDisabled": "❌ تشغيل Bilibili معطل (config.json → bilibili.enabled)."
     },

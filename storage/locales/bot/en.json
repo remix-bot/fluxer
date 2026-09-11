@@ -473,7 +473,7 @@
       "loadError": "An error occurred while loading the track.",
       "searchingProvider": "Searching {{provider}}...",
       "bilibiliResolving": "📺 Resolving Bilibili video...",
-      "bilibiliNoAudio": "❌ No playable audio for **{{title}}** — the video may be region-locked, premium-only, or need a login cookie (config.json → bilibili.cookie).",
+      "bilibiliNoAudio": "❌ No playable audio for **{{title}}** — the video may be region-locked, premium-only, or deleted.",
       "bilibiliError": "❌ Bilibili: {{message}}",
       "bilibiliDisabled": "❌ Bilibili playback is disabled (config.json → bilibili.enabled)."
     },

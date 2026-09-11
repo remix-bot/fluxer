@@ -462,7 +462,7 @@
       "loadError": "Parça yüklenirken bir hata oluştu.",
       "searchingProvider": "{{provider}} aranıyor...",
       "bilibiliResolving": "📺 Bilibili videosu çözümleniyor...",
-      "bilibiliNoAudio": "❌ **{{title}}** için çalınabilir ses yok — video bölge kilitli, ücretli olabilir veya giriş çerezi gerektirebilir (config.json → bilibili.cookie).",
+      "bilibiliNoAudio": "❌ **{{title}}** için çalınabilir ses yok — video bölge kilitli, ücretli olabilir veya silinmiş olabilir.",
       "bilibiliError": "❌ Bilibili: {{message}}",
       "bilibiliDisabled": "❌ Bilibili oynatma devre dışı (config.json → bilibili.enabled)."
     },

@@ -365,7 +365,7 @@
       "loadError": "Beim Laden des Tracks ist ein Fehler aufgetreten.",
       "searchingProvider": "Suche auf {{provider}}...",
       "bilibiliResolving": "📺 Bilibili-Video wird aufgelöst...",
-      "bilibiliNoAudio": "❌ Kein abspielbares Audio für **{{title}}** — das Video ist möglicherweise regional gesperrt, kostenpflichtig oder braucht einen Login-Cookie (config.json → bilibili.cookie).",
+      "bilibiliNoAudio": "❌ Kein abspielbares Audio für **{{title}}** — das Video ist möglicherweise regional gesperrt, kostenpflichtig oder gelöscht.",
       "bilibiliError": "❌ Bilibili: {{message}}",
       "bilibiliDisabled": "❌ Bilibili-Wiedergabe ist deaktiviert (config.json → bilibili.enabled)."
     },

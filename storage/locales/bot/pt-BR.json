@@ -365,7 +365,7 @@
       "loadError": "Ocorreu um erro ao carregar a faixa.",
       "searchingProvider": "Buscando no {{provider}}...",
       "bilibiliResolving": "📺 Resolvendo vídeo do Bilibili...",
-      "bilibiliNoAudio": "❌ Nenhum áudio reproduzível para **{{title}}** — o vídeo pode estar bloqueado por região, ser pago ou exigir um cookie de login (config.json → bilibili.cookie).",
+      "bilibiliNoAudio": "❌ Nenhum áudio reproduzível para **{{title}}** — o vídeo pode estar bloqueado por região, ser pago ou ter sido excluído.",
       "bilibiliError": "❌ Bilibili: {{message}}",
       "bilibiliDisabled": "❌ A reprodução do Bilibili está desativada (config.json → bilibili.enabled)."
     },

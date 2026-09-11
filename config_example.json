@@ -6,8 +6,7 @@
       "Comment": "REST client options. 'timeout' is ms before a request to api.fluxer.app is aborted (default: 15000). Raise if you see DOMException AbortError in logs.",
       "timeout": 30000,
       "retries": 3
-    },
-    "Comment": "Client options passed to @fluxerjs/core 3.0. NOTE: cache limits live here. The built-in defaults are bounded (guilds 2000, channels 5000, users 10000, members 5000, messages 20). Do NOT set cache values to false \u2014 in 3.0 `false` means UNBOUNDED, not disabled, and will OOM the bot on large guild counts. To override, e.g. \"cache\": { \"users\": 20000 }."
+    }
   },
   "prefix": "your desired prefix (such as %)",
   "presenceInterval": null,
@@ -24,7 +23,7 @@
     },
     {
       "text": "Ping for Prefix",
-      "emoji_name": "\ud83c\udfa7",
+      "emoji_name": "Remix",
       "activity": {
         "name": "music",
         "type": 2
@@ -32,7 +31,7 @@
     },
     {
       "text": "Ping for Prefix | By RedTech & NoLogicAlan",
-      "emoji_name": "\ud83c\udfb6",
+      "emoji_name": "Remix",
       "activity": {
         "name": "RedTech & NoLogicAlan",
         "type": 2
@@ -51,14 +50,13 @@
     "bind": "127.0.0.1",
     "port": 0,
     "advertiseHost": null,
-    "cookie": null,
-    "Comment": "Bilibili video playback (%play https://www.bilibili.com/video/BV... , b23.tv short links and ?p= parts included). Bilibili's CDN only serves audio to requests with a bilibili Referer, so the bot runs a tiny local HTTP proxy that adds those headers and hands a signed URL to your NodeLink/Lavalink node. Defaults work when the node runs on the same host as the bot (nodelink.host = localhost). bind/port: what the proxy listens on (port 0 = pick a free port). advertiseHost: the host your audio node should use to reach the proxy — set it (e.g. your bot's LAN IP or Docker service name, and bind 0.0.0.0) only when the node runs on a different machine. cookie: optional browser cookie string from a logged-in browser — SESSDATA is the only part that matters (it unlocks higher audio quality and fixes 'Bilibili blocked this server's requests (HTTP 412)' on flagged hosting IPs). buvid3/buvid4/b_nut device cookies are generated and managed automatically; if you paste them anyway, placeholder-looking or malformed values are ignored. Copy the whole cookie header from your browser's devtools."
+    "Comment": "Bilibili video playback (%play https://www.bilibili.com/video/BV... , b23.tv short links and ?p= parts included) — fully anonymous, no cookies needed. The bot talks to Bilibili's WBI-signed web API (survives the HTTP 412 risk-control blocks that hit plain API calls on many hosting IPs), prefers anonymous DASH audio (~130-170 kbps) and falls back to the html5 progressive mp4 for videos without DASH audio. Bilibili's CDN only serves audio to requests with a bilibili Referer, so the bot runs a tiny local HTTP proxy that adds those headers and hands a signed URL to your NodeLink/Lavalink node. Defaults work when the node runs on the same host as the bot (nodelink.host = localhost). bind/port: what the proxy listens on (port 0 = pick a free port). advertiseHost: the host your audio node should use to reach the proxy — set it (e.g. your bot's LAN IP or Docker service name, and bind 0.0.0.0) only when the node runs on a different machine. buvid3/buvid4/b_nut device cookies are generated and managed automatically."
   },
   "comment-radio": {
     "message": "If you have radio stations you'd like to connect, add them to the array below. Radio stations must be rendered like following:",
     "station": {
       "name": "zamrock",
-      "detailedName": "\u1614\u15e9\u15f0\u1614\u15e9\u15f0\u15b4O\u15b4\u14aaI\u15b4E",
+      "detailedName": "ZamRock Radio",
       "thumbnail": "https://zamrock.net/wp-content/uploads/2024/06/Zamrock_rd_logo_0004-1.gif",
       "url": "url to stream from; this will be kept private",
       "description": "Genre: Zamrock, provided by [Zamrock.net](https://zamrock.net/)",
@@ -87,8 +85,7 @@
     "enabled": false,
     "redis": {
       "url": "redis://127.0.0.1:6379"
-    },
-    "Comment": "Optional dashboard backend. When enabled, the bot speaks Redis RPC (request/response/info channels) with an external web frontend. Login codes are verified (bcrypt) from the MySQL login_codes table. Keep Redis network-isolated \u2014 the RPC channel has no shared secret."
+    }
   },
   "lastfm": {
     "Comment": "Last.fm integration: auto-scrobble songs, play loved/top/recent tracks. Register at https://www.last.fm/api/account/create",
@@ -144,7 +141,6 @@
     "playerSessionTimeout": 300000,
     "intentionalLeaveTTL": 8000
   },
-  "sharding-Comment": "Optional process-level sharding (@fluxerjs/sharding 3.0, beta). Only read by 'node shard.mjs' / 'npm run shard' \u2014 plain 'npm start' ignores this block entirely. totalShards: total gateway shards (use an explicit number, never 'auto'); shardsPerProcess: how many shards each child process runs; respawn: restart dead children; spawnTimeout: ms to wait for a child's ready IPC; spawnDelay: ms between successive spawns. The FLUXER_TOTAL_SHARDS / FLUXER_SHARDS_PER_PROCESS env vars override the first two (handy for Docker). Sharding only matters at ~2500+ guilds; leave at defaults otherwise. Caveats: DMs only reach shard 0, and the dashboard is single-process-first.",
   "sharding": {
     "totalShards": 1,
     "shardsPerProcess": 1,

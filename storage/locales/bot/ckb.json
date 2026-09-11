@@ -365,7 +365,7 @@
       "loadError": "هەڵەیەک ڕوویدا لە کاتی بارکردنی تراک.",
       "searchingProvider": "گەڕان لە {{provider}}...",
       "bilibiliResolving": "📺 ڤیدیۆی Bilibili چارەسەر دەکرێت...",
-      "bilibiliNoAudio": "❌ هیچ دەنگێکی لێدراو نییە بۆ **{{title}}** — لەوانەیە ڤیدیۆکە بە ناوچە دەبەسترێت، پارەدار بێت یان پێویستی بە کوکی چوونەژوورەوە هەبێت (config.json → bilibili.cookie).",
+      "bilibiliNoAudio": "❌ هیچ دەنگێکی لێدراو نییە بۆ **{{title}}** — لەوانەیە ڤیدیۆکە بە ناوچە دەبەسترێت، پارەدار بێت یان سڕدرابێتەوە.",
       "bilibiliError": "❌ Bilibili: {{message}}",
       "bilibiliDisabled": "❌ لێدانی Bilibili ناچالاک کراوە (config.json → bilibili.enabled)."
     },
