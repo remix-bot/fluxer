@@ -158,10 +158,6 @@ async function runEval(expression, context) {
         ? `return (${expression});`
         : expression;
 
-    // Build the async function via the AsyncFunction constructor instead of eval(),
-    // and shadow dangerous globals as parameters so evaluated code cannot trivially
-    // reach the Node.js runtime (require, process.binding, etc.) even if owner
-    // credentials are compromised.
     const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
     result = await new AsyncFunction("process", "require", "module", "global", "globalThis", "__dirname", "__filename", code).call(context);
     type = result === null ? "null" : typeof result;

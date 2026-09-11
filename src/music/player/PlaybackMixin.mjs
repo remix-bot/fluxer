@@ -13,6 +13,7 @@ import { getGlobalColor } from "../../ui/index.mjs";
 import { Utils, cleanId } from "../../utils/Utils.mjs";
 import { logger } from "../../core/Logger.mjs";
 import meta from "../probe.mjs";
+import { getBilibiliStreamUrl } from "../bilibili/index.mjs";
 
 /**
  * @type {object}
@@ -245,6 +246,10 @@ const PlaybackMixin = {
    * @private @async Play a track through the FluxerAudioBridge. For
    * radio/external tracks without an encoded payload, attempts Lavalink URL
    * resolution first so MP3/AAC streams can use the loadstream pipeline.
+   * Bilibili tracks get a FRESH signed proxy URL here on every play (DASH
+   * audio URLs expire after a few hours, and each play/seek/loop needs its
+   * own), which also clears any stale encoded payload so the pre-resolve
+   * below re-resolves against the new URL.
    * @this {import('./Player.mjs').Player}
    * @param {object} songData
    * @param {object} [options={}]
@@ -258,7 +263,15 @@ const PlaybackMixin = {
       throw new Error("No encoded track or URL for: " + (songData?.title ?? "unknown"));
     }
 
-    if (!songData.encoded && songData.url && songData.url.startsWith("http") && this._lavalink && songData.type !== "external") {
+    let bridgeUrl = songData.url;
+    if (songData.type === "bilibili") {
+      const stream = await getBilibiliStreamUrl(songData);
+      songData.streamUrl = stream.url;
+      songData.encoded   = null;
+      bridgeUrl          = stream.url;
+    }
+
+    if (!songData.encoded && bridgeUrl && bridgeUrl.startsWith("http") && this._lavalink && songData.type !== "external") {
       try {
         const nlInfo = this._lavalink.getNodeLinkInfo?.();
         if (nlInfo) {
@@ -268,7 +281,7 @@ const PlaybackMixin = {
           if (nlInfo.sessionId) headers["Session-Id"] = nlInfo.sessionId;
           if (this._guildId) headers["Guild-Id"] = this._guildId;
 
-          const loadtracksUrl = baseUrl + "/v4/loadtracks?identifier=" + encodeURIComponent(songData.url);
+          const loadtracksUrl = baseUrl + "/v4/loadtracks?identifier=" + encodeURIComponent(bridgeUrl);
           logger.player(`[Player] Pre-resolving ${songData.type || "external"} URL via Lavalink...`);
 
           const body = await this._request(loadtracksUrl, { headers });
@@ -296,7 +309,7 @@ const PlaybackMixin = {
 
     const result = await this._audioBridge.play(this._voiceConn, {
       encoded: songData.encoded,
-      url:     songData.url,
+      url:     bridgeUrl,
       title:   songData.title,
       guildId: this._guildId,
     }, {

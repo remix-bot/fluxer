@@ -59,7 +59,7 @@
     "lyrics": "Display synced lyrics from NodeLink.",
     "np": "Request the name and url of the currently playing song.",
     "pause": "Pause the playback in your voice channel.",
-    "play": "Play a song or playlist from a URL or search query.\nSupports YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, and more.\nDefault search: YouTube Music. Use `-p <provider>` or inline prefix e.g. `sp: blinding lights`.",
+    "play": "Play a song or playlist from a URL or search query.\nSupports YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, Bilibili, and more.\nDefault search: YouTube Music. Use `-p <provider>` or inline prefix e.g. `sp: blinding lights`.",
     "player": "Create an interactive player control panel with live progress.",
     "playnext": "Same as $prefixplay but adds the result to the top of the queue.",
     "radio": "Play a radio station. Use `$prefixradio list` to browse all stations.",
@@ -471,7 +471,11 @@
       "loadFailed": "Failed to load track.",
       "unexpectedResult": "Unexpected result from track loader.",
       "loadError": "An error occurred while loading the track.",
-      "searchingProvider": "Searching {{provider}}..."
+      "searchingProvider": "Searching {{provider}}...",
+      "bilibiliResolving": "📺 Resolving Bilibili video...",
+      "bilibiliNoAudio": "❌ No playable audio for **{{title}}** — the video may be region-locked, premium-only, or need a login cookie (config.json → bilibili.cookie).",
+      "bilibiliError": "❌ Bilibili: {{message}}",
+      "bilibiliDisabled": "❌ Bilibili playback is disabled (config.json → bilibili.enabled)."
     },
     "playnext": {
       "searching": "🔍 Searching..."

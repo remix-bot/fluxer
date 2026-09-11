@@ -12,6 +12,7 @@ import { EventEmitter } from "node:events";
 import { Utils } from "../../utils/Utils.mjs";
 import { logger } from "../../core/Logger.mjs";
 import { PROVIDERS, PROVIDER_NAMES } from "../providers.mjs";
+import { bilibiliEnabled, isBilibiliUrl, resolveBilibiliVideo } from "../bilibili/index.mjs";
 
 /**
  * @type {object}
@@ -188,7 +189,8 @@ const SearchMixin = {
 
   /**
    * Search for a track and add it to the queue. Handles URL loading with
-   * YouTube normalization + oEmbed title fallback and playlist expansion.
+   * YouTube normalization + oEmbed title fallback and playlist expansion;
+   * Bilibili links are routed to {@link _playBilibili} before Lavalink.
    * @this {import('./Player.mjs').Player}
    * @param {string} query
    * @param {boolean} [top=false]
@@ -197,6 +199,8 @@ const SearchMixin = {
    * @returns {EventEmitter} Emits "message" events with status strings.
    */
   play(query, top = false, provider, trackMeta = null) {
+    if (isBilibiliUrl(query)) return this._playBilibili(query, top);
+
     const events = new EventEmitter();
     const source = this._getSource(provider || "ytm");
     const isUrl  = Utils.isValidUrl(query);
@@ -432,6 +436,65 @@ const SearchMixin = {
       }
     } catch (_) {}
     return "External Stream";
+  },
+
+  /**
+   * Resolve a Bilibili video link into queueable track(s) — reached from
+   * {@link play} for any bilibili.com / b23.tv URL. Multi-part videos queue
+   * every part (like a YouTube playlist); `?p=N` queues exactly that part.
+   * Metadata and duration come from the view API, so queue display works
+   * before any stream is fetched; the audio stream itself is resolved at
+   * playback time by {@link module:src/music/player/PlaybackMixin}.
+   * @this {import('./Player.mjs').Player}
+   * @param {string} query - The raw Bilibili URL.
+   * @param {boolean} [top=false] - Insert at the top of the queue.
+   * @returns {EventEmitter} Emits "message" events with status strings.
+   */
+  _playBilibili(query, top = false) {
+    const events = new EventEmitter();
+
+    (async () => {
+      try {
+        /* let the caller attach its "message" listener before the first emit
+           (play() relies on the same await-before-emit property) */
+        await Promise.resolve();
+
+        if (!bilibiliEnabled()) {
+          events.emit("message", this._t("responses.play.bilibiliDisabled"));
+          return;
+        }
+
+        events.emit("message", this._t("responses.play.bilibiliResolving"));
+
+        const { tracks } = await resolveBilibiliVideo(query);
+        if (!tracks.length) {
+          events.emit("message", this._t("responses.play.bilibiliNoAudio", { title: "?" }));
+          return;
+        }
+
+        if (tracks.length === 1) {
+          this.addToQueue(tracks[0], top);
+          events.emit("message", this._t("responses.play.added", {
+            title: tracks[0].title,
+            url:   tracks[0].url,
+          }));
+        } else {
+          this.addManyToQueue(tracks, top);
+          events.emit("message", this._t("responses.play.addedPlaylist", { count: tracks.length }));
+        }
+
+        if (!this.queue.getCurrent()) {
+          this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
+        }
+      } catch (err) {
+        logger.warn("[Player] Bilibili resolve failed:", err?.message);
+        events.emit("message", this._t("responses.play.bilibiliError", {
+          message: err?.message || String(err),
+        }));
+      }
+    })();
+
+    return events;
   },
 
   /**

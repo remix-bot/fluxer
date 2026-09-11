@@ -59,7 +59,7 @@
     "lyrics": "NodeLink'ten senkronize şarkı sözlerini görüntüleyin.",
     "np": "Şu an çalan şarkının adını ve URL'sini isteyin.",
     "pause": "Ses kanalınızdaki çalmayı duraklatın.",
-    "play": "Bir URL veya arama sorgusundan şarkı veya çalma listesi çalın.\nYouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal ve daha fazlasını destekler.\nVarsayılan arama: YouTube Music. `-p <sağlayıcı>` veya `sp: blinding lights` gibi satır içi önek kullanın.",
+    "play": "Bir URL veya arama sorgusundan şarkı veya çalma listesi çalın.\nYouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, Bilibili ve daha fazlasını destekler.\nVarsayılan arama: YouTube Music. `-p <sağlayıcı>` veya `sp: blinding lights` gibi satır içi önek kullanın.",
     "player": "Canlı ilerleme çubuğlu etkileşimli bir oynatıcı kontrol paneli oluşturun.",
     "playnext": "$prefixplay ile aynıdır, ancak sonucu kuyruğun en üstüne ekler.",
     "radio": "Bir radyo istasyonu çalın. Tüm istasyonları görüntülemek için `$prefixradio list` kullanın.",
@@ -460,7 +460,11 @@
       "loadFailed": "Parça yüklenemedi.",
       "unexpectedResult": "Parça yükleyiciden beklenmeyen sonuç.",
       "loadError": "Parça yüklenirken bir hata oluştu.",
-      "searchingProvider": "{{provider}} aranıyor..."
+      "searchingProvider": "{{provider}} aranıyor...",
+      "bilibiliResolving": "📺 Bilibili videosu çözümleniyor...",
+      "bilibiliNoAudio": "❌ **{{title}}** için çalınabilir ses yok — video bölge kilitli, ücretli olabilir veya giriş çerezi gerektirebilir (config.json → bilibili.cookie).",
+      "bilibiliError": "❌ Bilibili: {{message}}",
+      "bilibiliDisabled": "❌ Bilibili oynatma devre dışı (config.json → bilibili.enabled)."
     },
     "playnext": {
       "searching": "🔍 Aranıyor..."

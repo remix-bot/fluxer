@@ -40,19 +40,19 @@ export class TrackOptionsManager {
   async _ensureTable() {
     try {
       await this._query(
-        `CREATE TABLE IF NOT EXISTS track_options (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          user_id VARCHAR(32) NOT NULL,
-          track_identifier VARCHAR(512) NOT NULL,
-          track_title VARCHAR(512) NOT NULL DEFAULT '',
-          alias VARCHAR(${MAX_ALIAS_LEN}) NOT NULL DEFAULT ${mysql.escape(DEFAULT_ALIAS)},
-          start_ms INT UNSIGNED NOT NULL DEFAULT 0,
-          end_ms INT UNSIGNED NOT NULL DEFAULT 0,
-          bot_id VARCHAR(32) NOT NULL DEFAULT '',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          UNIQUE KEY uq_user_track_alias_bot (user_id, track_identifier, alias, bot_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+          `CREATE TABLE IF NOT EXISTS track_options (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id VARCHAR(32) NOT NULL,
+            track_identifier VARCHAR(512) NOT NULL,
+            track_title VARCHAR(512) NOT NULL DEFAULT '',
+            alias VARCHAR(${MAX_ALIAS_LEN}) NOT NULL DEFAULT ${mysql.escape(DEFAULT_ALIAS)},
+            start_ms INT UNSIGNED NOT NULL DEFAULT 0,
+            end_ms INT UNSIGNED NOT NULL DEFAULT 0,
+            bot_id VARCHAR(32) NOT NULL DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_user_track_alias_bot (user_id, track_identifier, alias, bot_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
       );
       await this._migrateOldTable();
       this._hasTable = true;
@@ -119,8 +119,8 @@ export class TrackOptionsManager {
         const u = new URL(track.url);
         return `${u.hostname}${u.pathname}`.replace(/\/+$/, "").toLowerCase().trim();
       } catch (e) {
-          logger.warn("[TrackOptions] Error:", e?.message);
-          return track.url.toLowerCase().trim();
+        logger.warn("[TrackOptions] Error:", e?.message);
+        return track.url.toLowerCase().trim();
       }
     }
     const artist = track.artist || track.author?.name || "";
@@ -145,9 +145,9 @@ export class TrackOptionsManager {
 
     try {
       await this._query(
-        `INSERT INTO track_options (user_id, track_identifier, track_title, alias, start_ms, end_ms${bi.col})
-         VALUES (${mysql.escape(userId)}, ${mysql.escape(identifier)}, ${mysql.escape(title)}, ${mysql.escape(safeAlias)}, ${safeStartMs}, ${safeEndMs}${bi.val})
-         ON DUPLICATE KEY UPDATE start_ms = ${safeStartMs}, end_ms = ${safeEndMs}, track_title = ${mysql.escape(title)}`
+          `INSERT INTO track_options (user_id, track_identifier, track_title, alias, start_ms, end_ms${bi.col})
+           VALUES (${mysql.escape(userId)}, ${mysql.escape(identifier)}, ${mysql.escape(title)}, ${mysql.escape(safeAlias)}, ${safeStartMs}, ${safeEndMs}${bi.val})
+             ON DUPLICATE KEY UPDATE start_ms = ${safeStartMs}, end_ms = ${safeEndMs}, track_title = ${mysql.escape(title)}`
       );
       this._cache.delete(`${userId}:${identifier}:${safeAlias}`);
       return { identifier, startMs: safeStartMs, endMs: safeEndMs, alias: safeAlias };
@@ -174,7 +174,7 @@ export class TrackOptionsManager {
 
     try {
       const rows = await this._query(
-        `SELECT start_ms, end_ms, track_title, alias FROM track_options WHERE user_id = ${mysql.escape(userId)} AND track_identifier = ${mysql.escape(identifier)} AND alias = ${mysql.escape(safeAlias)}${this._botIdWhere()}`
+          `SELECT start_ms, end_ms, track_title, alias FROM track_options WHERE user_id = ${mysql.escape(userId)} AND track_identifier = ${mysql.escape(identifier)} AND alias = ${mysql.escape(safeAlias)}${this._botIdWhere()}`
       );
       if (!rows || rows.length === 0) return null;
       const result = { startMs: rows[0].start_ms, endMs: rows[0].end_ms, title: rows[0].track_title, alias: rows[0].alias };
@@ -198,7 +198,7 @@ export class TrackOptionsManager {
 
     try {
       const rows = await this._query(
-        `SELECT start_ms, end_ms, track_title, alias FROM track_options WHERE user_id = ${mysql.escape(userId)} AND track_identifier = ${mysql.escape(identifier)}${this._botIdWhere()} ORDER BY alias`
+          `SELECT start_ms, end_ms, track_title, alias FROM track_options WHERE user_id = ${mysql.escape(userId)} AND track_identifier = ${mysql.escape(identifier)}${this._botIdWhere()} ORDER BY alias`
       );
       return rows || [];
     } catch (err) {
@@ -240,7 +240,7 @@ export class TrackOptionsManager {
     await this.ready();
     try {
       const rows = await this._query(
-        `SELECT track_identifier, track_title, alias, start_ms, end_ms FROM track_options WHERE user_id = ${mysql.escape(userId)}${this._botIdWhere()} ORDER BY track_title, alias LIMIT ${Math.min(limit, 100)}`
+          `SELECT track_identifier, track_title, alias, start_ms, end_ms FROM track_options WHERE user_id = ${mysql.escape(userId)}${this._botIdWhere()} ORDER BY track_title, alias LIMIT ${Math.min(limit, 100)}`
       );
       return rows || [];
     } catch (err) {

@@ -112,13 +112,14 @@ A few things worth knowing:
 - **Filters** (bassboost, nightcore, etc.) are applied server-side by NodeLink, so they take effect on the next track that starts.
 - **Volume** is applied client-side by the LiveKit connection (1–200).
 - Radio metadata (StreamTitle) is read with **ffprobe** (`ffprobe-static`).
+- **Bilibili playback** — `%play https://www.bilibili.com/video/BV…` (b23.tv short links and `?p=` parts included) resolves the video through Bilibili's web API, picks the best DASH audio stream, and feeds it to the node through a signed localhost proxy that attaches the Referer/User-Agent headers Bilibili's CDN requires. Multi-part videos queue like a playlist. If Bilibili risk-control blocks your hosting IP (HTTP 412), set `bilibili.cookie` in config.json to a logged-in browser cookie string. The proxy binds `127.0.0.1` by default — set `bilibili.advertiseHost` (and `bind: "0.0.0.0"`) when your node runs on another machine.
 
 ---
 
 ## Features
 
 - **High-quality audio playback** — NodeLink streaming with a zero-re-encode WebM/Opus pipeline, published over LiveKit
-- **Multi-source search** — YouTube, YT Music, Spotify, SoundCloud, Deezer, Apple Music, Tidal, Bandcamp and 40+ more provider prefixes, plus direct URLs
+- **Multi-source search** — YouTube, YT Music, Spotify, SoundCloud, Deezer, Apple Music, Tidal, Bandcamp and 40+ more provider prefixes, plus direct URLs and Bilibili videos
 - **24/7 mode** — keep the bot in a voice channel permanently, with staggered auto-rejoin on boot and rejoin retries on connection loss
 - **Interactive emoji player** — reaction-based control panel with live progress, lyrics viewer, and a filter submenu
 - **Lyrics** — synced lyrics via NodeLink

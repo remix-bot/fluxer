@@ -58,7 +58,7 @@
     "lyrics": "دەقی گۆرانیی هاوئاهەنگ لە NodeLink نیشان بدە.",
     "np": "ناو و بەستەری گۆرانیی ئێستا داوا بکە.",
     "pause": "پەخشکردنەکە لە کەناڵی دەنگیت وەستێنە.",
-    "play": "گۆرانییەک یان لیستی پەخش بەستەرێکەوە یان بە پرسیارێکی گەڕان پەخش بکە.\nپشتگیری YouTube، Spotify، SoundCloud، Deezer، Apple Music، Tidal و زیاتر دەکات.\nگەڕانی بنەڕەتی: YouTube Music. `-p <provider>` یان پێشگر بەکاربهێنە وەک `sp: blinding lights`.",
+    "play": "گۆرانییەک یان لیستی پەخش بەستەرێکەوە یان بە پرسیارێکی گەڕان پەخش بکە.\nپشتگیری YouTube، Spotify، SoundCloud، Deezer، Apple Music، Tidal، Bilibili و زیاتر دەکات.\nگەڕانی بنەڕەتی: YouTube Music. `-p <provider>` یان پێشگر بەکاربهێنە وەک `sp: blinding lights`.",
     "player": "پانێلی کۆنتڕۆڵی پەخشکەری تەواوکەری هاوئاهەنگ دروست بکە.",
     "playnext": "وەک $prefixplay بەڵام ئەنجامەکە لە سەرەوەی ڕیزبەندییەکە زیاد دەکرێت.",
     "radio": "ستەیشنی ڕادیۆ پەخش بکە. `$prefixradio list` بەکاربهێنە بۆ بینینی هەموو ستەیشنەکان.",
@@ -363,7 +363,11 @@
       "loadFailed": "بارکردنی تراک سەرکەوتوو نەبوو.",
       "unexpectedResult": "ئەنجامێکی چاوەڕواننەکراو لە بارکەری تراکەوە.",
       "loadError": "هەڵەیەک ڕوویدا لە کاتی بارکردنی تراک.",
-      "searchingProvider": "گەڕان لە {{provider}}..."
+      "searchingProvider": "گەڕان لە {{provider}}...",
+      "bilibiliResolving": "📺 ڤیدیۆی Bilibili چارەسەر دەکرێت...",
+      "bilibiliNoAudio": "❌ هیچ دەنگێکی لێدراو نییە بۆ **{{title}}** — لەوانەیە ڤیدیۆکە بە ناوچە دەبەسترێت، پارەدار بێت یان پێویستی بە کوکی چوونەژوورەوە هەبێت (config.json → bilibili.cookie).",
+      "bilibiliError": "❌ Bilibili: {{message}}",
+      "bilibiliDisabled": "❌ لێدانی Bilibili ناچالاک کراوە (config.json → bilibili.enabled)."
     },
     "playnext": {
       "searching": "🔍 گەڕان..."

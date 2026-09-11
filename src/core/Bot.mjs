@@ -26,6 +26,7 @@ import { GatewayHandler } from "../voice/gateway/GatewayHandler.mjs";
 import { LastFmManager } from "../services/lastfm/LastFmManager.mjs";
 import { FluxerListManager } from "../services/FluxerListManager.mjs";
 import { TrackOptionsManager } from "../services/TrackOptionsManager.mjs";
+import { configureBilibili } from "../music/bilibili/index.mjs";
 import { applyMixins } from "../utils/mixins.mjs";
 import BotVoiceMixin from "./BotVoiceMixin.mjs";
 
@@ -113,6 +114,14 @@ class Remix {
     this.config = config;
 
     setGlobalColor(config.embedColor);
+
+    configureBilibili({
+      enabled:       config.bilibili?.enabled !== false,
+      bind:          config.bilibili?.bind       ?? "127.0.0.1",
+      port:          config.bilibili?.port       ?? 0,
+      advertiseHost: config.bilibili?.advertiseHost ?? null,
+      cookie:        config.bilibili?.cookie     ?? null,
+    });
 
     this.locale = new Locale(typeof config.prefix === "string" && config.prefix ? config.prefix : "%");
     this.locale.load();

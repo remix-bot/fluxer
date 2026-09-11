@@ -1,7 +1,7 @@
 /**
  * @module commands/play
  * @description Play a song or playlist from a URL or search query.
- * Supports YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, and Last.fm integration.
+ * Supports YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, Bilibili, and Last.fm integration.
  */
 
 import { CommandBuilder } from "../src/commands/index.mjs";
@@ -159,8 +159,8 @@ export const command = new CommandBuilder()
     .setCategory("music")
     .setDescription(
         "Play a song or playlist from a URL or search query.\n" +
-        "Supports YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, and more.\n" +
-        "Also accepts direct audio URLs (MP3, OGG, AAC, radio streams).\n" +
+        "Supports YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, Bilibili, and more.\n" +
+        "Also accepts direct audio URLs (MP3, OGG, AAC, radio streams) and Bilibili video links (incl. b23.tv and ?p= parts).\n" +
         "Default search: YouTube Music. Use `-p <provider>` or inline prefix e.g. `sp: blinding lights`.",
         "commands.play"
     )
@@ -170,6 +170,7 @@ export const command = new CommandBuilder()
         "$prefixplay dz: get lucky",
         "$prefixplay -p yt take over league of legends",
         "$prefixplay https://open.spotify.com/track/...",
+        "$prefixplay https://www.bilibili.com/video/BV1y7bg6kEhY",
         "$prefixplay https://example.com/stream.mp3",
         "$prefixplay https://radio.example.com:8000/live",
         "$prefixplay https://www.last.fm/music/Drake/_/Make+Them+Cry",

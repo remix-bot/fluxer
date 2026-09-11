@@ -58,7 +58,7 @@
     "lyrics": "Exiba letras sincronizadas do NodeLink.",
     "np": "Solicite o nome e a URL da música que está tocando atualmente.",
     "pause": "Pause a reprodução no seu canal de voz.",
-    "play": "Toque uma música ou playlist a partir de uma URL ou consulta de busca.\nSuporta YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal e mais.\nBusca padrão: YouTube Music. Use `-p <provedor>` ou prefixo inline como `sp: blinding lights`.",
+    "play": "Toque uma música ou playlist a partir de uma URL ou consulta de busca.\nSuporta YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, Bilibili e mais.\nBusca padrão: YouTube Music. Use `-p <provedor>` ou prefixo inline como `sp: blinding lights`.",
     "player": "Crie um painel de controle interativo com progresso ao vivo.",
     "playnext": "Igual ao $prefixplay, mas adiciona o resultado ao topo da fila.",
     "radio": "Toque uma estação de rádio. Use `$prefixradio list` para ver todas as estações.",
@@ -363,7 +363,11 @@
       "loadFailed": "Falha ao carregar a faixa.",
       "unexpectedResult": "Resultado inesperado do carregador de faixas.",
       "loadError": "Ocorreu um erro ao carregar a faixa.",
-      "searchingProvider": "Buscando no {{provider}}..."
+      "searchingProvider": "Buscando no {{provider}}...",
+      "bilibiliResolving": "📺 Resolvendo vídeo do Bilibili...",
+      "bilibiliNoAudio": "❌ Nenhum áudio reproduzível para **{{title}}** — o vídeo pode estar bloqueado por região, ser pago ou exigir um cookie de login (config.json → bilibili.cookie).",
+      "bilibiliError": "❌ Bilibili: {{message}}",
+      "bilibiliDisabled": "❌ A reprodução do Bilibili está desativada (config.json → bilibili.enabled)."
     },
     "playnext": {
       "searching": "🔍 Buscando..."
