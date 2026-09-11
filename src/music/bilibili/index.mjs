@@ -18,7 +18,7 @@ import {
   configureBilibiliProxy,
   ensureBilibiliProxy,
 } from "./BilibiliProxy.mjs";
-import { fetchBilibiliPlayUrl, pickBestAudioStream, setBilibiliCookie } from "./BilibiliResolver.mjs";
+import { fetchBilibiliPlayUrl, pickBestAudioStream, pickProgressiveStream, setBilibiliCookie } from "./BilibiliResolver.mjs";
 import { logger } from "../../core/Logger.mjs";
 
 /**
@@ -42,8 +42,11 @@ export function configureBilibili(section = {}) {
  * Resolve a fresh, playable stream URL for a queued Bilibili track.
  * DASH audio URLs expire after a few hours, so this runs at every play
  * (and every seek/loop) rather than at queue time: the playurl API is
- * re-queried, the best audio stream picked, and the CDN URL wrapped in a
- * signed proxy URL the audio node can fetch with the right Referer/UA.
+ * re-queried, the best DASH audio stream picked, and the CDN URL wrapped in
+ * a signed proxy URL the audio node can fetch with the right Referer/UA.
+ * When Bilibili returns no DASH audio (anonymous playback — DASH requires
+ * a login cookie), a single-segment progressive mp4 is used instead, asking
+ * the anonymous-friendly html5 playurl variant as a second chance.
  * @param {object} track - Internal track with a `bilibili` metadata field.
  * @returns {Promise<{url: string, backupUrls: Array<string>}>}
  * @throws {Error} with a user-readable message when resolution fails.
@@ -60,17 +63,28 @@ export async function getBilibiliStreamUrl(track) {
 
   const data = await fetchBilibiliPlayUrl(meta);
   const best = pickBestAudioStream(data);
-  if (!best?.baseUrl) {
-    throw new Error("Bilibili returned no playable audio stream for this video");
+  if (best?.baseUrl) {
+    const url = await buildSignedProxyUrl(best.baseUrl);
+    logger.player("[Bilibili] audio stream ready (bandwidth " + (best.bandwidth || "?") + "): " + url.substring(0, 60) + "...");
+    return { url, backupUrls: Array.isArray(best.backupUrl) ? best.backupUrl : [] };
   }
 
-  const url = await buildSignedProxyUrl(best.baseUrl);
-  logger.player("[Bilibili] audio stream ready (bandwidth " + (best.bandwidth || "?") + "): " + url.substring(0, 60) + "...");
-  return { url, backupUrls: Array.isArray(best.backupUrl) ? best.backupUrl : [] };
+  let progressive = pickProgressiveStream(data);
+  if (!progressive) {
+    const html5 = await fetchBilibiliPlayUrl(meta, { html5: true });
+    progressive = pickProgressiveStream(html5);
+  }
+  if (progressive) {
+    const url = await buildSignedProxyUrl(progressive.url);
+    logger.player("[Bilibili] no DASH audio — using progressive mp4 (a browser cookie in config.json -> bilibili.cookie unlocks full-quality audio): " + url.substring(0, 60) + "...");
+    return { url, backupUrls: progressive.backupUrls };
+  }
+
+  throw new Error("Bilibili returned no playable audio stream for this video (anonymous playback is limited — a browser cookie in config.json -> bilibili.cookie unlocks full-quality audio)");
 }
 
 export { isBilibiliUrl, parseBilibiliVideoRef, resolveBilibiliVideo } from "./BilibiliResolver.mjs";
-export { setBilibiliCookie, BILIBILI_UA, BILIBILI_REFERER } from "./BilibiliResolver.mjs";
+export { setBilibiliCookie, resetBilibiliFingerprint, BILIBILI_UA, BILIBILI_REFERER } from "./BilibiliResolver.mjs";
 export {
   bilibiliEnabled,
   bilibiliProxyInfo,
