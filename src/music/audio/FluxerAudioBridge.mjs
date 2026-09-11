@@ -80,9 +80,12 @@ export class FluxerAudioBridge extends EventEmitter {
           const direct = await this._getTrackstreamUrl(trackInfo);
           if (direct?.url && /webm|opus/i.test(direct.format || "")) {
             this._usedTrackstream = true;
-            logger.player("[AudioBridge] Passthrough webm/opus via trackstream (zero-copy): " + (trackInfo.title || "unknown"));
+            logger.player("[AudioBridge] Passthrough webm/opus via trackstream: " + (trackInfo.title || "unknown"));
 
-            await conn.play(direct.url);
+            const directLoaded = await this._httpRequestStream(direct.url, this._streamFetchHeaders(trackInfo));
+            this._sourceStream = directLoaded.stream;
+            this._sourceReq = directLoaded.req || null;
+            await conn.play(directLoaded.stream);
             if (generation !== this._playGeneration) return "stopped";
 
             if (durationMs > 0) await this._waitDuration(durationMs);
@@ -105,8 +108,11 @@ export class FluxerAudioBridge extends EventEmitter {
                 const freshDirect = await this._getTrackstreamUrl(trackInfo);
                 if (freshDirect?.url && /webm|opus/i.test(freshDirect.format || "")) {
                   this._usedTrackstream = true;
-                  logger.player("[AudioBridge] Fresh trackstream is webm/opus — zero-copy passthrough: " + (trackInfo.title || "unknown"));
-                  await conn.play(freshDirect.url);
+                  logger.player("[AudioBridge] Fresh trackstream is webm/opus — passthrough: " + (trackInfo.title || "unknown"));
+                  const freshLoaded = await this._httpRequestStream(freshDirect.url, this._streamFetchHeaders(trackInfo));
+                  this._sourceStream = freshLoaded.stream;
+                  this._sourceReq = freshLoaded.req || null;
+                  await conn.play(freshLoaded.stream);
                   if (generation !== this._playGeneration) return "stopped";
                   if (durationMs > 0) await this._waitDuration(durationMs);
                   if (generation !== this._playGeneration) return "stopped";
@@ -302,6 +308,26 @@ export class FluxerAudioBridge extends EventEmitter {
     } finally {
       this._cleanup();
     }
+  }
+
+  /**
+   * @param {object} trackInfo
+   * @returns {object}
+   * @private
+   */
+  _streamFetchHeaders(trackInfo) {
+    const headers = {};
+    if (trackInfo?.url && /^https?:\/\//i.test(trackInfo.url)) {
+      try {
+        const host = new URL(trackInfo.url).hostname;
+        if (/(^|\.)bilibili\.com$/i.test(host)) {
+          headers["Referer"] = "https://www.bilibili.com/";
+        } else {
+          headers["Referer"] = new URL(trackInfo.url).origin + "/";
+        }
+      } catch (_) {}
+    }
+    return headers;
   }
 
   /** Stop current playback and clean up resources. */
