@@ -11,13 +11,48 @@ const BLOCKS_PER_CLUSTER = 250;
 /** @type {number} @description Force a cluster flush when buffered blocks exceed this size. */
 const CLUSTER_FLUSH_BYTES = 64 * 1024;
 
+const HEX_CACHE = new Map();
+
+/**
+ * Get or create a Buffer from a hex string.
+ * @param {string} hex
+ * @returns {Buffer}
+ */
+function getHexBuf(hex) {
+  let b = HEX_CACHE.get(hex);
+  if (!b) {
+    b = Buffer.from(hex, "hex");
+    HEX_CACHE.set(hex, b);
+  }
+  return b;
+}
+
 /**
  * Encode a Matroska variable-length size integer (finite size).
+ * Uses fast paths for 1, 2, and 3-byte lengths to avoid loops and allocations.
  * @param {number} value - Size to encode (must be >= 0).
  * @returns {Buffer}
  */
 function encodeSizeVint(value) {
-  let length = 1;
+  if (value <= 127) {
+    const buf = Buffer.allocUnsafe(1);
+    buf[0] = value | 0x80;
+    return buf;
+  }
+  if (value <= 16383) {
+    const buf = Buffer.allocUnsafe(2);
+    buf[0] = ((value >> 8) & 0xff) | 0x40;
+    buf[1] = value & 0xff;
+    return buf;
+  }
+  if (value <= 2097151) {
+    const buf = Buffer.allocUnsafe(3);
+    buf[0] = ((value >> 16) & 0xff) | 0x20;
+    buf[1] = (value >> 8) & 0xff;
+    buf[2] = value & 0xff;
+    return buf;
+  }
+  let length = 4;
   while (value > 2 ** (7 * length) - 1 && length < 8) length++;
   const buf = Buffer.alloc(length);
   for (let i = length - 1; i >= 0; i--) {
@@ -35,7 +70,7 @@ function encodeSizeVint(value) {
  * @returns {Buffer}
  */
 function element(idHex, payload) {
-  return Buffer.concat([Buffer.from(idHex, "hex"), encodeSizeVint(payload.length), payload]);
+  return Buffer.concat([getHexBuf(idHex), encodeSizeVint(payload.length), payload]);
 }
 
 /**
@@ -127,8 +162,33 @@ function buildHeader(sampleRate, channels) {
  */
 function buildSimpleBlock(packet, relTimeMs) {
   const clamped = Math.max(-32768, Math.min(32767, relTimeMs));
-  const header = Buffer.from([0x81, (clamped >> 8) & 0xff, clamped & 0xff, 0x80]);
-  return element("a3", Buffer.concat([header, packet]));
+  const payloadLen = 4 + packet.length;
+  let block;
+
+  if (payloadLen <= 127) {
+    block = Buffer.allocUnsafe(1 + 1 + 4 + packet.length);
+    block[0] = 0xa3; // SimpleBlock EBML ID
+    block[1] = payloadLen | 0x80; // 1-byte VINT
+    block[2] = 0x81; // Track 1
+    block[3] = (clamped >> 8) & 0xff;
+    block[4] = clamped & 0xff;
+    block[5] = 0x80; // Keyframe flag
+    packet.copy(block, 6);
+  } else if (payloadLen <= 16383) {
+    block = Buffer.allocUnsafe(1 + 2 + 4 + packet.length);
+    block[0] = 0xa3; // SimpleBlock EBML ID
+    block[1] = ((payloadLen >> 8) & 0xff) | 0x40; // 2-byte VINT
+    block[2] = payloadLen & 0xff;
+    block[3] = 0x81; // Track 1
+    block[4] = (clamped >> 8) & 0xff;
+    block[5] = clamped & 0xff;
+    block[6] = 0x80; // Keyframe flag
+    packet.copy(block, 7);
+  } else {
+    const header = Buffer.from([0x81, (clamped >> 8) & 0xff, clamped & 0xff, 0x80]);
+    return element("a3", Buffer.concat([header, packet]));
+  }
+  return block;
 }
 
 /**

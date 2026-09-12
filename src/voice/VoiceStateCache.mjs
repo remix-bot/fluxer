@@ -24,8 +24,6 @@ export class VoiceStateCache {
 
     this._maxUsers = opts.maxUsers ?? 50_000;
     this._maxBots  = opts.maxBots  ?? 10_000;
-    this._lruUserKeys = [];
-    this._lruBotKeys = [];
   }
 
   /**
@@ -51,7 +49,7 @@ export class VoiceStateCache {
   /**
    * Update (or remove) a user's voice-channel location in the cache.
    * When `channelId` is provided the user is added; when `null`/falsy the user is removed.
-   * Automatically evicts LRU entries when capacity is exceeded.
+   * Automatically evicts LRU entries in O(1) time when capacity is exceeded.
    * @param {{ guildId: string, userId: string, channelId: string|null, isBot?: boolean }} opts
    */
   updateUser({ guildId, userId, channelId, isBot = false }) {
@@ -63,7 +61,6 @@ export class VoiceStateCache {
     const locations   = isBot ? this.botLocations   : this.userLocations;
     const channelIdx  = isBot ? this.botChannelMembers : this.channelMembers;
     const maxEntries  = isBot ? this._maxBots        : this._maxUsers;
-    const lruKeys     = isBot ? this._lruBotKeys     : this._lruUserKeys;
     const uKey        = VoiceStateCache.userKey(cleanGuild, cleanUser);
 
     const prev = locations.get(uKey);
@@ -85,36 +82,23 @@ export class VoiceStateCache {
       locations.delete(uKey);
       locations.set(uKey, { channelId: cleanChannel, guildId: cleanGuild, userId: cleanUser });
 
-      const lruIdx = lruKeys.indexOf(uKey);
-      if (lruIdx !== -1) lruKeys.splice(lruIdx, 1);
-      lruKeys.push(uKey);
-
       while (locations.size > maxEntries) {
-        let evicted = false;
-        for (let i = 0; i < lruKeys.length; i++) {
-          const evictKey = lruKeys[i];
-          if (evictKey === uKey) continue;
+        const oldestKey = locations.keys().next().value;
+        if (!oldestKey) break;
 
-          const evictEntry = locations.get(evictKey);
-          if (evictEntry) {
-            const evictCKey = VoiceStateCache.channelKey(evictEntry.guildId, evictEntry.channelId);
-            const evictSet  = channelIdx.get(evictCKey);
-            if (evictSet) {
-              evictSet.delete(evictEntry.userId);
-              if (evictSet.size === 0) channelIdx.delete(evictCKey);
-            }
-            locations.delete(evictKey);
+        const evictEntry = locations.get(oldestKey);
+        if (evictEntry) {
+          const evictCKey = VoiceStateCache.channelKey(evictEntry.guildId, evictEntry.channelId);
+          const evictSet  = channelIdx.get(evictCKey);
+          if (evictSet) {
+            evictSet.delete(evictEntry.userId);
+            if (evictSet.size === 0) channelIdx.delete(evictCKey);
           }
-          lruKeys.splice(i, 1);
-          evicted = true;
-          break;
         }
-        if (!evicted) break;
+        locations.delete(oldestKey);
       }
     } else {
       locations.delete(uKey);
-      const idx = lruKeys.indexOf(uKey);
-      if (idx !== -1) lruKeys.splice(idx, 1);
     }
   }
 
@@ -227,7 +211,6 @@ export class VoiceStateCache {
       if (cKey.startsWith(prefix)) channelKeysToRemove.push(cKey);
     }
     for (const cKey of channelKeysToRemove) this.channelMembers.delete(cKey);
-    this._lruUserKeys = this._lruUserKeys.filter(k => !k.startsWith(prefix));
 
     const botKeysToRemove = [];
     for (const [uKey, loc] of this.botLocations) {
@@ -247,7 +230,6 @@ export class VoiceStateCache {
       if (cKey.startsWith(prefix)) botChannelKeysToRemove.push(cKey);
     }
     for (const cKey of botChannelKeysToRemove) this.botChannelMembers.delete(cKey);
-    this._lruBotKeys = this._lruBotKeys.filter(k => !k.startsWith(prefix));
   }
 
   /**
@@ -582,8 +564,8 @@ export class VoiceStateCache {
       botUsers: this.botLocations.size,
       humanChannels: this.channelMembers.size,
       botChannels: this.botChannelMembers.size,
-      lruUserKeysLen: this._lruUserKeys.length,
-      lruBotKeysLen: this._lruBotKeys.length,
+      lruUserKeysLen: this.userLocations.size,
+      lruBotKeysLen: this.botLocations.size,
     };
   }
 }

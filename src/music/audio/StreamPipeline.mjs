@@ -43,36 +43,40 @@ const StreamPipeline = {
    * @returns {Promise<void>}
    * @private
    */
-  _awaitEnd(durationMs) {    return new Promise((resolve, reject) => {
-    this._endResolve = resolve;
-    this._endReject = reject;
-    const failFast = (err) => {
-      if (this._playing && !this._stopped) {
-        this._playing = false;
-        reject(err);
-      } else {
-        resolve();
-      }
-    };
+  _awaitEnd(durationMs) {
+    return new Promise((resolve, reject) => {
+      this._endResolve = resolve;
+      this._endReject = reject;
+      const failFast = (err) => {
+        if (this._playing && !this._stopped) {
+          this._playing = false;
+          reject(err);
+        } else {
+          resolve();
+        }
+      };
 
-    if (durationMs > 0) {
-      this._durationTimer = setTimeout(resolve, durationMs);
-    } else {
       const stream = this._stream;
-      if (!stream) return resolve();
-      const onEnd = () => resolve();
-      stream.once("end", onEnd);
-      stream.once("close", onEnd);
-      stream.once("error", failFast);
-    }
+      if (stream) {
+        const onEnd = () => resolve();
+        stream.once("end", onEnd);
+        stream.once("close", onEnd);
+        stream.once("error", failFast);
+      }
 
-    if (this._sourceStream) {
-      this._sourceStream.once("error", failFast);
-    }
-    if (this._encoder) {
-      this._encoder.once("error", failFast);
-    }
-  });
+      if (durationMs > 0) {
+        this._durationTimer = setTimeout(resolve, durationMs);
+      } else if (!stream) {
+        return resolve();
+      }
+
+      if (this._sourceStream) {
+        this._sourceStream.once("error", failFast);
+      }
+      if (this._encoder) {
+        this._encoder.once("error", failFast);
+      }
+    });
   },
 
   /**

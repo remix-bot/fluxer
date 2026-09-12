@@ -212,6 +212,11 @@ export class RemoteSettingsManager extends SettingsManager {
       logger.info("Settings", `Flushing ${pendingServers.length} pending write(s) on shutdown...`);
     }
     await Promise.allSettled(pendingServers.map(server => this._doSave(server)));
+    try {
+      if (this.db?.end) {
+        await new Promise(r => this.db.end(() => r()));
+      }
+    } catch (_) {}
   }
 
   /**
@@ -503,7 +508,11 @@ export class RemoteSettingsManager extends SettingsManager {
    * @returns {ServerSettings}
    */
   getServer(id) {
-    if (!this.guilds.has(id)) return new ServerSettings(id, this);
+    if (!this.guilds.has(id)) {
+      const server = new ServerSettings(id, this);
+      this.guilds.set(id, server);
+      return server;
+    }
     return this.guilds.get(id);
   }
 

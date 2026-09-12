@@ -65,19 +65,23 @@ export function hasHumansInChannel({ guildId, channelId, client, voiceCache, obs
   }
 
 
-  if (observedVoiceUsers) {
-    try {
-      const iterator = typeof observedVoiceUsers.iterateHumanUsers === "function"
-        ? observedVoiceUsers.iterateHumanUsers()
-        : observedVoiceUsers.entries();
+  if (observedVoiceUsers && observedVoiceUsers !== voiceCache) {
+    if (typeof observedVoiceUsers.hasHumansInChannel === "function") {
+      if (observedVoiceUsers.hasHumansInChannel(guildId, channelId)) return true;
+    } else {
+      try {
+        const iterator = typeof observedVoiceUsers.iterateHumanUsers === "function"
+          ? observedVoiceUsers.iterateHumanUsers()
+          : observedVoiceUsers.entries();
 
-      for (const [, info] of iterator) {
-        const gId = String(info.guildId ?? "");
-        const cId = String(info.channelId ?? "");
-        if (gId === guildId && cId === channelId) return true;
+        for (const [, info] of iterator) {
+          const gId = String(info.guildId ?? "");
+          const cId = String(info.channelId ?? "");
+          if (gId === guildId && cId === channelId) return true;
+        }
+      } catch (e) {
+        logger.warn("[VoiceStateResolver] ObservedVoiceUsers check failed:", e?.message);
       }
-    } catch (e) {
-      logger.warn("[VoiceStateResolver] ObservedVoiceUsers check failed:", e?.message);
     }
   }
 
