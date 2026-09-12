@@ -291,6 +291,47 @@ const PlayerLifecycleMixin = {
     }
 
     const cleanChannelId = cleanId(cid);
+    const targetGuildId = cleanId(channel.guildId ?? getMessageGuildId(message));
+
+    // --- Single-voice-channel-per-server enforcement ---
+    // The bot may only occupy one voice channel per guild at a time. If it's
+    // already active in a *different* channel in this guild, either refuse
+    // (busy: actively playing, or parked in 24/7) or silently relocate
+    // (idle: no queue, not 24/7) before joining the newly requested channel.
+    if (targetGuildId) {
+      const otherGuildPlayers = this.getGuildPlayers(targetGuildId)
+        .filter(([chId]) => chId !== cleanChannelId);
+
+      if (otherGuildPlayers.length > 0) {
+        const busyPlayers = otherGuildPlayers.filter(([, p]) => this._isPlayerBusy(p));
+
+        if (busyPlayers.length > 0) {
+          const playingPlayers = busyPlayers.filter(([, p]) => this._isPlayerActivelyPlaying(p));
+          const relevantPlayers = playingPlayers.length > 0 ? playingPlayers : busyPlayers;
+          const busyChannelList = relevantPlayers
+              .map(([chId, p]) => `<#${getPlayerChannelId(p, chId)}>`)
+              .join(" or ");
+          const prefix = this.commands.getPrefix(targetGuildId);
+          const key = playingPlayers.length > 0
+              ? "responses._common.busyPlayingInOtherVoiceChannel"
+              : "responses._common.busyStayingInOtherVoiceChannel";
+          message.reply(this._t(message, key, { channels: busyChannelList, prefix }));
+          return null;
+        }
+
+        for (const [oldChannelId, oldPlayer] of otherGuildPlayers) {
+          this.playerMap.delete(oldChannelId);
+          this._unindexPlayer(targetGuildId, oldChannelId);
+          const pendingScrobble = this._pendingScrobbleTimers.get(oldChannelId);
+          if (pendingScrobble) { clearTimeout(pendingScrobble.timer); this._pendingScrobbleTimers.delete(oldChannelId); }
+          try { await oldPlayer.leave(); } catch (e) {
+            logger.warn("[PlayerManager] Error leaving idle channel during relocation:", e?.message);
+          }
+          try { oldPlayer.destroy(); } catch (_) {}
+        }
+      }
+    }
+
     const existing = this.playerMap.get(cleanChannelId)
       ?? this.getPlayerByChannelId(cleanChannelId);
     if (existing) {
