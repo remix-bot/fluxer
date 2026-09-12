@@ -202,6 +202,8 @@
       "noVoiceChannel": "⚠️ Bitte trete zuerst einem Sprachkanal bei.",
       "noVoiceStrict": "⚠️ Du musst einem Sprachkanal beitreten, um diesen Befehl zu nutzen.",
       "alreadyInChannel": "⚠️ Ich spiele bereits in {{channels}}. Trete diesem Kanal bei oder nutze `{{prefix}}play`, um Musik in deinem Kanal zu starten.",
+      "busyPlayingInOtherVoiceChannel": "🎵 Ich spiele gerade Musik in einem anderen Sprachkanal: {{channels}}!\n🎧 **Tritt diesem Kanal bei**, um mitzuhören.\n💡 Oder benutze `{{prefix}}join`, wenn ich in deinen Kanal wechseln soll.",
+      "busyStayingInOtherVoiceChannel": "🤖 Ich halte mich gerade in einem anderen Sprachkanal auf: {{channels}} (24/7-Modus).\n🎧 Tritt diesem Kanal bei, um bei mir zu sein, oder benutze `{{prefix}}join`, um mich in deinen Kanal zu holen.",
       "notInVoice": "Ich bin in keinem Sprachkanal.",
       "queueEmpty": "📭 Die Warteschlange ist leer. Nutze `{{prefix}}play`, um Songs hinzuzufügen!",
       "queueEnded": "🎵 Die Warteschlange ist zu Ende — nichts mehr abzuspielen. Füge weitere Songs mit `{{prefix}}play` hinzu!",

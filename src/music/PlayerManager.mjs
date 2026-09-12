@@ -125,6 +125,49 @@ export class PlayerManager {
     return null;
   }
 
+  /**
+   * Check whether a player counts as "busy" — i.e. the bot is actively
+   * serving that channel: a track is loaded (playing or paused), the queue
+   * still has songs, a radio stream is running, or the channel is parked in
+   * 24/7 (stay) mode. Used by {@link getPlayer} to warn users instead of
+   * silently moving the bot out of a channel where people are listening.
+   * @param {Player} player - The player to inspect.
+   * @returns {boolean} True if the player is playing/staying for its channel.
+   */
+  _isPlayerBusy(player) {
+    if (!player || player._destroyed) return false;
+    try {
+      if (player._get247Mode?.() === "on") return true;
+      if (player.queue?.getCurrent?.()) return true;
+      if (player.queue && !player.queue.isEmpty()) return true;
+      if (player._wasRadio) return true;
+    } catch (e) {
+      logger.warn("[PlayerManager] _isPlayerBusy check failed:", e?.message);
+    }
+    return false;
+  }
+
+  /**
+   * Check whether a player is actively playing audio — a track is loaded
+   * (playing or paused), the queue still has songs, or a radio stream is
+   * running. Stricter than {@link _isPlayerBusy}, which also counts idle
+   * 24/7 stays. Picks which of the two "busy elsewhere" warnings to show:
+   * the "already playing music" one, or the "staying in 24/7 mode" one.
+   * @param {Player} player - The player to inspect.
+   * @returns {boolean} True if audio is actively playing (or paused).
+   */
+  _isPlayerActivelyPlaying(player) {
+    if (!player || player._destroyed) return false;
+    try {
+      if (player.queue?.getCurrent?.()) return true;
+      if (player.queue && !player.queue.isEmpty()) return true;
+      if (player._wasRadio) return true;
+    } catch (e) {
+      logger.warn("[PlayerManager] _isPlayerActivelyPlaying check failed:", e?.message);
+    }
+    return false;
+  }
+
   /** Find a player by its channel ID across all guilds. @param {string} channelId @returns {Player|null} */
  getPlayerByChannelId(channelId) {
     const cId = cleanId(channelId);
@@ -199,6 +242,25 @@ export class PlayerManager {
       }
 
       if (shouldJoin) {
+        const busyPlayers = serverPlayers.filter(([, player]) => this._isPlayerBusy(player));
+        if (busyPlayers.length > 0) {
+          const playingPlayers = busyPlayers.filter(([, player]) => this._isPlayerActivelyPlaying(player));
+          const relevantPlayers = playingPlayers.length > 0 ? playingPlayers : busyPlayers;
+          const busyChannelList = relevantPlayers
+              .map(([chId, player]) => `<#${getPlayerChannelId(player, chId)}>`)
+              .join(" or ");
+          const prefix = this.commands.getPrefix(guildId);
+          const key = playingPlayers.length > 0
+              ? "responses._common.busyPlayingInOtherVoiceChannel"
+              : "responses._common.busyStayingInOtherVoiceChannel";
+          message.reply(
+              this._t(message, key, {
+                channels: busyChannelList,
+                prefix,
+              })
+          );
+          return null;
+        }
         return this.initPlayer(message, userChannelId);
       }
 

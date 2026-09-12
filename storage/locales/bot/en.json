@@ -202,6 +202,8 @@
       "noVoiceChannel": "⚠️ I can't find you in a voice channel. Please join one first, or if you're already in one, make sure I have **View Channel** and **Connect** permissions.",
       "noVoiceStrict": "⚠️ I can't find you in a voice channel. Please join one, or if you're already in one, make sure I have **View Channel** and **Connect** permissions.",
       "alreadyInChannel": "⚠️ I'm already playing in {{channels}}. Join that channel or use `{{prefix}}play` to start music in your channel.",
+      "busyPlayingInOtherVoiceChannel": "🎵 I'm already playing music in another voice channel: {{channels}}!\n🎧 **Join that channel** to listen along.\n💡 Or use `{{prefix}}join` if you want me to move to your channel instead.",
+      "busyStayingInOtherVoiceChannel": "🤖 I'm currently staying in another voice channel: {{channels}} (24/7 mode).\n🎧 Join that channel to hang out with me, or use `{{prefix}}join` to move me to your channel.",
       "notInVoice": "I'm not in a voice channel.",
       "queueEmpty": "📭 The queue is empty. Use `{{prefix}}play` to add songs!",
       "queueEnded": "🎵 The queue has ended — nothing left to play. Add more songs with `{{prefix}}play`!",

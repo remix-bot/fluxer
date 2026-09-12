@@ -202,6 +202,8 @@
       "noVoiceChannel": "⚠️ Lütfen önce bir ses kanalına katılın.",
       "noVoiceStrict": "⚠️ Bu komutu kullanmak için bir ses kanalına katılmanız gerekiyor.",
       "alreadyInChannel": "⚠️ Zaten {{channels}} kanalında çalıyorum. O kanala katılın veya kendi kanalınızda müzik başlatmak için `{{prefix}}play` kullanın.",
+      "busyPlayingInOtherVoiceChannel": "🎵 Şu anda başka bir ses kanalında müzik çalıyorum: {{channels}}!\n🎧 Dinlemek için **o kanala katıl**.\n💡 Benim senin kanalına geçmemi istiyorsan `{{prefix}}join` komutunu kullan.",
+      "busyStayingInOtherVoiceChannel": "🤖 Şu anda başka bir ses kanalında kalıyorum: {{channels}} (24/7 modu).\n🎧 Benimle vakit geçirmek için o kanala katıl ya da beni taşımak için `{{prefix}}join` komutunu kullan.",
       "notInVoice": "Bir ses kanalında değilim.",
       "queueEmpty": "📭 Kuyruk boş. Şarkı eklemek için `{{prefix}}play` kullanın!",
       "queueEnded": "🎵 Kuyruk bitti — çalacak bir şey kalmadı. Daha fazla şarkı eklemek için `{{prefix}}play` kullanın!",

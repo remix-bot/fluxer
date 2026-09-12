@@ -202,6 +202,8 @@
       "noVoiceChannel": "⚠️ Por favor, entre em um canal de voz primeiro.",
       "noVoiceStrict": "⚠️ Você precisa entrar em um canal de voz para usar este comando.",
       "alreadyInChannel": "⚠️ Já estou tocando em {{channels}}. Entre nesse canal ou use `{{prefix}}play` para começar a tocar no seu canal.",
+      "busyPlayingInOtherVoiceChannel": "🎵 Já estou tocando música em outro canal de voz: {{channels}}!\n🎧 **Entre nesse canal** para ouvir junto.\n💡 Ou use `{{prefix}}join` se quiser que eu mude para o seu canal.",
+      "busyStayingInOtherVoiceChannel": "🤖 No momento estou em outro canal de voz: {{channels}} (modo 24/7).\n🎧 Entre nesse canal para ficar comigo, ou use `{{prefix}}join` para me mover para o seu canal.",
       "notInVoice": "Não estou em um canal de voz.",
       "queueEmpty": "📭 A fila está vazia. Use `{{prefix}}play` para adicionar músicas!",
       "queueEnded": "🎵 A fila acabou — nada mais para tocar. Adicione mais músicas com `{{prefix}}play`!",
