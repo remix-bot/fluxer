@@ -572,6 +572,7 @@
       "resetSuccess": "🔄 `{{setting}}` varsayılan değerine sıfırlandı: {{value}}",
       "mustBeBool": "❌ `{{setting}}` bir boole değeri olmalıdır.\nKabul edilen: `true`, `false`, `on`, `off`, `enable`, `disable`",
       "volumeRange": "❌ Ses seviyesi **1** ile **200** arasında bir sayı olmalıdır.",
+      "voteSkipThresholdRange": "❌ Oylama eşiği **{{min}}** ile **{{max}}** arasında bir sayı olmalıdır.",
       "invalidLocale": "❌ `{{locale}}` desteklenen bir dil değil.\nKullanılabilir diller: {{locales}}",
       "prefixLength": "❌ Önek **1** ile **5** karakter arasında olmalıdır.",
       "prefixSpaces": "❌ Önek boşluk içeremez.",
@@ -587,10 +588,10 @@
       "helpTitle": "⚙️ Ayarlar Yardımı",
       "helpAvailable": "**Kullanılabilir ayarlar:** {{settings}}",
       "helpSubcommands": "**Alt komutlar:**\n• `{{prefix}}settings get` — tüm mevcut değerleri listele\n• `{{prefix}}settings get <ayar>` — tek bir ayarı görüntüle\n• `{{prefix}}settings set <ayar> <değer>` — bir ayarı değiştir\n• `{{prefix}}settings reset <ayar>` — varsayılan değeri geri yükle\n• `{{prefix}}settings help <ayar>` — bir ayarı açıkla",
-      "helpShortcuts": "**Kısayollar:** `{{prefix}}prefix`, `{{prefix}}247`",
+      "helpShortcuts": "**Kısayollar:** `{{prefix}}prefix`, `{{prefix}}247`, `{{prefix}}voteskip`, `{{prefix}}voteskiplimit`",
       "serverTitle": "⚙️ Sunucu Ayarları",
       "serverHeader": "Sunucu: **{{name}}**",
-      "shortcutsHint": "Kısayollar: `{{prefix}}247`, `{{prefix}}prefix`\nHerhangi bir ayar hakkında bilgi için `{{prefix}}settings help <ayar>` kullanın.",
+      "shortcutsHint": "Kısayollar: `{{prefix}}247`, `{{prefix}}prefix`, `{{prefix}}voteskip`, `{{prefix}}voteskiplimit`\nHerhangi bir ayar hakkında bilgi için `{{prefix}}settings help <ayar>` kullanın.",
       "247Panel": {
         "title": "♾️ 24/7 Modu",
         "noChannelsSaved": "Kayıtlı ses kanalı yok.",
@@ -643,6 +644,8 @@
       "labelPfp": "Bot avatar stili",
       "labelLocale": "Yerel ayar",
       "labelVolume": "Varsayılan ses",
+      "labelVoteSkip": "Atlama oylaması",
+      "labelVoteSkipThreshold": "Atlama oylaması eşiği",
       "labelAnnouncementChannel": "Duyuru kanalı",
       "labelRestrictVolume": "Ses kısıtlaması",
       "labelAutojoinChannel": "Otomatik katılma kanalı",
@@ -672,7 +675,9 @@
       "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
       "skipped": "⏭️ Atlandı",
       "skippedTrack": "⏭️ [{{title}}]({{url}}) atlandı",
-      "skippedToPosition": "⏭️ {{position}} konumuna atlandı"
+      "skippedToPosition": "⏭️ {{position}} konumuna atlandı",
+      "voteAdded": "🗳️ Atlama oylaması: **{{votes}}/{{needed}}**. Oyunu eklemek için komutu tekrar çalıştır!",
+      "alreadyVoted": "🗳️ Zaten atlamak için oy verdin! Şu ana kadar **{{votes}}/{{needed}}** oy."
     },
     "stats": {
       "title": "Remix Müzik Botu",

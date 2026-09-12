@@ -5,7 +5,9 @@
     "pfp": "default",
     "locale": "en",
     "stay_247": "none",
-    "volume": 100
+    "volume": 100,
+    "voteSkip": true,
+    "voteSkipThreshold": 3
   },
   "descriptions": {
     "songAnnouncements": "Whether the bot should announce every song in a new message when it starts playing. Set to `true` or `1` to enable.",
@@ -13,6 +15,8 @@
     "pfp": "What profile picture the bot should use. Presets: `default | dark | light | mono | <custom url>`.",
     "locale": "The preferred language of your server.",
     "stay_247": "Join a voice channel and use `$prefix247` to toggle 24/7. The bot stays permanently and auto-rejoins if disconnected. Use `$prefix247 off` to disable.",
-    "volume": "The default playback volume for this server (1-200). Saved automatically when you use $prefixvolume."
+    "volume": "The default playback volume for this server (1-200). Saved automatically when you use $prefixvolume.",
+    "voteSkip": "Whether a majority vote is required to skip when several people are listening. Set to `true` or `1` to enable (default), `false` or `0` to let anyone skip instantly.",
+    "voteSkipThreshold": "The number of people in the voice channel (2-50) at which a skip vote is required instead of an instant skip. Default is `3`."
   }
 }

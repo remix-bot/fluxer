@@ -54,6 +54,9 @@ class Player extends EventEmitter {
   /** @private @type {string|null} The home channel of a 24/7 spawn. */
   _home247Channel    = null;
 
+  /** @private @type {Set<string>} User IDs who have voted to skip the current track. Reset whenever a new track starts. */
+  _skipVotes         = new Set();
+
   /** @type {Queue} */
   queue        = null;
   client       = null;

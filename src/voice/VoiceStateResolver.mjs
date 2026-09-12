@@ -111,6 +111,60 @@ export function hasHumansInChannel({ guildId, channelId, client, voiceCache, obs
 }
 
 /**
+ * Count the number of distinct non-bot humans currently in a voice channel.
+ * Checks, in order: VoiceStateCache (exact count) → guild voice_states (live
+ * count) → ObservedVoiceUsers (falls back to a 0/1 presence check only).
+ * @param {object} opts
+ * @param {string} opts.guildId
+ * @param {string} opts.channelId
+ * @param {object} [opts.client] - client with `guilds`.
+ * @param {VoiceStateCache} [opts.voiceCache]
+ * @param {Map} [opts.observedVoiceUsers]
+ * @returns {number}
+ */
+export function countHumansInChannel({ guildId, channelId, client, voiceCache, observedVoiceUsers }) {
+  if (!channelId || !guildId) return 0;
+
+  if (voiceCache && typeof voiceCache.getHumanCount === "function") {
+    return voiceCache.getHumanCount(guildId, channelId);
+  }
+
+  if (client) {
+    try {
+      const guild = client.guilds?.get?.(guildId);
+      if (guild) {
+        const users = new Set();
+        for (const vs of iterateVoiceStates(guild)) {
+          if (vs.channelId === channelId && !vs.isBot) users.add(vs.userId);
+        }
+        return users.size;
+      }
+    } catch (e) {
+      logger.warn("[VoiceStateResolver] countHumansInChannel guild fallback failed:", e?.message);
+    }
+  }
+
+  if (observedVoiceUsers) {
+    try {
+      const users = new Set();
+      const iterator = typeof observedVoiceUsers.iterateHumanUsers === "function"
+        ? observedVoiceUsers.iterateHumanUsers()
+        : observedVoiceUsers.entries();
+      for (const [userId, info] of iterator) {
+        if (String(info.guildId ?? "") === guildId && String(info.channelId ?? "") === channelId) {
+          users.add(userId);
+        }
+      }
+      return users.size;
+    } catch (e) {
+      logger.warn("[VoiceStateResolver] countHumansInChannel observedVoiceUsers fallback failed:", e?.message);
+    }
+  }
+
+  return 0;
+}
+
+/**
  * Get the set of channel IDs that contain at least one human user.
  * @param {object} guild - guild object.
  * @returns {Set<string>}

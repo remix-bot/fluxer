@@ -11,6 +11,7 @@ import runnables from "../../settings/runnables.mjs";
 import {
   parseBool, displayValue, getGuildName, embed, tWrap, prettifySettingLabel,
   BOOL_SETTINGS, VALID_LOCALES, VOLUME_MIN, VOLUME_MAX, PREFIX_MAX, SHORTCUTS,
+  VOTE_SKIP_THRESHOLD_MIN, VOTE_SKIP_THRESHOLD_MAX,
 } from "./utils.mjs";
 import {
   get247Channels, save247Channels, build247Panel, disable247, handle247Toggle,
@@ -39,6 +40,18 @@ export async function applySet(ctx, message, set, key, rawValue) {
     const num = parseInt(rawValue, 10);
     if (isNaN(num) || num < VOLUME_MIN || num > VOLUME_MAX) {
       return ctx.t(message, "responses.settings.volumeRange");
+    }
+    set.set(key, num);
+    return null;
+  }
+
+  if (key === "voteSkipThreshold") {
+    const num = parseInt(rawValue, 10);
+    if (isNaN(num) || num < VOTE_SKIP_THRESHOLD_MIN || num > VOTE_SKIP_THRESHOLD_MAX) {
+      return ctx.t(message, "responses.settings.voteSkipThresholdRange", {
+        min: VOTE_SKIP_THRESHOLD_MIN,
+        max: VOTE_SKIP_THRESHOLD_MAX,
+      });
     }
     set.set(key, num);
     return null;

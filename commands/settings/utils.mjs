@@ -18,6 +18,8 @@ export const SHORTCUTS = {
   prefix: "prefix",
   pfx:    "prefix",
   "247":  "stay_247",
+  voteskip:      "voteSkip",
+  voteskiplimit: "voteSkipThreshold",
 };
 
 /** @private @type {Set<string>} Strings that evaluate to boolean true. */
@@ -25,7 +27,7 @@ const BOOL_TRUE  = new Set(["true",  "1", "yes", "on",  "enable", "enabled"]);
 /** @private @type {Set<string>} Strings that evaluate to boolean false. */
 const BOOL_FALSE = new Set(["false", "0", "no",  "off", "disable", "disabled"]);
 /** @private @type {Set<string>} Setting keys that use boolean display formatting. */
-export const BOOL_SETTINGS = new Set(["songAnnouncements"]);
+export const BOOL_SETTINGS = new Set(["songAnnouncements", "voteSkip"]);
 
 /** @private @type {Set<string>} Available locale codes, populated at load time. */
 export let VALID_LOCALES = new Set(["en"]);
@@ -38,6 +40,10 @@ export const VOLUME_MAX = 200;
 export const PREFIX_MAX = 5;
 /** @private @type {number} Maximum number of 24/7 channels per guild. */
 export const MAX_247_CHANNELS = 1;
+/** @private @type {number} Minimum allowed vote-skip threshold (people in channel). */
+export const VOTE_SKIP_THRESHOLD_MIN = 2;
+/** @private @type {number} Maximum allowed vote-skip threshold (people in channel). */
+export const VOTE_SKIP_THRESHOLD_MAX = 50;
 
 /**
  * Replace the set of known locale codes (called by the settings command
@@ -132,6 +138,8 @@ export function prettifySettingLabel(key, t, guildId) {
     locale: "responses.settings.labelLocale",
     stay_247: "responses.settings.label247",
     volume: "responses.settings.labelVolume",
+    voteSkip: "responses.settings.labelVoteSkip",
+    voteSkipThreshold: "responses.settings.labelVoteSkipThreshold",
   };
   if (localeMap[key] && t && guildId) return t(guildId, localeMap[key]);
   const fallback = {
@@ -141,6 +149,8 @@ export function prettifySettingLabel(key, t, guildId) {
     locale: "Locale",
     stay_247: "24/7 mode",
     volume: "Default volume",
+    voteSkip: "Vote to skip",
+    voteSkipThreshold: "Vote to skip threshold",
   };
   return fallback[key] ?? key.replace(/_/g, " ");
 }

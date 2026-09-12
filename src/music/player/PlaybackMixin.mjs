@@ -178,6 +178,7 @@ const PlaybackMixin = {
       this.announceSong(songData);
       if (songData.type === "radio") this._radioAnnounced = true;
     }
+    this._skipVotes.clear();
     this.emit("startplay", songData);
 
     try {
