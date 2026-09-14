@@ -220,17 +220,41 @@ const SearchMixin = {
         const canonicalYtUrl = ytId ? Utils.normalizeYouTubeUrl(query) : null;
         const searchQuery = (isUrl && canonicalYtUrl) ? canonicalYtUrl : query;
 
-        let result;
-        try {
-          if (isUrl) {
-            result = await this._lavalink.search(searchQuery);
-          } else {
-            result = await this._lavalink.search(searchQuery, { source });
+        let playlistQuery = null;
+        if (isUrl && ytId && canonicalYtUrl) {
+          try {
+            const listId = new URL(query.trim()).searchParams.get("list");
+            if (listId) playlistQuery = canonicalYtUrl + "&list=" + listId;
+          } catch (_) { /* ignore malformed URLs */ }
+        }
+
+        let result = null;
+        let usedPlaylistQuery = false;
+        if (isUrl && playlistQuery) {
+          try {
+            result = await this._lavalink.search(playlistQuery);
+            usedPlaylistQuery = true;
+          } catch (searchErr) {
+            logger.warn("[Player] Playlist load failed:", searchErr?.message);
+            result = null;
           }
-        } catch (searchErr) {
-          logger.warn("[Player] URL/primary search failed:", searchErr?.message);
-          result = null;
-          if (!isUrl) throw searchErr;
+          if ((result?.tracks?.length ?? 0) === 0) {
+            usedPlaylistQuery = false;
+            result = null;
+          }
+        }
+        if (!usedPlaylistQuery) {
+          try {
+            if (isUrl) {
+              result = await this._lavalink.search(searchQuery);
+            } else {
+              result = await this._lavalink.search(searchQuery, { source });
+            }
+          } catch (searchErr) {
+            logger.warn("[Player] URL/primary search failed:", searchErr?.message);
+            result = null;
+            if (!isUrl) throw searchErr;
+          }
         }
         let lcTracks = result?.tracks ?? [];
         let fromTitleFallback = false;
