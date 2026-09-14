@@ -58,7 +58,10 @@ const StreamPipeline = {
 
       const stream = this._stream;
       if (stream) {
-        const onEnd = () => resolve();
+        const onEnd = () => {
+          if (durationMs > 0 && this._playing && !this._stopped) return;
+          resolve();
+        };
         stream.once("end", onEnd);
         stream.once("close", onEnd);
         stream.once("error", failFast);
