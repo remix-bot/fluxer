@@ -18,6 +18,7 @@ import { MessageHandler, HelpCommand, setGlobalColor } from "../ui/index.mjs";
 import { cleanId } from "../utils/Utils.mjs";
 import * as ShardingUtils from "../utils/ShardingUtils.mjs";
 import { RemoteSettingsManager } from "../db/Settings.mjs";
+import { PlayerStateStore } from "../db/PlayerStateStore.mjs";
 import { PlayerManager } from "../music/PlayerManager.mjs";
 import { LavalinkManager } from "../music/LavalinkManager.mjs";
 import { Dashboard } from "../dashboard/Dashboard.mjs";
@@ -176,6 +177,8 @@ class Remix {
     const settings    = new RemoteSettingsManager(config.mysql, "./storage/defaults.json");
     this.settingsMgr  = settings;
 
+    this.playerState  = new PlayerStateStore(settings.db);
+
     const configPrefix = config.prefix ?? null;
     if (configPrefix && settings.defaults) {
       settings.defaults.prefix = configPrefix;
@@ -258,6 +261,7 @@ class Remix {
 
         await this.settingsMgr.setBotId(botId);
         await this.lastfm.setBotId(botId);
+        this.playerState?.setBotId?.(botId);
         this.dashboard.setBotId(botId);
         this.trackOptions.setBotId(botId);
 
@@ -493,7 +497,7 @@ class Remix {
             player._startInactivityTimer?.();
           } else {
             player._stopInactivityTimer?.();
-            player.emit("autoleave");
+            if (!player._stayInVoice) player.emit("autoleave");
           }
         } else if (hasHuman) {
           player._stopInactivityTimer?.();

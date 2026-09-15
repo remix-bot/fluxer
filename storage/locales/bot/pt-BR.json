@@ -207,6 +207,7 @@
       "notInVoice": "Não estou em um canal de voz.",
       "queueEmpty": "📭 A fila está vazia. Use `{{prefix}}play` para adicionar músicas!",
       "queueEnded": "🎵 A fila acabou — nada mais para tocar. Adicione mais músicas com `{{prefix}}play`!",
+      "queueRestored": "🔁 Reinício concluído — **{{count}}** música(s) de volta na fila e reconectado ao canal de voz. Continuando de onde parou.",
       "notConnected": "Parece que não estamos no mesmo canal de voz.",
       "controlsExpired": "⌛ Controles expirados",
       "sessionEnded": "Sessão encerrada",

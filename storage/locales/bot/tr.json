@@ -207,6 +207,7 @@
       "notInVoice": "Bir ses kanalında değilim.",
       "queueEmpty": "📭 Kuyruk boş. Şarkı eklemek için `{{prefix}}play` kullanın!",
       "queueEnded": "🎵 Kuyruk bitti — çalacak bir şey kalmadı. Daha fazla şarkı eklemek için `{{prefix}}play` kullanın!",
+      "queueRestored": "🔁 Yeniden başlatma tamamlandı — **{{count}}** şarkı kuyruğa geri yüklendi ve ses kanalına yeniden bağlanıldı. Kaldığı yerden devam ediliyor.",
       "notConnected": "Görünüşe göre aynı ses kanalında değiliz.",
       "controlsExpired": "⌛ Kontrollerin süresi doldu",
       "sessionEnded": "Oturum sona erdi",

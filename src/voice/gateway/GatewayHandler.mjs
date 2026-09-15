@@ -448,6 +448,13 @@ class GatewayHandler {
 
     this.rejoin247Channels();
     this.start247Watchdog();
+
+    try {
+      this.remix.restorePlayerState?.().catch?.((e) =>
+          logger.warn("[Restore] Player state restore failed:", e?.message));
+    } catch (e) {
+      logger.warn("[Restore] Player state restore could not start:", e?.message);
+    }
   }
 
   /**

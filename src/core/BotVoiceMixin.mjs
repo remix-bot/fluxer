@@ -414,6 +414,104 @@ const BotVoiceMixin = {
   },
 
   /**
+   * Restore music players saved before a restart/crash (PlayerStateStore).
+   * Called from GatewayHandler.onReady after the 24/7 boot recovery.
+   * @this {import('./Bot.mjs').Remix}
+   * @returns {Promise<void>}
+   */
+  async restorePlayerState() {
+    const store = this.playerState;
+    if (!store) return;
+
+    let rows = [];
+    try {
+      rows = await store.loadAll();
+    } catch (e) {
+      logger.warn("[Restore] Could not load saved player state:", e?.message);
+      return;
+    }
+    if (!rows.length) return;
+
+    const lava = this.lavalink;
+    if (lava?.hasConnectedNode && !lava.hasConnectedNode() && lava.waitForNode) {
+      logger.player("[Restore] Waiting up to 90s for an audio node...");
+      await lava.waitForNode({ timeoutMs: 90_000, intervalMs: 2_000 }).catch(() => {});
+    }
+
+    const local = rows.filter((r) => {
+      try { return !!this.client?.guilds?.get?.(r.guildId); } catch (_) { return false; }
+    });
+    logger.player(`[Restore] ${rows.length} saved player(s) found — restoring ${local.length} on this shard.`);
+    if (!local.length) return;
+
+    for (let i = 0; i < local.length; i++) {
+      const { guildId, data: snap } = local[i];
+      if (i > 0) await new Promise((r) => setTimeout(r, 1_500));
+
+      try {
+        const channelId = cleanId(snap.channelId);
+        if (!channelId) { await store.clearSnapshot(guildId); continue; }
+
+        const channel = await resolveChannelCached(this.client, channelId);
+        if (!channel || channel.type !== 2) {
+          logger.player(`[Restore] Channel ${channelId} for guild ${guildId} is gone — dropping snapshot.`);
+          await store.clearSnapshot(guildId);
+          continue;
+        }
+
+        const player = await this._spawnPlayer(guildId, channelId);
+
+        const tcId = cleanId(snap.textChannelId);
+        if (tcId) {
+          const tc = this.client?.channels?.get?.(tcId);
+          if (tc) player.textChannel = tc;
+        }
+
+        if (Number.isFinite(snap.volume) && snap.volume > 0) {
+          try { player.setVolume(Math.min(Number(snap.volume), 2)); } catch (_) {}
+        }
+        player.queue.loop     = !!snap.loop;
+        player.queue.songLoop = !!snap.songLoop;
+
+        const restoredQueue = (Array.isArray(snap.queue) ? snap.queue : [])
+            .filter((t) => t && (t.url || t.encoded));
+
+        let current = (snap.current && (snap.current.url || snap.current.encoded)) ? snap.current : null;
+        const pos = Math.max(0, Number(snap.positionMs) || 0);
+        const dur = Number(current?._durationMs) || 0;
+        if (current && dur > 0 && pos > dur * 0.9) current = null;
+
+        player.queue.data = [];
+        if (current) player.queue.data.push(current);
+        for (const t of restoredQueue) player.queue.data.push(t);
+
+        if (!player.queue.data.length) {
+          await store.clearSnapshot(guildId);
+          continue;
+        }
+
+        player.emit("message", {
+          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
+              player._t?.("responses._common.queueRestored", { count: player.queue.data.length })
+              ?? `Bot restarted — restored **${player.queue.data.length}** song(s) to the queue.`)],
+          system: true,
+        });
+
+        await player.playNext();
+
+        if (current && pos > 0) {
+          await new Promise((r) => setTimeout(r, 800)); // let the bridge settle
+          try { await player.seekToPosition(pos); } catch (_) {}
+        }
+
+        logger.player(`[Restore] Guild ${guildId}: ${player.queue.data.length} track(s) restored, resuming at ${pos}ms.`);
+      } catch (e) {
+        logger.warn(`[Restore] Failed to restore guild ${guildId}:`, e?.message ?? e);
+      }
+    }
+  },
+
+  /**
    * Leave a voice channel programmatically. Removes 24/7 if active, destroys
    * the player, and optionally sends a confirmation message.
    * @this {import('./Bot.mjs').Remix}

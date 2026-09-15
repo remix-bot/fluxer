@@ -102,6 +102,11 @@ process.on("uncaughtExceptionMonitor", (err, origin) => {
 const saveAndExit = async () => {
   logger.recovery("\n[Shutdown] Cleaning up before exit...");
   try {
+    await remix.playerState?.saveAllFrom?.(remix.players);
+  } catch (e) {
+    logger.warn("[Shutdown] Player state save failed:", e?.message);
+  }
+  try {
     if (remix.players?.playerMap) {
       for (const [channelId, player] of remix.players.playerMap) {
         try { player.destroy(); } catch (e) { logger.warn("[Shutdown] Player destroy error:", e?.message); }

@@ -321,11 +321,6 @@ const ServerStatsMixin = {
   async getLeaderboard(page = 0, perPage = 10) {
     if (!this.enabled) return { entries: [], totalUsers: 0, page: 0, perPage: 10, totalPages: 0 };
 
-    /* Sync scrobble counts from Last.fm before ranking. The local counter
-       only advances on bot-made scrobbles, so listening done outside the
-       bot (phone/desktop clients) would never show up. getTotalScrobbles()
-       syncs every linked user, is deduped while in-flight, cached for 10
-       minutes, and resolves (never throws) even if the API is down. */
     try {
       await this.getTotalScrobbles();
     } catch (_) { /* stale counts are better than no leaderboard */ }
@@ -359,9 +354,6 @@ const ServerStatsMixin = {
 
   /**
    * Global rank (1-based) of one user on the all-time scrobble leaderboard.
-   * Returns null when the user is not linked or has no scrobbles recorded
-   * yet (they are not ranked). Used so anyone can check whether they are
-   * top 1, 2, 3 ... even when their row is not on the visible page.
    * @async
    * @param {string} userId - Platform user ID to look up.
    * @returns {Promise<{rank: number, scrobbleCount: number}|null>} Rank info or null.
@@ -388,10 +380,7 @@ const ServerStatsMixin = {
   },
 
   /**
-   * Get the scrobble leaderboard scoped to a set of platform user IDs
-   * (typically the members of one guild), with pagination. Refreshes only
-   * these users' counts from Last.fm first (5-minute TTL, deduped while
-   * in-flight) so pagination turns don't hammer the API.
+   * Get the scrobble leaderboard scoped to a set of platform user IDs, with pagination.
    * @async
    * @param {Array<string>} userIds - Platform user IDs to include.
    * @param {number} [page=0] - Zero-based page index.
@@ -407,9 +396,6 @@ const ServerStatsMixin = {
       .filter(id => /^\d{5,25}$/.test(id)))];
     if (!ids.length) return empty;
 
-    /* Refresh just these users' counts from Last.fm before ranking.
-       The local counter only advances on bot-made scrobbles, so listening
-       done outside the bot would never show up. TTL-gated + deduped. */
     try {
       if (!this._lbServerSyncAt || Date.now() - this._lbServerSyncAt > 5 * 60 * 1000) {
         if (!this._lbServerSyncInflight) {

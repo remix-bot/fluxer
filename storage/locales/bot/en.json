@@ -208,6 +208,7 @@
       "notInVoice": "I'm not in a voice channel.",
       "queueEmpty": "📭 The queue is empty. Use `{{prefix}}play` to add songs!",
       "queueEnded": "🎵 The queue has ended — nothing left to play. Add more songs with `{{prefix}}play`!",
+      "queueRestored": "🔁 Bot restarted — restored **{{count}}** song(s) to the queue and reconnected to voice. Resuming where it stopped.",
       "notConnected": "It doesn't look like we're in the same voice channel.",
       "controlsExpired": "⌛ Controls expired",
       "sessionEnded": "Session ended",

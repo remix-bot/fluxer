@@ -139,7 +139,8 @@
     "playerUpdateInterval": 5000,
     "searchSessionTimeout": 30000,
     "playerSessionTimeout": 300000,
-    "intentionalLeaveTTL": 8000
+    "intentionalLeaveTTL": 8000,
+    "stayInVoice": true
   },
   "sharding": {
     "totalShards": 1,

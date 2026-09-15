@@ -207,6 +207,7 @@
       "notInVoice": "Ich bin in keinem Sprachkanal.",
       "queueEmpty": "📭 Die Warteschlange ist leer. Nutze `{{prefix}}play`, um Songs hinzuzufügen!",
       "queueEnded": "🎵 Die Warteschlange ist zu Ende — nichts mehr abzuspielen. Füge weitere Songs mit `{{prefix}}play` hinzu!",
+      "queueRestored": "🔁 Neustart abgeschlossen — **{{count}}** Titel zurück in der Warteschlange und Sprachverbindung wiederhergestellt. Es wird dort fortgesetzt, wo es aufgehört hat.",
       "notConnected": "Es scheint, als wären wir nicht im selben Sprachkanal.",
       "controlsExpired": "⌛ Steuerung abgelaufen",
       "sessionEnded": "Sitzung beendet",

@@ -35,7 +35,6 @@ export const WHOKNOWS_ACTIONS = new Set([
 
 /**
  * Get all non-bot user IDs in a guild.
- * @export
  * @async
  * @param {object} guild - The guild object.
  * @returns {Promise<string[]>} Array of user ID strings.

@@ -108,8 +108,6 @@ function buildLeaderboardEmbed(lb, pageIdx, prefix, tr, opts = {}) {
  * @returns {Promise<*>} Whatever the original switch returned for this action.
  */
 export async function runListeningActions(msg, data, lastfm, prefix, userId, targetUserId, action) {
-  /* Translator bound to this message: every embed builder below renders in
-     the guild's locale instead of hardcoded English. */
   const tr = (key, repl = {}) => this.t(msg, key, repl);
 
   switch (action) {

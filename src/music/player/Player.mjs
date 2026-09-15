@@ -156,6 +156,32 @@ class Player extends EventEmitter {
       }
     }
 
+    this._stayInVoice = this.config?.timers?.stayInVoice ?? this.config?.stayInVoice ?? true;
+
+    this._snapSaveTimer = null;
+    this._scheduleStateSave = () => {
+      if (this._snapSaveTimer || this._destroyed || this.leaving) return;
+      this._snapSaveTimer = setTimeout(() => {
+        this._snapSaveTimer = null;
+        try {
+          this.client?._remix?.playerState?.saveSnapshot(this)?.catch?.(() => {});
+        } catch (_) { /* persistence must never break playback */ }
+      }, 3_000);
+    };
+    for (const evt of ["queue", "startplay", "stopplay", "playback"]) {
+      try { this.on(evt, this._scheduleStateSave); } catch (_) {}
+    }
+    this._stateHeartbeat = setInterval(() => {
+      try {
+        const current = this.queue?.getCurrent?.();
+        if (!current || this._destroyed || this.leaving || this._paused) return;
+        if (!this.startedPlaying) return;
+        const pos = Math.max(0, Date.now() - this.startedPlaying);
+        this.client?._remix?.playerState?.updatePosition?.(this._guildId, pos)?.catch?.(() => {});
+      } catch (_) { /* best effort */ }
+    }, 15_000);
+    this._stateHeartbeat.unref?.();
+
     if (this._lavalink) {
       this._onLavalinkPlayerDisconnect = (lavaPlayer) => {
         if (!lavaPlayer || String(lavaPlayer.guildId) !== String(this._guildId)) return;
@@ -268,6 +294,11 @@ class Player extends EventEmitter {
   _startInactivityTimer() {
     this._stopInactivityTimer();
     if (this._inactivityLimit <= 0) return;
+
+    if (this._stayInVoice) {
+      logger.inactivity(`[Player] stay-in-voice active for guild ${this._guildId} — skipping inactivity auto-leave`);
+      return;
+    }
 
     const mode = this._get247Mode();
     logger.inactivity(`[Player] Checking 24/7 mode for guild ${this._guildId}: ${mode}`);
@@ -614,6 +645,10 @@ class Player extends EventEmitter {
         this.removeListener("queueEnd", this._autoplayHandler);
         this._autoplayHandler = null;
       }
+
+      try {
+        this.client?._remix?.playerState?.clearSnapshot?.(this._guildId)?.catch?.(() => {});
+      } catch (_) { /* best effort */ }
     } catch (e) {
       logger.error("[Player] leave error:", e.message);
       this.leaving = false;
@@ -631,6 +666,10 @@ class Player extends EventEmitter {
   destroy() {
     if (this._destroyed) return;
     this._destroyed = true;
+
+    this._scheduleStateSave = null;
+    if (this._snapSaveTimer) { clearTimeout(this._snapSaveTimer); this._snapSaveTimer = null; }
+    if (this._stateHeartbeat) { clearInterval(this._stateHeartbeat); this._stateHeartbeat = null; }
 
     this._clearTrackEndTimer();
     this._activeTrackOpt = null;
