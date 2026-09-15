@@ -179,8 +179,12 @@ const StreamPipeline = {
     this._encoder = encoder;
 
     pcmStream.on("error", (err) => {
-      logger.warn("[AudioBridge] PCM source error: " + err.message);
-      encoder.destroy(err);
+      if (this._stopped || !this._playing) {
+        logger.player("[AudioBridge] PCM source torn down after stop: " + err.message);
+      } else {
+        logger.warn("[AudioBridge] PCM source error: " + err.message);
+        encoder.destroy(err);
+      }
     });
     encoder.on("error", (err) => {
       muxer.destroy(err);

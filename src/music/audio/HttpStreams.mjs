@@ -154,7 +154,15 @@ const HttpStreams = {
 
         if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
         resetIdleTimeout();
-        res.once("data", () => resetIdleTimeout());
+
+        const rearmIdle = () => resetIdleTimeout();
+        const stopIdleWatch = () => {
+          res.off("data", rearmIdle);
+          if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+        };
+        res.on("data", rearmIdle);
+        res.once("end", stopIdleWatch);
+        res.once("close", stopIdleWatch);
 
         logger.player("[AudioBridge] loadstream response: " + res.statusCode + " content-type=" + (res.headers["content-type"] || "?"));
         resolve({ stream: res, inputFormat: res.headers["content-type"] || null, req });
