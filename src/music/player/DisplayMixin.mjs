@@ -79,6 +79,12 @@ const DisplayMixin = {
           ? `${vid.title} - ${vid.url}`
           : `[${vid.title}](${vid.url})`;
     }
+    if (vid.isLive || vid.type === "livestream") {
+      const link = vid.url || "";
+      return code
+          ? `${vid.title} (LIVE) - ${link}`
+          : `🔴 [${vid.title}](${link}) — **LIVE**`;
+    }
     const elapsed = this.getCurrentElapsedDuration();
     const total   = this.getDuration(vid.duration);
     const link    = vid.spotifyUrl || vid.url || "";

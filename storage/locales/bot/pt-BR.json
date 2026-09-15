@@ -775,6 +775,7 @@
     "seek": {
       "nothingPlaying": "❌ Não está tocando nada no momento!",
       "paused": "❌ Não é possível buscar enquanto pausado. Retome primeiro.",
+      "live": "❌ Isto é uma transmissão ao vivo ou rádio — não é possível buscar uma posição.",
       "invalidFormat": "❌ Formato de posição inválido. Use `mm:ss`, `hh:mm:ss`, ou segundos (ex: `1:30`, `90`).",
       "exceedsDuration": "❌ Posição de busca excede a duração da faixa (**{{duration}}**).",
       "seeked": "⏩ Pulou para **{{position}}**",

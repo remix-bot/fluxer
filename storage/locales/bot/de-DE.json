@@ -775,6 +775,7 @@
     "seek": {
       "nothingPlaying": "❌ Es wird gerade nichts abgespielt!",
       "paused": "❌ Kann nicht springen während pausiert. Zuerst fortsetzen.",
+      "live": "❌ Das ist ein Livestream oder Radio — Spulen wird hier nicht unterstützt.",
       "invalidFormat": "❌ Ungültiges Positionsformat. Nutze `mm:ss`, `hh:mm:ss` oder Sekunden (z.B. `1:30`, `90`).",
       "exceedsDuration": "❌ Sprungposition überschreitet Track-Dauer (**{{duration}}**).",
       "seeked": "⏩ Gesprungen zu **{{position}}**",

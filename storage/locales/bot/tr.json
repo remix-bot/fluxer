@@ -738,6 +738,7 @@
     "seek": {
       "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
       "paused": "❌ Duraklatılmışken konuma gidilemez. Önce devam ettirin.",
+      "live": "❌ Bu canlı bir yayın veya radyo — belirli bir konuma geçilemez.",
       "invalidFormat": "❌ Geçersiz konum biçimi. `dd:ss`, `sa:dd:ss` veya saniye kullanın (örn. `1:30`, `90`).",
       "exceedsDuration": "❌ Konum parça süresini aşıyor (**{{duration}}**).",
       "seeked": "⏩ **{{position}}** konumuna gidildi",

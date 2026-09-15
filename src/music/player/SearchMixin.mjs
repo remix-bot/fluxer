@@ -148,6 +148,7 @@ const SearchMixin = {
       videoId:    info.identifier ?? "",
       encoded:    track.encoded ?? info.encoded ?? "",
       sourceName: info.sourceName ?? "unknown",
+      isLive:     info.isLive === true,
       title:      Utils.cleanTitle(info.title ?? "Unknown"),
       url:        trackUri,
       thumbnail:  info.artworkUrl ?? null,
@@ -292,20 +293,36 @@ const SearchMixin = {
         }
 
         if (lcTracks.length === 0) {
-          if (!isUrl && source !== "ytmsearch") {
-            events.emit("message", "No results from primary source, trying YouTube Music...");
-            const fallback = await this._lavalink.search(searchQuery, { source: "ytmsearch" });
-            if (fallback?.tracks?.length > 0) {
-              const video = this._lcTrackToVideo(fallback.tracks[0], trackMeta);
-              if (video) {
-                this.addToQueue(video, top);
-                events.emit("message", "Successfully added [" + video.title + "](" + video.url + ") to the queue.");
-                if (!this.queue.getCurrent()) {
-                  this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
+          if (!isUrl) {
+            const FALLBACKS = [
+              { source: "ytmsearch", label: "YouTube Music" },
+              { source: "ytsearch",  label: "YouTube" },
+              { source: "scsearch",  label: "SoundCloud" },
+            ].filter(f => f.source !== source);
+
+            for (const fb of FALLBACKS) {
+              events.emit("message", "No results yet — trying **" + fb.label + "**...");
+              let fbResult = null;
+              try {
+                fbResult = await this._lavalink.search(searchQuery, { source: fb.source });
+              } catch (_) { fbResult = null; }
+              if (fbResult?.tracks?.length > 0) {
+                const video = this._lcTrackToVideo(fbResult.tracks[0], trackMeta);
+                if (video) {
+                  this.addToQueue(video, top);
+                  events.emit("message", "Successfully added [" + video.title + "](" + video.url + ") to the queue. *(found on " + fb.label + ")*");
+                  if (!this.queue.getCurrent()) {
+                    this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
+                  }
+                  return;
                 }
-                return;
               }
             }
+          } else {
+            const lavasrcHost = /(?:open\.spotify\.com|spotify\.link|music\.apple\.com|tidal\.com|deezer\.com|deezer\.page\.link|music\.youtube\.com\/playlist)/i;
+            try { if (lavasrcHost.test(new URL(query.trim()).hostname)) {
+              events.emit("message", "⚠️ This link needs the **LavaSrc plugin** on the audio node, which isn't available. Try the song/playlist **name** instead — e.g. `%play <name>`.");
+            } } catch (_) {}
           }
           events.emit("message", "**No results found for '" + query + "'.**");
           return;
@@ -328,6 +345,9 @@ const SearchMixin = {
           if (video) {
             this.addToQueue(video, top);
             events.emit("message", "Successfully added [" + video.title + "](" + video.url + ") to the queue.");
+            if (playlistQuery) {
+              events.emit("message", "⚠️ Couldn't load the full playlist — added just this video.");
+            }
           } else {
             events.emit("message", "**Failed to parse track data.**");
             return;

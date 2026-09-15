@@ -37,9 +37,7 @@ const PlaybackMixin = {
       this._lastPlayedTrack = this.queue.getCurrent() ?? songData;
       this.queue.current = null;
       this.emit("stopplay");
-      if (!this._is247Enabled()) {
-        this._startInactivityTimer();
-      }
+      this._scheduleRadioReconnect(songData);
       return;
     }
 
@@ -173,6 +171,7 @@ const PlaybackMixin = {
     this._pausedAt        = null;
     this._queueEndedSent  = false;
     this._consecutiveErrors = 0;
+    this._radioReconnects   = 0;
 
     if (songData.type !== "radio" || !this._radioAnnounced) {
       this.announceSong(songData);
@@ -360,6 +359,31 @@ const PlaybackMixin = {
       }
     }
     this._skipping = false;
+  },
+
+  /**
+   * @private Re-arm the same radio station after its stream drops. Live
+   * streams end on network hiccups, not on purpose — retry twice (3s apart)
+   * before giving the channel back to the inactivity timer. A user-queued
+   * song or an intentional leave during the wait window cancels it.
+   * @this {import('./Player.mjs').Player}
+   * @param {object} track - The radio track object that ended.
+   */
+  _scheduleRadioReconnect(track) {
+    const maxRetries = 2;
+    if ((this._radioReconnects ?? 0) >= maxRetries || !track?.url) {
+      this._radioReconnects = 0;
+      if (!this._is247Enabled()) this._startInactivityTimer();
+      return;
+    }
+    this._radioReconnects = (this._radioReconnects ?? 0) + 1;
+    logger.player(`[Player] Radio stream ended — reconnecting (${this._radioReconnects}/${maxRetries}) in 3s: ${track.title}`);
+    setTimeout(() => {
+      if (this._destroyed || this.leaving || !this._voiceConn) return;
+      if (this.queue.getCurrent() || !this.queue.isEmpty()) return;
+      this.queue.add(track);
+      this.playNext().catch(e => logger.error("[Player] Radio reconnect playNext error:", e.message));
+    }, 3_000).unref?.();
   },
 
   /**

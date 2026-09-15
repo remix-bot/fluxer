@@ -4,24 +4,6 @@
  * survive bot reboots/crashes. One row per (bot_id, guild_id) holding a JSON
  * snapshot of the player: voice channel, text channel, queue tracks, current
  * track, resume position, volume and loop modes.
- *
- * WHY MySQL AND NOT REDIS/FILES:
- * - The bot already owns a MySQL pool (RemoteSettingsManager) that is flushed
- *   on graceful shutdown; snapshots ride the same healthy connection and are
- *   durable across restarts of ANY component.
- * - The project's Redis handle (dashboard RedisHandler) is a pub/sub cache
- *   whose client is closed on shutdown — it is the wrong place for state
- *   that must outlive a reboot.
- * - Local JSON files were audited and removed from the hot path years ago
- *   (storage/stats.json has no writer left); adding file writes would make
- *   the bot slower, not faster.
- *
- * Write pattern:
- * - Full snapshot: debounced 3s per player, triggered by queue/playback
- *   events (see Player.mjs).
- * - Position heartbeat: single cheap UPDATE of the position_ms column every
- *   15s while a track is playing, so resume-after-crash lands within ~15s
- *   of where the song actually was.
  */
 
 import { logger } from "../core/Logger.mjs";

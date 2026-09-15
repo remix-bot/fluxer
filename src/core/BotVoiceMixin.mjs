@@ -499,7 +499,7 @@ const BotVoiceMixin = {
 
         await player.playNext();
 
-        if (current && pos > 0) {
+        if (current && pos > 0 && dur > 0) {
           await new Promise((r) => setTimeout(r, 800)); // let the bridge settle
           try { await player.seekToPosition(pos); } catch (_) {}
         }

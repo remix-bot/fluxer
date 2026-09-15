@@ -776,6 +776,7 @@
     "seek": {
       "nothingPlaying": "❌ There's nothing playing at the moment!",
       "paused": "❌ Can't seek while paused. Resume first.",
+      "live": "❌ This is a live stream or radio — you can't seek in it.",
       "invalidFormat": "❌ Invalid position format. Use `mm:ss`, `hh:mm:ss`, or seconds (e.g. `1:30`, `90`).",
       "exceedsDuration": "❌ Seek position exceeds track duration (**{{duration}}**).",
       "seeked": "⏩ Seeked to **{{position}}**",

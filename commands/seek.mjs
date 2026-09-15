@@ -42,6 +42,12 @@ export async function run(msg, data) {
     return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.seek.paused"))] });
   }
 
+  const current = p.queue.getCurrent();
+
+  if (current?.type === "radio" || current?.isLive || p._getTrackDurationMs(current) === 0) {
+    return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.seek.live"))] });
+  }
+
   let seekMs = Utils.parseDuration(positionInput);
   if (!seekMs || seekMs < 0) {
     return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.seek.invalidFormat"))] });
