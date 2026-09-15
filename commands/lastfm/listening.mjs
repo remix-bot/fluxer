@@ -76,12 +76,12 @@ function buildLeaderboardEmbed(lb, pageIdx, prefix, tr, opts = {}) {
 
   const lines = lb.entries.map((entry, i) => {
     const rank = startRank + i + 1;
-    const medal = rank <= 3 ? MEDALS[rank - 1] : "`  `";
+    const head = rank <= 3 ? `${MEDALS[rank - 1]} ` : "";
     const who = entry.userId ? `<@${entry.userId}>` : (entry.username || "?");
     const lfName = entry.username ? ` — *${entry.username}*` : "";
     const marker = requesterId && String(entry.userId) === requesterId ? ` **${tr("responses.lastfm.leaderboardYou")}**` : "";
     const count = Utils.formatNumber(entry.scrobbleCount);
-    return `${medal} **${rank}.** ${who}${lfName} — **${count}** ${tr("responses.lastfm.leaderboardScrobbles")}${marker}`;
+    return `${head}**${rank}.** ${who}${lfName} — **${count}** ${tr("responses.lastfm.leaderboardScrobbles")}${marker}`;
   });
 
   const desc = (lines.join("\n") + (opts.extraLine ? `\n\n${opts.extraLine}` : "")).slice(0, 4096);
