@@ -734,7 +734,8 @@
       "crownsFooter": "{{count}} Krone(n) im Besitz",
       "noArtistTags": "🏷️ Keine Tags für Künstler **{{artist}}** gefunden.",
       "artistTagsTitle": "🏷️ Top-Tags für {{artist}}",
-      "listeners": "Hörer"
+      "listeners": "Hörer",
+      "leaderboardYourRank": "📍 Dein Rang: **#{{rank}}** ({{count}} Scrobbles)"
     },
     "messages": {
       "missingCriticalPermsTitle": "Fehlende Berechtigungen — Bot kann nicht ordnungsgemäß arbeiten",

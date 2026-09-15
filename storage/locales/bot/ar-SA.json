@@ -734,7 +734,8 @@
       "crownsFooter": "يمتلك {{count}} تاجاً",
       "noArtistTags": "🏷️ لا توجد وسوم للفنان **{{artist}}**.",
       "artistTagsTitle": "🏷️ وسوم أعلى لـ {{artist}}",
-      "listeners": "مستمع"
+      "listeners": "مستمع",
+      "leaderboardYourRank": "📍 ترتيبك: **#{{rank}}** ({{count}} سكرابل)"
     },
     "messages": {
       "missingCriticalPermsTitle": "صلاحيات مفقودة — البوت لا يستطيع العمل بشكل صحيح",

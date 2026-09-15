@@ -734,7 +734,8 @@
       "crownsFooter": "{{count}} تاج هەڵگیراوە",
       "noArtistTags": "🏷️ هیچ تاگێک بۆ هونەرمەندی **{{artist}}** نەدۆزرایەوە.",
       "artistTagsTitle": "🏷️ تاگە سەرەکییەکان بۆ {{artist}}",
-      "listeners": "گوێگر"
+      "listeners": "گوێگر",
+      "leaderboardYourRank": "📍 پلەی تۆ: **#{{rank}}** ({{count}} scrobble)"
     },
     "messages": {
       "missingCriticalPermsTitle": "مۆڵەتە کەمەکان — بۆت ناتوانێت بە دروستی کار بکات",

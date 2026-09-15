@@ -10,7 +10,6 @@ import { Utils } from "../../src/utils/Utils.mjs";
 import { logger } from "../../src/core/Logger.mjs";
 import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../../src/utils/UI.mjs";
 import { notLinked, extractPeriod } from "./shared.mjs";
-import { getGuildLinkedUsers } from "./whoknows.mjs";
 
 /**
  * Action names dispatched to this module.
@@ -67,6 +66,7 @@ function buildTrackList(username, title, tracks, tr, showPlaycount = false, pref
  * @param {function(string, object=): string} tr - Translator bound to the invoking message.
  * @param {object} [opts] - Extra options.
  * @param {string|null} [opts.requesterId] - Invoking user's ID for the "you" marker.
+ * @param {string|null} [opts.extraLine] - Extra description line (e.g. the requester's rank) appended below the list.
  * @returns {EmbedBuilder} The constructed embed.
  */
 function buildLeaderboardEmbed(lb, pageIdx, prefix, tr, opts = {}) {
@@ -84,7 +84,7 @@ function buildLeaderboardEmbed(lb, pageIdx, prefix, tr, opts = {}) {
     return `${medal} **${rank}.** ${who}${lfName} — **${count}** ${tr("responses.lastfm.leaderboardScrobbles")}${marker}`;
   });
 
-  const desc = lines.join("\n").slice(0, 4096);
+  const desc = (lines.join("\n") + (opts.extraLine ? `\n\n${opts.extraLine}` : "")).slice(0, 4096);
   const title = lb.scope === "server"
     ? tr("responses.lastfm.leaderboardTitleServer")
     : tr("responses.lastfm.leaderboardTitleGlobal");
@@ -162,18 +162,9 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
 
     case "leaderboard":
     case "lb": {
-      /* Server scope when the guild's members are resolvable (ranks only
-         people actually in this server), global fallback for DMs. */
-      const guild = msg.message?.guild ?? msg.message?.member?.guild ?? null;
-      const guildIds = guild ? await getGuildLinkedUsers(guild).catch(() => []) : [];
-      const useServer = guildIds.length > 0;
-      const fetchLb = (page, perPage = 10) => useServer
-        ? lastfm.getServerLeaderboard(guildIds, page, perPage)
-        : lastfm.getLeaderboard(page, perPage);
-
       let lb;
       try {
-        lb = await fetchLb(0);
+        lb = await lastfm.getLeaderboard(0, 10);
       } catch (err) {
         return msg.reply({
           embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
@@ -188,8 +179,14 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
         });
       }
 
+      let myRank = null;
+      try { myRank = await lastfm.getUserRank?.(userId) ?? null; } catch (_) { myRank = null; }
+      const rankLine = () => (myRank && !lb.entries.some(e => String(e.userId) === String(userId))
+        ? tr("responses.lastfm.leaderboardYourRank", { rank: myRank.rank, count: Utils.formatNumber(myRank.scrobbleCount) })
+        : null);
+
       if (lb.totalPages <= 1) {
-        const embed = buildLeaderboardEmbed(lb, 0, prefix, tr, { requesterId: userId });
+        const embed = buildLeaderboardEmbed(lb, 0, prefix, tr, { requesterId: userId, extraLine: rankLine() });
         return msg.reply({ embeds: [embed] });
       }
 
@@ -199,7 +196,7 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
         const footerText = expired
           ? tr("responses.lastfm.leaderboardControlsExpired")
           : tr("responses.lastfm.leaderboardPageFooter", { current: pageIdx + 1, total: lb.totalPages });
-        const embed = buildLeaderboardEmbed(lb, pageIdx, prefix, tr, { requesterId: userId });
+        const embed = buildLeaderboardEmbed(lb, pageIdx, prefix, tr, { requesterId: userId, extraLine: rankLine() });
         embed.setFooter({ text: footerText });
         return { embeds: [embed] };
       };
@@ -249,7 +246,7 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
         }
 
         try {
-          lb = await fetchLb(currentPage);
+          lb = await lastfm.getLeaderboard(currentPage, 10);
         } catch(e) { logger.warn("[LastFm] Error:", e?.message); }
 
         await replyMsg.edit(buildPage(currentPage)).catch(() => {});

@@ -734,7 +734,8 @@
       "crownsFooter": "{{count}} coroa{{plural}} mantida{{plural}}",
       "noArtistTags": "🏷️ Nenhuma tag encontrada para o artista **{{artist}}**.",
       "artistTagsTitle": "🏷️ Tags Populares para {{artist}}",
-      "listeners": "ouvintes"
+      "listeners": "ouvintes",
+      "leaderboardYourRank": "📍 Sua posição: **#{{rank}}** ({{count}} scrobbles)"
     },
     "messages": {
       "missingCriticalPermsTitle": "Permissões Ausentes — Bot Não Pode Funcionar Corretamente",

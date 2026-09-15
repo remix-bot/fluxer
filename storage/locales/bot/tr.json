@@ -405,7 +405,8 @@
       "crownsFooter": "{{count}} taç elde tutuluyor",
       "noArtistTags": "🏷️ Sanatçı **{{artist}}** için etiket bulunamadı.",
       "artistTagsTitle": "🏷️ {{artist}} için En Çok Dinlenen Etiketler",
-      "listeners": "dinleyici"
+      "listeners": "dinleyici",
+      "leaderboardYourRank": "📍 Sıralan: **#{{rank}}** ({{count}} scrobble)"
     },
     "list": {
       "empty": "📭 Kuyruk boş. Şarkı eklemek için `{{prefix}}play` kullanın!",

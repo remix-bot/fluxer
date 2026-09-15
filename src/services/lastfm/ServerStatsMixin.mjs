@@ -358,6 +358,36 @@ const ServerStatsMixin = {
   },
 
   /**
+   * Global rank (1-based) of one user on the all-time scrobble leaderboard.
+   * Returns null when the user is not linked or has no scrobbles recorded
+   * yet (they are not ranked). Used so anyone can check whether they are
+   * top 1, 2, 3 ... even when their row is not on the visible page.
+   * @async
+   * @param {string} userId - Platform user ID to look up.
+   * @returns {Promise<{rank: number, scrobbleCount: number}|null>} Rank info or null.
+   */
+  async getUserRank(userId) {
+    if (!this.enabled || !userId) return null;
+
+    const pool = await this._getPool();
+    const f = this._botIdFilter();
+
+    const [mine] = await pool.execute(
+      `SELECT scrobble_count FROM lastfm_users WHERE user_id = ?${f.where}`,
+      [String(userId), ...f.params]
+    );
+    const count = Number(mine[0]?.scrobble_count ?? 0);
+    if (!(count > 0)) return null;
+
+    const [ahead] = await pool.execute(
+      `SELECT COUNT(*) AS n FROM lastfm_users WHERE scrobble_count > ?${f.where}`,
+      [count, ...f.params]
+    );
+
+    return { rank: Number(ahead[0]?.n ?? 0) + 1, scrobbleCount: count };
+  },
+
+  /**
    * Get the scrobble leaderboard scoped to a set of platform user IDs
    * (typically the members of one guild), with pagination. Refreshes only
    * these users' counts from Last.fm first (5-minute TTL, deduped while

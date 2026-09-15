@@ -409,7 +409,8 @@
       "whoknowsAlbumTitle": "👤 Who knows {{album}}?",
       "noArtistTags": "🏷️ No tags found for artist **{{artist}}**.",
       "artistTagsTitle": "🏷️ Top Tags for {{artist}}",
-      "listeners": "listeners"
+      "listeners": "listeners",
+      "leaderboardYourRank": "📍 Your rank: **#{{rank}}** ({{count}} scrobbles)"
     },
     "list": {
       "empty": "📭 The queue is empty. Use `{{prefix}}play` to add songs!",
