@@ -590,12 +590,12 @@ const PlayerLifecycleMixin = {
           return player;
         } catch (retryErr) {
           logger.warn(`[PlayerManager] Retry also failed for channel ${cleanChannelId}: ${retryErr.message}`);
-          errorMsg = this._t(message, "responses.join.joinFailedGeneric");
+          errorMsg = this._t(message, "responses._common.joinFailedGeneric");
         }
       } else if (errCode === "PERMISSION") {
         errorMsg = this._t(message, "responses.join.joinFailedPerms", { channel: cleanChannelId });
       } else if (errCode === "NOT_FOUND") {
-        errorMsg = this._t(message, "responses.join.joinFailedNotFound");
+        errorMsg = this._t(message, "responses._common.joinFailedNotFound");
       } else if (errCode === "TIMEOUT") {
         errorMsg = this._t(message, "responses.join.joinFailed");
       } else {

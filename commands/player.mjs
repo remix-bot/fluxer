@@ -243,10 +243,22 @@ export async function run(msg) {
           reply = player.pause();
           break;
 
-        case "stop":
+        case "stop": {
+          const hadCurrent = !!player.queue.getCurrent();
+          player._lastPlayedTrack = player.queue.getCurrent() ?? player._lastPlayedTrack;
           player.queue.reset();
+          player._activeTrackOpt = null;
+          player._clearTrackEndTimer?.();
+          player._bridgeStop?.();
+          player._paused = false;
+          player._pausedAt = null;
+          if (hadCurrent) {
+            player.emit("stopplay");
+            if (!player._is247Enabled?.()) player._startInactivityTimer?.();
+          }
           reply = this.t(msg, "responses.player.stoppedCleared");
           break;
+        }
 
         case "skip":
           reply = player.skip();

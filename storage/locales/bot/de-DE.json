@@ -199,6 +199,7 @@
   "responses": {
     "_common": {
       "nothingPlaying": "❌ Es wird gerade nichts abgespielt!",
+      "serverOnlyForMusic": "🎵 Musik braucht einen **Sprachkanal in einem Server** — ich kann mich nicht mit Sprachchat in DMs verbinden. Führe den Befehl stattdessen in einem Server aus!",
       "noVoiceChannel": "⚠️ Bitte trete zuerst einem Sprachkanal bei.",
       "noVoiceStrict": "⚠️ Du musst einem Sprachkanal beitreten, um diesen Befehl zu nutzen.",
       "alreadyInChannel": "⚠️ Ich spiele bereits in {{channels}}. Trete diesem Kanal bei oder nutze `{{prefix}}play`, um Musik in deinem Kanal zu starten.",

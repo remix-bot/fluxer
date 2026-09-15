@@ -65,7 +65,7 @@ export async function run(message, data) {
       const elapsed = p.getCurrentElapsedDuration();
       const total   = p.getCurrentDuration();
       const link    = current.spotifyUrl || current.url || "";
-      let   title   = current.title;
+      let   title   = current.title ?? "Unknown";
       if (title.length > 50) title = title.slice(0, 47) + "...";
       const titleFmt = link ? `[${title}](${link})` : title;
 
@@ -84,7 +84,7 @@ export async function run(message, data) {
         const index   = String(start + i + 1).padStart(2, " ");
         const dur     = vid.duration ? p.getDuration(vid.duration) : "?:??";
         const link    = vid.spotifyUrl || vid.url || "";
-        let   title   = vid.title;
+        let   title   = vid.title ?? "Unknown";
         if (title.length > 45) title = title.slice(0, 42) + "...";
         title = link ? `[${title}](${link})` : title;
         const upNext  = (start + i === 0) ? " ▶" : "";

@@ -199,6 +199,7 @@
   "responses": {
     "_common": {
       "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
+      "serverOnlyForMusic": "🎵 Müzik için bir **sunucudaki ses kanalı** gerekiyor — DM'lerde sesli kanala katılamam. Komutu bunun yerine bir sunucuda kullan!",
       "noVoiceChannel": "⚠️ Lütfen önce bir ses kanalına katılın.",
       "noVoiceStrict": "⚠️ Bu komutu kullanmak için bir ses kanalına katılmanız gerekiyor.",
       "alreadyInChannel": "⚠️ Zaten {{channels}} kanalında çalıyorum. O kanala katılın veya kendi kanalınızda müzik başlatmak için `{{prefix}}play` kullanın.",

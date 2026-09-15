@@ -53,8 +53,10 @@ export async function run(msg, data) {
 
       let desc = `📻 **Radio Stations (Page ${page + 1}/${totalPages})**\n\n`;
       pickable.forEach((r, i) => {
-        desc += `${NUMBER_EMOJIS[i]} **${r.detailedName}** (\`${r.name}\`)\n`;
-        desc += `   ${r.description.replaceAll("\n", "\n   ")}\n\n`;
+        const displayName = r.detailedName ?? r.name ?? "Station";
+        const stationDesc = String(r.description ?? "").replaceAll("\n", "\n   ");
+        desc += `${NUMBER_EMOJIS[i]} **${displayName}** (\`${r.name ?? "station"}\`)\n`;
+        desc += `   ${stationDesc}\n\n`;
       });
       desc += `⬅️ Previous   ➡️ Next   ❌ Cancel`;
 
@@ -126,9 +128,9 @@ export async function run(msg, data) {
   }
 
   if (input) {
-    const radio = radios.find(r => r.name.toLowerCase() === input);
+    const radio = radios.find(r => String(r.name ?? "").toLowerCase() === input);
     if (!radio) {
-      const names = radios.map(r => `\`${r.name}\``).join(", ");
+      const names = radios.map(r => `\`${r.name ?? "station"}\``).join(", ");
       return msg.reply(this.t(msg, "responses.radio.unknownStation", { station: input, stations: names }));
     }
     return playStation(this, msg, radio);
@@ -157,12 +159,18 @@ async function playStation(ctx, msg, radio, editTarget = null) {
   else p.playRadio(radio);
 
   const prefix = ctx.handler.getPrefix(msg?.channel?.channel?.guildId ?? msg?.message?.guildId);
+  const stationName = radio.detailedName ?? radio.name ?? "Radio Station";
+  const stationUrl  = radio.author?.url ?? "";
+  const stationDesc = String(radio.description ?? "");
+  const stationLine = stationUrl
+      ? `**[${stationName}](${stationUrl})**\n\n`
+      : `**${stationName}**\n\n`;
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setTitle(`📻 ${radio.detailedName}`)
+    .setTitle(`📻 ${stationName}`)
     .setDescription(
-      `**[${radio.detailedName}](${radio.author.url})**\n\n` +
-      `${radio.description}\n\n` +
+      stationLine +
+      `${stationDesc}\n\n` +
       `_Use \`${prefix}skip\` to stop the radio, or \`${prefix}radio list\` to switch stations._`
     )
     ;
