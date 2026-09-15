@@ -16,12 +16,12 @@ import { notLinked } from "./shared.mjs";
  * @type {Set<string>}
  */
 export const ACCOUNT_ACTIONS = new Set([
-  "link",,
-  "confirm",,
-  "unlink",,
-  "scrobble",,
-  "np",,
-  "profile",,
+  "link",
+  "confirm",
+  "unlink",
+  "scrobble",
+  "np",
+  "profile",
   "playlists"
 ]);
 

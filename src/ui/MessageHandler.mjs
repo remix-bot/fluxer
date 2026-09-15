@@ -179,6 +179,8 @@ export class MessageHandler {
    * @returns {Promise<boolean>}
    */
   async assertPermissions(permissions, message) {
+    if (!message.guildId && !message.guild?.id) return true;
+
     const guild = message.guild ?? await message.client?.guilds?.resolve?.(message.guildId);
     if (guild && !guild.members?.me) {
       try { await guild.members.fetchMe(); } catch (e) { logger.warn("[MessageHandler] fetchMe failed:", e?.message); }

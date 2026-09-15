@@ -10,19 +10,20 @@ import { Utils } from "../../src/utils/Utils.mjs";
 import { logger } from "../../src/core/Logger.mjs";
 import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../../src/utils/UI.mjs";
 import { notLinked, extractPeriod } from "./shared.mjs";
+import { getGuildLinkedUsers } from "./whoknows.mjs";
 
 /**
  * Action names dispatched to this module.
  * @type {Set<string>}
  */
 export const LISTENING_ACTIONS = new Set([
-  "loved",,
-  "top",,
-  "leaderboard",,
-  "lb",,
-  "recent",,
-  "artists",,
-  "love",,
+  "loved",
+  "top",
+  "leaderboard",
+  "lb",
+  "recent",
+  "artists",
+  "love",
   "unlove"
 ]);
 
@@ -33,17 +34,18 @@ export const LISTENING_ACTIONS = new Set([
  * @param {string} username - The Last.fm username.
  * @param {string} title - The list title.
  * @param {object[]} tracks - Array of track objects with name, artist, url, and optional playcount.
+ * @param {function(string, object=): string} tr - Translator bound to the invoking message.
  * @param {boolean} [showPlaycount=false] - Whether to show play counts.
  * @param {string} [prefix="%"] - The command prefix for the footer hint.
  * @returns {EmbedBuilder} The constructed embed.
  */
-function buildTrackList(username, title, tracks, showPlaycount = false, prefix = "%") {
+function buildTrackList(username, title, tracks, tr, showPlaycount = false, prefix = "%") {
   const lines = tracks.map((t, i) => {
     const num = String(i + 1).padStart(2, " ");
     let name = t.name;
     if (name.length > 40) name = name.slice(0, 37) + "...";
     const link = t.url ? `[${name}](${t.url})` : name;
-    const extra = showPlaycount && t.playcount ? ` (${t.playcount} plays)` : "";
+    const extra = showPlaycount && t.playcount ? ` (${t.playcount} ${tr("responses.lastfm.plays")})` : "";
     return `\`${num}.\` ${link} — **${t.artist}**${extra}`;
   });
 
@@ -51,38 +53,47 @@ function buildTrackList(username, title, tracks, showPlaycount = false, prefix =
 
   return new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setTitle(`${title} — ${username}`)
+    .setTitle(title) /* locale titles (lovedTitle/topTitle/recentTitle) already embed {{username}} */
     .setDescription(desc)
-    .setFooter({ text: `💡 Use ${prefix}lastfm play loved to play these!` });
+    .setFooter({ text: tr("responses.lastfm.trackListFooter", { prefix }) });
 }
 
 /**
  * Build a scrobble leaderboard embed for a given page.
  * @private
- * @param {object} lb - Leaderboard data with entries and perPage.
+ * @param {object} lb - Leaderboard data with entries, perPage and scope ("server"|"global").
  * @param {number} pageIdx - The page index (0-based).
  * @param {string} prefix - The command prefix for the footer hint.
+ * @param {function(string, object=): string} tr - Translator bound to the invoking message.
+ * @param {object} [opts] - Extra options.
+ * @param {string|null} [opts.requesterId] - Invoking user's ID for the "you" marker.
  * @returns {EmbedBuilder} The constructed embed.
  */
-function buildLeaderboardEmbed(lb, pageIdx, prefix) {
+function buildLeaderboardEmbed(lb, pageIdx, prefix, tr, opts = {}) {
   const MEDALS = ["🥇", "🥈", "🥉"];
   const startRank = pageIdx * lb.perPage;
+  const requesterId = opts.requesterId ? String(opts.requesterId) : null;
 
   const lines = lb.entries.map((entry, i) => {
     const rank = startRank + i + 1;
-    const medal = rank <= 3 ? MEDALS[rank - 1] : `  `;
-    const name = entry.username || entry.userId;
+    const medal = rank <= 3 ? MEDALS[rank - 1] : "`  `";
+    const who = entry.userId ? `<@${entry.userId}>` : (entry.username || "?");
+    const lfName = entry.username ? ` — *${entry.username}*` : "";
+    const marker = requesterId && String(entry.userId) === requesterId ? ` **${tr("responses.lastfm.leaderboardYou")}**` : "";
     const count = Utils.formatNumber(entry.scrobbleCount);
-    return `${medal} ${rank}. **${name}** — ${count} scrobbles`;
+    return `${medal} **${rank}.** ${who}${lfName} — **${count}** ${tr("responses.lastfm.leaderboardScrobbles")}${marker}`;
   });
 
   const desc = lines.join("\n").slice(0, 4096);
+  const title = lb.scope === "server"
+    ? tr("responses.lastfm.leaderboardTitleServer")
+    : tr("responses.lastfm.leaderboardTitleGlobal");
 
   return new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setTitle("🎵 Scrobble Leaderboard")
+    .setTitle(title)
     .setDescription(desc)
-    .setFooter({ text: `💡 View & sync your count: ${prefix}lastfm profile` });
+    .setFooter({ text: tr("responses.lastfm.leaderboardFooterSync", { prefix }) });
 }
 
 /**
@@ -97,6 +108,10 @@ function buildLeaderboardEmbed(lb, pageIdx, prefix) {
  * @returns {Promise<*>} Whatever the original switch returned for this action.
  */
 export async function runListeningActions(msg, data, lastfm, prefix, userId, targetUserId, action) {
+  /* Translator bound to this message: every embed builder below renders in
+     the guild's locale instead of hardcoded English. */
+  const tr = (key, repl = {}) => this.t(msg, key, repl);
+
   switch (action) {
     case "loved": {
       const user = await lastfm.getUser(userId);
@@ -117,7 +132,7 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
         });
       }
 
-      return msg.reply({ embeds: [buildTrackList(user.username, this.t(msg, "responses.lastfm.lovedTitle", { username: user.username }), tracks, false, prefix)] });
+      return msg.reply({ embeds: [buildTrackList(user.username, tr("responses.lastfm.lovedTitle", { username: user.username }), tracks, tr, false, prefix)] });
     }
 
     case "top": {
@@ -142,14 +157,23 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
       }
 
       const periodLabel = period !== "overall" ? ` (${period})` : "";
-      return msg.reply({ embeds: [buildTrackList(user.username, this.t(msg, "responses.lastfm.topTitle", { username: user.username }) + periodLabel, tracks, true, prefix)] });
+      return msg.reply({ embeds: [buildTrackList(user.username, tr("responses.lastfm.topTitle", { username: user.username }) + periodLabel, tracks, tr, true, prefix)] });
     }
 
     case "leaderboard":
     case "lb": {
+      /* Server scope when the guild's members are resolvable (ranks only
+         people actually in this server), global fallback for DMs. */
+      const guild = msg.message?.guild ?? msg.message?.member?.guild ?? null;
+      const guildIds = guild ? await getGuildLinkedUsers(guild).catch(() => []) : [];
+      const useServer = guildIds.length > 0;
+      const fetchLb = (page, perPage = 10) => useServer
+        ? lastfm.getServerLeaderboard(guildIds, page, perPage)
+        : lastfm.getLeaderboard(page, perPage);
+
       let lb;
       try {
-        lb = await lastfm.getLeaderboard(0, 10);
+        lb = await fetchLb(0);
       } catch (err) {
         return msg.reply({
           embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.lastfm.fetchFailed", { error: err.message }))]
@@ -165,7 +189,7 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
       }
 
       if (lb.totalPages <= 1) {
-        const embed = buildLeaderboardEmbed(lb, 0, prefix);
+        const embed = buildLeaderboardEmbed(lb, 0, prefix, tr, { requesterId: userId });
         return msg.reply({ embeds: [embed] });
       }
 
@@ -173,9 +197,9 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
 
       const buildPage = (pageIdx, expired = false) => {
         const footerText = expired
-          ? this.t(msg, "responses.lastfm.leaderboardControlsExpired")
-          : this.t(msg, "responses.lastfm.leaderboardPageFooter", { current: pageIdx + 1, total: lb.totalPages });
-        const embed = buildLeaderboardEmbed(lb, pageIdx, prefix);
+          ? tr("responses.lastfm.leaderboardControlsExpired")
+          : tr("responses.lastfm.leaderboardPageFooter", { current: pageIdx + 1, total: lb.totalPages });
+        const embed = buildLeaderboardEmbed(lb, pageIdx, prefix, tr, { requesterId: userId });
         embed.setFooter({ text: footerText });
         return { embeds: [embed] };
       };
@@ -225,7 +249,7 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
         }
 
         try {
-          lb = await lastfm.getLeaderboard(currentPage, 10);
+          lb = await fetchLb(currentPage);
         } catch(e) { logger.warn("[LastFm] Error:", e?.message); }
 
         await replyMsg.edit(buildPage(currentPage)).catch(() => {});
@@ -254,7 +278,7 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
         });
       }
 
-      return msg.reply({ embeds: [buildTrackList(user.username, this.t(msg, "responses.lastfm.recentTitle", { username: user.username }), tracks, false, prefix)] });
+      return msg.reply({ embeds: [buildTrackList(user.username, tr("responses.lastfm.recentTitle", { username: user.username }), tracks, tr, false, prefix)] });
     }
 
     case "artists": {
@@ -284,7 +308,7 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
         let name = a.name;
         if (name.length > 40) name = name.slice(0, 37) + "...";
         const link = a.url ? `[${name}](${a.url})` : name;
-        return `\`${num}.\` ${link} — **${a.playcount}** plays`;
+        return `\`${num}.\` ${link} — **${a.playcount}** ${tr("responses.lastfm.plays")}`;
       });
 
       const desc = lines.join("\n").slice(0, 4096);
@@ -292,9 +316,9 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
       return msg.reply({
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
-          .setTitle(this.t(msg, "responses.lastfm.artistsTitle", { username: user.username }) + periodLabel)
+          .setTitle(tr("responses.lastfm.artistsTitle", { username: user.username }) + periodLabel)
           .setDescription(desc)
-          .setFooter({ text: this.t(msg, "responses.lastfm.artistsFooter", { prefix }) })]
+          .setFooter({ text: tr("responses.lastfm.artistsFooter", { prefix }) })]
       });
     }
 

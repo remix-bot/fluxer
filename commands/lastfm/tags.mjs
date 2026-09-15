@@ -16,14 +16,14 @@ import { extractCurrentTrack } from "./shared.mjs";
  * @type {Set<string>}
  */
 export const TAG_ACTIONS = new Set([
-  "tag",,
-  "artisttags",,
-  "at",,
-  "albumtags",,
-  "alt",,
-  "tracktags",,
-  "tt",,
-  "tagalbums",,
+  "tag",
+  "artisttags",
+  "at",
+  "albumtags",
+  "alt",
+  "tracktags",
+  "tt",
+  "tagalbums",
   "ta"
 ]);
 
@@ -85,7 +85,7 @@ export async function runTagActions(msg, data, lastfm, prefix, userId, targetUse
       if (topArtists.length) {
         const artistStr = topArtists.map((a, i) => {
           const link = a.url ? `[${a.name}](${a.url})` : a.name;
-          return `${i + 1}. ${link} (**${Utils.formatNumber(a.playcount)}** plays)`;
+          return `${i + 1}. ${link} (**${Utils.formatNumber(a.playcount)}** ${this.t(msg, "responses.lastfm.plays")})`;
         }).join("\n");
         fields.push({ name: "Top Artists", value: artistStr.slice(0, 1024), inline: false });
       }
@@ -316,7 +316,7 @@ export async function runTagActions(msg, data, lastfm, prefix, userId, targetUse
       const lines = albums.map((a, i) => {
         const num = String(i + 1).padStart(2, " ");
         const link = a.url ? `[${a.name}](${a.url})` : a.name;
-        return `\`${num}.\` ${link} by **${a.artist}**${a.playcount > 0 ? ` (${Utils.formatNumber(a.playcount)} plays)` : ""}`;
+        return `\`${num}.\` ${link} by **${a.artist}**${a.playcount > 0 ? ` (${Utils.formatNumber(a.playcount)} ${this.t(msg, "responses.lastfm.plays")})` : ""}`;
       });
 
       const desc = lines.join("\n").slice(0, 4096);

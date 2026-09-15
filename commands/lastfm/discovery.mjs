@@ -15,17 +15,17 @@ import { notLinked, extractCurrentTrack } from "./shared.mjs";
  * @type {Set<string>}
  */
 export const DISCOVERY_ACTIONS = new Set([
-  "friends",,
-  "fr",,
-  "weekly",,
-  "wc",,
-  "trending",,
-  "tr",,
-  "geo",,
-  "g",,
-  "artisttracks",,
-  "atr",,
-  "search",,
+  "friends",
+  "fr",
+  "weekly",
+  "wc",
+  "trending",
+  "tr",
+  "geo",
+  "g",
+  "artisttracks",
+  "atr",
+  "search",
   "s"
 ]);
 
@@ -119,7 +119,7 @@ export async function runDiscoveryActions(msg, data, lastfm, prefix, userId, tar
         const num = String(i + 1).padStart(2, " ");
         const link = item.url ? `[${item.name}](${item.url})` : item.name;
         const artistStr = item.artist ? ` by **${item.artist}**` : "";
-        return `\`${num}.\` ${link}${artistStr} — **${Utils.formatNumber(item.playcount)}** plays`;
+        return `\`${num}.\` ${link}${artistStr} — **${Utils.formatNumber(item.playcount)}** ${this.t(msg, "responses.lastfm.plays")}`;
       });
 
       const desc = lines.join("\n").slice(0, 4096);
@@ -163,7 +163,7 @@ export async function runDiscoveryActions(msg, data, lastfm, prefix, userId, tar
         const num = String(i + 1).padStart(2, " ");
         const link = item.url ? `[${item.name}](${item.url})` : item.name;
         const artistStr = item.artist ? ` by **${item.artist}**` : "";
-        const extra = item.listeners ? ` — ${Utils.formatNumber(item.listeners)} listeners` : item.playcount ? ` — ${Utils.formatNumber(item.playcount)} plays` : "";
+        const extra = item.listeners ? ` — ${Utils.formatNumber(item.listeners)} ${this.t(msg, "responses.lastfm.listeners")}` : item.playcount ? ` — ${Utils.formatNumber(item.playcount)} ${this.t(msg, "responses.lastfm.plays")}` : "";
         return `\`${num}.\` ${link}${artistStr}${extra}`;
       });
 

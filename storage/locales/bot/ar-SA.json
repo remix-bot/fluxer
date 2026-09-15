@@ -690,6 +690,13 @@
       "whoknowsAlbumTitle": "👤 من يعرف {{album}}؟",
       "leaderboardEmpty": "🎵 لا توجد سكرابلات مسجلة بعد. اربط حساب Last.fm الخاص بك باستخدام `{{prefix}}lastfm link` وابدأ الاستماع!",
       "leaderboardControlsExpired": "⌛ انتهت صلاحية عناصر التحكم",
+      "leaderboardTitleServer": "🎵 لوحة متصدري السكرابل للسيرفر",
+      "leaderboardTitleGlobal": "🎵 لوحة متصدري السكرابل (عالمية)",
+      "leaderboardScrobbles": "سكرابل",
+      "leaderboardYou": "← أنت",
+      "leaderboardFooterSync": "💡 تتم مزامنة الأعداد مباشرة من Last.fm (ذاكرة مؤقتة ~10 دقائق) · `{{prefix}}lastfm profile` لمزامنة أعدادك يدويًا",
+      "trackListFooter": "💡 استخدم `{{prefix}}lastfm play loved` لتشغيل هذه المسارات!",
+      "plays": "تشغيل",
       "leaderboardPageFooter": "صفحة {{current}}/{{total}} • استخدم ◀️▶️ للتنقل",
       "artistsFooter": "💡 استخدم `{{prefix}}lastfm play top` لتشغيل أكثر مساراتك استماعاً!",
       "noArtistSpecified": "❌ لم يتم تحديد فنان. شغّل أغنية أو حدد اسم فنان.",
@@ -726,7 +733,8 @@
       "crownsTitle": "👑 ألقاب الفنانين — {{username}}",
       "crownsFooter": "يمتلك {{count}} تاجاً",
       "noArtistTags": "🏷️ لا توجد وسوم للفنان **{{artist}}**.",
-      "artistTagsTitle": "🏷️ وسوم أعلى لـ {{artist}}"
+      "artistTagsTitle": "🏷️ وسوم أعلى لـ {{artist}}",
+      "listeners": "مستمع"
     },
     "messages": {
       "missingCriticalPermsTitle": "صلاحيات مفقودة — البوت لا يستطيع العمل بشكل صحيح",

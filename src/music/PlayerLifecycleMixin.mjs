@@ -145,6 +145,14 @@ const PlayerLifecycleMixin = {
 
     const guildId = getMessageGuildId(msg);
     const cleanGuildId = cleanId(guildId);
+
+    /* DMs have no voice channels — prompting for a channel selection would
+       be pointless (and hang until timeout). Tell the user directly. */
+    if (!cleanGuildId) {
+      await msg.reply(this._t(msg, "responses._common.serverOnlyForMusic")).catch(() => {});
+      return false;
+    }
+
     const allChannels = cleanGuildId
         ? [...(this.commands.client?.channels?.values?.() ?? [])]
             .filter(c => {

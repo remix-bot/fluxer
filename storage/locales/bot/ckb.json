@@ -690,6 +690,13 @@
       "whoknowsAlbumTitle": "👤 کێ دەزانێت {{album}}؟",
       "leaderboardEmpty": "🎵 هێشتا هیچ scrobble تۆمار نەکراوە. هەژماری Last.fm خۆت بە `{{prefix}}lastfm link` ببەستە و گوێگرتن دەستپێبکە!",
       "leaderboardControlsExpired": "⌛ کۆنتڕۆڵەکان بەسەرچوون",
+      "leaderboardTitleServer": "🎵 خشتەی سکرۆبڵی سێرڤەر",
+      "leaderboardTitleGlobal": "🎵 خشتەی سکرۆبڵ (گشتی)",
+      "leaderboardScrobbles": "scrobble",
+      "leaderboardYou": "← تۆ",
+      "leaderboardFooterSync": "💡 ژمارەکان ڕاستەوخۆ لە Last.fm ەوە هاوکات دەکرێن (کاش ~10 خولەک) · بۆ نوێکردنەوەی ژمارەکانت `{{prefix}}lastfm profile`",
+      "trackListFooter": "💡 بۆ لێدانی ئەم تراکانە `{{prefix}}lastfm play loved` بەکاربهێنە!",
+      "plays": "جار لێدراوە",
       "leaderboardPageFooter": "لاپەڕە {{current}}/{{total}} • بۆ ناوبردن ◀️▶️ بەکاربهێنە",
       "artistsFooter": "💡 بۆ لێدانی زۆرترین گوێگرتنی تراکەکانت `{{prefix}}lastfm play top` بەکاربهێنە!",
       "noArtistSpecified": "❌ هونەرمەند دیاری نەکراوە. گۆرانییەک لێبدە یان ناوی هونەرمەند بدە.",
@@ -726,7 +733,8 @@
       "crownsTitle": "👑 تاجەکانی هونەرمەند — {{username}}",
       "crownsFooter": "{{count}} تاج هەڵگیراوە",
       "noArtistTags": "🏷️ هیچ تاگێک بۆ هونەرمەندی **{{artist}}** نەدۆزرایەوە.",
-      "artistTagsTitle": "🏷️ تاگە سەرەکییەکان بۆ {{artist}}"
+      "artistTagsTitle": "🏷️ تاگە سەرەکییەکان بۆ {{artist}}",
+      "listeners": "گوێگر"
     },
     "messages": {
       "missingCriticalPermsTitle": "مۆڵەتە کەمەکان — بۆت ناتوانێت بە دروستی کار بکات",

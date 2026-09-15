@@ -361,6 +361,13 @@
       "whoknowsAlbumTitle": "👤 Kim bilir {{album}}?",
       "leaderboardEmpty": "🎵 Henüz scrobble kaydedilmedi. Last.fm hesabınızı `{{prefix}}lastfm link` ile bağlayın ve dinlemeye başlayın!",
       "leaderboardControlsExpired": "⌛ Kontrollerin süresi doldu",
+      "leaderboardTitleServer": "🎵 Sunucu Scrobble Sıralaması",
+      "leaderboardTitleGlobal": "🎵 Scrobble Sıralaması (genel)",
+      "leaderboardScrobbles": "scrobble",
+      "leaderboardYou": "← sen",
+      "leaderboardFooterSync": "💡 Sayılar Last.fm'den canlı senkronize edilir (~10 dk önbellek) · Kendi saylarını güncellemek için `{{prefix}}lastfm profile`",
+      "trackListFooter": "💡 Bunları çalmak için `{{prefix}}lastfm play loved` kullan!",
+      "plays": "çalma",
       "leaderboardPageFooter": "Sayfa {{current}}/{{total}} • Gezinmek için ◀️▶️ kullanın",
       "artistsFooter": "💡 En çok dinlediğin parçaları çalmak için `{{prefix}}lastfm play top` kullan!",
       "noArtistSpecified": "❌ Sanatçı belirtilmedi. Bir şarkı çalın veya sanatçı adı girin.",
@@ -397,7 +404,8 @@
       "crownsTitle": "👑 Sanatçı Taçları — {{username}}",
       "crownsFooter": "{{count}} taç elde tutuluyor",
       "noArtistTags": "🏷️ Sanatçı **{{artist}}** için etiket bulunamadı.",
-      "artistTagsTitle": "🏷️ {{artist}} için En Çok Dinlenen Etiketler"
+      "artistTagsTitle": "🏷️ {{artist}} için En Çok Dinlenen Etiketler",
+      "listeners": "dinleyici"
     },
     "list": {
       "empty": "📭 Kuyruk boş. Şarkı eklemek için `{{prefix}}play` kullanın!",

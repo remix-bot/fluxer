@@ -690,6 +690,13 @@
       "whoknowsAlbumTitle": "👤 Wer kennt {{album}}?",
       "leaderboardEmpty": "🎵 Noch keine Scrobbles aufgezeichnet. Verknüpfe dein Last.fm-Konto mit `{{prefix}}lastfm link` und leg los!",
       "leaderboardControlsExpired": "⌛ Steuerung abgelaufen",
+      "leaderboardTitleServer": "🎵 Server-Scrobble-Bestenliste",
+      "leaderboardTitleGlobal": "🎵 Scrobble-Bestenliste (global)",
+      "leaderboardScrobbles": "Scrobbles",
+      "leaderboardYou": "← du",
+      "leaderboardFooterSync": "💡 Zahlen werden live von Last.fm synchronisiert (Cache ~10 Min.) · `{{prefix}}lastfm profile` zum Aktualisieren deiner Zahlen",
+      "trackListFooter": "💡 Nutze `{{prefix}}lastfm play loved`, um diese Titel zu spielen!",
+      "plays": "Wiedergaben",
       "leaderboardPageFooter": "Seite {{current}}/{{total}} • Nutze ◀️▶️ zum Navigieren",
       "artistsFooter": "💡 Nutze `{{prefix}}lastfm play top`, um deine Top-Titel zu spielen!",
       "noArtistSpecified": "❌ Kein Künstler angegeben. Spiele einen Song oder gib einen Künstlernamen an.",
@@ -726,7 +733,8 @@
       "crownsTitle": "👑 Künstler-Kronen — {{username}}",
       "crownsFooter": "{{count}} Krone(n) im Besitz",
       "noArtistTags": "🏷️ Keine Tags für Künstler **{{artist}}** gefunden.",
-      "artistTagsTitle": "🏷️ Top-Tags für {{artist}}"
+      "artistTagsTitle": "🏷️ Top-Tags für {{artist}}",
+      "listeners": "Hörer"
     },
     "messages": {
       "missingCriticalPermsTitle": "Fehlende Berechtigungen — Bot kann nicht ordnungsgemäß arbeiten",

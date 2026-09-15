@@ -199,6 +199,7 @@
   "responses": {
     "_common": {
       "nothingPlaying": "❌ There's nothing playing at the moment!",
+      "serverOnlyForMusic": "🎵 Music needs a **voice channel in a server** — I can't join voice in DMs. Run the command in a server instead!",
       "noVoiceChannel": "⚠️ I can't find you in a voice channel. Please join one first, or if you're already in one, make sure I have **View Channel** and **Connect** permissions.",
       "noVoiceStrict": "⚠️ I can't find you in a voice channel. Please join one, or if you're already in one, make sure I have **View Channel** and **Connect** permissions.",
       "alreadyInChannel": "⚠️ I'm already playing in {{channels}}. Join that channel or use `{{prefix}}play` to start music in your channel.",
@@ -357,6 +358,13 @@
       "whoknowsFooter": "{{count}} listener{{plural}} · {{totalPlays}} total plays",
       "leaderboardEmpty": "🎵 No scrobbles recorded yet. Link your Last.fm account with `{{prefix}}lastfm link` and start listening!",
       "leaderboardControlsExpired": "Controls expired",
+      "leaderboardTitleServer": "🎵 Server Scrobble Leaderboard",
+      "leaderboardTitleGlobal": "🎵 Scrobble Leaderboard (global)",
+      "leaderboardScrobbles": "scrobbles",
+      "leaderboardYou": "← you",
+      "leaderboardFooterSync": "💡 Counts synced live from Last.fm (cached ~10 min) · `{{prefix}}lastfm profile` to force-sync yours",
+      "trackListFooter": "💡 Use `{{prefix}}lastfm play loved` to play these!",
+      "plays": "plays",
       "leaderboardPageFooter": "Page {{current}}/{{total}} • Use ◀️▶️ to navigate",
       "artistsFooter": "💡 Use {{prefix}}lastfm play top to play your top tracks!",
       "noArtistSpecified": "❌ No artist specified. Play a song or provide an artist name via the token option.",
@@ -400,7 +408,8 @@
       "whoknowsAlbumNobody": "👤 Nobody in this server has listened to **{{album}}** on Last.fm.",
       "whoknowsAlbumTitle": "👤 Who knows {{album}}?",
       "noArtistTags": "🏷️ No tags found for artist **{{artist}}**.",
-      "artistTagsTitle": "🏷️ Top Tags for {{artist}}"
+      "artistTagsTitle": "🏷️ Top Tags for {{artist}}",
+      "listeners": "listeners"
     },
     "list": {
       "empty": "📭 The queue is empty. Use `{{prefix}}play` to add songs!",

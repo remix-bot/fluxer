@@ -690,6 +690,13 @@
       "whoknowsAlbumTitle": "👤 Quem conhece {{album}}?",
       "leaderboardEmpty": "🎵 Nenhum scrobble registrado ainda. Vincule sua conta do Last.fm com `{{prefix}}lastfm link` e comece a ouvir!",
       "leaderboardControlsExpired": "⌛ Controles expirados",
+      "leaderboardTitleServer": "🎵 Ranking de Scrobbles do Servidor",
+      "leaderboardTitleGlobal": "🎵 Ranking de Scrobbles (global)",
+      "leaderboardScrobbles": "scrobbles",
+      "leaderboardYou": "← você",
+      "leaderboardFooterSync": "💡 Contagens sincronizadas ao vivo do Last.fm (cache de ~10 min) · `{{prefix}}lastfm profile` para sincronizar as suas",
+      "trackListFooter": "💡 Use `{{prefix}}lastfm play loved` para tocar estas faixas!",
+      "plays": "reproduções",
       "leaderboardPageFooter": "Página {{current}}/{{total}} • Use ◀️▶️ para navegar",
       "artistsFooter": "💡 Use `{{prefix}}lastfm play top` para tocar suas faixas mais ouvidas!",
       "noArtistSpecified": "❌ Nenhum artista especificado. Toque uma música ou forneça um nome de artista.",
@@ -726,7 +733,8 @@
       "crownsTitle": "👑 Coroas de Artista — {{username}}",
       "crownsFooter": "{{count}} coroa{{plural}} mantida{{plural}}",
       "noArtistTags": "🏷️ Nenhuma tag encontrada para o artista **{{artist}}**.",
-      "artistTagsTitle": "🏷️ Tags Populares para {{artist}}"
+      "artistTagsTitle": "🏷️ Tags Populares para {{artist}}",
+      "listeners": "ouvintes"
     },
     "messages": {
       "missingCriticalPermsTitle": "Permissões Ausentes — Bot Não Pode Funcionar Corretamente",

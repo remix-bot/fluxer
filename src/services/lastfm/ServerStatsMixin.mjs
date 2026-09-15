@@ -321,6 +321,15 @@ const ServerStatsMixin = {
   async getLeaderboard(page = 0, perPage = 10) {
     if (!this.enabled) return { entries: [], totalUsers: 0, page: 0, perPage: 10, totalPages: 0 };
 
+    /* Sync scrobble counts from Last.fm before ranking. The local counter
+       only advances on bot-made scrobbles, so listening done outside the
+       bot (phone/desktop clients) would never show up. getTotalScrobbles()
+       syncs every linked user, is deduped while in-flight, cached for 10
+       minutes, and resolves (never throws) even if the API is down. */
+    try {
+      await this.getTotalScrobbles();
+    } catch (_) { /* stale counts are better than no leaderboard */ }
+
     const pool = await this._getPool();
     const f = this._botIdFilter();
 
@@ -346,6 +355,75 @@ const ServerStatsMixin = {
     }));
 
     return { entries, totalUsers, page, perPage, totalPages };
+  },
+
+  /**
+   * Get the scrobble leaderboard scoped to a set of platform user IDs
+   * (typically the members of one guild), with pagination. Refreshes only
+   * these users' counts from Last.fm first (5-minute TTL, deduped while
+   * in-flight) so pagination turns don't hammer the API.
+   * @async
+   * @param {Array<string>} userIds - Platform user IDs to include.
+   * @param {number} [page=0] - Zero-based page index.
+   * @param {number} [perPage=10] - Number of entries per page.
+   * @returns {Promise<{entries: Array<{userId: string, username: string, scrobbleCount: number}>, totalUsers: number, page: number, perPage: number, totalPages: number, scope: string}>} Leaderboard data.
+   */
+  async getServerLeaderboard(userIds, page = 0, perPage = 10) {
+    const empty = { entries: [], totalUsers: 0, page: 0, perPage, totalPages: 0, scope: "server" };
+    if (!this.enabled) return empty;
+
+    const ids = [...new Set((Array.isArray(userIds) ? userIds : [])
+      .map(id => String(id))
+      .filter(id => /^\d{5,25}$/.test(id)))];
+    if (!ids.length) return empty;
+
+    /* Refresh just these users' counts from Last.fm before ranking.
+       The local counter only advances on bot-made scrobbles, so listening
+       done outside the bot would never show up. TTL-gated + deduped. */
+    try {
+      if (!this._lbServerSyncAt || Date.now() - this._lbServerSyncAt > 5 * 60 * 1000) {
+        if (!this._lbServerSyncInflight) {
+          this._lbServerSyncInflight = (async () => {
+            const concurrency = 3;
+            for (let i = 0; i < ids.length; i += concurrency) {
+              await Promise.allSettled(
+                ids.slice(i, i + concurrency).map(uid => this.syncUserScrobbleCount(uid))
+              );
+            }
+            this._lbServerSyncAt = Date.now();
+          })().finally(() => { this._lbServerSyncInflight = null; });
+        }
+        await this._lbServerSyncInflight;
+      }
+    } catch (_) { /* stale counts are better than no leaderboard */ }
+
+    const pool = await this._getPool();
+    const f = this._botIdFilter();
+    const placeholders = ids.map(() => "?").join(",");
+    const scopeSql = ` AND user_id IN (${placeholders})`;
+
+    const [countRows] = await pool.execute(
+      `SELECT COUNT(*) AS total FROM lastfm_users WHERE scrobble_count > 0${scopeSql}${f.where}`,
+      [...ids, ...f.params]
+    );
+    const totalUsers = Number(countRows[0]?.total ?? 0);
+    const totalPages = Math.max(1, Math.ceil(totalUsers / perPage));
+
+    page = Math.max(0, Math.min(page, totalPages - 1));
+    const offset = page * perPage;
+
+    const [rows] = await pool.execute(
+      `SELECT user_id, username, scrobble_count FROM lastfm_users WHERE scrobble_count > 0${scopeSql}${f.where} ORDER BY scrobble_count DESC LIMIT ? OFFSET ?`,
+      [...ids, ...f.params, String(perPage), String(offset)]
+    );
+
+    const entries = rows.map(r => ({
+      userId:       r.user_id,
+      username:     r.username || r.user_id,
+      scrobbleCount: Number(r.scrobble_count),
+    }));
+
+    return { entries, totalUsers, page, perPage, totalPages, scope: "server" };
   },
 
   /**

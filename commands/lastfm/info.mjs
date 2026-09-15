@@ -16,16 +16,16 @@ import { notLinked, extractCurrentTrack, extractPeriod } from "./shared.mjs";
  * @type {Set<string>}
  */
 export const INFO_ACTIONS = new Set([
-  "artistinfo",,
-  "ai",,
-  "albuminfo",,
-  "ali",,
-  "trackinfo",,
-  "ti",,
-  "topalbums",,
-  "toptags",,
-  "tags",,
-  "cover",,
+  "artistinfo",
+  "ai",
+  "albuminfo",
+  "ali",
+  "trackinfo",
+  "ti",
+  "topalbums",
+  "toptags",
+  "tags",
+  "cover",
   "art"
 ]);
 
@@ -387,7 +387,7 @@ export async function runInfoActions(msg, data, lastfm, prefix, userId, targetUs
         let albumTitle = a.name;
         if (albumTitle.length > 30) albumTitle = albumTitle.slice(0, 27) + "...";
         const link = a.url ? `[${albumTitle}](${a.url})` : albumTitle;
-        return `\`${num}.\` ${link} — **${a.artist}** (**${a.playcount}** plays)`;
+        return `\`${num}.\` ${link} — **${a.artist}** (**${a.playcount}** ${this.t(msg, "responses.lastfm.plays")})`;
       });
 
       const desc = lines.join("\n").slice(0, 4096);

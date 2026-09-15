@@ -16,31 +16,31 @@ import { notLinked, extractCurrentTrack } from "./shared.mjs";
  * @type {Set<string>}
  */
 export const WHOKNOWS_ACTIONS = new Set([
-  "whoknows",,
-  "wk",,
-  "compare",,
-  "fmc",,
-  "refreshmembers",,
-  "rm",,
-  "affinity",,
-  "af",,
-  "crowns",,
-  "cr",,
-  "whoknowstrack",,
-  "wkt",,
-  "whoknowsalbum",,
+  "whoknows",
+  "wk",
+  "compare",
+  "fmc",
+  "refreshmembers",
+  "rm",
+  "affinity",
+  "af",
+  "crowns",
+  "cr",
+  "whoknowstrack",
+  "wkt",
+  "whoknowsalbum",
   "wka"
 ]);
 
 
 /**
  * Get all non-bot user IDs in a guild.
- * @private
+ * @export
  * @async
  * @param {object} guild - The guild object.
  * @returns {Promise<string[]>} Array of user ID strings.
  */
-async function getGuildLinkedUsers(guild) {
+export async function getGuildLinkedUsers(guild) {
   const memberIds = [];
   try {
     const members = guild?.members;
@@ -127,7 +127,7 @@ export async function runWhoknowsActions(msg, data, lastfm, prefix, userId, targ
 
       const lines = listeners.map((l, i) => {
         const medal = i < 3 ? MEDALS[i] : `  `;
-        return `${medal} ${i + 1}. **${l.username}** — **${Utils.formatNumber(l.playcount)}** plays`;
+        return `${medal} ${i + 1}. **${l.username}** — **${Utils.formatNumber(l.playcount)}** ${this.t(msg, "responses.lastfm.plays")}`;
       });
 
       const desc = lines.join("\n").slice(0, 4096);
@@ -197,7 +197,7 @@ export async function runWhoknowsActions(msg, data, lastfm, prefix, userId, targ
         const commonStr = comparison.commonArtists.slice(0, 15).map((a, i) => {
           const num = String(i + 1).padStart(2, " ");
           const link = a.url ? `[${a.name}](${a.url})` : a.name;
-          return `\`${num}.\` ${link} (**${a.playcount}** plays)`;
+          return `\`${num}.\` ${link} (**${a.playcount}** ${this.t(msg, "responses.lastfm.plays")})`;
         }).join("\n");
         embed.addFields({ name: `Common Artists (${comparison.commonArtists.length})`, value: commonStr.slice(0, 1024), inline: false });
       }
@@ -332,7 +332,7 @@ export async function runWhoknowsActions(msg, data, lastfm, prefix, userId, targ
       const lines = filteredCrowns.slice(0, 20).map(c => {
         const link = c.artistUrl ? `[${c.artist}](${c.artistUrl})` : c.artist;
         const nextStr = c.nextBest ? ` (next: **${c.nextBest.username}** with ${Utils.formatNumber(c.nextBest.playcount)})` : "";
-        return `👑 ${link} — **${Utils.formatNumber(c.userPlaycount)}** plays${nextStr}`;
+        return `👑 ${link} — **${Utils.formatNumber(c.userPlaycount)}** ${this.t(msg, "responses.lastfm.plays")}${nextStr}`;
       });
 
       const desc = lines.join("\n").slice(0, 4096);
@@ -423,7 +423,7 @@ export async function runWhoknowsActions(msg, data, lastfm, prefix, userId, targ
 
       const lines = listeners.map((l, i) => {
         const medal = i < 3 ? MEDALS[i] : `  `;
-        return `${medal} ${i + 1}. **${l.username}** — **${Utils.formatNumber(l.playcount)}** plays`;
+        return `${medal} ${i + 1}. **${l.username}** — **${Utils.formatNumber(l.playcount)}** ${this.t(msg, "responses.lastfm.plays")}`;
       });
 
       const desc = lines.join("\n").slice(0, 4096);
@@ -504,7 +504,7 @@ export async function runWhoknowsActions(msg, data, lastfm, prefix, userId, targ
 
       const lines = listeners.map((l, i) => {
         const medal = i < 3 ? MEDALS[i] : `  `;
-        return `${medal} ${i + 1}. **${l.username}** — **${Utils.formatNumber(l.playcount)}** plays`;
+        return `${medal} ${i + 1}. **${l.username}** — **${Utils.formatNumber(l.playcount)}** ${this.t(msg, "responses.lastfm.plays")}`;
       });
 
       const desc = lines.join("\n").slice(0, 4096);
