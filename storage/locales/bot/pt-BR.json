@@ -356,7 +356,7 @@
       "paused": "⏸️ Pausado"
     },
     "ping": {
-      "title": "🏓  **Pong!**",
+      "title": "🏓  Pong!",
       "measuring": "🏓  Medindo o ping...",
       "roundtrip": "📶  **Latência**",
       "gateway": "🌐  **Gateway**",

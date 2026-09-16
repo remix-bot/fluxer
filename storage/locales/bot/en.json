@@ -473,7 +473,7 @@
       "paused": "⏸️ Paused"
     },
     "ping": {
-      "title": "🏓  **Pong!**",
+      "title": "🏓  Pong!",
       "measuring": "🏓  Pinging...",
       "roundtrip": "📶  **Roundtrip**",
       "gateway": "🌐  **Gateway**",

@@ -462,7 +462,7 @@
       "paused": "⏸️ Duraklatıldı"
     },
     "ping": {
-      "title": "🏓  **Pong!**",
+      "title": "🏓  Pong!",
       "measuring": "🏓  Ping ölçülüyor...",
       "roundtrip": "📶  **Gecikme**",
       "gateway": "🌐  **Gateway**",
