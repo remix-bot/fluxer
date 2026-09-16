@@ -268,7 +268,7 @@ const DisplayMixin = {
       this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses.radio.nowPlaying", {
         title:  Utils.escapeMarkdown(s.title),
         author: s.author?.name || "Unknown",
-        url:    s.author?.url || "",
+        url:    s.author?.url || s.url || "",
         channel: this._channelId || "",
       }))] });
       return;
