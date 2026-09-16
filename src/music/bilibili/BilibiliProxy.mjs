@@ -5,17 +5,25 @@
  * progressive mp4/flv alike) only respond to requests carrying a bilibili
  * Referer and a browser User-Agent — headers an audio node cannot attach —
  * so the bot signs the CDN URL with a per-process HMAC key and hands the
- * node `http://<host>:<port>/s?u=<cdn-url>&e=<expiry>&x=<hmac>` instead.
+ * node `http://<host>:<port>/s/audio.m4a?u=<cdn-url>&e=<expiry>&x=<hmac>`
+ * instead.
  *
  * Two serving modes:
- * - `/s` — a single CDN URL: the proxy validates the signature, then
+ * - `/s/<name>` — a single CDN URL: the proxy validates the signature, then
  *   streams the CDN response (including Range requests, which give seek
- *   support) with the right headers attached.
- * - `/l` — a list of progressive segments: some playurl responses return
- *   the audio split over several durl segments; the proxy streams them
- *   back-to-back as one continuous body. Range requests are mapped across
- *   the concatenation using the segment sizes from the playurl payload,
- *   so seeking works in this mode too.
+ *   support) with the right headers attached. `<name>` is a synthetic file
+ *   name (`audio.m4a`, `audio.flac`, …) that advertises the stream format:
+ *   generic audio nodes pick their decoder from the URL extension and/or
+ *   the Content-Type, and Bilibili provides neither in a usable form (DASH
+ *   segments are extension-less `.m4s` served as application/octet-stream).
+ * - `/l/<name>` — a list of progressive segments: some playurl responses
+ *   return the audio split over several durl segments; the proxy streams
+ *   them back-to-back as one continuous body. Range requests are mapped
+ *   across the concatenation using the segment sizes from the playurl
+ *   payload, so seeking works in this mode too.
+ *
+ * The bare `/s` and `/l` forms (no synthetic name) are still accepted so
+ * URLs signed by older builds keep working.
  *
  * The server starts lazily on the first Bilibili play and is unref'd, so it
  * never delays startup or shutdown. Only URLs signed by this very process
@@ -34,6 +42,74 @@ const PROXY_TTL_MS = 6 * 60 * 60 * 1000;
 const CDN_CONNECT_TIMEOUT_MS = 20_000;
 /** @type {number} @description Maximum number of segments served through one list-mode URL. */
 const MAX_SEGMENTS = 64;
+
+/**
+ * @type {object} @description Content-Type advertised per file extension when
+ *   the CDN response does not carry a usable one (Bilibili DASH segments
+ *   come back as opaque application/octet-stream, which audio nodes cannot
+ *   map to a decoder).
+ */
+const MIME_BY_EXT = {
+  m4a:  "audio/mp4",
+  mp4:  "audio/mp4",
+  m4s:  "audio/mp4",
+  m4v:  "audio/mp4",
+  mov:  "audio/mp4",
+  aac:  "audio/aac",
+  mp3:  "audio/mpeg",
+  flac: "audio/flac",
+  ogg:  "audio/ogg",
+  opus: "audio/ogg",
+  wav:  "audio/wav",
+  webm: 'audio/webm; codecs="opus"',
+  weba: 'audio/webm; codecs="opus"',
+  flv:  "video/x-flv",
+};
+
+/**
+ * Map a Bilibili CDN URL to a canonical audio file extension for the
+ * synthetic proxy path name. DASH audio segments are `.m4s` — a fragmented
+ * MP4 (AAC) container most audio nodes do not recognize by extension — so
+ * they are advertised as `.m4a` (identical bytes, conventional name).
+ * Progressive durl segments (`mp4`/`flv`) and exotic streams pass their own
+ * extension through when it is a known audio type; anything unrecognized
+ * falls back to `m4a`, which matches what Bilibili actually serves.
+ * @param {string} url - Raw CDN URL.
+ * @returns {string} Extension without the leading dot (never empty).
+ */
+function advertisedExtension(url) {
+  let path = String(url ?? "");
+  try { path = new URL(path).pathname; } catch (_) { /* keep raw */ }
+  const m = /\.([a-z0-9]+)$/i.exec(path);
+  const ext = m ? m[1].toLowerCase() : "";
+  if (ext === "m4s") return "m4a";
+  if (MIME_BY_EXT[ext]) return ext;
+  return "m4a";
+}
+
+/**
+ * The Content-Type to advertise for an audio stream identified by file
+ * extension. Used when the upstream response lacks a usable Content-Type
+ * (Bilibili serves DASH m4s as application/octet-stream).
+ * @param {string} ext - Extension without the leading dot.
+ * @returns {string}
+ */
+function advertisedMime(ext) {
+  return MIME_BY_EXT[ext] || "audio/mp4";
+}
+
+/**
+ * Whether a Content-Type is already meaningful to an audio node (any
+ * audio/* or video/* type). Opaque types (application/octet-stream, JSON
+ * error bodies, plain text) are not — they get replaced with the advertised
+ * mime for the stream's extension.
+ * @param {string|null} contentType
+ * @returns {boolean}
+ */
+function isUsableContentType(contentType) {
+  const type = String(contentType ?? "").toLowerCase();
+  return type.startsWith("audio/") || type.startsWith("video/");
+}
 
 /** @type {object} @description Effective proxy configuration (merged from config.json -> bilibili). */
 const _cfg = {
@@ -226,23 +302,27 @@ function verifySignature(target, expires, sig) {
  * Starts the proxy on first use. The HMAC is computed over the
  * base64url-encoded target exactly as it travels in the `u` query
  * parameter, so verification on the serving side never has to guess the
- * encoding.
+ * encoding. The path carries a synthetic file name (`/s/audio.m4a`) whose
+ * extension tells extension-sniffing audio nodes which decoder to use —
+ * without it, nodes see an extension-less URL and fail with
+ * "Unsupported audio format: 'undefined'" (NodeLink) or equivalent.
  * @param {string} targetUrl - The raw CDN (m4s / mp4) URL from the playurl API.
  * @param {number} [ttlMs=PROXY_TTL_MS] - Signature lifetime.
- * @returns {Promise<string>} The signed proxy URL (`/s` mode).
+ * @returns {Promise<string>} The signed proxy URL (`/s/<name>` form).
  */
 export async function buildSignedProxyUrl(targetUrl, ttlMs = PROXY_TTL_MS) {
+  const name = "audio." + advertisedExtension(targetUrl);
   if (remoteMode()) {
     const expires = Date.now() + ttlMs;
     const u = Buffer.from(String(targetUrl), "utf8").toString("base64url");
     const x = signTarget(u, expires);
-    return _cfg.remoteProxy + "/s?u=" + u + "&e=" + expires + "&x=" + x;
+    return _cfg.remoteProxy + "/s/" + name + "?u=" + u + "&e=" + expires + "&x=" + x;
   }
   const { port, host } = await ensureBilibiliProxy();
   const expires = Date.now() + ttlMs;
   const u = Buffer.from(String(targetUrl), "utf8").toString("base64url");
   const x = signTarget(u, expires);
-  return "http://" + host + ":" + port + "/s?u=" + u + "&e=" + expires + "&x=" + x;
+  return "http://" + host + ":" + port + "/s/" + name + "?u=" + u + "&e=" + expires + "&x=" + x;
 }
 
 /**
@@ -268,9 +348,11 @@ export async function buildSignedListProxyUrl(segments, ttlMs = PROXY_TTL_MS) {
   const u = Buffer.from(payload, "utf8").toString("base64url");
   const expires = Date.now() + ttlMs;
   const x = signTarget(u, expires);
-  if (remoteMode()) return _cfg.remoteProxy + "/l?u=" + u + "&e=" + expires + "&x=" + x;
+  const first = Array.isArray(segments) ? segments[0]?.url : null;
+  const name = "audio." + advertisedExtension(typeof first === "string" ? first : "");
+  if (remoteMode()) return _cfg.remoteProxy + "/l/" + name + "?u=" + u + "&e=" + expires + "&x=" + x;
   const { port, host } = await ensureBilibiliProxy();
-  return "http://" + host + ":" + port + "/l?u=" + u + "&e=" + expires + "&x=" + x;
+  return "http://" + host + ":" + port + "/l/" + name + "?u=" + u + "&e=" + expires + "&x=" + x;
 }
 
 /**
@@ -417,7 +499,10 @@ async function handleProxyRequest(req, res) {
     res.end("bad request");
     return;
   }
-  if (u.pathname !== "/s" && u.pathname !== "/l") {
+  const route = /^\/s(\/|$)/.exec(u.pathname) ? "/s"
+      : /^\/l(\/|$)/.exec(u.pathname) ? "/l"
+      : null;
+  if (!route) {
     res.writeHead(404, { "Content-Type": "text/plain" });
     res.end("not found");
     return;
@@ -433,7 +518,7 @@ async function handleProxyRequest(req, res) {
     return;
   }
 
-  if (u.pathname === "/s") {
+  if (route === "/s") {
     await serveSingle(req, res, payload);
   } else {
     await serveSegmentList(req, res, payload);
@@ -487,6 +572,9 @@ async function serveSingle(req, res, payload) {
   for (const name of ["content-type", "content-length", "content-range", "accept-ranges"]) {
     const v = upstream.headers.get(name);
     if (v != null) headers[name] = v;
+  }
+  if (!isUsableContentType(headers["content-type"])) {
+    headers["content-type"] = advertisedMime(advertisedExtension(targetUrl.href));
   }
   res.writeHead(upstream.status, headers);
 
@@ -608,7 +696,9 @@ async function serveSegmentList(req, res, payload) {
     if (i === firstIdx) {
       const contentType = upstream.headers.get("content-type");
       const headers = { "Accept-Ranges": "bytes" };
-      if (contentType) headers["Content-Type"] = contentType;
+      headers["Content-Type"] = isUsableContentType(contentType)
+          ? contentType
+          : advertisedMime(advertisedExtension(seg.u));
       if (range) {
         headers["Content-Range"] = "bytes " + range.start + "-" + range.end + "/" + total;
         if (plannedLength >= 0) headers["Content-Length"] = String(plannedLength);
