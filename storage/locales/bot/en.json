@@ -444,6 +444,7 @@
       "error": "❌ Error: {{error}}",
       "syncedBadge": " ⏱️ Synced",
       "nodeLinkFooter": "NodeLink • {{lines}} lines",
+      "sourceFooter": "{{source}} • {{lines}} lines",
       "controlsExpired": "⌛ Controls expired • NodeLink • {{lines}} lines",
       "sessionClosed": "Session closed • NodeLink • {{lines}} lines"
     },

@@ -335,6 +335,7 @@
       "error": "❌ هەڵە: {{error}}",
       "syncedBadge": " ⏱️ هاوئاهەنگ",
       "nodeLinkFooter": "NodeLink • {{lines}} هێڵ",
+      "sourceFooter": "{{source}} • {{lines}} هێڵ",
       "controlsExpired": "⌛ کۆنتڕۆڵەکان بەسەرچوون • NodeLink • {{lines}} هێڵ",
       "sessionClosed": "دانیشتن داخرا • NodeLink • {{lines}} هێڵ"
     },

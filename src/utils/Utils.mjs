@@ -419,4 +419,96 @@ export class Utils {
         .trim()
         .toLowerCase();
   }
+
+  /**
+   * Clean a channel/artist name for lyrics lookups: YouTube auto-generated
+   * channels append " - Topic", labels upload as "ArtistVEVO" or
+   * "Artist - Official Audio" — none of which match a lyrics provider index.
+   * @param {string} name - Raw artist or channel name.
+   * @returns {string} Cleaned artist name ("" when nothing left).
+   */
+  static cleanArtistName(name) {
+    if (!name || typeof name !== "string") return "";
+    return name
+        .replace(/\s*-\s*topic$/i, "")
+        .replace(/vevo$/i, "")
+        .replace(/\s*-\s*(?:official|topic|subject).*$/i, "")
+        .replace(/\s*\((?:official|topic).*\)$/i, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+  }
+
+  /**
+   * Parse LRC-format synced lyrics ("[mm:ss.xx] line text") into structured
+   * lines. Returns null when the input holds no timestamped lines at all.
+   * @param {string} raw - Raw LRC text (one lyric line per source line).
+   * @returns {Array<{startTimeMs: number, text: string}>|null}
+   */
+  static parseSyncedLyrics(raw) {
+    if (!raw || typeof raw !== "string") return null;
+    const lines = [];
+    for (const line of raw.split("\n")) {
+      const m = line.match(/^\s*\[(\d+):(\d+)(?:[.:](\d{1,3}))?\]\s*(.*)$/);
+      if (!m) continue;
+      const frac = m[3] ? parseInt(m[3].padEnd(3, "0"), 10) : 0;
+      const startTimeMs = parseInt(m[1], 10) * 60_000 + parseInt(m[2], 10) * 1000 + frac;
+      lines.push({ startTimeMs, text: (m[4] || "").trim() });
+    }
+    return lines.length ? lines : null;
+  }
+
+  /**
+   * Pick the correct lyrics candidate from a provider result list by scoring
+   * title, artist and duration agreement. Returns null when no candidate is a
+   * confident match — wrong lyrics are worse than no lyrics.
+   * @param {Array<{trackName: string, artistName: string, duration?: number|null}>} candidates
+   * @param {object} ref - Reference track: { title, artist, durationSec }.
+   * @returns {object|null} The best-scoring candidate, or null.
+   */
+  static pickBestLyrics(candidates, ref) {
+    if (!Array.isArray(candidates) || candidates.length === 0) return null;
+
+    const refTitle = this.normalizeText(ref?.title);
+    const refArtist = this.normalizeText(ref?.artist);
+    const refDur = Number(ref?.durationSec) || 0;
+    if (!refTitle) return null;
+
+    let best = null;
+    let bestScore = 0;
+    for (const c of candidates) {
+      if (!c || typeof c !== "object") continue;
+
+      const cTitle = this.normalizeText(c.trackName);
+      const cArtist = this.normalizeText(c.artistName);
+      if (!cTitle) continue;
+
+      let score = 0;
+      if (cTitle === refTitle) {
+        score += 3;
+      } else if (cTitle.includes(refTitle) || refTitle.includes(cTitle)) {
+        score += 1.5;
+      } else {
+        continue;
+      }
+
+      if (refArtist) {
+        if (cArtist === refArtist) score += 2;
+        else if (cArtist.includes(refArtist) || refArtist.includes(cArtist)) score += 1;
+      }
+
+      const dur = Number(c.duration) || 0;
+      if (refDur > 0 && dur > 0) {
+        const diff = Math.abs(dur - refDur);
+        if (diff <= 3) score += 2;
+        else if (diff <= 8) score += 1;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+
+    return bestScore >= 4 ? best : null;
+  }
 }

@@ -124,7 +124,7 @@ export async function run(message) {
         .setColor(getGlobalColor())
         .setTitle(`🎵 ${Utils.truncate(displayTitle, 50)}`)
         .setDescription(singleDesc.slice(0, MAX_DESC))
-        .setFooter({ text: this.t(message, "responses.lyrics.nodeLinkFooter", { lines: totalLines }) });
+        .setFooter({ text: this.t(message, "responses.lyrics.sourceFooter", { source: result.source, lines: totalLines }) });
       if (current.thumbnail) singleEmbed.setThumbnail(current.thumbnail);
       return message.reply({ embeds: [singleEmbed] });
     }
@@ -150,7 +150,7 @@ export async function run(message) {
         .setDescription(desc.slice(0, MAX_DESC))
         .setFooter({ text: expired
           ? this.t(message, "responses.lyrics.controlsExpired", { lines: totalLines })
-          : this.t(message, "responses.lyrics.nodeLinkFooter", { lines: totalLines }) });
+          : this.t(message, "responses.lyrics.sourceFooter", { source: result.source, lines: totalLines }) });
       if (current.thumbnail) b.setThumbnail(current.thumbnail);
       return { embeds: [b] };
     };

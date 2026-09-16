@@ -624,8 +624,11 @@ const PlaybackMixin = {
   },
 
   /**
-   * @async Fetch lyrics for the currently playing track via the Lavalink
-   * REST API.
+   * @async Fetch lyrics for the currently playing track.
+   * Primary: LRCLIB direct lookup with a cleaned artist/title query, scoring
+   * every candidate by title, artist and duration agreement so a fuzzy hit on
+   * the wrong song is never returned.
+   * Fallback: NodeLink loadlyrics with the cleaned identifier (free-text).
    * @this {import('./Player.mjs').Player}
    * @returns {Promise<{text: string, source: string, synced: boolean, lines: Array}|null>}
    */
@@ -633,18 +636,21 @@ const PlaybackMixin = {
     const current = this.queue.getCurrent();
     if (!current) return null;
 
+    const query = this._buildLyricsQuery(current);
+    if (!query.title) return null;
+
+    try {
+      const result = await this._fetchVerifiedLyrics(query);
+      if (result) return result;
+    } catch (e) {
+      logger.player(`[Lyrics] LRCLIB lookup failed: ${e.message}`);
+    }
+
     const node = this._lavalink?.getNode?.() ?? null;
-
-    if (node) {
+    if (node && query.candidates.length > 0) {
       try {
-        const searchQuery = current.artists?.[0]?.name
-            ? `${current.title} ${current.artists[0].name}`
-            : current.title;
-
-        const path = current.encoded
-          ? `/loadlyrics?encodedTrack=${encodeURIComponent(current.encoded)}`
-          : `/loadlyrics?identifier=${encodeURIComponent(searchQuery)}`;
-
+        const searchQuery = query.candidates.join(" ");
+        const path = `/loadlyrics?identifier=${encodeURIComponent(searchQuery)}`;
         const results = await node.request(path);
 
         if (results?.data?.lines?.length) {
@@ -660,6 +666,107 @@ const PlaybackMixin = {
       }
     }
 
+    return null;
+  },
+
+  /**
+   * @private Build a cleaned artist/title pair for lyrics lookups, preferring
+   * real metadata (lastfm tags, provider artists) over the raw YouTube title,
+   * and splitting "Artist - Song" titles when no artist metadata exists.
+   * @this {import('./Player.mjs').Player}
+   * @param {object} current - Queue track.
+   * @returns {{artist: string, title: string, candidates: string[]}}
+   */
+  _buildLyricsQuery(current) {
+    const rawTitle = Utils.cleanTitle(current.title ?? "");
+    let artist = Utils.cleanArtistName(
+        current.lastfm?.artist
+        || current.artists?.[0]?.name
+        || current.author?.name
+        || ""
+    );
+
+    let title = rawTitle;
+    if (artist) {
+      const prefix = artist + " - ";
+      if (title.toLowerCase().startsWith(prefix.toLowerCase())) {
+        title = title.slice(prefix.length).trim();
+      }
+    } else {
+      const split = rawTitle.match(/^(.+?)\s+-\s+(.+)$/);
+      if (split) {
+        artist = Utils.cleanArtistName(split[1]);
+        title = split[2].trim();
+      }
+    }
+
+    const candidates = [];
+    if (artist && title) candidates.push(`${artist} ${title}`);
+    if (title && !candidates.length) candidates.push(title);
+
+    return { artist, title, candidates };
+  },
+
+  /**
+   * @private Query LRCLIB for lyrics and return only a verified match.
+   * @this {import('./Player.mjs').Player}
+   * @param {{artist: string, title: string}} query
+   * @returns {Promise<{text: string, source: string, synced: boolean, lines: Array}|null>}
+   */
+  async _fetchVerifiedLyrics(query) {
+    const durationMs = this._getTrackDurationMs(this.queue.getCurrent());
+    const durationSec = Math.round(durationMs / 1000);
+    const headers = { "User-Agent": "FluxerBot/1.0 (music bot lyrics lookup)" };
+
+    const urls = [];
+    if (query.artist) {
+      const p1 = new URLSearchParams({ track_name: query.title, artist_name: query.artist });
+      urls.push("https://lrclib.net/api/search?" + p1.toString());
+    }
+    const p2 = new URLSearchParams({ q: query.candidates.join(" ") || query.title });
+    urls.push("https://lrclib.net/api/search?" + p2.toString());
+
+    let candidates = [];
+    for (const url of urls) {
+      const res = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) continue;
+      const body = await res.json();
+      if (Array.isArray(body) && body.length) {
+        candidates = body;
+        break;
+      }
+    }
+    if (!candidates.length) return null;
+
+    const best = Utils.pickBestLyrics(candidates, {
+      title: query.title,
+      artist: query.artist,
+      durationSec,
+    });
+    if (!best) return null;
+
+    if (best.instrumental) {
+      return { text: "♪", source: "LRCLIB", synced: false, lines: [] };
+    }
+
+    const parsed = Utils.parseSyncedLyrics(best.syncedLyrics);
+    if (parsed) {
+      return {
+        text:   parsed.map(l => l.text).join("\n"),
+        source: "LRCLIB",
+        synced: true,
+        lines:  parsed,
+      };
+    }
+    if (best.plainLyrics) {
+      const text = String(best.plainLyrics).trim();
+      return {
+        text,
+        source: "LRCLIB",
+        synced: false,
+        lines:  text.split("\n").map(l => ({ text: l })),
+      };
+    }
     return null;
   },
 };

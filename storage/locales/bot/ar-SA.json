@@ -335,6 +335,7 @@
       "error": "❌ خطأ: {{error}}",
       "syncedBadge": " ⏱️ متزامن",
       "nodeLinkFooter": "NodeLink • {{lines}} سطر",
+      "sourceFooter": "{{source}} • {{lines}} سطر",
       "controlsExpired": "⌛ انتهت صلاحية عناصر التحكم • NodeLink • {{lines}} سطر",
       "sessionClosed": "تم إغلاق الجلسة • NodeLink • {{lines}} سطر"
     },

@@ -441,6 +441,7 @@
       "error": "❌ Hata: {{error}}",
       "syncedBadge": " ⏱️ Senkronize",
       "nodeLinkFooter": "NodeLink • {{lines}} satır",
+      "sourceFooter": "{{source}} • {{lines}} satır",
       "controlsExpired": "⌛ Kontrollerin süresi doldu • NodeLink • {{lines}} satır",
       "sessionClosed": "Oturum kapatıldı • NodeLink • {{lines}} satır"
     },

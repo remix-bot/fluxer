@@ -82,11 +82,12 @@ export async function openLyricsViewer(bot, msg, player, refresh, session) {
           player.queue.getCurrent()?.title?.replace(/\(Official.*?\)/gi, '').trim() ?? '',
           50
       );
+      const lyricsSource = lyricsResult.source || "Lyrics";
       const footerText = closed
-          ? `👋 Lyrics closed • NodeLink • ${totalLines} lines`
+          ? `👋 Lyrics closed • ${lyricsSource} • ${totalLines} lines`
           : expired
-              ? `⌛ Controls expired • NodeLink • ${totalLines} lines`
-              : `NodeLink • ${totalLines} lines total${lyricsResult.synced ? ' • Synced' : ''}`;
+              ? `⌛ Controls expired • ${lyricsSource} • ${totalLines} lines`
+              : `${lyricsSource} • ${totalLines} lines total${lyricsResult.synced ? ' • Synced' : ''}`;
       const desc = [
         `**${title}**${syncBadge} • Page ${pageIdx + 1}/${totalPages}`,
         ``,

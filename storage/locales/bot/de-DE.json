@@ -335,6 +335,7 @@
       "error": "❌ Fehler: {{error}}",
       "syncedBadge": " ⏱️ Synchronisiert",
       "nodeLinkFooter": "NodeLink • {{lines}} Zeilen",
+      "sourceFooter": "{{source}} • {{lines}} Zeilen",
       "controlsExpired": "⌛ Steuerung abgelaufen • NodeLink • {{lines}} Zeilen",
       "sessionClosed": "Sitzung geschlossen • NodeLink • {{lines}} Zeilen"
     },
