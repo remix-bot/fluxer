@@ -461,6 +461,13 @@
       "alreadyPaused": "❌ Zaten duraklatılmış!",
       "paused": "⏸️ Duraklatıldı"
     },
+    "ping": {
+      "title": "🏓  **Pong!**",
+      "measuring": "🏓  Ping ölçülüyor...",
+      "roundtrip": "📶  **Gecikme**",
+      "gateway": "🌐  **Gateway**",
+      "node": "🎧  **NodeLink**"
+    },
     "play": {
       "searching": "🔍 Aranıyor...",
       "loading": "Yükleniyor...",

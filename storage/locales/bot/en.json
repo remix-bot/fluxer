@@ -472,6 +472,13 @@
       "alreadyPaused": "❌ Already paused!",
       "paused": "⏸️ Paused"
     },
+    "ping": {
+      "title": "🏓  **Pong!**",
+      "measuring": "🏓  Pinging...",
+      "roundtrip": "📶  **Roundtrip**",
+      "gateway": "🌐  **Gateway**",
+      "node": "🎧  **NodeLink**"
+    },
     "play": {
       "searching": "🔍 Searching...",
       "loading": "Loading...",

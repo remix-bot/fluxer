@@ -355,6 +355,13 @@
       "alreadyPaused": "❌ متوقف بالفعل!",
       "paused": "⏸️ تم الإيقاف المؤقت"
     },
+    "ping": {
+      "title": "🏓  **Pong!**",
+      "measuring": "🏓  جارٍ قياس البينغ...",
+      "roundtrip": "📶  **زمن الاستجابة**",
+      "gateway": "🌐  **البوابة**",
+      "node": "🎧  **NodeLink**"
+    },
     "play": {
       "searching": "🔍 جارٍ البحث...",
       "loading": "جارٍ التحميل...",

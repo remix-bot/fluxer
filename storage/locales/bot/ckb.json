@@ -355,6 +355,13 @@
       "alreadyPaused": "❌ پێشتر وەستاوە!",
       "paused": "⏸️ وەستا"
     },
+    "ping": {
+      "title": "🏓  **Pong!**",
+      "measuring": "🏓  پینگ دەپێورێت...",
+      "roundtrip": "📶  **ماوەی وەڵام**",
+      "gateway": "🌐  **دەروازە**",
+      "node": "🎧  **NodeLink**"
+    },
     "play": {
       "searching": "🔍 گەڕان...",
       "loading": "بارکردن...",
