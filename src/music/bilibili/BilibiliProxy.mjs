@@ -41,7 +41,21 @@ const _cfg = {
   bind:     "127.0.0.1",
   port:     0,
   advertiseHost: null,
+  remoteProxy:  null,
+  remoteSecret: null,
 };
+
+/**
+ * Whether signed proxy URLs point at a remote HTTPS header-proxy (e.g. a
+ * Cloudflare Worker) instead of the in-process HTTP proxy. Remote mode is
+ * for split deployments where the audio node cannot reach the bot host —
+ * the node then fetches the public proxy URL directly and the bot never
+ * touches the audio bytes.
+ * @returns {boolean}
+ */
+function remoteMode() {
+  return Boolean(_cfg.remoteProxy && _cfg.remoteSecret);
+}
 
 /** @type {http.Server|null} @description The lazily-started proxy server (unref'd). */
 let _server = null;
@@ -59,12 +73,37 @@ let _starting = null;
  * @param {string} [section.advertiseHost] - Host the audio node should use
  *   to reach the proxy (defaults to the bind address; set when the node runs
  *   on another machine/container).
+ * @param {string} [section.remoteProxy] - Base URL of a remote HTTPS
+ *   header-proxy (e.g. a Cloudflare Worker deployed from
+ *   download/bilibili-proxy-worker.js). When set — together with
+ *   remoteSecret — signed URLs point there and the local proxy never
+ *   starts. For deployments where the node cannot reach the bot host.
+ * @param {string} [section.remoteSecret] - Shared HMAC secret the remote
+ *   proxy verifies signatures with (required with remoteProxy).
  */
 export function configureBilibiliProxy(section = {}) {
   if (section.bind != null)       _cfg.bind          = String(section.bind);
   if (section.port != null)       _cfg.port          = Number(section.port) || 0;
   if (section.advertiseHost != null) _cfg.advertiseHost = String(section.advertiseHost);
   if (section.enabled != null)    _cfg.enabled       = section.enabled !== false;
+  if (section.remoteProxy != null) {
+    const base = String(section.remoteProxy).trim().replace(/\/+$/, "");
+    _cfg.remoteProxy = base || null;
+  }
+  if (section.remoteSecret != null) {
+    const secret = String(section.remoteSecret);
+    _cfg.remoteSecret = secret.length > 0 ? secret : null;
+  }
+  if (_cfg.remoteProxy && !_cfg.remoteSecret) {
+    logger.warn("[BilibiliProxy] bilibili.remoteProxy is set but bilibili.remoteSecret is missing — " +
+        "falling back to the local proxy (the remote proxy cannot verify signed URLs without the shared secret).");
+    _cfg.remoteProxy = null;
+  }
+  // Remote mode signs with a key derived from the stable shared secret so
+  // the remote proxy can verify URLs signed by any bot restart.
+  _key = remoteMode()
+      ? crypto.createHash("sha256").update(_cfg.remoteSecret).digest()
+      : null;
 }
 
 /**
@@ -87,9 +126,12 @@ function advertiseHost() {
 
 /**
  * Start the proxy server (once per process) and return its listening info.
+ * In remote mode the local server never starts — the remote proxy is
+ * reported instead.
  * @returns {Promise<{port: number, host: string}>}
  */
 export function ensureBilibiliProxy() {
+  if (remoteMode()) return Promise.resolve({ port: 0, host: _cfg.remoteProxy });
   if (_starting) return _starting;
   _starting = new Promise((resolve, reject) => {
     try {
@@ -127,10 +169,12 @@ export function ensureBilibiliProxy() {
 }
 
 /**
- * Current proxy info (without starting it).
+ * Current proxy info (without starting it). Remote mode reports the remote
+ * proxy base instead of a local host:port.
  * @returns {{port: number, host: string}|null}
  */
 export function bilibiliProxyInfo() {
+  if (remoteMode()) return { port: 0, host: _cfg.remoteProxy };
   if (!_server) return null;
   const addr = _server.address();
   const port = typeof addr === "object" && addr ? addr.port : _cfg.port;
@@ -188,6 +232,12 @@ function verifySignature(target, expires, sig) {
  * @returns {Promise<string>} The signed proxy URL (`/s` mode).
  */
 export async function buildSignedProxyUrl(targetUrl, ttlMs = PROXY_TTL_MS) {
+  if (remoteMode()) {
+    const expires = Date.now() + ttlMs;
+    const u = Buffer.from(String(targetUrl), "utf8").toString("base64url");
+    const x = signTarget(u, expires);
+    return _cfg.remoteProxy + "/s?u=" + u + "&e=" + expires + "&x=" + x;
+  }
   const { port, host } = await ensureBilibiliProxy();
   const expires = Date.now() + ttlMs;
   const u = Buffer.from(String(targetUrl), "utf8").toString("base64url");
@@ -199,13 +249,13 @@ export async function buildSignedProxyUrl(targetUrl, ttlMs = PROXY_TTL_MS) {
  * Sign a multi-segment progressive stream into a concatenating proxy URL.
  * The payload carries each segment's CDN URL and byte size (plus up to four
  * backup URLs); the `/l` handler streams the segments back-to-back and maps
- * Range requests across the concatenation.
+ * Range requests across the concatenation. Remote mode serves this from the
+ * configured remote proxy instead of the in-process server.
  * @param {Array<{url: string, size: number, backupUrls?: Array<string>}>} segments
  * @param {number} [ttlMs=PROXY_TTL_MS] - Signature lifetime.
  * @returns {Promise<string>} The signed proxy URL (`/l` mode).
  */
 export async function buildSignedListProxyUrl(segments, ttlMs = PROXY_TTL_MS) {
-  const { port, host } = await ensureBilibiliProxy();
   const payload = JSON.stringify(
       (Array.isArray(segments) ? segments : []).slice(0, MAX_SEGMENTS).map(s => ({
         u: String(s?.url ?? ""),
@@ -218,6 +268,8 @@ export async function buildSignedListProxyUrl(segments, ttlMs = PROXY_TTL_MS) {
   const u = Buffer.from(payload, "utf8").toString("base64url");
   const expires = Date.now() + ttlMs;
   const x = signTarget(u, expires);
+  if (remoteMode()) return _cfg.remoteProxy + "/l?u=" + u + "&e=" + expires + "&x=" + x;
+  const { port, host } = await ensureBilibiliProxy();
   return "http://" + host + ":" + port + "/l?u=" + u + "&e=" + expires + "&x=" + x;
 }
 

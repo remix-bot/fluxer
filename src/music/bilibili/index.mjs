@@ -34,6 +34,12 @@ import { logger } from "../../core/Logger.mjs";
  * @param {number} [section.port=0] - Proxy listen port (0 = ephemeral).
  * @param {string} [section.advertiseHost] - Host the audio node uses to
  *   reach the proxy when it runs on another machine/container.
+ * @param {string} [section.remoteProxy] - Base URL of a remote HTTPS
+ *   header-proxy (e.g. a Cloudflare Worker). When set together with
+ *   remoteSecret, signed URLs point there and the local proxy never starts —
+ *   for deployments where the audio node cannot reach the bot host.
+ * @param {string} [section.remoteSecret] - Shared HMAC secret the remote
+ *   proxy verifies signed URLs with (required with remoteProxy).
  */
 export function configureBilibili(section = {}) {
   configureBilibiliProxy(section);

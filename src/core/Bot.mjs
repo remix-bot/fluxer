@@ -121,6 +121,8 @@ class Remix {
       bind:          config.bilibili?.bind       ?? "127.0.0.1",
       port:          config.bilibili?.port       ?? 0,
       advertiseHost: config.bilibili?.advertiseHost ?? null,
+      remoteProxy:   config.bilibili?.remoteProxy   ?? null,
+      remoteSecret:  config.bilibili?.remoteSecret  ?? null,
     });
 
     this.locale = new Locale(typeof config.prefix === "string" && config.prefix ? config.prefix : "%");
