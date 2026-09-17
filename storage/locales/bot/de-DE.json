@@ -58,6 +58,7 @@
     "lyrics": "Zeige synchronisierte Songtexte von NodeLink an.",
     "np": "Frage den Namen und die URL des aktuell spielenden Songs ab.",
     "pause": "Pausiere die Wiedergabe in deinem Sprachkanal.",
+    "ping": "Prüfe die Latenz und Verbindungsqualität des Bots.",
     "play": "Spiele einen Song oder eine Playlist von einer URL oder Suchanfrage.\nUnterstützt YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, Bilibili und mehr.\nStandardsuche: YouTube Music. Nutze `-p <Anbieter>` oder Inline-Präfix wie `sp: blinding lights`.",
     "player": "Erstelle ein interaktives Wiedergabe-Kontrollfeld mit Live-Fortschritt.",
     "playnext": "Wie $prefixplay, fügt das Ergebnis aber an den Anfang der Warteschlange hinzu.",

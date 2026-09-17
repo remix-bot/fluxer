@@ -59,6 +59,7 @@
     "lyrics": "Display synced lyrics from NodeLink.",
     "np": "Request the name and url of the currently playing song.",
     "pause": "Pause the playback in your voice channel.",
+    "ping": "Check the bot's latency and connection health.",
     "play": "Play a song or playlist from a URL or search query.\nSupports YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, Bilibili, and more.\nDefault search: YouTube Music. Use `-p <provider>` or inline prefix e.g. `sp: blinding lights`.",
     "player": "Create an interactive player control panel with live progress.",
     "playnext": "Same as $prefixplay but adds the result to the top of the queue.",
