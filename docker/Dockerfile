@@ -19,6 +19,7 @@ RUN apt-get update && \
       ffmpeg \
       tini \
       curl \
+      ca-certificates \
     && \
     rm -rf /var/lib/apt/lists/*
 
