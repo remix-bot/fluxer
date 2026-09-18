@@ -44,8 +44,15 @@ jobs:
 
       - name: Configure kubeconfig
         run: |
+          if [ -z "${{ secrets.KUBE_CONFIG }}" ]; then
+            echo "::error::KUBE_CONFIG secret is not set. Add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
           mkdir -p "$HOME/.kube"
           echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
+
+      - name: Verify cluster connectivity
+        run: kubectl cluster-info
 
       - name: Trigger rollout restart
         run: |
