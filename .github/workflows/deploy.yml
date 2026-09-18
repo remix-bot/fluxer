@@ -36,3 +36,18 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "latest"
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
+
+      - name: Trigger rollout restart
+        run: |
+          kubectl rollout restart deployment/fluxer -n fh-nologicalan-remix
+          kubectl rollout status deployment/fluxer -n fh-nologicalan-remix --timeout=180s
