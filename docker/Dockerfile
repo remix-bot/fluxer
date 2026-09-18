@@ -22,16 +22,16 @@ RUN apt-get update && \
     && \
     rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -r remix && useradd -r -g remix -d /app -s /sbin/nologin remix
+RUN groupadd -r -g 10001 remix && useradd -r -u 10001 -g remix -d /app -s /sbin/nologin remix
 
 WORKDIR /app
 
-COPY --from=builder --chown=remix:remix /app ./
+COPY --from=builder --chown=10001:10001 /app ./
 
 RUN chmod +x docker/docker-entrypoint.sh && \
-    mkdir -p /app/storage && chown -R remix:remix /app
+    mkdir -p /app/storage && chown -R 10001:10001 /app
 
-USER remix
+USER 10001:10001
 
 EXPOSE 80
 
