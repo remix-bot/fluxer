@@ -64,7 +64,7 @@
     "player": "Create an interactive player control panel with live progress.",
     "playnext": "Same as $prefixplay but adds the result to the top of the queue.",
     "radio": "Play a radio station. Use `$prefixradio list` to browse all stations.",
-    "reload": "Reload commands, src modules, or audio modules. Leave blank to see all targets.",
+    "reload": "Reload commands. Leave blank to see all targets.",
     "remove": "Remove a specific song from the queue.",
     "resume": "Resume the playback in your voice channel.",
     "search": "Display search results for a query and pick one to play.\nSupports all providers — use inline prefix e.g. `sp: song` or `-p dz`.",
@@ -562,12 +562,11 @@
       "noFileTracked": "❌ No file tracked for `{{name}}`",
       "noBuilder": "❌ No builder returned from `{{name}}`",
       "reloaded": "✅ `{{name}}`",
-      "fileNotFound": "❌ File not found: `{{label}}`",
       "moduleError": "❌ `{{label}}`: {{error}}",
       "unknownTarget": "❌ Unknown target `{{target}}`.\nRun `$prefixreload` with no arguments to see all reloadable targets.",
       "availableTargetsTitle": "🔄 Reload — Available Targets",
       "runHint": "Run `$prefixreload <target>` or use a batch keyword:",
-      "batchKeywords": "`all` · `commands` · `src` · `audio`",
+      "batchKeywords": "`all` · `commands`",
       "resultsHeader": "✅ **{{ok}}** reloaded · ❌ **{{bad}}** failed"
     },
     "remove": {

@@ -63,7 +63,7 @@
     "player": "Erstelle ein interaktives Wiedergabe-Kontrollfeld mit Live-Fortschritt.",
     "playnext": "Wie $prefixplay, fügt das Ergebnis aber an den Anfang der Warteschlange hinzu.",
     "radio": "Spiele einen Radiosender. Nutze `$prefixradio list`, um alle Sender zu durchsuchen.",
-    "reload": "Lade Befehle, src-Module oder Audio-Module neu. Leer lassen, um alle Ziele anzuzeigen.",
+    "reload": "Lade Befehle neu. Leer lassen, um alle Ziele anzuzeigen.",
     "remove": "Entferne einen bestimmten Song aus der Warteschlange.",
     "resume": "Setze die Wiedergabe in deinem Sprachkanal fort.",
     "search": "Zeige Suchergebnisse für eine Anfrage an und wähle einen zum Abspielen.\nUnterstützt alle Anbieter — nutze Inline-Präfix wie `sp: song` oder `-p dz`.",
@@ -445,12 +445,11 @@
       "noFileTracked": "❌ Keine Datei für `{{name}}` erfasst",
       "noBuilder": "❌ Kein Builder von `{{name}}` zurückgegeben",
       "reloaded": "✅ `{{name}}`",
-      "fileNotFound": "❌ Datei nicht gefunden: `{{label}}`",
       "moduleError": "❌ `{{label}}`: {{error}}",
       "unknownTarget": "❌ Unbekanntes Ziel `{{target}}`.\nFühre `$prefixreload` ohne Argumente aus, um alle neuladbaren Ziele zu sehen.",
       "availableTargetsTitle": "🔄 Neu laden — Verfügbare Ziele",
       "runHint": "Führe `$prefixreload <Ziel>` aus oder nutze ein Stichwort:",
-      "batchKeywords": "`all` · `commands` · `src` · `audio`",
+      "batchKeywords": "`all` · `commands`",
       "resultsHeader": "✅ **{{ok}}** neu geladen · ❌ **{{bad}}** fehlgeschlagen"
     },
     "remove": {

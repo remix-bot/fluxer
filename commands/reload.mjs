@@ -1,13 +1,11 @@
 /**
  * @module commands/reload
- * @description Owner-only command to hot-reload commands, source modules, or audio modules at runtime.
+ * @description Owner-only command to hot-reload commands at runtime.
  */
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/ui/index.mjs";
-import fs from "node:fs";
-import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 /**
@@ -16,18 +14,15 @@ import { pathToFileURL } from "node:url";
  */
 export const command = new CommandBuilder()
     .setName("reload")
-    .setDescription("Reload commands, src modules, or audio modules. Leave blank to see all targets.")
+    .setDescription("Reload commands. Leave blank to see all targets.")
     .setCategory("util")
     .addStringOption(o =>
         o.setName("target")
-            .setDescription("Command/module name, or: all | commands | src | audio")
+            .setDescription("Command name, or: all | commands")
             .setRequired(false)
     )
     .setRequirement(r => r.setOwnerOnly(true));
 
-
-const __dirname = path.dirname(new URL(import.meta.url).pathname);
-const ROOT      = path.resolve(__dirname, "..");
 
 /**
  * Reload a single command by name, removing the old one and re-importing its file.
@@ -48,17 +43,37 @@ async function reloadCommand(ctx, msg, name) {
   const file = ctx.commandFiles.get(command.uid);
   if (!file)  return { ok: false, msg: ctx.t(msg, "responses.reload.noFileTracked", { name }) };
 
+  const oldRun = ctx.runnables.get(command.uid);
+
   command.subcommands.forEach(sub => ctx.runnables.delete(sub.uid));
   ctx.handler.removeCommand(command);
   ctx.runnables.delete(command.uid);
   ctx.commandFiles.delete(command.uid);
 
-  const url   = pathToFileURL(file).href + "?t=" + Date.now();
-  const cData = await import(url);
+  const restore = () => {
+    ctx.handler.addCommand(command);
+    ctx.commandFiles.set(command.uid, file);
+    if (oldRun) {
+      ctx.runnables.set(command.uid, oldRun);
+      command.subcommands.forEach(sub => ctx.runnables.set(sub.uid, oldRun));
+    }
+  };
+
+  let cData;
+  try {
+    const url = pathToFileURL(file).href + "?t=" + Date.now();
+    cData = await import(url);
+  } catch (e) {
+    restore();
+    return { ok: false, msg: ctx.t(msg, "responses.reload.moduleError", { label: name, error: e.message }) };
+  }
 
   const raw     = cData.command ?? cData.default?.command;
   const builder = typeof raw === "function" ? raw.call(ctx) : raw;
-  if (!builder) return { ok: false, msg: ctx.t(msg, "responses.reload.noBuilder", { name }) };
+  if (!builder) {
+    restore();
+    return { ok: false, msg: ctx.t(msg, "responses.reload.noBuilder", { name }) };
+  }
 
   const runFn     = cData.run ?? cData.default?.run;
   const exportDef = cData.exportDef ?? cData.export ?? cData.default?.exportDef ?? cData.default?.export;
@@ -72,41 +87,6 @@ async function reloadCommand(ctx, msg, name) {
   }
 
   return { ok: true, msg: ctx.t(msg, "responses.reload.reloaded", { name }) };
-}
-
-/**
- * Reload a single source module by re-importing its file.
- * @private
- * @async
- * @param {object} ctx - The bot (Remix) instance context.
- * @param {object} msg - The command message wrapper.
- * @param {string} filePath - Absolute path to the module file.
- * @param {string} label - Human-readable label for error messages.
- * @returns {Promise<{ ok: boolean, msg: string }>} Result with success status and message.
- */
-async function reloadModule(ctx, msg, filePath, label) {
-  if (!fs.existsSync(filePath))
-    return { ok: false, msg: ctx.t(msg, "responses.reload.fileNotFound", { label }) };
-  try {
-    await import(pathToFileURL(filePath).href + "?t=" + Date.now());
-    return { ok: true, msg: ctx.t(msg, "responses.reload.reloaded", { name: label }) };
-  } catch (e) {
-    return { ok: false, msg: ctx.t(msg, "responses.reload.moduleError", { label, error: e.message }) };
-  }
-}
-
-/**
- * List all JS/MJS module files in a subdirectory.
- * @private
- * @param {string} subdir - The subdirectory name relative to project root.
- * @returns {Array<{ file: string, label: string }>} Array of file info objects.
- */
-function allModuleFiles(subdir) {
-  const dir = path.join(ROOT, subdir);
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-      .filter(f => f.endsWith(".mjs") || f.endsWith(".js"))
-      .map(f => ({ file: path.join(dir, f), label: `${subdir}/${f}` }));
 }
 
 /**
@@ -158,21 +138,22 @@ async function showPaged(msg, title, lines, pageSize = 14) {
  * Display reload results in a paginated embed.
  * @private
  * @async
+ * @param {object} ctx - The bot (Remix) instance context.
  * @param {object} msg - The command message wrapper.
  * @param {object[]} results - Array of { ok, msg } result objects.
  * @param {string} label - Category label for the title.
  * @returns {Promise<void>}
  */
-async function showResults(msg, results, label) {
+async function showResults(ctx, msg, results, label) {
   const ok  = results.filter(r => r.ok).length;
   const bad = results.filter(r => !r.ok).length;
-  const header = `✅ **${ok}** reloaded · ❌ **${bad}** failed`;
+  const header = ctx.t(msg, "responses.reload.resultsHeader", { ok, bad });
   await showPaged(msg, `🔄 Reload — ${label}`, [header, "", ...results.map(r => r.msg)]);
 }
 
 /**
  * Run handler for the reload command.
- * Reloads commands, src modules, or audio modules based on the target option.
+ * Reloads commands based on the target option.
  *
  * @param {object} msg - The command message wrapper.
  * @param {object} data - Parsed command data containing the target option.
@@ -183,70 +164,27 @@ export async function run(msg, data) {
 
   if (!target) {
     const cmdLines = this.handler.commands.map(c => `📦 \`${c.name}\` *(command)*`);
-    const srcLines = allModuleFiles("src").map(m => `🔧 \`${m.label}\` *(src)*`);
-    const audLines = allModuleFiles("audio").map(m => `🎵 \`${m.label}\` *(audio)*`);
 
     const lines = [
       this.t(msg, "responses.reload.runHint"),
       this.t(msg, "responses.reload.batchKeywords"),
       "",
       ...cmdLines,
-      ...srcLines,
-      ...audLines,
     ];
 
     return showPaged(msg, this.t(msg, "responses.reload.availableTargetsTitle"), lines);
   }
 
-  if (target === "commands") {
+  if (target === "commands" || target === "all") {
     const results = [];
     for (const c of [...this.handler.commands]) {
       results.push(await reloadCommand(this, msg, c.name));
     }
-    return showResults(msg, results, "Commands");
-  }
-
-  if (target === "src") {
-    const results = await Promise.all(
-        allModuleFiles("src").map(m => reloadModule(this, msg, m.file, m.label))
-    );
-    return showResults(msg, results, "src/");
-  }
-
-  if (target === "audio") {
-    const results = await Promise.all(
-        allModuleFiles("audio").map(m => reloadModule(this, msg, m.file, m.label))
-    );
-    return showResults(msg, results, "audio/");
-  }
-
-  if (target === "all") {
-    const results = [];
-    for (const c of [...this.handler.commands]) {
-      results.push(await reloadCommand(this, msg, c.name));
-    }
-    for (const m of allModuleFiles("src")) {
-      results.push(await reloadModule(this, msg, m.file, m.label));
-    }
-    for (const m of allModuleFiles("audio")) {
-      results.push(await reloadModule(this, msg, m.file, m.label));
-    }
-    return showResults(msg, results, "Everything");
+    return showResults(this, msg, results, target === "all" ? "Everything" : "Commands");
   }
 
   if (this.handler.commands.some(c => c.name === target)) {
     const res = await reloadCommand(this, msg, target);
-    return msg.reply(res.msg);
-  }
-
-  const allMods = [...allModuleFiles("src"), ...allModuleFiles("audio")];
-  const mod = allMods.find(m =>
-      m.label.toLowerCase() === target ||
-      path.basename(m.file).replace(/\.m?js$/, "").toLowerCase() === target
-  );
-
-  if (mod) {
-    const res = await reloadModule(this, msg, mod.file, mod.label);
     return msg.reply(res.msg);
   }
 

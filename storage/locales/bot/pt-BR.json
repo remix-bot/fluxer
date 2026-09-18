@@ -63,7 +63,7 @@
     "player": "Crie um painel de controle interativo com progresso ao vivo.",
     "playnext": "Igual ao $prefixplay, mas adiciona o resultado ao topo da fila.",
     "radio": "Toque uma estação de rádio. Use `$prefixradio list` para ver todas as estações.",
-    "reload": "Recarregue comandos, módulos src ou módulos de áudio. Deixe vazio para ver todos os alvos.",
+    "reload": "Recarregue comandos. Deixe vazio para ver todos os alvos.",
     "remove": "Remova uma música específica da fila.",
     "resume": "Retome a reprodução no seu canal de voz.",
     "search": "Exiba resultados de busca para uma consulta e escolha uma para tocar.\nSuporta todos os provedores — use prefixo inline como `sp: música` ou `-p dz`.",
@@ -445,12 +445,11 @@
       "noFileTracked": "❌ Nenhum arquivo rastreado para `{{name}}`",
       "noBuilder": "❌ Nenhum builder retornado de `{{name}}`",
       "reloaded": "✅ `{{name}}`",
-      "fileNotFound": "❌ Arquivo não encontrado: `{{label}}`",
       "moduleError": "❌ `{{label}}`: {{error}",
       "unknownTarget": "❌ Alvo desconhecido `{{target}}`.\nExecute `$prefixreload` sem argumentos para ver todos os alvos recarregáveis.",
       "availableTargetsTitle": "🔄 Recarregar — Alvos Disponíveis",
       "runHint": "Execute `$prefixreload <alvo>` ou use uma palavra-chave em lote:",
-      "batchKeywords": "`all` · `commands` · `src` · `audio`",
+      "batchKeywords": "`all` · `commands`",
       "resultsHeader": "✅ **{{ok}}** recarregados · ❌ **{{bad}}** falharam"
     },
     "remove": {

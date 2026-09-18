@@ -64,7 +64,7 @@
     "player": "Canlı ilerleme çubuğlu etkileşimli bir oynatıcı kontrol paneli oluşturun.",
     "playnext": "$prefixplay ile aynıdır, ancak sonucu kuyruğun en üstüne ekler.",
     "radio": "Bir radyo istasyonu çalın. Tüm istasyonları görüntülemek için `$prefixradio list` kullanın.",
-    "reload": "Komutları, kaynak modüllerini veya ses modüllerini yeniden yükleyin. Tüm hedefleri görmek için boş bırakın.",
+    "reload": "Komutları yeniden yükleyin. Tüm hedefleri görmek için boş bırakın.",
     "remove": "Kuyruktan belirli bir şarkıyı kaldırın.",
     "resume": "Ses kanalınızdaki çalmayı devam ettirin.",
     "search": "Bir sorgu için arama sonuçlarını görüntüleyin ve çalmak için birini seçin.\nTüm sağlayıcıları destekler — `sp: şarkı` gibi satır içi önek veya `-p dz` kullanın.",
@@ -551,12 +551,11 @@
       "noFileTracked": "❌ `{{name}}` için izlenen dosya yok",
       "noBuilder": "❌ `{{name}}`'den döndürülen oluşturucu yok",
       "reloaded": "✅ `{{name}}`",
-      "fileNotFound": "❌ Dosya bulunamadı: `{{label}}`",
       "moduleError": "❌ `{{label}}`: {{error}}",
       "unknownTarget": "❌ Bilinmeyen hedef `{{target}}`.\nTüm yeniden yüklenebilir hedefleri görmek için `$prefixreload`'u argüman olmadan çalıştırın.",
       "availableTargetsTitle": "🔄 Yeniden Yükle — Kullanılabilir Hedefler",
       "runHint": "`$prefixreload <hedef>` çalıştırın veya bir toplu anahtar kelime kullanın:",
-      "batchKeywords": "`all` · `commands` · `src` · `audio`",
+      "batchKeywords": "`all` · `commands`",
       "resultsHeader": "✅ **{{ok}}** yeniden yüklendi · ❌ **{{bad}}** başarısız"
     },
     "remove": {
