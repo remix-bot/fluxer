@@ -52,7 +52,7 @@ jobs:
           echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
 
       - name: Verify cluster connectivity
-        run: kubectl cluster-info
+        run: kubectl get deployment fluxer -n fh-nologicalan-remix
 
       - name: Trigger rollout restart
         run: |
