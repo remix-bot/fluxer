@@ -7,7 +7,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json* ./
 
-RUN npm ci --omit=dev 2>/dev/null || npm install --omit=dev
+RUN npm ci --omit=dev --legacy-peer-deps 2>/dev/null || npm install --omit=dev --legacy-peer-deps
 
 COPY . .
 
