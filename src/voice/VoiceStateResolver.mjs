@@ -3,12 +3,45 @@
 import { logger } from "../core/Logger.mjs";
 
 /**
+ * Decide whether a voice-state user is a bot, using every available signal:
+ * explicit self-bot id, the state's own member payload, the guild member
+ * cache, and the global user cache. Never trusts a single missing flag —
+ * a voice state without a `member.user` payload used to be classified as
+ * human, which made third-party bots count toward vote-skip thresholds.
+ * @param {object} opts
+ * @param {string} opts.userId
+ * @param {object} [opts.member] - Member object from the voice state payload (if any).
+ * @param {object} [opts.guild] - Cached guild object (for the member cache fallback).
+ * @param {object} [opts.client] - Client (for the global user cache fallback).
+ * @param {string} [opts.botId] - This bot's own user id.
+ * @returns {boolean}
+ */
+export function resolveIsBotUser({ userId, member, guild, client, botId }) {
+  const id = String(userId ?? "");
+  if (!id) return false;
+  if (botId && id === String(botId)) return true;
+
+  const candidates = [
+    member?.user,
+    guild?.members?.get?.(id)?.user,
+    client?.users?.cache?.get?.(id) ?? client?.users?.get?.(id),
+  ];
+  for (const user of candidates) {
+    if (user && typeof user === "object" && typeof user.bot === "boolean") return user.bot;
+  }
+  return false;
+}
+
+/**
  * Iterate over a guild's voice states, normalising different data shapes.
  * Yields objects with `{ userId, channelId, isBot }` for each member in a voice channel.
  * @param {object} guild - guild object with a `voice_states` property.
+ * @param {object} [classifier] - Optional extras for bot detection (see resolveIsBotUser).
+ * @param {object} [classifier.client]
+ * @param {string} [classifier.botId]
  * @yields {{ userId: string, channelId: string, isBot: boolean }}
  */
-export function* iterateVoiceStates(guild) {
+export function* iterateVoiceStates(guild, classifier = {}) {
   if (!guild) return;
 
   const voiceStates = guild.voice_states;
@@ -37,7 +70,13 @@ export function* iterateVoiceStates(guild) {
     if (!userId || !channelId) continue;
 
     const member = guild.members?.get?.(userId);
-    const isBot  = member?.user?.bot ?? false;
+    const isBot  = resolveIsBotUser({
+      userId,
+      member,
+      guild,
+      client: classifier.client,
+      botId:  classifier.botId,
+    });
 
     yield { userId: String(userId), channelId: String(channelId), isBot };
   }
@@ -58,7 +97,6 @@ export function* iterateVoiceStates(guild) {
  */
 export function hasHumansInChannel({ guildId, channelId, client, voiceCache, observedVoiceUsers, room, botId }) {
   if (!channelId || !guildId) return false;
-
 
   if (voiceCache && typeof voiceCache.hasHumansInChannel === "function") {
     if (voiceCache.hasHumansInChannel(guildId, channelId)) return true;
@@ -90,7 +128,7 @@ export function hasHumansInChannel({ guildId, channelId, client, voiceCache, obs
     try {
       const guild = client.guilds?.get?.(guildId);
       if (guild) {
-        for (const vs of iterateVoiceStates(guild)) {
+        for (const vs of iterateVoiceStates(guild, { client, botId })) {
           if (vs.channelId === channelId && !vs.isBot) return true;
         }
       }
@@ -124,9 +162,10 @@ export function hasHumansInChannel({ guildId, channelId, client, voiceCache, obs
  * @param {object} [opts.client] - client with `guilds`.
  * @param {VoiceStateCache} [opts.voiceCache]
  * @param {Map} [opts.observedVoiceUsers]
+ * @param {string} [opts.botId] - This bot's own user id.
  * @returns {number}
  */
-export function countHumansInChannel({ guildId, channelId, client, voiceCache, observedVoiceUsers }) {
+export function countHumansInChannel({ guildId, channelId, client, voiceCache, observedVoiceUsers, botId }) {
   if (!channelId || !guildId) return 0;
 
   if (voiceCache && typeof voiceCache.getHumanCount === "function") {
@@ -138,7 +177,7 @@ export function countHumansInChannel({ guildId, channelId, client, voiceCache, o
       const guild = client.guilds?.get?.(guildId);
       if (guild) {
         const users = new Set();
-        for (const vs of iterateVoiceStates(guild)) {
+        for (const vs of iterateVoiceStates(guild, { client, botId })) {
           if (vs.channelId === channelId && !vs.isBot) users.add(vs.userId);
         }
         return users.size;

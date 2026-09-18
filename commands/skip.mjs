@@ -66,6 +66,7 @@ export async function run(message) {
     guildId,
     channelId,
     client: this.client,
+    botId: this.client?.user?.id,
     voiceCache: this.voiceCache,
     observedVoiceUsers: this.observedVoiceUsers,
   });

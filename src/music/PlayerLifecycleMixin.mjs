@@ -93,7 +93,8 @@ const PlayerLifecycleMixin = {
 
 
     if (!channelId && guild) {
-      for (const vs of iterateVoiceStates(guild)) {
+      const lcClient = this.commands?.client;
+      for (const vs of iterateVoiceStates(guild, { client: lcClient, botId: lcClient?.user?.id })) {
         if (vs.userId === String(userId) && !vs.isBot) {
           channelId = vs.channelId;
           break;

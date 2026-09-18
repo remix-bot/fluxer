@@ -13,6 +13,7 @@
 import { logger } from "../../core/Logger.mjs";
 import { get247ChannelMode, isPlayerConnectionDead } from "../../utils/Helpers247.mjs";
 import { VoiceStateCache } from "../VoiceStateCache.mjs";
+import { resolveIsBotUser } from "../VoiceStateResolver.mjs";
 import { cleanId } from "../../utils/Utils.mjs";
 
 /**
@@ -35,7 +36,13 @@ const VoiceStateRouting = {
 
     const newChannelId = data?.channel_id ?? null;
     const vsuGuildId   = data?.guild_id;
-    const isBot        = data?.member?.user?.bot ?? null;
+    const isBot        = resolveIsBotUser({
+      userId,
+      member: data?.member,
+      guild:  client.guilds?.get?.(vsuGuildId),
+      client,
+      botId:  client.user?.id,
+    });
 
 
     const prevEntry    = this.findPrevVoiceStateEntry(userId, vsuGuildId);
@@ -79,7 +86,13 @@ const VoiceStateRouting = {
       const channelId = vs.channel_id;
       if (!userId || !channelId) continue;
 
-      const isBot = vs.member?.user?.bot ?? (userId === botId);
+      const isBot = resolveIsBotUser({
+        userId,
+        member: vs.member,
+        guild:  client.guilds?.get?.(guildId),
+        client,
+        botId,
+      });
 
       remix.voiceCache.updateUser({ guildId, userId, channelId, isBot });
       if (isBot) {

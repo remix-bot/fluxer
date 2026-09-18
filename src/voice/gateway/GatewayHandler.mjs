@@ -13,7 +13,7 @@ import { ServerSettings } from "../../db/Settings.mjs";
 import { get247ChannelMode, remove247ChannelMode } from "../../utils/Helpers247.mjs";
 import { cleanId } from "../../utils/Utils.mjs";
 import * as ShardingUtils from "../../utils/ShardingUtils.mjs";
-import { iterateVoiceStates, hasHumansInChannel, getChannelsWithHumans } from "../VoiceStateResolver.mjs";
+import { iterateVoiceStates, hasHumansInChannel, getChannelsWithHumans, resolveIsBotUser } from "../VoiceStateResolver.mjs";
 import { applyMixins } from "../../utils/mixins.mjs";
 import VoiceStateRouting from "./VoiceStateRouting.mjs";
 import GuildSync from "./GuildSync.mjs";
@@ -142,6 +142,7 @@ class GatewayHandler {
       if (!remix._rawGatewayHandler) {
         remix._rawGatewayHandler = (data) => {
           try {
+            const client = remix.client;
             if (typeof data === "string" && !RAW_GATEWAY_INTEREST.test(data)) return;
             const payload = typeof data === "string" ? JSON.parse(data) : data;
 
@@ -172,7 +173,7 @@ class GatewayHandler {
                     const userId    = state.user_id;
                     const channelId = state.channel_id;
                     if (!userId || !channelId) continue;
-                    const isBot  = state.member?.user?.bot ?? false;
+                    const isBot  = resolveIsBotUser({ userId, member: state.member, guild: client.guilds?.get?.(gId), client, botId: client.user?.id });
                     remix.voiceCache.updateUser({ guildId: gId, userId, channelId, isBot });
                   }
                 }
@@ -192,7 +193,7 @@ class GatewayHandler {
                   const userId    = state.user_id;
                   const channelId = state.channel_id;
                   if (!userId || !channelId) continue;
-                  const isBot  = state.member?.user?.bot ?? false;
+                  const isBot  = resolveIsBotUser({ userId, member: state.member, guild: client.guilds?.get?.(gId), client, botId: client.user?.id });
                   remix.voiceCache.updateUser({ guildId: gId, userId, channelId, isBot });
                 }
               }
@@ -207,7 +208,7 @@ class GatewayHandler {
               const userId    = d?.user_id;
               const channelId = d?.channel_id ?? null;
               const guildId   = d?.guild_id;
-              const isBot     = d?.member?.user?.bot ?? false;
+              const isBot     = resolveIsBotUser({ userId, member: d?.member, guild: client.guilds?.get?.(guildId), client, botId: client.user?.id });
               if (!userId) return;
               if (channelId) {
                 remix.voiceCache.updateUser({ guildId, userId, channelId, isBot });
@@ -336,13 +337,13 @@ class GatewayHandler {
 
       if (voiceStatesRaw) {
         const newUserIds = new Set();
-        for (const vs of iterateVoiceStates(guild)) {
+        for (const vs of iterateVoiceStates(guild, { client: remix.client, botId: remix.client?.user?.id })) {
           newUserIds.add(vs.userId);
         }
         remix.voiceCache.purgeUsersInGuild(guildId, newUserIds);
       }
       if (voiceStatesRaw) {
-        for (const vs of iterateVoiceStates(guild)) {
+        for (const vs of iterateVoiceStates(guild, { client: remix.client, botId: remix.client?.user?.id })) {
           remix.voiceCache.updateUser({ guildId, userId: vs.userId, channelId: vs.channelId, isBot: vs.isBot });
         }
       }

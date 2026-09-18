@@ -16,6 +16,7 @@ import { Locale } from "./Locale.mjs";
 import { CommandHandler, CommandLoader, PrefixManager } from "../commands/index.mjs";
 import { MessageHandler, HelpCommand, setGlobalColor } from "../ui/index.mjs";
 import { cleanId } from "../utils/Utils.mjs";
+import { resolveIsBotUser } from "../voice/VoiceStateResolver.mjs";
 import * as ShardingUtils from "../utils/ShardingUtils.mjs";
 import { RemoteSettingsManager } from "../db/Settings.mjs";
 import { PlayerStateStore } from "../db/PlayerStateStore.mjs";
@@ -473,8 +474,13 @@ class Remix {
                 const stateChannel = cleanId(state?.channelId ?? state?.channel_id);
                 if (stateChannel === cleanChanId) {
                   const stateUserId = state?.userId ?? state?.user_id ?? state?.id;
-                  const member = guild?.members?.get?.(stateUserId);
-                  const isBot = member?.user?.bot ?? state?.member?.user?.bot ?? false;
+                  const isBot = resolveIsBotUser({
+                    userId: stateUserId,
+                    member: state?.member,
+                    guild,
+                    client: this.client,
+                    botId:  this.client?.user?.id,
+                  });
                   if (!isBot) {
                     hasHuman = true;
                     break;

@@ -14,7 +14,7 @@ import { getVoiceManager } from "@fluxerjs/voice";
 import { logger } from "../../core/Logger.mjs";
 import { REQUIRED_BOT_PERMISSIONS } from "../../ui/index.mjs";
 import { cleanId } from "../../utils/Utils.mjs";
-import { iterateVoiceStates } from "../VoiceStateResolver.mjs";
+import { iterateVoiceStates, resolveIsBotUser } from "../VoiceStateResolver.mjs";
 
 /**
  * @type {object}
@@ -115,7 +115,7 @@ const GuildSync = {
             } else {
               const guild = client.guilds.get(cleanGuildId) ?? client.guilds.get(guildId);
               const member = guild?.members?.get?.(userId);
-              const isBot = member?.user?.bot ?? false;
+              const isBot = resolveIsBotUser({ userId, member, guild, client, botId });
               remix.voiceCache.updateUser({ guildId: cleanGuildId, userId, channelId, isBot });
               if (isBot) totalBots++;
               else totalHumans++;
@@ -137,7 +137,7 @@ const GuildSync = {
     }
 
     for (const [gId, guild] of client.guilds) {
-      for (const vs of iterateVoiceStates(guild)) {
+      for (const vs of iterateVoiceStates(guild, { client, botId: client.user?.id })) {
         remix.voiceCache.updateUser({ guildId: gId, userId: vs.userId, channelId: vs.channelId, isBot: vs.isBot });
       }
     }
@@ -175,7 +175,7 @@ const GuildSync = {
             } else {
               const guild = client.guilds.get(cleanGuild) ?? client.guilds.get(guildId);
               const member = guild?.members?.get?.(userId);
-              const isBot = member?.user?.bot ?? false;
+              const isBot = resolveIsBotUser({ userId, member, guild, client, botId });
               if (isBot) {
                 remix.voiceCache.updateUser({ guildId: cleanGuild, userId, channelId: cleanChannel, isBot: true });
               } else {
@@ -210,7 +210,7 @@ const GuildSync = {
           `[Reseed] Guild ${cleanGuild} not in cache — cannot reseed voice states.`
       );
     } else {
-      for (const vs of iterateVoiceStates(guild)) {
+      for (const vs of iterateVoiceStates(guild, { client, botId })) {
         if (vs.isBot) continue;
         if (vs.channelId === cleanChannel) {
           remix.voiceCache.updateUser({ guildId: cleanGuild, userId: vs.userId, channelId: vs.channelId, isBot: false });
