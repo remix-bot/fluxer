@@ -29,6 +29,7 @@ import { LastFmManager } from "../services/lastfm/LastFmManager.mjs";
 import { FluxerListManager } from "../services/FluxerListManager.mjs";
 import { TrackOptionsManager } from "../services/TrackOptionsManager.mjs";
 import { configureBilibili } from "../music/bilibili/index.mjs";
+import { configureAudio } from "../music/audio/AudioSettings.mjs";
 import { applyMixins } from "../utils/mixins.mjs";
 import BotVoiceMixin from "./BotVoiceMixin.mjs";
 
@@ -124,6 +125,10 @@ class Remix {
       advertiseHost: config.bilibili?.advertiseHost ?? null,
       remoteProxy:   config.bilibili?.remoteProxy   ?? null,
       remoteSecret:  config.bilibili?.remoteSecret  ?? null,
+    });
+
+    configureAudio({
+      allowLoadstream: config.audio?.allowLoadstream ?? false,
     });
 
     this.locale = new Locale(typeof config.prefix === "string" && config.prefix ? config.prefix : "%");

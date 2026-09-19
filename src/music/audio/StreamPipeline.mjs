@@ -2,8 +2,8 @@
  * @module src/music/audio/StreamPipeline
  * @description Stream pipeline concern for {@link FluxerAudioBridge}:
  * end-of-playback waiting, magic-byte routing, the in-process PCM -> Opus ->
- * WebM pipeline, Ogg/Opus remuxing, trackstream/loadstream URL handling and
- * Lavalink URL resolution.
+ * WebM pipeline, Ogg/Opus remuxing, positioned trackstream URL streaming,
+ * trackstream/loadstream URL handling and Lavalink URL resolution.
  *
  * These methods are applied onto the FluxerAudioBridge class prototype via
  * {@link module:src/utils/mixins.applyMixins} — `this` is a
@@ -12,6 +12,7 @@
 
 import { logger } from "../../core/Logger.mjs";
 import { WebMOpusMuxer, OPUS_FRAME_MS } from "./WebMOpusMuxer.mjs";
+import { StreamPositioner } from "./StreamPositioner.mjs";
 import prismMedia from "prism-media";
 
 const { Encoder: PrismOpusEncoder, OggDemuxer: PrismOggDemuxer } = prismMedia.opus;
@@ -58,6 +59,13 @@ const StreamPipeline = {
 
       const stream = this._stream;
       if (stream) {
+        if (stream.readableEnded || stream.destroyed) {
+          // Stream already finished before the wait started (very short
+          // sources, or the consumer drained it during conn.play setup).
+          this._endResolve = null;
+          this._endReject = null;
+          return resolve();
+        }
         const onEnd = () => {
           if (durationMs > 0 && this._playing && !this._stopped) return;
           resolve();
@@ -84,19 +92,59 @@ const StreamPipeline = {
 
   /**
    * Simple timed wait used by the trackstream passthrough route (no local
-   * pipeline to watch). Resolves early if stopped.
+   * pipeline to watch). Resolves early when stop()/cleanup clears the timer —
+   * the resolve handle lives on the bridge (`_durationResolve`) so a stop can
+   * never leave this promise pending forever.
    * @param {number} durationMs
    * @returns {Promise<void>}
    * @private
    */
   _waitDuration(durationMs) {
     return new Promise((resolve) => {
+      this._durationResolve = resolve;
       const timer = setTimeout(() => {
         this._durationTimer = null;
+        this._durationResolve = null;
         resolve();
       }, durationMs);
       this._durationTimer = timer;
     });
+  },
+
+  /**
+   * Open a direct media URL (typically the NodeLink trackstream result) as a
+   * bot-side stream and — for seeks — drop leading WebM clusters / Ogg pages
+   * so playback starts near the target position without re-encoding
+   * (StreamPositioner). Also used with seekMs = 0 whenever the caller wants a
+   * real stream handle (unknown-duration tracks) instead of zero-copy URL
+   * passthrough. Registers the HTTP stream on the bridge for stop/cleanup.
+   * @param {string} url - Direct media URL to fetch.
+   * @param {number} [seekMs=0] - Target position in milliseconds (0 = start).
+   * @returns {Promise<{stream: Transform, kind: "webm"|"ogg"}>}
+   * @throws {Error} When the URL does not serve WebM or Ogg (nothing the
+   *   in-process pipeline can position or play without decoding).
+   * @private
+   */
+  async _openPositionedStream(url, seekMs = 0) {
+    const loaded = await this._httpRequestStream(url);
+    this._sourceStream = loaded.stream;
+    this._sourceReq = loaded.req || null;
+
+    const routed = await this._routeByMagic(loaded.stream);
+    if (routed.kind !== "webm" && routed.kind !== "ogg") {
+      loaded.stream.destroy();
+      this._sourceStream = null;
+      this._sourceReq = null;
+      throw new Error(
+          "Trackstream URL is not WebM/Ogg (" + (loaded.inputFormat || routed.kind) + ") — " +
+          "in-process positioning supports WebM/Opus and Ogg/Opus only"
+      );
+    }
+
+    const positioner = new StreamPositioner({ kind: routed.kind, seekMs });
+    const out = routed.stream.pipe(positioner);
+    logger.player("[AudioBridge] Positioned stream open (kind=" + routed.kind + ", seek=" + seekMs + "ms)");
+    return { stream: out, kind: routed.kind };
   },
 
   /**

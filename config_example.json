@@ -45,6 +45,10 @@
     "requestTimeout": 60000,
     "Comment": "requestTimeout: ms before a NodeLink HTTP request is aborted. Default: 60000 (60s). Raise if you see 'NodeLink request timeout' errors. All audio sources (Spotify, Deezer, Apple Music, etc.) are resolved by NodeLink, so configure source credentials in nodelink.config.json, not here."
   },
+  "audio": {
+    "allowLoadstream": false,
+    "Comment": "Playback runs on NodeLink's /v4/trackstream endpoint only: WebM/Opus zero-re-encode passthrough, stale URLs auto-retried with a fresh resolve, and seeks handled in-process by the bot (no FFmpeg anywhere). Leave allowLoadstream = false unless you specifically need the legacy /v4/loadstream route. Set it to true only if your audio node exposes /v4/loadstream — it re-enables: server-side audio filters (bassboost, nightcore, ...), MP3/AAC/PCM sources (radio stations, Bilibili's AAC audio), and NodeLink-side seeking. loadstream is what required FFmpeg in the past."
+  },
   "bilibili": {
     "enabled": true,
     "bind": "127.0.0.1",

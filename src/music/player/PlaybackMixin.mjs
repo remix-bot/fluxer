@@ -14,6 +14,7 @@ import { Utils, cleanId } from "../../utils/Utils.mjs";
 import { logger } from "../../core/Logger.mjs";
 import meta from "../probe.mjs";
 import { getBilibiliStreamUrl } from "../bilibili/index.mjs";
+import { isLoadstreamEnabled } from "../audio/AudioSettings.mjs";
 
 /**
  * @type {object}
@@ -477,7 +478,9 @@ const PlaybackMixin = {
   /**
    * @async Apply an audio filter to playback. Stores filter metadata for
    * dashboard tracking; filters are applied server-side by NodeLink on the
-   * next track.
+   * next track. Requires the loadstream route (config.json ->
+   * audio.allowLoadstream) — NodeLink server-side effects cannot run when the
+   * bot is in trackstream-only mode, so activation is rejected with a reason.
    * @this {import('./Player.mjs').Player}
    * @param {object} filterPayload
    * @param {object|null} [filterMeta=null]
@@ -486,6 +489,14 @@ const PlaybackMixin = {
   async applyFilter(filterPayload, filterMeta = null) {
     if (!this._guildId) {
       return { ok: false, reason: "Player not bound to a guild." };
+    }
+
+    if (filterMeta && !isLoadstreamEnabled()) {
+      logger.warn("[Player] applyFilter rejected — loadstream route disabled (audio.allowLoadstream), filters are NodeLink server-side effects");
+      return {
+        ok: false,
+        reason: "filters need the NodeLink loadstream route — set audio.allowLoadstream to true in config.json; playback is unfiltered in trackstream mode",
+      };
     }
 
     const current = this.queue.getCurrent();
