@@ -63,11 +63,27 @@ function isLastFmUserNotFound(err) {
   return /user not found/i.test(String(err?.message ?? ""));
 }
 
+/**
+ * Check whether an error means the stored Last.fm link is unrecoverable —
+ * the linked account no longer exists or its session was revoked. Deliberately
+ * distinct from transient failures (timeouts, 5xx, network errors), which must
+ * never trigger an unlink.
+ * @param {Error} err
+ * @returns {boolean}
+ */
+function isLastFmFatalLinkError(err) {
+  if (isLastFmUserNotFound(err)) return true;
+  const msg = String(err?.message ?? "");
+  return /Last\.fm error 4:/.test(msg) || /authentication failed/i.test(msg);
+}
+
 /** @type {Set<string>} @description Users already warned about as stale (dedup for background flows). */
 const _staleUserWarned = new Set();
 
 /**
- * Report a stale linked user only once per bot+user pair (per process).
+ * Report a stale linked user only once per bot+user pair (per process) and
+ * kick a fire-and-forget recovery: refresh the stored username when the
+ * account was renamed, or unlink the dead binding when the account is gone.
  * @param {object} manager - LastFmManager instance (used for botId scoping).
  * @param {string} userId
  * @returns {boolean} True the first time this user is reported.
@@ -77,7 +93,22 @@ function noteStaleUser(manager, userId) {
   if (_staleUserWarned.has(key)) return false;
   if (_staleUserWarned.size >= 1000) _staleUserWarned.clear();
   _staleUserWarned.add(key);
+  try {
+    const recovery = manager?.recoverStaleUser?.(String(userId));
+    if (recovery && typeof recovery.catch === "function") recovery.catch(() => {});
+  } catch (_) { }
   return true;
+}
+
+/**
+ * Forget the stale-user flag for a user — called when a link is (re-)saved so
+ * future stale detections warn and recover again, and after each recovery
+ * attempt so transient failures are retried on the next detection.
+ * @param {object} manager - LastFmManager instance (used for botId scoping).
+ * @param {string} userId
+ */
+function clearStaleUserFlag(manager, userId) {
+  _staleUserWarned.delete(`${manager?.botId ?? ""}:${userId}`);
 }
 
 /** @private Make an authenticated Last.fm API call. @async @param {object} params @param {string} apiSecret @param {boolean} [post=false] @returns {Promise<object>} @throws {LastFmApiError} On HTTP or Last.fm API error. */
@@ -121,4 +152,4 @@ async function apiCall(params, apiSecret, post = false) {
   return data;
 }
 
-export { BASE_URL, normalizeTrackText, buildSignature, apiCall, LastFmApiError, isLastFmUserNotFound, noteStaleUser };
+export { BASE_URL, normalizeTrackText, buildSignature, apiCall, LastFmApiError, isLastFmUserNotFound, isLastFmFatalLinkError, noteStaleUser, clearStaleUserFlag };

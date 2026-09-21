@@ -7,7 +7,7 @@
  */
 
 import { logger } from "../../core/Logger.mjs";
-import { apiCall } from "./constants.mjs";
+import { apiCall, clearStaleUserFlag, isLastFmFatalLinkError } from "./constants.mjs";
 
 /**
  * @type {object}
@@ -68,7 +68,55 @@ const UserStoreMixin = {
       logger.warn("[LastFm] Stats update warning:", e?.message);
     }
 
+    clearStaleUserFlag(this, userId);
+
     return data;
+  },
+
+  /**
+   * @private @async Self-heal a stale link detected by a background flow: if
+   * the linked account was renamed, refresh the stored username through the
+   * still-valid session; if the account is gone or the session was revoked,
+   * remove the dead binding so background flows stop retrying until the user
+   * re-links. Transient API/network failures keep the link untouched and are
+   * retried on the next stale detection.
+   * @param {string} userId
+   * @returns {Promise<string|null>} The refreshed username, or null when the link was removed or nothing is linked.
+   */
+  async recoverStaleUser(userId) {
+    const id = String(userId);
+    const user = await this.getUser(id);
+    if (!user?.sessionKey) return null;
+
+    try {
+      const data = await apiCall(
+        { method: "user.getinfo", api_key: this.apiKey, sk: user.sessionKey },
+        this.apiSecret
+      );
+      const freshName = String(data?.user?.name ?? "").trim();
+      if (!freshName) throw new Error("Last.fm returned no user name");
+      if (freshName === user.username) throw new Error("Last.fm session still resolves to the missing name");
+
+      const pool = await this._getPool();
+      const f = this._botIdFilter();
+      await pool.execute(
+        `UPDATE lastfm_users SET username = ? WHERE user_id = ?${f.where}`,
+        [freshName, id, ...f.params]
+      );
+      this._userCache.set(id, { ...user, username: freshName });
+      logger.settings(`[LastFm] Re-linked ${id} to renamed Last.fm account "${freshName}"`);
+      return freshName;
+    } catch (e) {
+      if (!isLastFmFatalLinkError(e)) {
+        logger.warn(`[LastFm] Stale-link recovery for ${id} failed (link kept): ${e?.message}`);
+        return null;
+      }
+      try { await this.removeUser(id); } catch (_) { }
+      logger.warn(`[LastFm] Auto-unlinked stale Last.fm account for ${id}: ${e?.message ?? "unknown error"} (re-link required)`);
+      return null;
+    } finally {
+      clearStaleUserFlag(this, id);
+    }
   },
 
   /** @async Remove a user's Last.fm session from cache and DB. @param {string} userId */

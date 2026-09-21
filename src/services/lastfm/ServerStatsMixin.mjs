@@ -47,7 +47,7 @@ const ServerStatsMixin = {
           } catch (e) {
               if (isLastFmUserNotFound(e)) {
                 if (noteStaleUser(this, uid)) {
-                  logger.warn(`[LastFm] Skipping ${uid}: Last.fm user not found (account renamed or deleted? re-link required)`);
+                  logger.warn(`[LastFm] Skipping ${uid}: Last.fm user not found (account renamed or deleted? attempting auto-recovery)`);
                 }
                 return null;
               }
@@ -106,7 +106,7 @@ const ServerStatsMixin = {
           } catch (e) {
               if (isLastFmUserNotFound(e)) {
                 if (noteStaleUser(this, uid)) {
-                  logger.warn(`[LastFm] Skipping ${uid}: Last.fm user not found (account renamed or deleted? re-link required)`);
+                  logger.warn(`[LastFm] Skipping ${uid}: Last.fm user not found (account renamed or deleted? attempting auto-recovery)`);
                 }
                 return null;
               }
@@ -165,7 +165,7 @@ const ServerStatsMixin = {
           } catch (e) {
               if (isLastFmUserNotFound(e)) {
                 if (noteStaleUser(this, uid)) {
-                  logger.warn(`[LastFm] Skipping ${uid}: Last.fm user not found (account renamed or deleted? re-link required)`);
+                  logger.warn(`[LastFm] Skipping ${uid}: Last.fm user not found (account renamed or deleted? attempting auto-recovery)`);
                 }
                 return null;
               }
@@ -487,7 +487,7 @@ const ServerStatsMixin = {
           } catch (e) {
               if (isLastFmUserNotFound(e)) {
                 if (noteStaleUser(this, uid)) {
-                  logger.warn(`[LastFm] Skipping ${uid}: Last.fm user not found (account renamed or deleted? re-link required)`);
+                  logger.warn(`[LastFm] Skipping ${uid}: Last.fm user not found (account renamed or deleted? attempting auto-recovery)`);
                 }
                 return null;
               }

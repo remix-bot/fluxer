@@ -38,7 +38,7 @@ const ScrobblingMixin = {
     } catch (err) {
       if (isLastFmUserNotFound(err)) {
         if (noteStaleUser(this, userId)) {
-          logger.warn(`[LastFm] Now-playing updates paused for ${userId}: Last.fm user not found (account renamed or deleted? re-link required)`);
+          logger.warn(`[LastFm] Now-playing updates paused for ${userId}: Last.fm user not found (account renamed or deleted? attempting auto-recovery)`);
         }
         return;
       }
@@ -73,7 +73,7 @@ const ScrobblingMixin = {
     } catch (err) {
       if (isLastFmUserNotFound(err)) {
         if (noteStaleUser(this, userId)) {
-          logger.warn(`[LastFm] Scrobbling paused for ${userId}: Last.fm user not found (account renamed or deleted? re-link required)`);
+          logger.warn(`[LastFm] Scrobbling paused for ${userId}: Last.fm user not found (account renamed or deleted? attempting auto-recovery)`);
         }
         return;
       }
@@ -102,7 +102,7 @@ const ScrobblingMixin = {
     } catch (e) {
       if (isLastFmUserNotFound(e)) {
         if (noteStaleUser(this, userId)) {
-          logger.warn(`[LastFm] Scrobble count sync skipped for ${userId}: Last.fm user not found (account renamed or deleted? re-link required)`);
+          logger.warn(`[LastFm] Scrobble count sync skipped for ${userId}: Last.fm user not found (account renamed or deleted? attempting auto-recovery)`);
         }
         return 0;
       }
