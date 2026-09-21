@@ -7,8 +7,11 @@
 
 import { logger } from "./src/core/Logger.mjs";
 import Remix from "./src/core/Bot.mjs";
+import { initErrorChannel, reportCrash } from "./src/core/ErrorChannel.mjs";
 
 const remix = new Remix();
+
+initErrorChannel({ config: remix.config, client: remix.client });
 
 /**
  * Check whether an error is a known-ignorable WebSocket transport crash from
@@ -83,10 +86,11 @@ const WS_CRASH_LOG_COOLDOWN = 30_000;
 process.on("unhandledRejection", (reason, p) => {
   if (reason?.message?.includes("AudioSource is closed")) return;
   logger.error("[Error_Handling] Unhandled Rejection/Catch");
-  logger.error("Reason:", reason, p);
+  logger.error("[Error_Handling] Reason:", reason, p);
+  reportCrash("Unhandled Rejection", reason, { fatal: false });
 });
 
-process.on("uncaughtException", (err, origin) => {
+process.on("uncaughtException", async (err, origin) => {
   if (isIgnorableWsCrash(err)) {
     const now = Date.now();
     if (now - _lastWsCrashLog > WS_CRASH_LOG_COOLDOWN) {
@@ -120,7 +124,8 @@ process.on("uncaughtException", (err, origin) => {
     return;
   }
   logger.error("[Error_Handling] Uncaught Exception/Catch");
-  logger.error("Error:", err, origin);
+  logger.error("[Error_Handling] Error:", err, origin);
+  await reportCrash("Uncaught Exception — bot is restarting", err, { fatal: true });
   process.exit(1);
 });
 
@@ -130,7 +135,8 @@ process.on("uncaughtExceptionMonitor", (err, origin) => {
   if (isBenignStreamAbortRace(err)) return;
   if (isBenignTransportError(err)) return;
   logger.error("[Error_Handling] Uncaught Exception/Catch (MONITOR)");
-  logger.error("Error:", err, origin);
+  logger.error("[Error_Handling] Error:", err, origin);
+  reportCrash("Uncaught Exception (MONITOR)", err, { fatal: false });
 });
 
 /**
