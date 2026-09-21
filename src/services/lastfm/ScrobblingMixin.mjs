@@ -7,7 +7,7 @@
  */
 
 import { logger } from "../../core/Logger.mjs";
-import { apiCall } from "./constants.mjs";
+import { apiCall, isLastFmUserNotFound, noteStaleUser } from "./constants.mjs";
 
 /**
  * @type {object}
@@ -36,6 +36,12 @@ const ScrobblingMixin = {
         true
       );
     } catch (err) {
+      if (isLastFmUserNotFound(err)) {
+        if (noteStaleUser(this, userId)) {
+          logger.warn(`[LastFm] Now-playing updates paused for ${userId}: Last.fm user not found (account renamed or deleted? re-link required)`);
+        }
+        return;
+      }
       logger.warn(`[LastFm] updateNowPlaying failed for ${userId}: ${err.message}`);
     }
   },
@@ -65,6 +71,12 @@ const ScrobblingMixin = {
 
       this._incrementScrobbleCount(userId);
     } catch (err) {
+      if (isLastFmUserNotFound(err)) {
+        if (noteStaleUser(this, userId)) {
+          logger.warn(`[LastFm] Scrobbling paused for ${userId}: Last.fm user not found (account renamed or deleted? re-link required)`);
+        }
+        return;
+      }
       logger.warn(`[LastFm] Scrobble failed for ${userId}: ${err.message}`);
     }
   },
@@ -88,8 +100,14 @@ const ScrobblingMixin = {
       );
       return playcount;
     } catch (e) {
-        logger.warn("[LastFm] Error:", e?.message);
+      if (isLastFmUserNotFound(e)) {
+        if (noteStaleUser(this, userId)) {
+          logger.warn(`[LastFm] Scrobble count sync skipped for ${userId}: Last.fm user not found (account renamed or deleted? re-link required)`);
+        }
         return 0;
+      }
+      logger.warn("[LastFm] Error:", e?.message);
+      return 0;
     }
   }
 };

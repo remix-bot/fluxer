@@ -7,6 +7,7 @@
  */
 
 import { logger } from "../../core/Logger.mjs";
+import { isLastFmUserNotFound, noteStaleUser } from "./constants.mjs";
 
 /**
  * @type {object}
@@ -44,6 +45,12 @@ const ServerStatsMixin = {
               playcount,
             };
           } catch (e) {
+              if (isLastFmUserNotFound(e)) {
+                if (noteStaleUser(this, uid)) {
+                  logger.warn(`[LastFm] Skipping ${uid}: Last.fm user not found (account renamed or deleted? re-link required)`);
+                }
+                return null;
+              }
               logger.warn("[LastFm] Error:", e?.message);
               return {
               userId:    uid,
@@ -97,6 +104,12 @@ const ServerStatsMixin = {
               playcount,
             };
           } catch (e) {
+              if (isLastFmUserNotFound(e)) {
+                if (noteStaleUser(this, uid)) {
+                  logger.warn(`[LastFm] Skipping ${uid}: Last.fm user not found (account renamed or deleted? re-link required)`);
+                }
+                return null;
+              }
               logger.warn("[LastFm] Error:", e?.message);
               return {
               userId: uid,
@@ -150,6 +163,12 @@ const ServerStatsMixin = {
               playcount,
             };
           } catch (e) {
+              if (isLastFmUserNotFound(e)) {
+                if (noteStaleUser(this, uid)) {
+                  logger.warn(`[LastFm] Skipping ${uid}: Last.fm user not found (account renamed or deleted? re-link required)`);
+                }
+                return null;
+              }
               logger.warn("[LastFm] Error:", e?.message);
               return {
               userId: uid,
@@ -466,6 +485,12 @@ const ServerStatsMixin = {
             const artists = await this.getTopArtists(uid, "overall", 50);
             return { uid, username: user.username, artists };
           } catch (e) {
+              if (isLastFmUserNotFound(e)) {
+                if (noteStaleUser(this, uid)) {
+                  logger.warn(`[LastFm] Skipping ${uid}: Last.fm user not found (account renamed or deleted? re-link required)`);
+                }
+                return null;
+              }
               logger.warn("[LastFm] Error:", e?.message);
               return null;
           }
