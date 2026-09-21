@@ -1,6 +1,7 @@
 /** @module src/services/TrackOptionsManager @description Per-user track options (start/end timestamps) stored in MySQL. Provides caching, matching, and CRUD for track segments. */
 import mysql from "mysql2";
 import { logger } from "../core/Logger.mjs";
+import { MYSQL_POOL_DEFAULTS, attachMysqlPoolGuard } from "../db/MysqlGuard.mjs";
 
 const DEFAULT_ALIAS = "default";
 const MAX_ALIAS_LEN = 32;
@@ -24,7 +25,8 @@ export class TrackOptionsManager {
 
   /** @param {object} mysqlConfig - MySQL connection config. */
   constructor(mysqlConfig) {
-    this.db = mysql.createPool({ connectionLimit: 10, ...mysqlConfig });
+    this.db = mysql.createPool({ ...MYSQL_POOL_DEFAULTS, connectionLimit: 10, ...mysqlConfig });
+    attachMysqlPoolGuard(this.db, "TrackOptions");
     this.db.on("error", (err) => {
       logger.error("[TrackOptions] MySQL pool error:", err.code ?? err.message);
     });

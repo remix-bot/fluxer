@@ -235,6 +235,9 @@ export function ensureBilibiliProxy() {
         _starting = null;
         reject(new Error("bilibili proxy failed to listen on " + _cfg.bind + ":" + _cfg.port + ": " + err.message));
       });
+      server.on("error", (err) => {
+        logger.warn("[BilibiliProxy] server error: " + (err?.message || err));
+      });
       server.unref?.();
     } catch (e) {
       _starting = null;

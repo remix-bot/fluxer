@@ -14,6 +14,7 @@ import { logger } from "../../core/Logger.mjs";
 import { normalizeTrackText } from "./constants.mjs";
 import { applyMixins } from "../../utils/mixins.mjs";
 import { parseLastFmUrl, isLastFmUrl } from "./urlUtils.mjs";
+import { MYSQL_POOL_DEFAULTS, attachMysqlPoolGuard } from "../../db/MysqlGuard.mjs";
 import UserStoreMixin from "./UserStoreMixin.mjs";
 import ScrobblingMixin from "./ScrobblingMixin.mjs";
 import TrackQueriesMixin from "./TrackQueriesMixin.mjs";
@@ -140,12 +141,14 @@ export class LastFmManager {
     if (this._pool) return this._pool;
     const mysql = await import("mysql2/promise");
     this._pool = mysql.createPool({
+      ...MYSQL_POOL_DEFAULTS,
       host:     this._mysqlConfig.host,
       port:     this._mysqlConfig.port ?? 3306,
       user:     this._mysqlConfig.user,
       password: this._mysqlConfig.password,
       database: this._mysqlConfig.database,
     });
+    attachMysqlPoolGuard(this._pool, "LastFm");
     await this._initTable();
     return this._pool;
   }

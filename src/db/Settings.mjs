@@ -8,6 +8,7 @@
 import fs from "node:fs";
 import mysql from "mysql2";
 import { EventEmitter } from "node:events";
+import { MYSQL_POOL_DEFAULTS, attachMysqlPoolGuard } from "./MysqlGuard.mjs";
 import { logger } from "../core/Logger.mjs";
 
 /**
@@ -183,7 +184,8 @@ export class RemoteSettingsManager extends SettingsManager {
   constructor(config, defaultsPath, botId = null) {
     super();
     this.botId = botId;
-    this.db = mysql.createPool({ connectionLimit: 15, ...config });
+    this.db = mysql.createPool({ ...MYSQL_POOL_DEFAULTS, connectionLimit: 15, ...config });
+    attachMysqlPoolGuard(this.db, "DB");
     this.db.on('error', (err) => {
       logger.error('[DB] MySQL pool error:', err.code ?? err.message);
     });

@@ -184,6 +184,7 @@ const UserQueriesMixin = {
     const profileUrl = `https://www.last.fm/user/${encodeURIComponent(user.username)}/playlists`;
     const res = await fetch(profileUrl, {
       headers: { "User-Agent": "RemixBot/1.0 (Last.fm Integration)" },
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!res.ok) {
@@ -250,6 +251,7 @@ const UserQueriesMixin = {
 
     const res = await fetch(playlistUrl, {
       headers: { "User-Agent": "RemixBot/1.0 (Last.fm Integration)" },
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!res.ok) {

@@ -93,6 +93,7 @@ export class FluxerListManager {
         "Accept": "application/json",
         "User-Agent": "RemixBot/1.0 (FluxerList Integration)",
       },
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (res.status === 401) {

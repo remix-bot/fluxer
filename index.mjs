@@ -45,8 +45,39 @@ const isBenignAudioStopRace = (err) =>
 const isBenignStreamAbortRace = (err) =>
   err?.code === "ECONNRESET" && String(err?.message ?? "").includes("aborted");
 
+/**
+ * Socket error codes that represent transient transport failures of a single
+ * connection (NAT/firewall idle drops, dead upstreams, restarts). Losing one
+ * TCP connection is never a reason to take the whole bot down.
+ * @type {Set<string>}
+ */
+const TRANSIENT_SOCKET_CODES = new Set([
+  "ETIMEDOUT", "ECONNRESET", "EPIPE", "ECONNABORTED",
+  "EHOSTUNREACH", "ENETUNREACH", "ENETDOWN", "EAI_AGAIN",
+]);
+
+/**
+ * Check whether an error is a raw transport-level socket failure that bubbled
+ * out of a library's internals (mysql2 pooled connections, undici, ws, etc.)
+ * with no user stack frames involved. The owning library has already recorded
+ * the failure in its own state machine (marked the connection dead, destroyed
+ * the request...), so continuing to run is safe — crashing is not.
+ * Signature example: { errno: -110, code: 'ETIMEDOUT', syscall: 'read',
+ * fatal: true } at TCP.onStreamRead.
+ * @param {Error} err - The error to check.
+ * @returns {boolean} True if the error is a recoverable socket transport error.
+ */
+const isBenignTransportError = (err) => {
+  if (!err || typeof err !== "object") return false;
+  if (!TRANSIENT_SOCKET_CODES.has(err.code)) return false;
+  if (!err.syscall || !["read", "write", "connect", "getaddrinfo"].includes(err.syscall)) return false;
+  const stack = String(err.stack ?? "");
+  return !stack.includes("/src/") && !stack.includes("/commands/") && !stack.includes("index.mjs");
+};
+
 let _lastWsCrashLog = 0;
 let _lastAudioRaceLog = 0;
+let _lastTransportLog = 0;
 const WS_CRASH_LOG_COOLDOWN = 30_000;
 
 process.on("unhandledRejection", (reason, p) => {
@@ -80,6 +111,14 @@ process.on("uncaughtException", (err, origin) => {
     }
     return;
   }
+  if (isBenignTransportError(err)) {
+    const now = Date.now();
+    if (now - _lastTransportLog > WS_CRASH_LOG_COOLDOWN) {
+      _lastTransportLog = now;
+      logger.warn("[Error_Handling] Recovered from transient socket transport error (" + (err.code ?? "?") + " on " + (err.syscall ?? "?") + ") — connection-level failure, bot continues running (will not re-log for 30s).");
+    }
+    return;
+  }
   logger.error("[Error_Handling] Uncaught Exception/Catch");
   logger.error("Error:", err, origin);
   process.exit(1);
@@ -89,6 +128,7 @@ process.on("uncaughtExceptionMonitor", (err, origin) => {
   if (isIgnorableWsCrash(err)) return;
   if (isBenignAudioStopRace(err)) return;
   if (isBenignStreamAbortRace(err)) return;
+  if (isBenignTransportError(err)) return;
   logger.error("[Error_Handling] Uncaught Exception/Catch (MONITOR)");
   logger.error("Error:", err, origin);
 });

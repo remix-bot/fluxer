@@ -23,6 +23,9 @@ function buildSignature(params, apiSecret) {
   return crypto.createHash("md5").update(str + apiSecret).digest("hex");
 }
 
+/** @private @type {number} @description AbortSignal timeout (ms) for Last.fm API calls — prevents stalled TCP connections from hanging for the OS-level timeout (~15 min). */
+const LASTFM_FETCH_TIMEOUT_MS = 15_000;
+
 /** @private Make an authenticated Last.fm API call. @async @param {object} params @param {string} apiSecret @param {boolean} [post=false] @returns {Promise<object>} @throws {Error} On HTTP or Last.fm API error. */
 async function apiCall(params, apiSecret, post = false) {
   const allParams = { ...params };
@@ -36,8 +39,9 @@ async function apiCall(params, apiSecret, post = false) {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams(allParams).toString(),
+        signal: AbortSignal.timeout(LASTFM_FETCH_TIMEOUT_MS),
       }
-    : {};
+    : { signal: AbortSignal.timeout(LASTFM_FETCH_TIMEOUT_MS) };
 
   const res = await fetch(url, opts);
   if (!res.ok) {

@@ -7,6 +7,7 @@
 import { compare, genSalt, hash } from "bcryptjs";
 import { createPool } from "mysql2/promise";
 import { logger } from "../core/Logger.mjs";
+import { MYSQL_POOL_DEFAULTS, attachMysqlPoolGuard } from "./MysqlGuard.mjs";
 
 /**
  * @class
@@ -20,12 +21,11 @@ export class DatabaseManager {
    */
   constructor(config) {
     this.db = createPool({
+      ...MYSQL_POOL_DEFAULTS,
       connectionLimit: 15,
       ...config,
     });
-    this.db.on("error", (err) => {
-      logger.error("[DashboardDB] MySQL pool error:", err.code ?? err.message);
-    });
+    attachMysqlPoolGuard(this.db, "DashboardDB");
   }
 
   /**
