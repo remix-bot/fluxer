@@ -749,7 +749,7 @@
       "notConfigured": "❌ FluxerList integration is not configured on this bot. Ask the bot owner to add a FluxerList API key to the config.",
       "noResourceId": "❌ No {{type}} ID configured. Provide it with `{{prefix}}vote check {{type}} <id-or-slug>` or set it in config.json.",
       "infoTitle": "FluxerList Vote",
-      "infoDescription": "Vote for this bot/server on [FluxerList]({{siteUrl}})!\n\nFluxerList is a server and bot listing platform where users can vote to help grow the community.\n\n**Commands:**\n`{{prefix}}vote info` — Show this info & vote link\n`{{prefix}}vote info server` — Show vote link for a server\n`{{prefix}}vote check` — Check who voted (owner-only)\n`{{prefix}}vote voters` — View the voter list (owner-only)",
+      "infoDescription": "Vote for this bot/server on [FluxerList]({{siteUrl}})!\n\nFluxerList is a server and bot listing platform where users can vote to help grow the community.\n\n**Commands:**\n`{{prefix}}vote info` — Show this info & vote link\n`{{prefix}}vote info server` — Show vote link for a server\n`{{prefix}}vote check` — Check your own vote status\n`{{prefix}}vote voters` — View the voter list (owner-only)",
       "voteTitle": "Vote on FluxerList",
       "supportDesc": "Support this {{type}} by voting on FluxerList!",
       "voteLink": "**[Vote & View Profile]({{url}})**",
@@ -764,12 +764,15 @@
       "pageInfo": "Page {{page}}/{{totalPages}} of {{total}} voters • Use ◀️▶️ to navigate",
       "voterTotal": "{{total}} voter(s) total",
       "defaultCommandsTitle": "**FluxerList Vote Commands:**",
-      "defaultCommandsList": "`{{prefix}}vote` — Show vote info & link\n`{{prefix}}vote info` — Show voting info & vote link\n`{{prefix}}vote check` — Check who voted (owner-only)\n`{{prefix}}vote voters` — View the voter list (owner-only)",
+      "defaultCommandsList": "`{{prefix}}vote` — Show vote info & link\n`{{prefix}}vote info` — Show voting info & vote link\n`{{prefix}}vote check` — Check your own vote status\n`{{prefix}}vote voters` — View the voter list (owner-only)",
       "optionsTitle": "**Options:**",
-      "optionsList": "`{{prefix}}vote check server` — Check voters for a server\n`{{prefix}}vote check bot` — Check voters for a bot",
+      "optionsList": "`{{prefix}}vote check server` — Check your vote status for a server\n`{{prefix}}vote check bot` — Check your vote status for a bot",
       "votedDate": "voted {{date}}",
       "unknownUser": "User#{{id}}",
-      "unknownDate": "Unknown"
+      "unknownDate": "Unknown",
+      "checkYes": "✅ You **have an active vote** for this {{type}} — thank you!",
+      "checkNo": "❌ You haven't voted for this {{type}} yet (or your vote expired).\n**[Vote now!]({{url}})**",
+      "checkUnknown": "⚠️ Couldn't check your vote status right now — try again in a minute."
     },
     "volumedefault": {
       "title": "🔊 Volume Settings",

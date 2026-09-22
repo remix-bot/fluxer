@@ -759,7 +759,7 @@
       "notConfigured": "❌ FluxerList-Integration ist auf diesem Bot nicht konfiguriert. Bitte den Bot-Besitzer, einen FluxerList API-Schlüssel zur Konfiguration hinzuzufügen.",
       "noResourceId": "❌ Keine {{type}}-ID konfiguriert. Gib sie mit `{{prefix}}vote check {{type}} <id-or-slug>` an oder setze sie in config.json.",
       "infoTitle": "FluxerList-Abstimmung",
-      "infoDescription": "Stimme für diesen Bot/Server auf [FluxerList]({{siteUrl}})!\n\nFluxerList ist eine Server- und Bot-Auflistungsplattform, auf der Nutzer abstimmen können, um das Community-Wachstum zu fördern.\n\n**Befehle:**\n`{{prefix}}vote info` — Zeige diese Info & Abstimmungslink\n`{{prefix}}vote info server` — Zeige Abstimmungslink für einen Server\n`{{prefix}}vote check` — Prüfe, wer abgestimmt hat (nur Besitzer)\n`{{prefix}}vote voters` — Zeige die Wählerliste (nur Besitzer)",
+      "infoDescription": "Stimme für diesen Bot/Server auf [FluxerList]({{siteUrl}})!\n\nFluxerList ist eine Server- und Bot-Auflistungsplattform, auf der Nutzer abstimmen können, um das Community-Wachstum zu fördern.\n\n**Befehle:**\n`{{prefix}}vote info` — Zeige diese Info & Abstimmungslink\n`{{prefix}}vote info server` — Zeige Abstimmungslink für einen Server\n`{{prefix}}vote check` — Prüfe dein eigenes Votum\n`{{prefix}}vote voters` — Zeige die Wählerliste (nur Besitzer)",
       "voteTitle": "Auf FluxerList abstimmen",
       "supportDesc": "Unterstütze dieses {{type}} durch Abstimmung auf FluxerList!",
       "voteLink": "**[Abstimmen & Profil ansehen]({{url}})**",
@@ -774,12 +774,15 @@
       "pageInfo": "Seite {{page}}/{{totalPages}} von {{total}} Wählern • Nutze ◀️▶️ zum Navigieren",
       "voterTotal": "{{total}} Wähler insgesamt",
       "defaultCommandsTitle": "**FluxerList-Abstimmungsbefehle:**",
-      "defaultCommandsList": "`{{prefix}}vote` — Zeige Abstimmungsinfo & Link\n`{{prefix}}vote info` — Zeige Abstimmungsinfo & Link\n`{{prefix}}vote check` — Prüfe, wer abgestimmt hat (nur Besitzer)\n`{{prefix}}vote voters` — Zeige Wählerliste (nur Besitzer)",
+      "defaultCommandsList": "`{{prefix}}vote` — Zeige Abstimmungsinfo & Link\n`{{prefix}}vote info` — Zeige Abstimmungsinfo & Link\n`{{prefix}}vote check` — Prüfe dein eigenes Votum\n`{{prefix}}vote voters` — Zeige Wählerliste (nur Besitzer)",
       "optionsTitle": "**Optionen:**",
-      "optionsList": "`{{prefix}}vote check server` — Prüfe Wähler für einen Server\n`{{prefix}}vote check bot` — Prüfe Wähler für einen Bot",
+      "optionsList": "`{{prefix}}vote check server` — Prüfe dein Votum für einen Server\n`{{prefix}}vote check bot` — Prüfe dein Votum für einen Bot",
       "votedDate": "abgestimmt {{date}}",
       "unknownUser": "Benutzer#{{id}}",
-      "unknownDate": "Unbekannt"
+      "unknownDate": "Unbekannt",
+      "checkYes": "✅ Du hast ein **aktives Votum** für diesen {{type}} — danke!",
+      "checkNo": "❌ Du hast für diesen {{type}} noch nicht abgestimmt (oder dein Votum ist abgelaufen).\n**[Jetzt voten!]({{url}})**",
+      "checkUnknown": "⚠️ Dein Votum konnte gerade nicht geprüft werden — versuche es in einer Minute erneut."
     },
     "seek": {
       "nothingPlaying": "❌ Es wird gerade nichts abgespielt!",

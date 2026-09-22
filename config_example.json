@@ -12,9 +12,11 @@
     "enabled": false,
     "channelId": "paste the ID of the channel that should receive error logs",
     "forwardWarn": true,
+    "forwardInfo": false,
+    "startupMessage": true,
     "minIntervalMs": 1500,
     "maxQueue": 40,
-    "Comment": "Forward error logs and crash reports to a Fluxer channel. Every logger.error line (and every logger.warn line when forwardWarn=true) is posted there: player failures, node disconnects, database errors, plus fatal crash reports (uncaughtException, unhandledRejection) with uptime and memory. Identical messages are deduplicated for 60s, sends are spaced by minIntervalMs, and floods beyond maxQueue pending messages are dropped with a summary line instead of spamming. channelId: enable Developer Mode in the Fluxer app, right-click the target channel and copy its ID — the bot must be able to send messages there. Fully disabled unless enabled=true AND channelId is set."
+    "Comment": "Forward error logs and crash reports to a Fluxer channel. Every logger.error line (and every logger.warn line when forwardWarn=true) is posted there: player failures, node disconnects, database errors, plus fatal crash reports (uncaughtException, unhandledRejection) with uptime and memory. startupMessage=true sends a one-time 'Log channel connected' confirmation at boot through the real send path — if it fails, the console shows the exact permission/ID problem. forwardInfo=true ALSO forwards logger.info lines (boot activity, joins, recoveries) — useful for full visibility but much noisier; keep false for errors-only. Identical messages are deduplicated for 60s, sends are spaced by minIntervalMs, and floods beyond maxQueue pending messages are dropped with a summary line instead of spamming. Test delivery any time with the owner-only 'logtest' command. channelId: enable Developer Mode in the Fluxer app, right-click the target channel and copy its ID — the bot must be able to send messages there. Fully disabled unless enabled=true AND channelId is set."
   },
   "prefix": "your desired prefix (such as %)",
   "presenceInterval": null,
@@ -110,12 +112,14 @@
     "scrobbleMinMs": 240000
   },
   "fluxerlist": {
-    "Comment": "FluxerList integration: check voters for your server/bot. API keys are allocated by site admins, prefixed with fl_, and visible in your Dashboard. To request access, open a ticket in the Fluxer server.",
+    "Comment": "FluxerList.com integration (docs.fluxerlist.com). Generate your own API key: FluxerList Dashboard -> Developer tab -> generate (starts with fl_, shown once). While enabled, the bot auto-posts its server count to your bot listing: once at startup, then every statsIntervalMinutes (default 30; endpoint allows 12/hour; identical counts are skipped to conserve the shared 3000 requests/month key budget). botId: your bot's Fluxer ID — leave empty to auto-detect at startup. serverId/serverSlug/botSlug: optional, used by the vote command. Set autoStats=false to disable the server-count sync only (vote command keeps working).",
     "apiKey": "fl_your_api_key_here",
+    "botId": "",
     "serverId": "remix-hq",
-    "botId": "remix",
     "serverSlug": "remix-hq",
-    "botSlug": "remix"
+    "botSlug": "remix",
+    "autoStats": true,
+    "statsIntervalMinutes": 30
   },
   "owners": [
     "user id for owner-only commands",

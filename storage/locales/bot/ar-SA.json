@@ -759,7 +759,7 @@
       "notConfigured": "❌ تكامل FluxerList غير مُعدّ على هذا البوت. اطلب من مالك البوت إضافة مفتاح FluxerList API إلى الإعدادات.",
       "noResourceId": "❌ لا يوجد معرف {{type}} مُعدّ. قدّمه عبر `{{prefix}}vote check {{type}} <id-or-slug>` أو عيّنه في config.json.",
       "infoTitle": "تصويت FluxerList",
-      "infoDescription": "صوّت لهذا البوت/السيرفر على [FluxerList]({{siteUrl}})!\n\nFluxerList هي منصة لعرض السيرفرات والبوتات حيث يمكن للمستخدمين التصويت للمساعدة في نمو المجتمع.\n\n**الأوامر:**\n`{{prefix}}vote info` — اعرض هذه المعلومات ورابط التصويت\n`{{prefix}}vote info server` — اعرض رابط التصويت لسيرفر\n`{{prefix}}vote check` — تحقق ممن صوّت (للمالك فقط)\n`{{prefix}}vote voters` — اعرض قائمة الناخبين (للمالك فقط)",
+      "infoDescription": "صوّت لهذا البوت/السيرفر على [FluxerList]({{siteUrl}})!\n\nFluxerList هي منصة لعرض السيرفرات والبوتات حيث يمكن للمستخدمين التصويت للمساعدة في نمو المجتمع.\n\n**الأوامر:**\n`{{prefix}}vote info` — اعرض هذه المعلومات ورابط التصويت\n`{{prefix}}vote info server` — اعرض رابط التصويت لسيرفر\n`{{prefix}}vote check` — تحقق من حالة تصويتك\n`{{prefix}}vote voters` — اعرض قائمة الناخبين (للمالك فقط)",
       "voteTitle": "صوّت على FluxerList",
       "supportDesc": "ادعم هذا {{type}} بالتصويت على FluxerList!",
       "voteLink": "**[صوّت واعرض الملف الشخصي]({{url}})**",
@@ -774,12 +774,15 @@
       "pageInfo": "صفحة {{page}}/{{totalPages}} من {{total}} ناخب • استخدم ◀️▶️ للتنقل",
       "voterTotal": "{{total}} ناخب(ناخبين) إجمالاً",
       "defaultCommandsTitle": "**أوامر تصويت FluxerList:**",
-      "defaultCommandsList": "`{{prefix}}vote` — اعرض معلومات التصويت والرابط\n`{{prefix}}vote info` — اعرض معلومات التصويت ورابط التصويت\n`{{prefix}}vote check` — تحقق ممن صوّت (للمالك فقط)\n`{{prefix}}vote voters` — اعرض قائمة الناخبين (للمالك فقط)",
+      "defaultCommandsList": "`{{prefix}}vote` — اعرض معلومات التصويت والرابط\n`{{prefix}}vote info` — اعرض معلومات التصويت ورابط التصويت\n`{{prefix}}vote check` — تحقق من حالة تصويتك\n`{{prefix}}vote voters` — اعرض قائمة الناخبين (للمالك فقط)",
       "optionsTitle": "**الخيارات:**",
-      "optionsList": "`{{prefix}}vote check server` — تحقق من الناخبين لسيرفر\n`{{prefix}}vote check bot` — تحقق من الناخبين لبوت",
+      "optionsList": "`{{prefix}}vote check server` — تحقق من حالة تصويتك لسيرفر\n`{{prefix}}vote check bot` — تحقق من حالة تصويتك لبوت",
       "votedDate": "صوّت {{date}}",
       "unknownUser": "مستخدم#{{id}}",
-      "unknownDate": "غير معروف"
+      "unknownDate": "غير معروف",
+      "checkYes": "✅ لديك **تصويت نشط** لهذا {{type}} — شكرًا لك!",
+      "checkNo": "❌ لم تصوّت لهذا {{type}} بعد (أو انتهت صلاحية تصويتك).\n**[صوّت الآن!]({{url}})**",
+      "checkUnknown": "⚠️ تعذّر التحقق من حالة تصويتك الآن — حاول مجددًا بعد دقيقة."
     },
     "seek": {
       "nothingPlaying": "❌ لا يوجد شيء يعمل حالياً!",

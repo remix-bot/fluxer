@@ -285,6 +285,8 @@ class Remix {
 
         this.gatewayHandler.onReady();
 
+        this.fluxerlist?.startAutoStats?.(client);
+
         if (!presenceRotationStarted && presenceContents.length > 1) {
           presenceRotationStarted = true;
           setInterval(() => {

@@ -4,15 +4,21 @@
  * designated Fluxer channel, so the owner sees problems (player failures,
  * node disconnects, database errors, crashes) without reading container logs.
  *
- * Two forwarding layers:
- *  1. Logger tap: wraps logger.error and (optionally) logger.warn so every
- *     existing error site in the codebase is covered without touching call
- *     sites. The logger's built-in storm gate already collapses identical
- *     repeated lines before they reach this tap.
+ * Three forwarding layers:
+ *  1. Logger tap: wraps logger.error, (optionally) logger.warn and
+ *     (opt-in via forwardInfo) logger.info so every existing error site in
+ *     the codebase is covered without touching call sites. The logger's
+ *     built-in storm gate already collapses identical repeated lines before
+ *     they reach this tap.
  *  2. Crash reports: explicit reportCrash() calls from the process-level
  *     handlers in index.mjs. These bypass the queue and send immediately —
  *     REST keeps working even when the gateway connection is down — with a
  *     bounded timeout so the fatal-exit path is never stalled.
+ *  3. Startup confirmation: when enabled (startupMessage, default true), a
+ *     one-time "Log channel connected" message is sent through the real
+ *     send path at boot, so the owner immediately sees that forwarding works
+ *     — and gets an explicit console hint when the channel ID or bot
+ *     permissions are wrong instead of silent silence.
  *
  * Messages are sent through client.rest.post when available, with a raw
  * fetch fallback (Authorization: Bot <token>) for very early crashes before
@@ -44,12 +50,13 @@ let _maxQueue = 40;
 let _queue = [];
 let _dropped = 0;
 let _flushing = false;
+let _announced = false;
 
 const _forwardDedup = new Map();
 const _crashDedup = new Map();
 let _lastFailLog = 0;
 
-const _originals = { error: null, warn: null };
+const _originals = { error: null, warn: null, info: null };
 
 /**
  * Initialize the channel reporter from config. Safe to call once at boot;
@@ -71,8 +78,36 @@ export function initErrorChannel({ config, client } = {}) {
     console.info(`[ErrorChannel] Disabled (${!_channelId ? "no channelId configured" : "enabled=false"}).`);
     return;
   }
-  if (!_originals.error) _tapLogger(cfg.forwardWarn !== false);
-  console.info(`[ErrorChannel] Active — forwarding errors${cfg.forwardWarn !== false ? " + warnings" : ""} to channel ${_channelId}.`);
+  const forwardWarn = cfg.forwardWarn !== false;
+  const forwardInfo = cfg.forwardInfo === true;
+  if (!_originals.error) _tapLogger(forwardWarn, forwardInfo);
+  console.info(`[ErrorChannel] Active — forwarding errors${forwardWarn ? " + warnings" : ""}${forwardInfo ? " + info" : ""} to channel ${_channelId}.`);
+  if (cfg.startupMessage !== false) _announceOnce();
+}
+
+/**
+ * Whether the channel reporter is currently active (enabled=true and a
+ * channelId is configured). Used by the logtest command for its status reply.
+ * @returns {boolean} True when forwarding is active.
+ */
+export function isLogChannelEnabled() {
+  return _enabled && Boolean(_channelId);
+}
+
+/** @private Send the one-time startup confirmation through the real send path. */
+function _announceOnce() {
+  if (_announced) return;
+  _announced = true;
+  const content =
+    "✅ **Log channel connected** — from now on this channel receives:\n" +
+    "🔴 every error · 🟡 every warning · 🚨 crash reports (with uptime + memory)\n" +
+    "Verify delivery any time with the `logtest` command.";
+  _sendWithFallback(content).catch((e) => {
+    console.error(
+      `[ErrorChannel] Startup notice FAILED for channel ${_channelId}: ${e?.message ?? e}` +
+      " — check that the bot has View Channel + Send Messages permission there and that errorLogChannel.channelId is correct."
+    );
+  });
 }
 
 /**
@@ -103,11 +138,10 @@ export async function reportCrash(title, err, { fatal = false } = {}) {
         .slice(0, CONTENT_MAX);
 
     try {
-      await Promise.race([_send(content), _sleep(CRASH_SEND_BUDGET_MS)]);
+      await Promise.race([_sendWithFallback(content), _sleep(CRASH_SEND_BUDGET_MS)]);
       return true;
     } catch (_) {
-      await Promise.race([_sendRaw(content), _sleep(CRASH_SEND_BUDGET_MS)]);
-      return true;
+      return false;
     }
   } catch (_) {
     return false;
@@ -121,8 +155,11 @@ export async function reportCrash(title, err, { fatal = false } = {}) {
 export function _resetErrorChannelForTests() {
   if (_originals.error) logger.error = _originals.error;
   if (_originals.warn) logger.warn = _originals.warn;
+  if (_originals.info) logger.info = _originals.info;
   _originals.error = null;
   _originals.warn = null;
+  _originals.info = null;
+  _announced = false;
   _enabled = false;
   _channelId = null;
   _token = null;
@@ -135,7 +172,7 @@ export function _resetErrorChannelForTests() {
 }
 
 /** @private Wrap the shared logger methods so all existing error sites forward automatically. */
-function _tapLogger(forwardWarn) {
+function _tapLogger(forwardWarn, forwardInfo = false) {
   _originals.error = logger.error;
   logger.error = function (tag, ...args) {
     _originals.error(tag, ...args);
@@ -148,6 +185,13 @@ function _tapLogger(forwardWarn) {
       _forward("warn", tag, args);
     };
   }
+  if (forwardInfo && typeof logger.info === "function") {
+    _originals.info = logger.info;
+    logger.info = function (tag, ...args) {
+      _originals.info(tag, ...args);
+      _forward("info", tag, args);
+    };
+  }
 }
 
 /** @private Forward one emitted log line into the queue (with dedup + self-exclusion). */
@@ -157,7 +201,7 @@ function _forward(level, tag, args) {
     if (tag.startsWith("[ErrorChannel]") || tag.startsWith("[Error_Handling]")) return;
     const body = _formatArgs(args);
     const now = Date.now();
-    const emoji = level === "error" ? "🔴" : "🟡";
+    const emoji = level === "error" ? "🔴" : level === "info" ? "ℹ️" : "🟡";
     const text = body ? `${emoji} **${tag}** ${body}` : `${emoji} **${tag}**`;
     const key = `${level}|${tag}|${(body || tag).slice(0, 200)}`;
     const last = _forwardDedup.get(key);
@@ -209,7 +253,7 @@ async function _runFlush() {
 /** @private Send a queued message, swallowing and cooldown-logging failures. */
 async function _sendQuietly(content) {
   try {
-    await _send(content);
+    await _sendWithFallback(content);
   } catch (e) {
     const now = Date.now();
     if (now - _lastFailLog > FAIL_LOG_COOLDOWN_MS) {
@@ -223,10 +267,19 @@ async function _sendQuietly(content) {
 async function _send(content) {
   const rest = _client?.rest;
   if (typeof rest?.post === "function") {
-    await rest.post(`/channels/${_channelId}/messages`, { content });
+    await rest.post(`/channels/${_channelId}/messages`, { body: { content } });
     return;
   }
   await _sendRaw(content);
+}
+
+/** @private Send via client REST, retrying once via raw fetch when that throws. */
+async function _sendWithFallback(content) {
+  try {
+    await _send(content);
+  } catch (_) {
+    await _sendRaw(content);
+  }
 }
 
 /** @private Send via a direct Fluxer REST call (Authorization: Bot <token>). */

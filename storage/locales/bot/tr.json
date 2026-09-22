@@ -801,7 +801,7 @@
       "notConfigured": "❌ FluxerList entegrasyonu bu botta yapılandırılmamış. Bot sahibinden FluxerList API anahtarı eklemesini isteyin.",
       "noResourceId": "❌ {{type}} ID yapılandırılmamış. `{{prefix}}vote check {{type}} <id-or-slug>` ile sağlayın veya config.json'da ayarlayın.",
       "infoTitle": "FluxerList Oylama",
-      "infoDescription": "Bu bot/sunucu için [FluxerList]({{siteUrl}}) üzerinde oy verin!\n\nFluxerList, kullanıcıların topluluğun büyümesine yardımcı olmak için oy verebileceği bir sunucu ve bot listeleme platformudur.\n\n**Komutlar:**\n`{{prefix}}vote info` — Bu bilgiyi ve oylama bağlantısını göster\n`{{prefix}}vote info server` — Bir sunucu için oylama bağlantısını göster\n`{{prefix}}vote check` — Kimin oy verdiğini kontrol et (sadece sahip)\n`{{prefix}}vote voters` — Oy verenler listesini görüntüle (sadece sahip)",
+      "infoDescription": "Bu bot/sunucu için [FluxerList]({{siteUrl}}) üzerinde oy verin!\n\nFluxerList, kullanıcıların topluluğun büyümesine yardımcı olmak için oy verebileceği bir sunucu ve bot listeleme platformudur.\n\n**Komutlar:**\n`{{prefix}}vote info` — Bu bilgiyi ve oylama bağlantısını göster\n`{{prefix}}vote info server` — Bir sunucu için oylama bağlantısını göster\n`{{prefix}}vote check` — Kendi oy durumunu kontrol et\n`{{prefix}}vote voters` — Oy verenler listesini görüntüle (sadece sahip)",
       "voteTitle": "FluxerList'te Oy Ver",
       "supportDesc": "Bu {{type}} için FluxerList'te oy vererek destekleyin!",
       "voteLink": "**[Oy Ver ve Profili Görüntüle]({{url}})**",
@@ -816,12 +816,15 @@
       "pageInfo": "Sayfa {{page}}/{{totalPages}} / {{total}} oy veren • Gezinmek için ◀️▶️ kullanın",
       "voterTotal": "Toplam {{total}} oy veren",
       "defaultCommandsTitle": "**FluxerList Oylama Komutları:**",
-      "defaultCommandsList": "`{{prefix}}vote` — Oylama bilgisini ve bağlantıyı göster\n`{{prefix}}vote info` — Oylama bilgisini ve bağlantıyı göster\n`{{prefix}}vote check` — Kimin oy verdiğini kontrol et (sadece sahip)\n`{{prefix}}vote voters` — Oy verenler listesini görüntüle (sadece sahip)",
+      "defaultCommandsList": "`{{prefix}}vote` — Oylama bilgisini ve bağlantıyı göster\n`{{prefix}}vote info` — Oylama bilgisini ve bağlantıyı göster\n`{{prefix}}vote check` — Kendi oy durumunu kontrol et\n`{{prefix}}vote voters` — Oy verenler listesini görüntüle (sadece sahip)",
       "optionsTitle": "**Seçenekler:**",
-      "optionsList": "`{{prefix}}vote check server` — Bir sunucu için oy verenleri kontrol et\n`{{prefix}}vote check bot` — Bir bot için oy verenleri kontrol et",
+      "optionsList": "`{{prefix}}vote check server` — Bir sunucu için oy durumunu kontrol et\n`{{prefix}}vote check bot` — Bir bot için oy durumunu kontrol et",
       "votedDate": "{{date}} tarihinde oy verdi",
       "unknownUser": "Kullanıcı#{{id}}",
-      "unknownDate": "Bilinmiyor"
+      "unknownDate": "Bilinmiyor",
+      "checkYes": "✅ Bu {{type}} için **aktif oyunun var** — teşekkürler!",
+      "checkNo": "❌ Bu {{type}} için henüz oy vermedin (ya da oyunun süresi doldu).\n**[Hemen oy ver!]({{url}})**",
+      "checkUnknown": "⚠️ Oy durumu şu anda kontrol edilemedi — bir dakika sonra tekrar dene."
     }
   }
 }

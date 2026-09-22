@@ -759,7 +759,7 @@
       "notConfigured": "❌ تەواوکاری FluxerList لەسەر ئەم بوتە ڕێکنەخراوە. لە خاوەنی بوتەکە بخۆشتن کلیلی FluxerList API زیاد بکات.",
       "noResourceId": "❌ هیچ {{type}} ID ڕێکنەخراوە. بە `{{prefix}}vote check {{type}} <id-or-slug>` دایبنێ یان لە config.json دایبنێ.",
       "infoTitle": "دەنگدانی FluxerList",
-      "infoDescription": "بۆ ئەم بوت/سێرڤەرە دەنگبدە لە [FluxerList]({{siteUrl}})!\n\nFluxerList پلاتفۆرمێکی لیستی سێرڤەر و بوتە کە بەکارهێنەران دەتوانن دەنگبدەن بۆ یارمەتیدانی گەشتی کۆمەڵگە.\n\n**فەرمانەکان:**\n`{{prefix}}vote info` — ئەم زانیارییە و لینکی دەنگدان نیشانبدە\n`{{prefix}}vote info server` — لینکی دەنگدان بۆ سێرڤەر نیشانبدە\n`{{prefix}}vote check` — پشکنی کێ دەنگیدا (تەنها بۆ خاوەن)\n`{{prefix}}vote voters` — لیستی دەنگدەران نیشانبدە (تەنها بۆ خاوەن)",
+      "infoDescription": "بۆ ئەم بوت/سێرڤەرە دەنگبدە لە [FluxerList]({{siteUrl}})!\n\nFluxerList پلاتفۆرمێکی لیستی سێرڤەر و بوتە کە بەکارهێنەران دەتوانن دەنگبدەن بۆ یارمەتیدانی گەشتی کۆمەڵگە.\n\n**فەرمانەکان:**\n`{{prefix}}vote info` — ئەم زانیارییە و لینکی دەنگدان نیشانبدە\n`{{prefix}}vote info server` — لینکی دەنگدان بۆ سێرڤەر نیشانبدە\n`{{prefix}}vote check` — دۆخی دەنگدانی خۆت بپشکنە\n`{{prefix}}vote voters` — لیستی دەنگدەران نیشانبدە (تەنها بۆ خاوەن)",
       "voteTitle": "لە FluxerList دەنگبدە",
       "supportDesc": "ئەم {{type}} پشتگیری بکە بە دەنگدان لە FluxerList!",
       "voteLink": "**[دەنگبدە و پرۆفایل ببینە]({{url}})**",
@@ -774,12 +774,15 @@
       "pageInfo": "لاپەڕە {{page}}/{{totalPages}} لە {{total}} دەنگدەر • بۆ ناوەڕۆک ◀️▶️ بەکاربهێنە",
       "voterTotal": "{{total}} دەنگدەر(ەکان) بە گشتی",
       "defaultCommandsTitle": "**فەرمانەکانی دەنگدانی FluxerList:**",
-      "defaultCommandsList": "`{{prefix}}vote` — زانیاری دەنگدان و لینک نیشانبدە\n`{{prefix}}vote info` — زانیاری دەنگدان و لینک نیشانبدە\n`{{prefix}}vote check` — پشکنی کێ دەنگیدا (تەنها بۆ خاوەن)\n`{{prefix}}vote voters` — لیستی دەنگدەران نیشانبدە (تەنها بۆ خاوەن)",
+      "defaultCommandsList": "`{{prefix}}vote` — زانیاری دەنگدان و لینک نیشانبدە\n`{{prefix}}vote info` — زانیاری دەنگدان و لینک نیشانبدە\n`{{prefix}}vote check` — دۆخی دەنگدانی خۆت بپشکنە\n`{{prefix}}vote voters` — لیستی دەنگدەران نیشانبدە (تەنها بۆ خاوەن)",
       "optionsTitle": "**هەڵبژاردنەکان:**",
-      "optionsList": "`{{prefix}}vote check server` — دەنگدەرانی سێرڤەر بپشکنە\n`{{prefix}}vote check bot` — دەنگدەرانی بوت بپشکنە",
+      "optionsList": "`{{prefix}}vote check server` — دۆخی دەنگدانی خۆت بۆ سێرڤەر بپشکنە\n`{{prefix}}vote check bot` — دۆخی دەنگدانی خۆت بۆ بوت بپشکنە",
       "votedDate": "دەنگیدا {{date}}",
       "unknownUser": "بەکارهێنەر#{{id}}",
-      "unknownDate": "نەناسراو"
+      "unknownDate": "نەناسراو",
+      "checkYes": "✅ دەنگدانی **چالاکیت هەیە** بۆ ئەم {{type}} — سوپاس!",
+      "checkNo": "❌ هێشتا دەنگت بۆ ئەم {{type}} نەداوە (یان دەنگت کۆتایی هاتووە).\n**[ئێستا دەنگبدە!]({{url}})**",
+      "checkUnknown": "⚠️ ئێستا نەتوانرا دۆخی دەنگدانت بپشکنرێت — دوای خولەکێک دووبارە هەوڵبدە."
     },
     "seek": {
       "nothingPlaying": "❌ هیچ شتێک پەخش ناکرێت لە ئێستادا!",

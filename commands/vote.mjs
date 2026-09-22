@@ -1,6 +1,6 @@
 /**
  * @module commands/vote
- * @description View voting info, check voters, or browse voter lists for a server/bot on FluxerList.
+ * @description View voting info, check your vote status, or browse voter lists for a server/bot on FluxerList.
  */
 
 import { CommandBuilder } from "../src/commands/index.mjs";
@@ -14,7 +14,7 @@ import { logger } from "../src/core/Logger.mjs";
 /** @type {CommandBuilder} @description Command definition for the vote command. */
 export const command = new CommandBuilder()
   .setName("vote")
-  .setDescription("View voting info or check voters for your server/bot on FluxerList", "commands.vote")
+  .setDescription("View voting info or check your vote status on FluxerList", "commands.vote")
   .setCategory("util")
   .addAliases("voters")
   .addChoiceOption(o =>
@@ -175,7 +175,34 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [embed] });
     }
 
-    case "check":
+    case "check": {
+      if (!fluxerlist || !fluxerlist.enabled) return msg.reply(notConfigured(t, guildId));
+
+      const userId = msg.author?.id ?? msg.message?.author?.id;
+      if (!userId) {
+        return msg.reply({
+          embeds: [new EmbedBuilder()
+            .setColor(ERROR_COLOR)
+            .setDescription(this.t(msg, "responses.vote.checkUnknown"))]
+        });
+      }
+
+      const resolvedType = type || "bot";
+      const voted = await fluxerlist.hasVoted(userId);
+
+      const embed = new EmbedBuilder().setColor(getGlobalColor());
+      if (voted === null) {
+        embed.setDescription(this.t(msg, "responses.vote.checkUnknown"));
+      } else if (voted) {
+        embed.setDescription(this.t(msg, "responses.vote.checkYes", { type: resolvedType }));
+      } else {
+        const slug = resourceId || (resolvedType === "server" ? fluxerlist.serverSlug : fluxerlist.botSlug);
+        const voteUrl = slug ? buildVoteLink(resolvedType, slug) : FLUXERLIST.SITE_URL;
+        embed.setDescription(this.t(msg, "responses.vote.checkNo", { type: resolvedType, url: voteUrl }));
+      }
+      return msg.reply({ embeds: [embed] });
+    }
+
     case "voters": {
       if (!fluxerlist || !fluxerlist.enabled) return msg.reply(notConfigured(t, guildId));
 
