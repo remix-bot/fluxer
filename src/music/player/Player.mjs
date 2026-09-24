@@ -24,6 +24,27 @@ import PlaybackMixin from "./PlaybackMixin.mjs";
 import SearchMixin from "./SearchMixin.mjs";
 import DisplayMixin from "./DisplayMixin.mjs";
 
+/** @type {number} Timestamp (ms) of the last logged player-state persistence failure. */
+let _lastPersistErrorLog = 0;
+/** @type {number} Minimum spacing between persistence-error log lines, to avoid log floods when MySQL is down/unreachable. */
+const PERSIST_ERROR_LOG_COOLDOWN_MS = 60_000;
+
+/**
+ * Log a player-state persistence failure (saveSnapshot / updatePosition),
+ * rate-limited so a prolonged DB outage doesn't spam the log for every
+ * player's debounce/heartbeat tick. Persistence is best-effort — playback
+ * must never be interrupted by it — but a silent, permanently-swallowed
+ * failure previously left operators with zero visibility when it broke.
+ * @param {string} where - Short tag identifying the call site.
+ * @param {Error} e - The error thrown/rejected by the store call.
+ */
+function logPersistError(where, e) {
+  const now = Date.now();
+  if (now - _lastPersistErrorLog < PERSIST_ERROR_LOG_COOLDOWN_MS) return;
+  _lastPersistErrorLog = now;
+  logger.warn(`[Player] State persistence (${where}) failed — resume/queue restore may be stale until this clears (will not re-log for 60s):`, e?.message ?? e);
+}
+
 /**
  * @class Player
  * @description Main music player class. Manages voice connections, playback,
@@ -164,8 +185,8 @@ class Player extends EventEmitter {
       this._snapSaveTimer = setTimeout(() => {
         this._snapSaveTimer = null;
         try {
-          this.client?._remix?.playerState?.saveSnapshot(this)?.catch?.(() => {});
-        } catch (_) { /* persistence must never break playback */ }
+          this.client?._remix?.playerState?.saveSnapshot(this)?.catch?.(e => logPersistError("saveSnapshot", e));
+        } catch (e) { logPersistError("saveSnapshot/sync", e); }
       }, 3_000);
     };
     for (const evt of ["queue", "startplay", "stopplay", "playback"]) {
@@ -177,8 +198,8 @@ class Player extends EventEmitter {
         if (!current || this._destroyed || this.leaving || this._paused) return;
         if (!this.startedPlaying) return;
         const pos = Math.max(0, Date.now() - this.startedPlaying);
-        this.client?._remix?.playerState?.updatePosition?.(this._guildId, pos)?.catch?.(() => {});
-      } catch (_) { /* best effort */ }
+        this.client?._remix?.playerState?.updatePosition?.(this._guildId, pos)?.catch?.(e => logPersistError("updatePosition", e));
+      } catch (e) { logPersistError("updatePosition/sync", e); }
     }, 15_000);
     this._stateHeartbeat.unref?.();
 

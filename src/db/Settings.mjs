@@ -486,7 +486,11 @@ export class RemoteSettingsManager extends SettingsManager {
     this._debounceTimers.set(server.id, setTimeout(() => {
       this._debounceTimers.delete(server.id);
       const target = this.guilds.get(server.id);
-      if (target) this.remoteUpdate(target, key);
+      if (target) {
+        this.remoteUpdate(target, key).catch(e =>
+          logger.error(`[Settings] debounced update error (guild ${server.id}, key "${key}"):`, e?.message)
+        );
+      }
     }, 80));
   }
 
