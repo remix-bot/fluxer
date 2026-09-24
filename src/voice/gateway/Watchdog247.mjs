@@ -23,6 +23,7 @@
 import { logger } from "../../core/Logger.mjs";
 import { cleanId } from "../../utils/Utils.mjs";
 import { get247ChannelMode, isPlayerConnectionDead, detachPlayerFromManager } from "../../utils/Helpers247.mjs";
+import { ErrorCodes } from "@fluxerjs/core";
 
 /** @type {number} Default sweep interval (ms). Overridable via config.timers.watchdog247Interval. */
 const DEFAULT_SWEEP_INTERVAL = 60_000;
@@ -99,7 +100,7 @@ const Watchdog247 = {
       if (fetched) return { channel: fetched, definitive: false };
       return { channel: null, definitive: true };
     } catch (err) {
-      const gone = err?.code === "CHANNEL_NOT_FOUND"
+      const gone = err?.code === ErrorCodes.ChannelNotFound
           || err?.statusCode === 404 || err?.status === 404
           || /\b404\b|not found|unknown channel/i.test(String(err?.message ?? ""));
       return { channel: null, definitive: gone };

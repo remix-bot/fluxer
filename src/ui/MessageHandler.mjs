@@ -5,7 +5,7 @@
  * used by every command.
  */
 
-import { Client, Events, EmbedBuilder, PermissionFlags } from "@fluxerjs/core";
+import { Client, Events, EmbedBuilder, PermissionFlags, ErrorCodes } from "@fluxerjs/core";
 import { logger } from "../core/Logger.mjs";
 import { Utils } from "../utils/Utils.mjs";
 import { Message, Channel } from "./Wrappers.mjs";
@@ -498,7 +498,7 @@ export class MessageHandler {
       try {
         return new Message(await message.edit(payload), this);
       } catch (err) {
-        if (err.code === "UNKNOWN_MESSAGE" || err.code === 10008) {
+        if (err.code === ErrorCodes.MessageNotFound || String(err?.message ?? "").includes("Message wasn't found")) {
           logger.warn("[MessageHandler] editEmbed: Message no longer exists, skipping edit.");
           return null;
         }

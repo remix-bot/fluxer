@@ -5,7 +5,7 @@
  * (two-arrow embed paging).
  */
 
-import { EmbedBuilder } from "@fluxerjs/core";
+import { EmbedBuilder, ErrorCodes } from "@fluxerjs/core";
 import { logger } from "../core/Logger.mjs";
 import { Message } from "./Wrappers.mjs";
 import { getGlobalColor } from "./Embeds.mjs";
@@ -248,14 +248,14 @@ export class RichPaginator {
         await rawMsg.removeAllReactions();
         return;
       } catch (e) {
-        if (String(e?.message ?? e).includes("Message wasn't found") || e?.code === 10008) return;
+        if (String(e?.message ?? e).includes("Message wasn't found") || e?.code === ErrorCodes.MessageNotFound) return;
         logger.warn("[RichPaginator] removeAllReactions failed:", e?.message ?? e);
       }
       for (const emoji of allReactions) {
         try {
           await rawMsg.removeReaction(emoji);
         } catch(e) {
-          if (String(e?.message ?? e).includes("Message wasn't found") || e?.code === 10008) return;
+          if (String(e?.message ?? e).includes("Message wasn't found") || e?.code === ErrorCodes.MessageNotFound) return;
           logger.warn("[MessageHandler] Error:", e?.message);
         }
       }
@@ -346,12 +346,12 @@ export class QueuePaginator {
       try {
         await rawMsg.removeAllReactions();
       } catch (e) {
-        if (String(e?.message ?? e).includes("Message wasn't found") || e?.code === 10008) return;
+        if (String(e?.message ?? e).includes("Message wasn't found") || e?.code === ErrorCodes.MessageNotFound) return;
         for (const emoji of [prev, next]) {
           try {
             await rawMsg.removeReaction(emoji);
           } catch(e) {
-            if (String(e?.message ?? e).includes("Message wasn't found") || e?.code === 10008) return;
+            if (String(e?.message ?? e).includes("Message wasn't found") || e?.code === ErrorCodes.MessageNotFound) return;
             logger.warn("[MessageHandler] Error:", e?.message);
           }
         }

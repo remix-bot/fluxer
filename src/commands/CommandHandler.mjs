@@ -448,10 +448,10 @@ export class CommandHandler extends EventEmitter {
     const authorId = msg.message?.author?.id;
     const isOwner = this.owners.includes(authorId);
     const permGuildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
+    if (!isOwner && cmd.requirements.some(r => r.ownerOnly)) return false;
 
     for (let i = 0; i < cmd.requirements.length; i++) {
       let req = cmd.requirements[i];
-      if (req.ownerOnly && !isOwner) return false;
       if (req.permissions.length > 0 && !isOwner) {
         const guild = msg.message?.guild ?? null;
         if (!guild) {

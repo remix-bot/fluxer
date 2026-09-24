@@ -24,11 +24,16 @@ export class PrefixManager {
   }
 
   /**
-   * Get the command prefix for a guild.
-   * @param {string} guildId
+   * Get the command prefix for a guild. DMs and any other context without a
+   * real guildId skip the settings lookup entirely — falling through to
+   * getServer(undefined) would create and permanently cache a phantom
+   * "undefined" guild entry in the settings store, which then shows up in
+   * every guilds-map iteration (24/7 watchdog, shutdown save-all, etc.).
+   * @param {string|null|undefined} guildId
    * @returns {string}
    */
   getPrefix(guildId) {
+    if (!guildId) return this.configPrefix ?? "%";
     const serverPrefix = this.settings.getServer(guildId).get("prefix");
     return serverPrefix ?? this.configPrefix ?? "%";
   }
