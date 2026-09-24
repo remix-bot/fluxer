@@ -41,6 +41,9 @@ export class RedisHandler {
   /** @private @type {boolean} Whether the handler has been destroyed. */
   _destroyed = false;
 
+  /** @private @type {{main: number, subscriber: number}} Consecutive socket errors since the last successful connect, per client. */
+  _errorStreaks = { main: 0, subscriber: 0 };
+
   /**
    * Create a new RedisHandler and immediately begin connecting.
    * @param {object} [opts={}] - Redis connection options (passed to `createClient`).
@@ -51,6 +54,7 @@ export class RedisHandler {
 
     const { platform: _platform, ...clientOpts } = { ...opts };
     clientOpts.socket = {
+      connectTimeout: 5_000,
       ...(clientOpts.socket ?? {}),
       reconnectStrategy: DEFAULT_RETRY_STRATEGY,
     };
@@ -58,14 +62,38 @@ export class RedisHandler {
     this.client = createClient(clientOpts);
     this.client.on("error", (err) => {
       logger.warn("[Redis/Main] Error:", err.message);
+      this._noteErrorStreak("main");
     });
+    this.client.on("ready", () => { this._errorStreaks.main = 0; });
 
     this.subscriber = this.client.duplicate();
     this.subscriber.on("error", (err) => {
       logger.warn("[Redis/Subscriber] Error:", err.message);
+      this._noteErrorStreak("subscriber");
     });
+    this.subscriber.on("ready", () => { this._errorStreaks.subscriber = 0; });
 
     this._connect();
+  }
+
+  /**
+   * After enough consecutive failures on one client, log a single actionable
+   * diagnostic instead of letting the identical connection-error line repeat
+   * forever. Resets whenever that client reaches "ready".
+   * @private
+   * @param {"main"|"subscriber"} which
+   */
+  _noteErrorStreak(which) {
+    this._errorStreaks[which] = (this._errorStreaks[which] ?? 0) + 1;
+    if (this._errorStreaks[which] === 8) {
+      const label = which === "main" ? "Main" : "Subscriber";
+      logger.error(
+        `[Redis/${label}] Still failing to connect after repeated attempts — this looks like a ` +
+        "network-reachability problem, not an app bug: confirm the host in config.json -> dashboard.redis.url " +
+        "is reachable from inside the bot's container. If Redis runs in the same docker-compose stack, point " +
+        "this at the service name (e.g. redis://redis:6379) instead of a bare external IP."
+      );
+    }
   }
 
   /**

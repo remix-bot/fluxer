@@ -8,6 +8,10 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      nodelink:
+        condition: service_healthy
     volumes:
       - ./config.json:/app/config.json
       - ../storage:/app/storage
@@ -63,6 +67,12 @@ services:
       - ./nodelink.config.json:/nodelink/config.json:ro
     ports:
       - "${NODELINK_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(3000,'127.0.0.1').on('connect',function(){process.exit(0)}).on('error',function(){process.exit(1)})"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 60s
     networks:
       - remix-net
 

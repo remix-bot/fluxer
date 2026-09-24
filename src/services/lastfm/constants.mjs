@@ -74,7 +74,10 @@ function isLastFmUserNotFound(err) {
 function isLastFmFatalLinkError(err) {
   if (isLastFmUserNotFound(err)) return true;
   const msg = String(err?.message ?? "");
-  return /Last\.fm error 4:/.test(msg) || /authentication failed/i.test(msg);
+  return /Last\.fm error [49]:/.test(msg)
+    || /authentication failed/i.test(msg)
+    || /invalid session key/i.test(msg)
+    || /Last\.fm HTTP 40[13]:/.test(msg);
 }
 
 /** @type {Set<string>} @description Users already warned about as stale (dedup for background flows). */

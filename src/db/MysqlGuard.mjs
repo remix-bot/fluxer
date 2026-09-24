@@ -59,9 +59,16 @@ const _guardedPools = new WeakSet();
  * Idempotent: calling twice on the same pool is a no-op.
  * @param {object} pool - mysql2 Pool or PromisePool instance.
  * @param {string} [label="MySQL"] - Label used in log lines.
+ * @param {object} [options={}]
+ * @param {number} [options.keepAliveIntervalMs=20000] - How often to ping the pool
+ *   with a trivial query to keep at least one connection active. Many shared/cheap
+ *   MySQL hosts enforce a `wait_timeout` well under mysql2's own 60s idle default
+ *   (error 4031, "disconnected because of inactivity") — a query at this interval
+ *   keeps connections from ever sitting idle long enough to get killed server-side.
+ *   Set to 0 to disable.
  * @returns {object} The core (callback-API) pool that was guarded.
  */
-function attachMysqlPoolGuard(pool, label = "MySQL") {
+function attachMysqlPoolGuard(pool, label = "MySQL", { keepAliveIntervalMs = 20_000 } = {}) {
   if (!pool) return pool;
   const corePool = typeof pool.getConnection === "function" && pool.pool && pool.pool.getConnection
     ? pool.pool
@@ -85,6 +92,17 @@ function attachMysqlPoolGuard(pool, label = "MySQL") {
   corePool.on("error", (err) => {
     logger.error(`[${label}] MySQL pool error:`, err?.code ?? err?.message ?? err);
   });
+
+  if (keepAliveIntervalMs > 0) {
+    const timer = setInterval(() => {
+      corePool.query("SELECT 1", (err) => {
+        if (err) {
+          logger.warn(`[${label}] Keepalive ping failed:`, err?.code ?? err?.message ?? err);
+        }
+      });
+    }, keepAliveIntervalMs);
+    timer.unref?.();
+  }
 
   return corePool;
 }

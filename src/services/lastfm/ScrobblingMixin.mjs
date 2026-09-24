@@ -7,7 +7,7 @@
  */
 
 import { logger } from "../../core/Logger.mjs";
-import { apiCall, isLastFmUserNotFound, noteStaleUser } from "./constants.mjs";
+import { apiCall, isLastFmFatalLinkError, isLastFmUserNotFound, noteStaleUser } from "./constants.mjs";
 
 /**
  * @type {object}
@@ -39,6 +39,12 @@ const ScrobblingMixin = {
       if (isLastFmUserNotFound(err)) {
         if (noteStaleUser(this, userId)) {
           logger.warn(`[LastFm] Now-playing updates paused for ${userId}: Last.fm user not found (account renamed or deleted? attempting auto-recovery)`);
+        }
+        return;
+      }
+      if (isLastFmFatalLinkError(err)) {
+        if (noteStaleUser(this, userId)) {
+          logger.warn(`[LastFm] Now-playing updates paused for ${userId}: ${err.message} (session revoked — attempting auto-recovery, will auto-unlink if unrecoverable)`);
         }
         return;
       }
@@ -77,6 +83,12 @@ const ScrobblingMixin = {
         }
         return;
       }
+      if (isLastFmFatalLinkError(err)) {
+        if (noteStaleUser(this, userId)) {
+          logger.warn(`[LastFm] Scrobbling paused for ${userId}: ${err.message} (session revoked — attempting auto-recovery, will auto-unlink if unrecoverable)`);
+        }
+        return;
+      }
       logger.warn(`[LastFm] Scrobble failed for ${userId}: ${err.message}`);
     }
   },
@@ -103,6 +115,12 @@ const ScrobblingMixin = {
       if (isLastFmUserNotFound(e)) {
         if (noteStaleUser(this, userId)) {
           logger.warn(`[LastFm] Scrobble count sync skipped for ${userId}: Last.fm user not found (account renamed or deleted? attempting auto-recovery)`);
+        }
+        return 0;
+      }
+      if (isLastFmFatalLinkError(e)) {
+        if (noteStaleUser(this, userId)) {
+          logger.warn(`[LastFm] Scrobble count sync skipped for ${userId}: ${e.message} (session revoked — attempting auto-recovery, will auto-unlink if unrecoverable)`);
         }
         return 0;
       }
