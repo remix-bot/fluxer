@@ -47,7 +47,7 @@ export class TrackOptionsManager {
             user_id VARCHAR(32) NOT NULL,
             track_identifier VARCHAR(512) NOT NULL,
             track_title VARCHAR(512) NOT NULL DEFAULT '',
-            alias VARCHAR(${MAX_ALIAS_LEN}) NOT NULL DEFAULT ${mysql.escape(DEFAULT_ALIAS)},
+            alias VARCHAR(32) NOT NULL DEFAULT 'default',
             start_ms INT UNSIGNED NOT NULL DEFAULT 0,
             end_ms INT UNSIGNED NOT NULL DEFAULT 0,
             bot_id VARCHAR(32) NOT NULL DEFAULT '',
@@ -70,7 +70,7 @@ export class TrackOptionsManager {
     try {
       const cols = await this._query(`SHOW COLUMNS FROM track_options LIKE 'alias'`);
       if (cols && cols.length > 0) return;
-      await this._query(`ALTER TABLE track_options ADD COLUMN alias VARCHAR(${MAX_ALIAS_LEN}) NOT NULL DEFAULT ${mysql.escape(DEFAULT_ALIAS)} AFTER track_title`);
+      await this._query(`ALTER TABLE track_options ADD COLUMN alias VARCHAR(32) NOT NULL DEFAULT 'default' AFTER track_title`);
       await this._query(`ALTER TABLE track_options DROP INDEX uq_user_track_bot`);
       await this._query(`ALTER TABLE track_options ADD UNIQUE KEY uq_user_track_alias_bot (user_id, track_identifier, alias, bot_id)`);
       logger.player("[TrackOptions] Migrated table — added alias column.");
@@ -94,16 +94,9 @@ export class TrackOptionsManager {
     });
   }
 
-  /** @private @returns {string} SQL WHERE clause fragment for bot_id. */
-  _botIdWhere() {
-    if (!this.botId) return "";
-    return ` AND bot_id = ${mysql.escape(String(this.botId))}`;
-  }
-
-  /** @private @returns {{col: string, val: string}} SQL column and value fragments for bot_id INSERT. */
-  _botIdInsert() {
-    if (!this.botId) return { col: "", val: "" };
-    return { col: ", bot_id", val: `, ${mysql.escape(String(this.botId))}` };
+  /** @private @returns {string|null} The current bot_id value, or null if unset (matches any row via IS NULL check). */
+  _botIdVal() {
+    return this.botId ? String(this.botId) : null;
   }
 
   /** Sanitize an alias to alphanumeric, lowercase, max MAX_ALIAS_LEN chars. @param {*} raw @returns {string} */
@@ -143,13 +136,14 @@ export class TrackOptionsManager {
 
     const safeAlias = TrackOptionsManager.sanitizeAlias(alias);
     const title = (track.title || "").slice(0, 512);
-    const bi = this._botIdInsert();
+    const params = [userId, identifier, title, safeAlias, safeStartMs, safeEndMs, this._botIdVal() ?? "", safeStartMs, safeEndMs, title];
 
     try {
       await this._query(
-          `INSERT INTO track_options (user_id, track_identifier, track_title, alias, start_ms, end_ms${bi.col})
-           VALUES (${mysql.escape(userId)}, ${mysql.escape(identifier)}, ${mysql.escape(title)}, ${mysql.escape(safeAlias)}, ${safeStartMs}, ${safeEndMs}${bi.val})
-             ON DUPLICATE KEY UPDATE start_ms = ${safeStartMs}, end_ms = ${safeEndMs}, track_title = ${mysql.escape(title)}`
+          `INSERT INTO track_options (user_id, track_identifier, track_title, alias, start_ms, end_ms, bot_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE start_ms = ?, end_ms = ?, track_title = ?`,
+          params
       );
       this._cache.delete(`${userId}:${identifier}:${safeAlias}`);
       return { identifier, startMs: safeStartMs, endMs: safeEndMs, alias: safeAlias };
@@ -175,8 +169,10 @@ export class TrackOptionsManager {
     }
 
     try {
+      const botIdVal = this._botIdVal();
       const rows = await this._query(
-          `SELECT start_ms, end_ms, track_title, alias FROM track_options WHERE user_id = ${mysql.escape(userId)} AND track_identifier = ${mysql.escape(identifier)} AND alias = ${mysql.escape(safeAlias)}${this._botIdWhere()}`
+          `SELECT start_ms, end_ms, track_title, alias FROM track_options WHERE user_id = ? AND track_identifier = ? AND alias = ? AND (? IS NULL OR bot_id = ?)`,
+          [userId, identifier, safeAlias, botIdVal, botIdVal]
       );
       if (!rows || rows.length === 0) return null;
       const result = { startMs: rows[0].start_ms, endMs: rows[0].end_ms, title: rows[0].track_title, alias: rows[0].alias };
@@ -199,8 +195,10 @@ export class TrackOptionsManager {
     if (!identifier) return [];
 
     try {
+      const botIdVal = this._botIdVal();
       const rows = await this._query(
-          `SELECT start_ms, end_ms, track_title, alias FROM track_options WHERE user_id = ${mysql.escape(userId)} AND track_identifier = ${mysql.escape(identifier)}${this._botIdWhere()} ORDER BY alias`
+          `SELECT start_ms, end_ms, track_title, alias FROM track_options WHERE user_id = ? AND track_identifier = ? AND (? IS NULL OR bot_id = ?) ORDER BY alias`,
+          [userId, identifier, botIdVal, botIdVal]
       );
       return rows || [];
     } catch (err) {
@@ -216,20 +214,26 @@ export class TrackOptionsManager {
     if (!identifier) return false;
 
     try {
-      let sql;
+      const botIdVal = this._botIdVal();
+      let result;
       if (alias) {
         const safeAlias = TrackOptionsManager.sanitizeAlias(alias);
-        sql = `DELETE FROM track_options WHERE user_id = ${mysql.escape(userId)} AND track_identifier = ${mysql.escape(identifier)} AND alias = ${mysql.escape(safeAlias)}${this._botIdWhere()}`;
         this._cache.delete(`${userId}:${identifier}:${safeAlias}`);
+        result = await this._query(
+            `DELETE FROM track_options WHERE user_id = ? AND track_identifier = ? AND alias = ? AND (? IS NULL OR bot_id = ?)`,
+            [userId, identifier, safeAlias, botIdVal, botIdVal]
+        );
       } else {
-        sql = `DELETE FROM track_options WHERE user_id = ${mysql.escape(userId)} AND track_identifier = ${mysql.escape(identifier)}${this._botIdWhere()}`;
         const keysToDelete = [];
         for (const key of this._cache.keys()) {
           if (key.startsWith(`${userId}:${identifier}:`)) keysToDelete.push(key);
         }
         for (const key of keysToDelete) this._cache.delete(key);
+        result = await this._query(
+            `DELETE FROM track_options WHERE user_id = ? AND track_identifier = ? AND (? IS NULL OR bot_id = ?)`,
+            [userId, identifier, botIdVal, botIdVal]
+        );
       }
-      const result = await this._query(sql);
       return result.affectedRows > 0;
     } catch (err) {
       logger.error("[TrackOptions] remove error:", err.message);
@@ -241,8 +245,10 @@ export class TrackOptionsManager {
   async list(userId, limit = 25) {
     await this.ready();
     try {
+      const botIdVal = this._botIdVal();
       const rows = await this._query(
-          `SELECT track_identifier, track_title, alias, start_ms, end_ms FROM track_options WHERE user_id = ${mysql.escape(userId)}${this._botIdWhere()} ORDER BY track_title, alias LIMIT ${Math.min(limit, 100)}`
+          `SELECT track_identifier, track_title, alias, start_ms, end_ms FROM track_options WHERE user_id = ? AND (? IS NULL OR bot_id = ?) ORDER BY track_title, alias LIMIT ?`,
+          [userId, botIdVal, botIdVal, Math.min(limit, 100)]
       );
       return rows || [];
     } catch (err) {
