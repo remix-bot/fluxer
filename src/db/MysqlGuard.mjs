@@ -40,10 +40,19 @@ import { logger } from "../core/Logger.mjs";
  * `enableKeepAlive` is the critical one — without TCP keepalive probes, a
  * connection parked in the pool behind a NAT/firewall is silently dropped and
  * the next query on it dies with read ETIMEDOUT.
+ *
+ * `maxIdle` and `idleTimeout` switch on mysql2's idle-connection reaper, which
+ * only runs when `maxIdle` is below `connectionLimit` (by default they are
+ * equal, so it never starts). With them set, spare idle connections are closed
+ * client-side after 30s, before a short server-side `wait_timeout` can kill
+ * them (error 4031). Must stay above `keepAliveIntervalMs` (20s) so the pinged
+ * connection is never reaped.
  */
 const MYSQL_POOL_DEFAULTS = {
   enableKeepAlive: true,
   keepAliveInitialDelay: 10_000,
+  maxIdle: 1,
+  idleTimeout: 30_000,
 };
 
 /**
