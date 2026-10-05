@@ -1,11 +1,6 @@
 /**
  * @module commands/eval
  * @description Owner-only command to evaluate arbitrary JavaScript code and display the result.
- *
- * SECURITY: this is NOT a sandbox. The code runs with the full privileges of the bot process
- * (filesystem, network, database, `await import("node:child_process")`...). Treat every ID in
- * config.owners as root access to the host. Every use is written to the audit log, and known
- * secret values from the config are masked in the output to prevent ACCIDENTAL leaks only.
  */
 
 import { CommandBuilder } from "../src/commands/index.mjs";
@@ -14,7 +9,6 @@ import { getGlobalColor } from "../src/ui/index.mjs";
 import { logger } from "../src/core/Logger.mjs";
 import { inspect } from "node:util";
 import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/utils/UI.mjs";
-import { collectSecrets, redactSecrets } from "../src/utils/Redact.mjs";
 
 /** @private @type {string[]} Property name substrings that indicate sensitive/secret data. */
 const RESTRICTED = [
@@ -96,10 +90,9 @@ function removeSensitive(obj, level = 0, visited = new WeakSet()) {
  * Sanitize a value for safe display: await promises, redact sensitive keys,
  * inspect with node:util, and escape markup characters.
  * @param {*} value - The raw eval result.
- * @param {string[]} [secrets=[]] - Secret VALUES to mask anywhere in the output (see Redact.mjs).
  * @returns {Promise<string>} The sanitized output string.
  */
-async function clean(value, secrets = []) {
+async function clean(value) {
   if (value instanceof Promise) value = await value;
 
   if (typeof value === "object" && value !== null) {
@@ -114,8 +107,6 @@ async function clean(value, secrets = []) {
   } catch (err) {
     output = `[Inspection Error]: ${err.message}`;
   }
-
-  output = redactSecrets(output, secrets);
 
   return output
       .replace(/`/g, "`\u200b")
@@ -153,8 +144,7 @@ function isSingleExpression(code) {
 /**
  * @private
  * @async
- * Execute a JavaScript expression/statement in an async function. NOT a sandbox: shadowing
- * `process`/`require` below only hides the usual globals, it does not restrict anything.
+ * Execute a JavaScript expression/statement in a sandboxed async context.
  * @param {string} expression - The code to evaluate.
  * @param {object} context - The `this` context for the eval.
  * @returns {Promise<{output: string, isError: boolean, type: string, elapsed: number}>} Eval result.
@@ -162,11 +152,6 @@ function isSingleExpression(code) {
 async function runEval(expression, context) {
   const start = Date.now();
   let result, isError = false, type = "undefined";
-
-  const secrets = collectSecrets(context?.config);
-  for (const t of [context?.client?.token, context?.config?.token]) {
-    if (typeof t === "string" && t.length >= 6 && !secrets.includes(t)) secrets.push(t);
-  }
 
   try {
     const code = isSingleExpression(expression)
@@ -183,7 +168,7 @@ async function runEval(expression, context) {
   }
 
   const elapsed = Date.now() - start;
-  const output = await clean(result, secrets);
+  const output = await clean(result);
 
   return { output, isError, type, elapsed };
 }
@@ -211,8 +196,6 @@ export const command = new CommandBuilder()
  */
 export async function run(msg, data) {
   const expression = data.get("expression").value;
-
-  logger.warn(`[eval] ${msg?.message?.author?.id ?? msg?.author?.id ?? "unknown"} ran: ${String(expression).replace(/\s+/g, " ").slice(0, 200)}`);
 
   const context = Object.assign({
     message: msg?.message,

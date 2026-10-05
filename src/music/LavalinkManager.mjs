@@ -32,10 +32,6 @@ export class LavalinkManager extends EventEmitter {
     this._client = client;
     const requestSignalTimeoutMS = Number(nodeCfg.requestTimeout ?? 60_000);
 
-    if (["youshallnotpass", "change-me-nodelink"].includes(nodeCfg.password ?? "youshallnotpass")) {
-      logger.warn("[Lavalink] NodeLink is using a well-known/placeholder password. Set a strong one in config.json (nodelink.password) and as NODELINK_PASSWORD in docker/.env.");
-    }
-
     this.lavalink = new LavalinkClientManager({
       nodes: [
         {

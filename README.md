@@ -216,9 +216,9 @@ The fastest way to self-host Remix is with Docker. Everything — the bot, MySQL
    cp .env.example .env   # optional — compose has working defaults
    ```
 
-2. **Edit `config.json`** — fill in your bot token, MySQL credentials (defaults match the compose MySQL service), NodeLink details (defaults match the compose NodeLink service), and your owner IDs. Spotify/Deezer/Apple Music credentials are configured on the **NodeLink side** (`NODELINK_*` environment variables on the `nodelink` service in `docker/docker-compose.yml`; see NodeLink's docs), not in the bot config.
+2. **Edit `config.json`** — fill in your bot token, MySQL credentials (defaults match the compose MySQL service), NodeLink details (defaults match the compose NodeLink service), and your owner IDs. Spotify/Deezer/Apple Music credentials are configured on the **NodeLink side** (`nodelink.config.json`), not in the bot config.
 
-3. **Edit `.env`** (optional) — MySQL passwords, the NodeLink password (`NODELINK_PASSWORD`, required; use the same value in `config.json`), and timezone.
+3. **Edit `.env`** (optional) — MySQL passwords, host port mappings (`WEB_PORT`, `NODELINK_PORT`), and timezone.
 
 4. **Start everything:**
    ```bash
@@ -243,17 +243,17 @@ docker/
 ├── config_example.json     # Docker-friendly config template
 ├── config.json             # You create this (gitignored)
 ├── .env                    # You create this (gitignored)
-└── healthcheck.mjs         # container healthcheck (reads the bot's heartbeat file)
+└── nodelink.config.json    # NodeLink audio node config
 ```
 
 #### Docker services
 
 | Service | Container | Port | Purpose |
 | :--- | :--- | :--- | :--- |
-| `bot` | remix-bot | none (the bot runs no HTTP server) | The Remix bot (+ optional dashboard backend) |
+| `bot` | remix-bot | `${WEB_PORT:-8080}` → 80 | The Remix bot (+ optional dashboard backend) |
 | `mysql` | remix-mysql | — | Settings, Last.fm users, and track options storage |
 | `redis` | remix-redis | — | Dashboard RPC pub/sub (optional) |
-| `nodelink` | remix-nodelink | internal only (3000), built from the official NodeLink repo | Lavalink-compatible audio node |
+| `nodelink` | remix-nodelink | `${NODELINK_PORT:-3000}` | Lavalink-compatible audio node |
 
 #### Useful Docker commands
 
@@ -285,7 +285,7 @@ docker compose up -d --build bot
 If you prefer to keep your config in an environment variable (useful for CI/CD or secret managers), set `CONFIG_JSON` in your `.env`:
 
 ```bash
-CONFIG_JSON={"token":"YOUR_TOKEN","mysql":{"host":"mysql","port":3306,"user":"remix","password":"remix_pw","database":"remix"},"nodelink":{"host":"nodelink","port":3000,"password":"change-me-nodelink"}}
+CONFIG_JSON={"token":"YOUR_TOKEN","mysql":{"host":"mysql","port":3306,"user":"remix","password":"remix_pw","database":"remix"},"nodelink":{"host":"nodelink","port":3000,"password":"youshallnotpass"}}
 ```
 
 The entrypoint will write it to `/app/config.json` on first boot if no config file is mounted.

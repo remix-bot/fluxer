@@ -55,14 +55,8 @@
     "requestTimeout": 60000,
     "Comment": "requestTimeout: ms before a NodeLink HTTP request is aborted. Default: 60000 (60s). Raise if you see 'NodeLink request timeout' errors. All audio sources (Spotify, Deezer, Apple Music, etc.) are resolved by NodeLink, so configure source credentials in nodelink.config.json, not here."
   },
-  "restore": {
-    "maxAgeHours": 12,
-    "Comment": "After a restart the bot resumes the players it saved in MySQL. Snapshots whose last heartbeat is older than maxAgeHours (measured by the database clock) are discarded instead of resumed. Optional extras: spacingMs (pause between guilds, default 1500), spawnTimeoutMs (voice-join limit per guild, default 60000)."
-  },
   "audio": {
     "allowLoadstream": false,
-    "allowPrivateUrls": false,
-    "CommentPrivateUrls": "Direct audio URLs typed into %play are fetched by the bot itself. By default addresses on private networks (127.0.0.0/8, 10/8, 172.16/12, 192.168/16, 169.254/16, ...) are refused, including via redirects, so users cannot make the bot probe your internal services. Set true ONLY if you deliberately stream from your LAN (e.g. a home Icecast). Radio stations from config.radio and the local Bilibili proxy are always allowed.",
     "Comment": "Playback runs on NodeLink's /v4/trackstream endpoint only: WebM/Opus zero-re-encode passthrough, stale URLs auto-retried with a fresh resolve, and seeks handled in-process by the bot (no FFmpeg anywhere). Leave allowLoadstream = false unless you specifically need the legacy /v4/loadstream route. Set it to true only if your audio node exposes /v4/loadstream — it re-enables: server-side audio filters (bassboost, nightcore, ...), MP3/AAC/PCM sources (radio stations, Bilibili's AAC audio), and NodeLink-side seeking. loadstream is what required FFmpeg in the past."
   },
   "bilibili": {

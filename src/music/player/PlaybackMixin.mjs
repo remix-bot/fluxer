@@ -122,7 +122,6 @@ const PlaybackMixin = {
     if (currentBeforeNext) this._lastPlayedTrack = currentBeforeNext;
     const songData = this.queue.next();
     if (!songData) {
-      this._consecutiveErrors = 0;
       this.emit("stopplay");
       this.emit("queueEnd");
 
@@ -172,6 +171,7 @@ const PlaybackMixin = {
     this._paused          = false;
     this._pausedAt        = null;
     this._queueEndedSent  = false;
+    this._consecutiveErrors = 0;
     this._radioReconnects   = 0;
 
     if (songData.type !== "radio" || !this._radioAnnounced) {
@@ -213,8 +213,6 @@ const PlaybackMixin = {
       } else {
         await this._playTrackViaBridge(songData, { seekSeconds: seekSec });
       }
-
-      this._consecutiveErrors = 0;
 
       if (trackOptMatch && trackOptMatch.endMs > 0) {
         const elapsedMs = Date.now() - this.startedPlaying;
@@ -315,7 +313,6 @@ const PlaybackMixin = {
       url:     bridgeUrl,
       title:   songData.title,
       guildId: this._guildId,
-      trusted: songData.type === "radio" || songData.type === "bilibili",
     }, {
       seekSeconds: options.seekSeconds ?? 0,
       durationMs,

@@ -25,7 +25,6 @@ import { LavalinkManager } from "../music/LavalinkManager.mjs";
 import { Dashboard } from "../dashboard/Dashboard.mjs";
 import { VoiceStateCache } from "../voice/VoiceStateCache.mjs";
 import { GatewayHandler } from "../voice/gateway/GatewayHandler.mjs";
-import { RejoinBackoff } from "../voice/gateway/RejoinBackoff.mjs";
 import { LastFmManager } from "../services/lastfm/LastFmManager.mjs";
 import { FluxerListManager } from "../services/FluxerListManager.mjs";
 import { TrackOptionsManager } from "../services/TrackOptionsManager.mjs";
@@ -221,12 +220,7 @@ class Remix {
           }
       );
     };
-    const ownerList = [].concat(config.owners ?? []);
-    if (ownerList.some((id) => typeof id === "number")) {
-      logger.warn("[Config] owners contains a JSON number. Snowflake IDs exceed 2^53 and are corrupted as numbers: write each ID as a quoted string.");
-    }
-    commands.owners = ownerList.map((id) => String(id).trim()).filter(Boolean);
-    commands.allowBotCommands = config.allowBotCommands === true;
+    commands.owners = config.owners ?? [];
 
     this.lavalink = null;
     let lavalinkInitialised = false;
@@ -247,8 +241,6 @@ class Remix {
     this.intentionalLeaves = new Map();
     /** Bot-level 24/7 rejoin timers (channelId → Timeout). Owned by Remix, not by Players. */
     this._247RejoinTimers = new Map();
-    /** Escalating per-channel cool-down so the 24/7 watchdog stops hammering channels it cannot join. */
-    this.rejoinBackoff = new RejoinBackoff();
 
     this.gatewayHandler = new GatewayHandler(this);
     this.gatewayHandler.setupEventHandlers();
@@ -341,15 +333,9 @@ class Remix {
       this.comHash     = childProcess.execSync("git rev-parse --short HEAD", { cwd: __dirname, timeout: 3000 }).toString().trim();
       this.comHashLong = childProcess.execSync("git rev-parse HEAD",         { cwd: __dirname, timeout: 3000 }).toString().trim();
     } catch (e) {
-      const sha = process.env.GIT_SHA?.trim();
-      if (sha) {
-        this.comHash     = sha.slice(0, 7);
-        this.comHashLong = sha;
-      } else {
-        logger.warn("[Git] comhash error:", e?.message);
-        this.comHash     = "Newest";
-        this.comHashLong = null;
-      }
+      logger.warn("[Git] comhash error:", e?.message);
+      this.comHash     = "Newest";
+      this.comHashLong = null;
     }
 
     this.comLink = "https://github.com/remix-bot/fluxer/commit/" + (this.comHashLong ?? "");

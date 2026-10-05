@@ -8,10 +8,8 @@
 import { logger } from "./src/core/Logger.mjs";
 import Remix from "./src/core/Bot.mjs";
 import { initErrorChannel, reportCrash } from "./src/core/ErrorChannel.mjs";
-import { startHeartbeat } from "./src/core/Heartbeat.mjs";
 
 const remix = new Remix();
-startHeartbeat({ isReady: () => Boolean(remix.client?.user) });
 
 initErrorChannel({ config: remix.config, client: remix.client });
 
@@ -149,10 +147,6 @@ process.on("uncaughtExceptionMonitor", (err, origin) => {
  */
 const saveAndExit = async () => {
   logger.recovery("\n[Shutdown] Cleaning up before exit...");
-  setTimeout(() => {
-    logger.warn("[Shutdown] Cleanup timed out, forcing exit");
-    process.exit(1);
-  }, 8000).unref();
   try {
     await remix.playerState?.saveAllFrom?.(remix.players);
   } catch (e) {

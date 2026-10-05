@@ -34,10 +34,6 @@ export class LastFmManager {
 
     this._mysqlConfig = mysqlConfig;
     this._pool = null;
-    /** @private True once the tables exist (a pool without ready tables is never handed out). */
-    this._poolReady = false;
-    /** @private In-flight pool+table initialisation shared by concurrent callers. */
-    this._poolInit = null;
 
     this.botId = null;
     this._hasBotIdColumn = false;
@@ -142,41 +138,19 @@ export class LastFmManager {
 
   /** @private @async Get or create the MySQL connection pool. @returns {Promise<object>} */
   async _getPool() {
-    if (this._pool && this._poolReady) return this._pool;
-    if (!this._poolInit) {
-      this._poolInit = (async () => {
-        if (!this._pool) {
-          const mysql = await import("mysql2/promise");
-          const cfg = this._mysqlConfig ?? {};
-          const extra = {};
-          for (const k of ["ssl", "socketPath", "charset", "timezone", "connectTimeout", "localAddress", "flags"]) {
-            if (cfg[k] !== undefined) extra[k] = cfg[k];
-          }
-          this._pool = mysql.createPool({
-            ...MYSQL_POOL_DEFAULTS,
-            ...extra,
-            host:     cfg.host,
-            port:     cfg.port ?? 3306,
-            user:     cfg.user,
-            password: cfg.password,
-            database: cfg.database,
-          });
-          attachMysqlPoolGuard(this._pool, "LastFm");
-        }
-        try {
-          await this._initTable();
-          this._poolReady = true;
-        } catch (err) {
-          const failed = this._pool;
-          this._pool = null;
-          this._poolReady = false;
-          try { await failed?.end(); } catch (_) {}
-          throw err;
-        }
-        return this._pool;
-      })().finally(() => { this._poolInit = null; });
-    }
-    return this._poolInit;
+    if (this._pool) return this._pool;
+    const mysql = await import("mysql2/promise");
+    this._pool = mysql.createPool({
+      ...MYSQL_POOL_DEFAULTS,
+      host:     this._mysqlConfig.host,
+      port:     this._mysqlConfig.port ?? 3306,
+      user:     this._mysqlConfig.user,
+      password: this._mysqlConfig.password,
+      database: this._mysqlConfig.database,
+    });
+    attachMysqlPoolGuard(this._pool, "LastFm");
+    await this._initTable();
+    return this._pool;
   }
 
   /** @private @async Create the lastfm_users and lastfm_stats tables if they don't exist. */

@@ -2,9 +2,9 @@
 
 import { logger } from "../../core/Logger.mjs";
 import { EventEmitter } from "node:events";
+import { Readable } from "node:stream";
 import { applyMixins } from "../../utils/mixins.mjs";
-import { isLoadstreamEnabled, isPrivateUrlsAllowed } from "./AudioSettings.mjs";
-import { openPublicStream } from "./SafeHttp.mjs";
+import { isLoadstreamEnabled } from "./AudioSettings.mjs";
 import StreamPipeline from "./StreamPipeline.mjs";
 import HttpStreams from "./HttpStreams.mjs";
 
@@ -168,12 +168,15 @@ export class FluxerAudioBridge extends EventEmitter {
       // source page.
       if (!trackInfo.encoded && trackInfo.url && trackInfo.url.startsWith("http")) {
         logger.player("[AudioBridge] Route 3: Fetching directly: " + trackInfo.url.substring(0, 80) + "...");
-        const { stream, req: sourceReq } = await openPublicStream(trackInfo.url, {
+        const response = await fetch(trackInfo.url, {
           headers: { "User-Agent": "Mozilla/5.0 (compatible; Bot/1.0)" },
-          allowPrivate: trackInfo.trusted === true || isPrivateUrlsAllowed(),
+          redirect: "follow",
         });
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status + " for " + trackInfo.url);
+        }
+        const stream = Readable.fromWeb(response.body);
         this._sourceStream = stream;
-        this._sourceReq = sourceReq;
 
         const routed = await this._routeByMagic(stream);
         if (routed.kind === "webm") {

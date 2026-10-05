@@ -4,8 +4,6 @@
 const _settings = {
   /** @type {boolean} @description Whether the legacy /v4/loadstream route may be used (server-side seek, filters, MP3/AAC decode). Disabled by default: playback runs on /v4/trackstream only. */
   allowLoadstream: false,
-  /** @type {boolean} @description Whether direct audio URLs typed by users may point at private/loopback/link-local addresses (LAN radio, a home Icecast...). Off by default so %play cannot be used to probe internal services. Admin-configured radio stations and the local Bilibili proxy are always trusted. */
-  allowPrivateUrls: false,
 };
 
 /**
@@ -17,8 +15,6 @@ const _settings = {
 export function configureAudio(section = null) {
   const raw = section?.allowLoadstream;
   _settings.allowLoadstream = raw === true || raw === "true";
-  const rawPrivate = section?.allowPrivateUrls;
-  _settings.allowPrivateUrls = rawPrivate === true || rawPrivate === "true";
 }
 
 /**
@@ -37,11 +33,4 @@ export function isLoadstreamEnabled() {
   return _settings.allowLoadstream === true;
 }
 
-/**
- * @returns {boolean} Whether user-supplied direct URLs may target private/internal addresses.
- */
-export function isPrivateUrlsAllowed() {
-  return _settings.allowPrivateUrls === true;
-}
-
-export default { configureAudio, getAudioSettings, isLoadstreamEnabled, isPrivateUrlsAllowed };
+export default { configureAudio, getAudioSettings, isLoadstreamEnabled };

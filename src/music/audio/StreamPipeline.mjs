@@ -26,11 +26,6 @@ const PCM_FRAME_SIZE = 960;
 /** @type {number} @description Opus encoding bitrate. */
 const OPUS_BITRATE = 128000;
 
-/** @type {number} @description Max wait for the first bytes of a stream when sniffing its container. */
-const PEEK_TIMEOUT_MS = 15_000;
-/** @type {number} @description Max wait for an OpusHead before an Ogg stream is declared "not Ogg/Opus". */
-const OGG_HEAD_TIMEOUT_MS = 10_000;
-
 /** @type {Buffer} @description WebM/Matroska EBML magic bytes. */
 const WEBM_MAGIC = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
 /** @type {Buffer} @description OGG container magic bytes ("OggS"). */
@@ -173,7 +168,7 @@ const StreamPipeline = {
    * @returns {Promise<Buffer>}
    * @private
    */
-  _peek(stream, n, timeoutMs = PEEK_TIMEOUT_MS) {
+  _peek(stream, n) {
     return new Promise((resolve, reject) => {
       const tryRead = () => {
         const chunks = [];
@@ -194,9 +189,7 @@ const StreamPipeline = {
       const onReadable = () => { cleanup(); tryRead(); };
       const onEnd = () => { cleanup(); tryRead(); };
       const onError = (err) => { cleanup(); reject(err); };
-      let timer = null;
       const cleanup = () => {
-        if (timer) { clearTimeout(timer); timer = null; }
         stream.off("readable", onReadable);
         stream.off("end", onEnd);
         stream.off("error", onError);
@@ -204,10 +197,6 @@ const StreamPipeline = {
       stream.once("readable", onReadable);
       stream.once("end", onEnd);
       stream.once("error", onError);
-      timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("Timed out waiting for stream data (" + timeoutMs + "ms)"));
-      }, timeoutMs);
       tryRead();
     });
   },
@@ -259,37 +248,20 @@ const StreamPipeline = {
    * @returns {Promise<{stream: WebMOpusMuxer, getDurationMs: function}>}
    * @private
    */
-  async _remuxOggToWebM(oggStream, { headTimeoutMs = OGG_HEAD_TIMEOUT_MS } = {}) {
+  async _remuxOggToWebM(oggStream) {
     const demuxer = new PrismOggDemuxer();
     const muxer = new WebMOpusMuxer();
-    muxer.on("error", () => {});
     oggStream.on("error", (err) => demuxer.destroy(err));
     demuxer.on("error", (err) => muxer.destroy(err));
     let frameCount = 0;
     demuxer.on("data", () => { frameCount++; });
-    let headTimer = null;
     const headPromise = new Promise((resolve, reject) => {
       demuxer.once("head", () => resolve());
       demuxer.once("error", (err) => reject(new Error("OGG demux: " + err.message)));
       oggStream.once("error", (err) => reject(new Error("OGG source: " + err.message)));
-      demuxer.once("end", () => reject(new Error("Ogg stream ended without an OpusHead (not Ogg/Opus)")));
-      demuxer.once("close", () => reject(new Error("Ogg demuxer closed before an OpusHead was seen")));
-      headTimer = setTimeout(
-        () => reject(new Error("Timed out waiting for an OpusHead (" + headTimeoutMs + "ms): not Ogg/Opus or the source stalled")),
-        headTimeoutMs
-      );
     });
     oggStream.pipe(demuxer).pipe(muxer);
-    try {
-      await headPromise;
-    } catch (err) {
-      try { oggStream.destroy(); } catch (_) {}
-      try { demuxer.destroy(); } catch (_) {}
-      try { muxer.destroy(); } catch (_) {}
-      throw err;
-    } finally {
-      clearTimeout(headTimer);
-    }
+    await headPromise;
     const wrapper = Object.create(muxer);
     wrapper.getDurationMs = () => frameCount * OPUS_FRAME_MS;
     return wrapper;

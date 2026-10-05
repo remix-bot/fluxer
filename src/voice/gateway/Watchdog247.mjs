@@ -213,11 +213,6 @@ const Watchdog247 = {
         continue;
       }
 
-      if ((remix.rejoinBackoff?.remainingMs(channelId) ?? 0) > 0) {
-        skipped++;
-        continue;
-      }
-
       if (typeof remix.schedule247Rejoin === "function") {
         remix.schedule247Rejoin(channelId, guildId);
         healed++;

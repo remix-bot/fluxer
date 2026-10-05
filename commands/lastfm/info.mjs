@@ -160,7 +160,7 @@ export async function runInfoActions(msg, data, lastfm, prefix, userId, targetUs
 
       const tokenText = data.get("token")?.value;
       if (tokenText) {
-        const dashMatch = tokenText.length <= 300 ? tokenText.match(/^(.+?)\s*[-–—]\s*(.+)$/) : null;
+        const dashMatch = tokenText.match(/^(.+?)\s*[-–—]\s*(.+)$/);
         if (dashMatch) {
           artistName = dashMatch[1].trim();
           albumName = dashMatch[2].trim();
@@ -249,7 +249,7 @@ export async function runInfoActions(msg, data, lastfm, prefix, userId, targetUs
 
       const tokenText = data.get("token")?.value;
       if (tokenText) {
-        const dashMatch = tokenText.length <= 300 ? tokenText.match(/^(.+?)\s*[-–—]\s*(.+)$/) : null;
+        const dashMatch = tokenText.match(/^(.+?)\s*[-–—]\s*(.+)$/);
         if (dashMatch) {
           artistName = dashMatch[1].trim();
           trackName = dashMatch[2].trim();

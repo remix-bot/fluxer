@@ -17,15 +17,6 @@ import { remove247ChannelMode, isPlayerConnectionDead, detachPlayerFromManager, 
 import { logger } from "./Logger.mjs";
 import { Dashboard } from "../dashboard/Dashboard.mjs";
 
-/** Reject if `promise` has not settled within `ms` (the timer is always cleared). */
-function withTimeout(promise, ms, label) {
-  let timer;
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms); }),
-  ]).finally(() => clearTimeout(timer));
-}
-
 /**
  * @type {object}
  * @description Voice/channel mixin — applied to Remix.
@@ -399,7 +390,6 @@ const BotVoiceMixin = {
 
       this.players.playerMap.set(cleanChannelId, player);
       this.players._indexPlayer(cleanGuildId, cleanChannelId);
-      this.rejoinBackoff?.recordSuccess(cleanChannelId);
       if (this.players._pendingJoins) {
         this.players._pendingJoins.delete(cleanChannelId);
       }
@@ -454,29 +444,9 @@ const BotVoiceMixin = {
     logger.player(`[Restore] ${rows.length} saved player(s) found — restoring ${local.length} on this shard.`);
     if (!local.length) return;
 
-    const rc  = this.config?.restore ?? {};
-    const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : d);
-    const spacingMs      = num(rc.spacingMs, 1_500);
-    const startTimeoutMs = num(rc.startTimeoutMs, 20_000);
-    const seekSettleMs   = num(rc.seekSettleMs, 800);
-    const spawnTimeoutMs = num(rc.spawnTimeoutMs, 60_000);
-    const rawHours       = Number(rc.maxAgeHours);
-    const maxAgeHours    = rawHours > 0 ? rawHours : 12;
-
-    const toRestore = [];
-    for (const r of local) {
-      if (Number.isFinite(r.ageMs) && r.ageMs > maxAgeHours * 3_600_000) {
-        logger.player(`[Restore] Snapshot for guild ${r.guildId} is ${(r.ageMs / 3_600_000).toFixed(1)}h old (limit ${maxAgeHours}h), dropping it.`);
-        try { await store.clearSnapshot(r.guildId); } catch (_) {}
-      } else {
-        toRestore.push(r);
-      }
-    }
-    if (!toRestore.length) return;
-
-    for (let i = 0; i < toRestore.length; i++) {
-      const { guildId, data: snap } = toRestore[i];
-      if (i > 0) await new Promise((r) => setTimeout(r, spacingMs));
+    for (let i = 0; i < local.length; i++) {
+      const { guildId, data: snap } = local[i];
+      if (i > 0) await new Promise((r) => setTimeout(r, 1_500));
 
       try {
         const channelId = cleanId(snap.channelId);
@@ -489,7 +459,7 @@ const BotVoiceMixin = {
           continue;
         }
 
-        const player = await withTimeout(this._spawnPlayer(guildId, channelId), spawnTimeoutMs, "Voice join");
+        const player = await this._spawnPlayer(guildId, channelId);
 
         const tcId = cleanId(snap.textChannelId);
         if (tcId) {
@@ -527,25 +497,11 @@ const BotVoiceMixin = {
           system: true,
         });
 
-        await new Promise((resolve) => {
-          const timer = setTimeout(() => { player.off("startplay", onStart); resolve(); }, startTimeoutMs);
-          const onStart = () => { clearTimeout(timer); player.off("startplay", onStart); resolve(); };
-          player.once("startplay", onStart);
-          player.playNext().then(onStart, (e) => {
-            logger.warn(`[Restore] playNext failed for guild ${guildId}:`, e?.message ?? e);
-            onStart();
-          });
-        });
+        await player.playNext();
 
         if (current && pos > 0 && dur > 0) {
-          (async () => {
-            const deadline = Date.now() + 15_000;
-            while (Date.now() < deadline && player._audioBridge?._playing !== true) {
-              await new Promise((r) => setTimeout(r, 250));
-            }
-            await new Promise((r) => setTimeout(r, seekSettleMs)); // let the bridge settle
-            try { await player.seekToPosition(pos); } catch (_) {}
-          })().catch(() => {});
+          await new Promise((r) => setTimeout(r, 800)); // let the bridge settle
+          try { await player.seekToPosition(pos); } catch (_) {}
         }
 
         logger.player(`[Restore] Guild ${guildId}: ${player.queue.data.length} track(s) restored, resuming at ${pos}ms.`);
