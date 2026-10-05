@@ -12,7 +12,7 @@ import { getGlobalColor, cleanId } from "../src/ui/index.mjs";
 export const command = new CommandBuilder()
     .setName("leave")
     .setDescription("Make the bot leave a voice channel", "commands.leave")
-    .addAliases("l", "stop")
+    .addAliases("l", "dc", "discounted", "bye")
     .setCategory("music")
     .addChannelOption(o =>
         o.setName("channel")
