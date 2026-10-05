@@ -8,3 +8,4 @@ download/
 config.json
 docker/config.json
 docker/.env
+scripts/
