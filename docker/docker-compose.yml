@@ -3,6 +3,9 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        # Baked into the image so the bot can show a working commit link (the image has no .git).
+        GIT_SHA: ${GIT_SHA:-}
     container_name: remix-bot
     restart: unless-stopped
     depends_on:
@@ -17,8 +20,7 @@ services:
       - ../storage:/app/storage
     environment:
       - TZ=${TZ:-UTC}
-    ports:
-      - "${WEB_PORT:-8080}:80"
+    # No ports: the bot runs no HTTP server (the dashboard talks to it over Redis).
     networks:
       - remix-net
 
@@ -34,7 +36,8 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-remix_root_pw}"]
+      # Password via MYSQL_PWD (not on the command line, so it is not visible in `ps` or warned about).
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h localhost -u root"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -55,18 +58,24 @@ services:
       - remix-net
 
   nodelink:
-    image: node:22-bookworm-slim
+    # NodeLink is NOT published on npm: it is built from the official repository using its own
+    # Dockerfile. NODELINK_REF is a git tag or commit (v3.9.0 = commit cdb02c6814fd...).
+    # Configuration is done with NODELINK_* environment variables (see NodeLink's docker-compose.yml
+    # for the full list, e.g. cluster, logging and per-source settings).
+    build:
+      context: https://github.com/PerformanC/NodeLink.git#${NODELINK_REF:-v3.9.0}
+      dockerfile: Dockerfile
     container_name: remix-nodelink
     restart: unless-stopped
-    working_dir: /nodelink
-    command: sh -c "if [ ! -f package.json ]; then npm init -y && npm install @performanc/nodelink; fi; node node_modules/@performanc/nodelink/index.js || node index.js"
     environment:
       - TZ=${TZ:-UTC}
-    volumes:
-      - nodelink_data:/nodelink
-      - ./nodelink.config.json:/nodelink/config.json:ro
-    ports:
-      - "${NODELINK_PORT:-3000}:3000"
+      - NODELINK_SERVER_HOST=0.0.0.0
+      - NODELINK_SERVER_PORT=3000
+      - NODELINK_SERVER_PASSWORD=${NODELINK_PASSWORD:?Set NODELINK_PASSWORD in docker/.env (and the same value in config.json -> nodelink.password)}
+    # Reachable from the bot over the compose network only. It is deliberately NOT published on
+    # the host: anyone who can reach it with the password can use your server as an audio proxy.
+    expose:
+      - "3000"
     healthcheck:
       test: ["CMD", "node", "-e", "require('net').connect(3000,'127.0.0.1').on('connect',function(){process.exit(0)}).on('error',function(){process.exit(1)})"]
       interval: 5s
@@ -78,7 +87,6 @@ services:
 
 volumes:
   mysql_data:
-  nodelink_data:
 
 networks:
   remix-net:

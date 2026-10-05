@@ -220,7 +220,10 @@ export class PlayerManager {
         try {
           const textChannelId = message?.channel?.id ?? message?.channel?.channel?.id ?? null;
           if (guildId && textChannelId) {
-            this.settings.getServer(guildId)?.set("announcementChannelId", textChannelId);
+            const announceSrv = this.settings.getServer(guildId);
+            if (announceSrv && announceSrv.get("announcementChannelId") !== textChannelId) {
+              announceSrv.set("announcementChannelId", textChannelId);
+            }
           }
         } catch(e) {
           logger.warn("[PlayerManager] Failed to save announcement channel ID:", e?.message);
@@ -256,7 +259,10 @@ export class PlayerManager {
         try {
           const textChannelId = message?.channel?.id ?? message?.channel?.channel?.id ?? null;
           if (cleanGuildId && textChannelId) {
-            this.settings.getServer(cleanGuildId)?.set("announcementChannelId", textChannelId);
+            const announceSrv = this.settings.getServer(cleanGuildId);
+            if (announceSrv && announceSrv.get("announcementChannelId") !== textChannelId) {
+              announceSrv.set("announcementChannelId", textChannelId);
+            }
           }
         } catch(e) {
           logger.warn("[PlayerManager] Failed to save announcement channel ID:", e?.message);

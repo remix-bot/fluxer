@@ -13,7 +13,7 @@
   "nodelink": {
     "host": "nodelink",
     "port": 3000,
-    "password": "youshallnotpass",
+    "password": "change-me-nodelink",
     "requestTimeout": 60000
   },
   "lastfm": {

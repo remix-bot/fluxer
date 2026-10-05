@@ -129,10 +129,14 @@ const RejoinManager = {
 
     try {
       const player = await this._attemptRejoin(cleanChannelId, cleanGuildId, maxRetries, 5_000, "Rejoin");
+      this._rejoinAttempts.delete(cleanChannelId);
       if (player) {
-        this._rejoinAttempts.delete(cleanChannelId);
+        remix.rejoinBackoff?.recordSuccess(cleanChannelId);
       } else {
-        this._rejoinAttempts.delete(cleanChannelId);
+        const { failures, delayMs } = remix.rejoinBackoff?.recordFailure(cleanChannelId) ?? {};
+        if (failures) {
+          logger.warn(`[Rejoin] Channel ${cleanChannelId} failed ${failures} attempt cycle(s) in a row; the watchdog will wait ${Math.round(delayMs / 60_000)} min before retrying (missing Connect permission or a full channel?).`);
+        }
       }
       return player;
     } finally {

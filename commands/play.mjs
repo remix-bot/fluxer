@@ -73,6 +73,7 @@ function parseLastFmSubProvider(query) {
 function parseLastFmTrackQuery(raw) {
   const value = String(raw ?? "").trim();
   if (!value) return null;
+  if (value.length > 300) return null;
 
   const byMatch = value.match(/^(.+?)\s+by\s+(.+)$/i);
   if (byMatch) {

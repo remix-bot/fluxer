@@ -67,7 +67,7 @@ export class Queue extends EventEmitter {
    * @returns {string} Result message indicating success or out-of-bounds error.
    */
   remove(idx) {
-    if (idx < 0 || idx >= this.data.length) return "Index out of bounds";
+    if (!Number.isInteger(idx) || idx < 0 || idx >= this.data.length) return "Index out of bounds";
     const title = this.data[idx].title;
     const removed = this.data.splice(idx, 1);
     this.emit("queue", { type: "remove", data: { index: idx, old: this.data.slice(), removed, new: this.data } });
@@ -81,8 +81,8 @@ export class Queue extends EventEmitter {
    * @returns {string} Result message indicating success or error.
    */
   move(from, to) {
-    if (from < 0 || from >= this.data.length) return "Source index out of bounds";
-    if (to < 0 || to >= this.data.length)     return "Target index out of bounds";
+    if (!Number.isInteger(from) || from < 0 || from >= this.data.length) return "Source index out of bounds";
+    if (!Number.isInteger(to) || to < 0 || to >= this.data.length)     return "Target index out of bounds";
     if (from === to)                            return "Track is already in that position";
     const [track] = this.data.splice(from, 1);
     this.data.splice(to, 0, track);

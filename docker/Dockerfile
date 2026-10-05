@@ -5,18 +5,20 @@ FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+# .npmrc carries legacy-peer-deps (the @fluxerjs peer ranges conflict); package-lock.json pins versions.
+COPY package.json package-lock.json* .npmrc ./
 
-RUN npm ci --omit=dev --legacy-peer-deps 2>/dev/null || npm install --omit=dev --legacy-peer-deps
+RUN npm ci --omit=dev --legacy-peer-deps || npm install --omit=dev --legacy-peer-deps
 
 COPY . .
 
-# ---- Runtime stage: minimal image with ffmpeg ----
+# ---- Runtime stage: minimal image ----
+# No ffmpeg: audio goes through NodeLink and the in-process Opus/WebM pipeline; ffprobe comes from
+# the bundled ffprobe-static package.
 FROM node:22-bookworm-slim AS runtime
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      ffmpeg \
       tini \
       curl \
       ca-certificates \
@@ -32,12 +34,18 @@ COPY --from=builder --chown=10001:10001 /app ./
 RUN chmod +x docker/docker-entrypoint.sh && \
     mkdir -p /app/storage && chown -R 10001:10001 /app
 
+# Commit shown by the bot (the image has no .git). CI passes it with --build-arg GIT_SHA=<sha>.
+ARG GIT_SHA=""
+ENV GIT_SHA=${GIT_SHA}
+
+# The bot touches this file every 15s while its event loop is running and it is logged in.
+# docker/healthcheck.mjs reports unhealthy when it is missing or stale (no procps needed).
+ENV HEARTBEAT_FILE=/tmp/remix-heartbeat
+
 USER 10001:10001
 
-EXPOSE 80
-
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD pgrep -f "node .*index.mjs" >/dev/null 2>&1 || pgrep -f "node .*shard.mjs" >/dev/null 2>&1 || exit 1
+  CMD ["node", "docker/healthcheck.mjs"]
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker/docker-entrypoint.sh"]
 

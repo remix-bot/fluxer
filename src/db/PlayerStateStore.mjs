@@ -209,12 +209,14 @@ export class PlayerStateStore {
 
   /**
    * Load every snapshot belonging to this bot.
-   * @returns {Promise<Array<{guildId: string, data: object, positionMs: number}>>}
+   * @returns {Promise<Array<{guildId: string, data: object, positionMs: number, ageMs: number|null}>>}
+   *   ageMs = time since the row was last written, measured by the DATABASE clock (immune to
+   *   bot/DB clock skew); null when it cannot be determined.
    */
   async loadAll() {
     await this.init();
     const rows = await this._exec(
-      `SELECT guild_id, data, position_ms FROM player_state WHERE bot_id = ?`,
+      `SELECT guild_id, data, position_ms, TIMESTAMPDIFF(SECOND, updated_at, NOW()) AS age_s FROM player_state WHERE bot_id = ?`,
       [this.botId]
     );
     const out = [];
@@ -222,7 +224,11 @@ export class PlayerStateStore {
       try {
         const parsed = typeof row.data === "string" ? JSON.parse(row.data) : row.data;
         if (parsed && parsed.channelId) {
-          out.push({ guildId: String(row.guild_id), data: parsed, positionMs: Number(row.position_ms) || 0 });
+          const ageS = row.age_s == null ? NaN : Number(row.age_s);
+          out.push({
+            guildId: String(row.guild_id), data: parsed, positionMs: Number(row.position_ms) || 0,
+            ageMs: Number.isFinite(ageS) ? Math.max(0, ageS) * 1000 : null,
+          });
         }
       } catch (e) {
         logger.warn("[PlayerState] Skipping malformed snapshot for guild", row.guild_id, ":", e?.message);

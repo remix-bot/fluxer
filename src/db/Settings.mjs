@@ -172,6 +172,9 @@ export class RemoteSettingsManager extends SettingsManager {
   /** @private @type {Map<string, setTimeout>} Debounce timers keyed by guild ID. */
   _debounceTimers = new Map();
 
+  /** @private @type {Map<string, Set<string>>} Keys changed since the last flush, per guild: one debounce window can span several keys. */
+  _dirtyKeys = new Map();
+
   /** @private @type {boolean} True after shutdown() is called. */
   _shuttingDown = false;
 
@@ -210,6 +213,7 @@ export class RemoteSettingsManager extends SettingsManager {
         .filter(Boolean);
     for (const [, timer] of this._debounceTimers) clearTimeout(timer);
     this._debounceTimers.clear();
+    this._dirtyKeys?.clear();
     if (pendingServers.length > 0) {
       logger.info("Settings", `Flushing ${pendingServers.length} pending write(s) on shutdown...`);
     }
@@ -475,20 +479,28 @@ export class RemoteSettingsManager extends SettingsManager {
     }
     const s = this.guilds.get(server.id);
     s.data[key] = server.data[key];
+    this._dirtyKeys ??= new Map();
     if (key === 'stay_247') {
       const existing = this._debounceTimers.get(server.id);
       if (existing) { clearTimeout(existing); this._debounceTimers.delete(server.id); }
+      this._dirtyKeys.delete(server.id);
       this.remoteSave(s).catch(e => logger.error('[Settings] immediate save error:', e.message));
       return;
     }
+    let dirty = this._dirtyKeys.get(server.id);
+    if (!dirty) { dirty = new Set(); this._dirtyKeys.set(server.id, dirty); }
+    dirty.add(key);
     const existing = this._debounceTimers.get(server.id);
     if (existing) clearTimeout(existing);
     this._debounceTimers.set(server.id, setTimeout(() => {
       this._debounceTimers.delete(server.id);
+      const keys = [...(this._dirtyKeys.get(server.id) ?? [])];
+      this._dirtyKeys.delete(server.id);
       const target = this.guilds.get(server.id);
-      if (target) {
-        this.remoteUpdate(target, key).catch(e =>
-          logger.error(`[Settings] debounced update error (guild ${server.id}, key "${key}"):`, e?.message)
+      if (!target) return;
+      for (const k of keys) {
+        this.remoteUpdate(target, k).catch(e =>
+          logger.error(`[Settings] debounced update error (guild ${server.id}, key "${k}"):`, e?.message)
         );
       }
     }, 80));
@@ -529,6 +541,7 @@ export class RemoteSettingsManager extends SettingsManager {
   removeServer(id) {
     const timer = this._debounceTimers.get(id);
     if (timer) { clearTimeout(timer); this._debounceTimers.delete(id); }
+    this._dirtyKeys?.delete(id);
     this.guilds.delete(id);
   }
 }

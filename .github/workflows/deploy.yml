@@ -4,8 +4,36 @@ on:
   push:
     branches: [ "main" ]
 
+# Two quick pushes must not race each other's rollout.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
 jobs:
+  # Nothing is built or deployed unless the project still parses, links and has complete translations.
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax, module-link, JSON and translation check
+        run: npm run check
+
   build-and-push:
+    needs: check
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,6 +58,7 @@ jobs:
           tags: |
             type=raw,value=latest
             type=ref,event=branch
+            type=sha,format=long
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -39,6 +68,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
@@ -46,13 +77,16 @@ jobs:
           version: "latest"
 
       - name: Configure kubeconfig
+        env:
+          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
         run: |
-          if [ -z "${{ secrets.KUBE_CONFIG }}" ]; then
+          if [ -z "$KUBE_CONFIG" ]; then
             echo "::error::KUBE_CONFIG secret is not set. Add it under Settings > Secrets and variables > Actions."
             exit 1
           fi
           mkdir -p "$HOME/.kube"
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
+          echo "$KUBE_CONFIG" | base64 --decode > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
 
       - name: Verify cluster connectivity
         run: kubectl get deployment fluxer -n fh-nologicalan-remix

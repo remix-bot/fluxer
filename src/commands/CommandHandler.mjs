@@ -33,6 +33,8 @@ export class CommandHandler extends EventEmitter {
   pingPrefix = true;
   /** @type {string[]} Bot owner user IDs. */
   owners = [];
+  /** When false (default) messages from other bots/webhooks never trigger commands (set config.allowBotCommands = true to allow). */
+  allowBotCommands = false;
 
   /** @type {import('../ui/MessageHandler.mjs').MessageHandler} */
   messages;
@@ -131,6 +133,8 @@ export class CommandHandler extends EventEmitter {
    */
   messageHandler(msg) {
     if (!msg || !msg.content) return;
+    const author = msg.message?.author ?? msg.author;
+    if (author?.bot && !this.allowBotCommands) return;
     const trimmed = msg.content.trim();
     if (/^<@!?\d+>$/.test(trimmed)) {
       const botId = this.client.user?.id;
@@ -244,7 +248,7 @@ export class CommandHandler extends EventEmitter {
    * @param {boolean} [external=false] - When true, errors are returned instead of replied.
    * @returns {object|undefined} The command run payload.
    */
-  processCommand(cmd, args, msg, previous = false, external = false) {
+  processCommand(cmd, args, msg, previous = false, external = false, requirementsChecked = false) {
     if (!cmd) return logger.warn("[CommandHandler.processCommand] Invalid case: `cmd` falsy.");
 
     if (!external) {
@@ -266,8 +270,8 @@ export class CommandHandler extends EventEmitter {
       }
     }
 
-    if (cmd.requirements.length > 0 && !external) {
-      if (!this.assertRequirements(cmd, msg)) return;
+    if (cmd.requirements.length > 0 && !external && !requirementsChecked) {
+      if (!this.assertRequirements(cmd, msg, args, previous)) return;
     }
     if (previous === false) previous = this.format("$prefix" + cmd.name, msg.channel?.channel?.guildId);
     if (!external) this.emit("command", { command: cmd, message: msg });
@@ -444,7 +448,7 @@ export class CommandHandler extends EventEmitter {
    * @param {Message} msg
    * @returns {boolean}
    */
-  assertRequirements(cmd, msg) {
+  assertRequirements(cmd, msg, args = null, previous = false) {
     const authorId = msg.message?.author?.id;
     const isOwner = this.owners.includes(authorId);
     const permGuildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
@@ -477,12 +481,19 @@ export class CommandHandler extends EventEmitter {
             if (missing.length > 0) {
               this.replyHandler(this.t(permGuildId, "cmdBuilder.requirement.permission"), msg);
             } else {
-              const guildId2 = msg.channel?.channel?.guildId ?? msg.message?.guildId;
-              const prefix2  = this.getPrefix(guildId2);
-              const rawContent = msg.message.content;
-              const len2 = rawContent.startsWith(prefix2) ? prefix2.length : 0;
-              const args = rawContent.slice(len2).replace(/\u00A0/gi, " ").trim().split(" ").map(e => e.trim());
-              this.processCommand(cmd, args, msg, false, true);
+              let dispatchArgs = args;
+              if (!dispatchArgs) {
+                const guildId2 = msg.channel?.channel?.guildId ?? msg.message?.guildId;
+                const prefix2  = this.getPrefix(guildId2);
+                const rawContent = msg.message.content;
+                const len2 = rawContent.startsWith(prefix2) ? prefix2.length : 0;
+                dispatchArgs = rawContent.slice(len2).replace(/\u00A0/gi, " ").trim().split(" ").map(e => e.trim());
+              }
+              try {
+                this.processCommand(cmd, dispatchArgs, msg, previous, false, true);
+              } catch (e) {
+                logger.error("[CommandHandler] Command failed after async permission check:", e);
+              }
             }
           }).catch(() => this.replyHandler(this.t(permGuildId, "cmdBuilder.requirement.permission"), msg));
           return false;
