@@ -27,6 +27,202 @@ const MIX_POOL_TTL_MS = 5 * 60_000;
 /** Max mix pools cached per player (LRU-style eviction). */
 const MAX_MIX_POOLS = 4;
 
+/** Max Last.fm tag lookups per pick (each uncached lookup is a network call). */
+const MAX_TAG_CHECKS = 8;
+/** Last.fm tag weights are 0-100 relative to the top tag; ignore the long tail. */
+const TAG_MIN_COUNT = 30;
+/** Number of genre tags kept per artist. */
+const TAG_KEEP = 6;
+const TAG_CACHE_MAX = 500;
+const TAG_CACHE_TTL_MS = 6 * 60 * 60_000;
+/** Cap on remembered autoplay-picked video IDs per player. */
+const PICKED_VIDS_MAX = 100;
+
+/** Last.fm tags that say nothing about genre (normalised form). */
+const NOISE_TAGS = new Set([
+  "seenlive", "favorites", "favourites", "favorite", "favourite", "love", "awesome", "beautiful",
+  "malevocalists", "femalevocalists", "malevocalist", "femalevocalist", "good", "amazing", "best",
+  "cool", "music", "songs", "underrated", "allsongs", "mymusic",
+]);
+/** Broad tags that many unrelated genres share — never enough on their own to match. */
+const WEAK_TAGS = new Set([
+  "pop", "rock", "electronic", "dance", "alternative", "indie", "hiphop", "rap", "rnb",
+  "electropop", "metal", "popmusic",
+]);
+
+/** artist (normalised) -> { tags: Set<string>, ts } */
+const tagCache = new Map();
+
+/**
+ * Normalise a tag/artist string for comparison ("K-Pop" and "kpop" become "kpop").
+ * @param {string} s - Raw string.
+ * @returns {string} Lower-case letters and digits only.
+ */
+function norm(s) {
+  return String(s ?? "").toLowerCase().normalize("NFKD").replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+/**
+ * Strip YouTube channel decorations from an artist name.
+ * @param {string} s - Raw artist/channel name.
+ * @returns {string} Cleaned artist name.
+ */
+function cleanArtist(s) {
+  return String(s ?? "")
+    .replace(/\s*-\s*topic$/i, "")
+    .replace(/\s*vevo$/i, "")
+    .replace(/\s*official$/i, "")
+    .trim();
+}
+
+/**
+ * Best-effort artist name of an internal track object.
+ * @param {object|null} t - Track.
+ * @returns {string|null} Artist name, or null.
+ */
+function artistOf(t) {
+  let a = t?.lastfm?.artist ?? t?.requestedArtist ?? t?.artist ?? t?.artists?.[0]?.name ?? t?.author?.name ?? null;
+  if (a && typeof a !== "string") a = a.name ?? null;
+  a = a ? cleanArtist(a) : null;
+  return a || null;
+}
+
+/**
+ * Best-effort title of an internal track object.
+ * @param {object|null} t - Track.
+ * @returns {string|null} Title, or null.
+ */
+function titleOf(t) {
+  return t?.lastfm?.name ?? t?.requestedTitle ?? t?.title ?? t?.name ?? null;
+}
+
+/**
+ * Whether two artist names refer to the same artist ("TWICE" vs "TWICE Japan").
+ * @param {string|null} a - First name.
+ * @param {string|null} b - Second name.
+ * @returns {boolean} True if they match.
+ */
+function artistMatches(a, b) {
+  const x = norm(a), y = norm(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  return short.length >= 3 && long.includes(short);
+}
+
+/**
+ * Fisher-Yates shuffle (copy).
+ * @template T
+ * @param {T[]} arr - Input array.
+ * @returns {T[]} Shuffled copy.
+ */
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/**
+ * Whether the genre tags of an artist are already cached (a lookup would be free).
+ * @param {string} artist - Artist name.
+ * @returns {boolean} True if cached and fresh.
+ */
+function hasFreshTags(artist) {
+  const hit = tagCache.get(norm(artist));
+  return !!hit && Date.now() - hit.ts < TAG_CACHE_TTL_MS;
+}
+
+/**
+ * Genre tags for an artist from Last.fm: top tags with real weight, minus
+ * noise ("seen live", decades, ...). Cached across players.
+ * @param {object} lf - Last.fm manager (enabled).
+ * @param {string} artist - Artist name.
+ * @returns {Promise<Set<string>>} Normalised genre tags (empty if unknown).
+ */
+async function getGenreTags(lf, artist) {
+  const key = norm(artist);
+  if (!key) return new Set();
+  const hit = tagCache.get(key);
+  if (hit && Date.now() - hit.ts < TAG_CACHE_TTL_MS) return hit.tags;
+
+  const tags = new Set();
+  try {
+    const list = await lf.getArtistTopTags(cleanArtist(artist), 12);
+    for (const t of list) {
+      if ((t.count ?? 0) < TAG_MIN_COUNT) continue;
+      const n = norm(t.name);
+      if (!n || NOISE_TAGS.has(n) || /^(?:19|20)?\d{2}s?$/.test(n)) continue;
+      tags.add(n);
+      if (tags.size >= TAG_KEEP) break;
+    }
+  } catch (e) { logger.warn("[Autoplay] Tag lookup failed:", e?.message); }
+
+  if (tags.size) {
+    if (tagCache.size >= TAG_CACHE_MAX) tagCache.delete(tagCache.keys().next().value);
+    tagCache.set(key, { tags, ts: Date.now() });
+  }
+  return tags;
+}
+
+/**
+ * Do a candidate's tags share the seed's genre? Broad tags ("pop", "rock")
+ * only count when the seed has nothing more specific.
+ * @param {Set<string>} seedTags - Genre tags of the seed artist.
+ * @param {Set<string>} candTags - Genre tags of the candidate artist.
+ * @returns {boolean} True if the genres overlap.
+ */
+function genreOverlaps(seedTags, candTags) {
+  const strong = [...seedTags].filter(t => !WEAK_TAGS.has(t));
+  const need = strong.length ? strong : [...seedTags];
+  return need.some(t => candTags.has(t));
+}
+
+/**
+ * Track whether the player's last track was picked by autoplay, and keep the
+ * "seed" (the most recent track a human chose) up to date. Recommendations are
+ * always built from the seed, never from a previous autoplay pick, so a single
+ * off-genre result can no longer snowball into a different genre.
+ * @param {object} p - The player instance.
+ * @param {object|null} lastTrack - The track that just finished.
+ * @returns {boolean} True if lastTrack was itself an autoplay pick.
+ */
+function updateSeed(p, lastTrack) {
+  if (!lastTrack) return false;
+  const vid = extractVideoId(lastTrack);
+  const picked = !!lastTrack._autoplayPicked || (!!vid && !!p._autoplayPickedVids?.has(vid));
+  if (picked) return true;
+
+  const key = vid ?? `${norm(artistOf(lastTrack))}|${norm(titleOf(lastTrack))}`;
+  if (!p._autoplaySeed || p._autoplaySeedKey !== key) {
+    p._autoplaySeed = lastTrack;
+    p._autoplaySeedKey = key;
+    p._autoplaySeedTags = null;
+    p._autoplayMixPools?.clear();
+    p._autoplayPreferredPoolVid = null;
+  }
+  return false;
+}
+
+/**
+ * Mark a track as chosen by autoplay (so it is never mistaken for a seed).
+ * @param {object} p - The player instance.
+ * @param {object} track - The picked track.
+ * @returns {void}
+ */
+function markPicked(p, track) {
+  track._autoplayPicked = true;
+  const vid = extractVideoId(track);
+  if (!vid) return;
+  const set = p._autoplayPickedVids ?? new Set();
+  p._autoplayPickedVids = set;
+  set.delete(vid);
+  set.add(vid);
+  if (set.size > PICKED_VIDS_MAX) set.delete(set.values().next().value);
+}
+
 /**
  * Extract a YouTube video ID from a track's videoId field or URL.
  * @param {object} t - Internal track object.
@@ -74,13 +270,15 @@ function isCandidateOk(p, t) {
 }
 
 /**
- * Take a random acceptable candidate from a cached mix pool, if one exists and
- * is fresh. Candidates already picked are excluded via the autoplay history.
+ * Take an acceptable candidate from a cached mix pool, if one exists and is
+ * fresh. Candidates already played are excluded via the autoplay history;
+ * candidates failing the genre guard are dropped from the pool.
  * @param {object} p - The player instance.
  * @param {string} videoId - The video ID the pool was resolved from.
- * @returns {object|null} An acceptable track from the pool, or null.
+ * @param {(t: object) => Promise<boolean>} [guard] - Optional genre guard.
+ * @returns {Promise<object|null>} An acceptable track from the pool, or null.
  */
-function takeFromPool(p, videoId) {
+async function takeFromPool(p, videoId, guard) {
   const pools = p._autoplayMixPools;
   if (!pools) return null;
   const pool = pools.get(videoId);
@@ -89,12 +287,16 @@ function takeFromPool(p, videoId) {
     pools.delete(videoId);
     return null;
   }
-  const ok = pool.tracks.filter(t => isCandidateOk(p, t));
-  if (!ok.length) {
-    pools.delete(videoId);
-    return null;
+  const ok = shuffle(pool.tracks.filter(t => isCandidateOk(p, t)));
+  const rejected = new Set();
+  let found = null;
+  for (const t of ok) {
+    if (!guard || await guard(t)) { found = t; break; }
+    rejected.add(t);
   }
-  return ok[Math.floor(Math.random() * Math.min(PICK_POOL, ok.length))];
+  if (rejected.size) pool.tracks = pool.tracks.filter(t => !rejected.has(t));
+  if (!found && !pool.tracks.some(t => isCandidateOk(p, t))) pools.delete(videoId);
+  return found;
 }
 
 /**
@@ -129,91 +331,137 @@ async function resolveCandidates(p, query, provider = "ytm") {
 }
 
 /**
- * Resolve a query via the player's Lavalink search and return a random acceptable
- * candidate from the top results.
+ * Search and return the first acceptable result that passes every check.
  * @param {object} p - The player instance.
- * @param {string} query - The search query or URL.
- * @param {string} provider - Provider shorthand key ("yt", "ytm", ...).
- * @returns {Promise<object|null>} An acceptable track, or null.
+ * @param {string} query - The search query.
+ * @param {(t: object) => (boolean|Promise<boolean>)} accept - Extra acceptance test (artist/genre).
+ * @param {string} [provider="ytm"] - Provider shorthand key.
+ * @returns {Promise<object|null>} A passing track, or null.
  */
-async function pickFromQuery(p, query, provider = "ytm") {
-  const ok = await resolveCandidates(p, query, provider);
-  if (!ok.length) return null;
-  return ok[Math.floor(Math.random() * Math.min(PICK_POOL, ok.length))];
+async function searchAccepted(p, query, accept, provider = "ytm") {
+  const found = await resolveCandidates(p, query, provider);
+  for (const t of shuffle(found.slice(0, PICK_POOL))) {
+    if (await accept(t)) return t;
+  }
+  return null;
 }
 
 /**
+ * Choose the next track. Everything is anchored to the "seed" — the last track a
+ * person actually chose — and, when Last.fm is available, every candidate's
+ * artist must share the seed artist's genre tags. Search results must also be by
+ * the artist we asked for, so a title collision (a different band's song with the
+ * same name) can no longer slip through. The old title-only search fallback was
+ * removed for the same reason.
  * @param {object} p - The player instance.
  * @param {object} ctx - The bot context (needs .lastfm).
  * @param {object|null} lastTrack - The last played internal track.
  * @returns {Promise<object|null>} The chosen track, or null if all strategies failed.
  */
-async function pickAutoplayTrack(p, ctx, lastTrack) {
-  const artist = lastTrack?.lastfm?.artist ?? lastTrack?.requestedArtist ?? lastTrack?.artist
-    ?? lastTrack?.artists?.[0]?.name ?? lastTrack?.author?.name ?? null;
-  const name   = lastTrack?.lastfm?.name   ?? lastTrack?.requestedTitle   ?? lastTrack?.title   ?? lastTrack?.name ?? null;
-  const videoId = extractVideoId(lastTrack);
+export async function pickAutoplayTrack(p, ctx, lastTrack) {
+  const lastWasPicked = updateSeed(p, lastTrack);
+  const seed = p._autoplaySeed ?? lastTrack;
+  const seedArtist = artistOf(seed);
+  const seedName = titleOf(seed);
+  const seedVid = extractVideoId(seed);
+  const lf = ctx?.lastfm?.enabled ? ctx.lastfm : null;
 
-  if (p._autoplayPreferredPoolVid) {
-    const pooled = takeFromPool(p, p._autoplayPreferredPoolVid);
-    if (pooled) return pooled;
-    p._autoplayPreferredPoolVid = null;
+  let seedTags = p._autoplaySeedTags ?? null;
+  if (!seedTags && lf && seedArtist) {
+    const t = await getGenreTags(lf, seedArtist);
+    if (t.size) { seedTags = t; p._autoplaySeedTags = t; }
   }
 
-  if (videoId) {
-    const cached = takeFromPool(p, videoId);
-    if (cached) {
-      p._autoplayPreferredPoolVid = videoId;
-      return cached;
+  const budget = { left: MAX_TAG_CHECKS };
+  /** True if the candidate belongs to the seed's genre (or genre can't be judged). */
+  const genreOk = async (t) => {
+    if (!lf || !seedTags?.size) return true;
+    const ca = artistOf(t);
+    if (!ca) return false;
+    if (artistMatches(ca, seedArtist)) return true;
+    if (!hasFreshTags(ca)) {
+      if (budget.left <= 0) return false;
+      budget.left--;
     }
+    return genreOverlaps(seedTags, await getGenreTags(lf, ca));
+  };
+
+  const finish = (track) => {
+    p._autoplayPreferredPoolVid = null;
+    return track;
+  };
+
+  if (seedVid) {
+    const pooled = await takeFromPool(p, seedVid, genreOk);
+    if (pooled) { p._autoplayPreferredPoolVid = seedVid; return pooled; }
   }
 
-  const lf = ctx?.lastfm;
-  if (lf?.enabled && artist && name) {
-    try {
-      const similar = await lf.getSimilarTracks(artist, name, 10);
-      for (let i = 0; i < Math.min(4, similar.length); i++) {
-        const pick = similar[Math.floor(Math.random() * Math.min(3, similar.length))];
-        const track = await pickFromQuery(p, `${pick.name} ${pick.artist}`.trim(), "ytm");
-        if (track) {
-          p._autoplayPreferredPoolVid = null;
-          return track;
+  const tryLastfmSimilar = async () => {
+    const bases = [seed];
+    if (lastWasPicked && lastTrack && artistOf(lastTrack) && !artistMatches(artistOf(lastTrack), seedArtist)) bases.push(lastTrack);
+    for (const base of bases) {
+      const bArtist = artistOf(base), bName = titleOf(base);
+      if (!bArtist || !bName) continue;
+      try {
+        const similar = await lf.getSimilarTracks(bArtist, bName, 30);
+        const picks = shuffle(similar.slice(0, 15)).slice(0, 5);
+        for (const pick of picks) {
+          const track = await searchAccepted(
+            p, `${pick.name} ${pick.artist}`.trim(),
+            async (t) => artistMatches(artistOf(t), pick.artist) && await genreOk(t),
+          );
+          if (track) return track;
         }
-      }
-    } catch (e) { logger.warn("[Autoplay] Last.fm strategy failed:", e?.message); }
-  }
+      } catch (e) { logger.warn("[Autoplay] Last.fm similar-tracks strategy failed:", e?.message); }
+    }
+    return null;
+  };
 
-  if (artist) {
+  const tryLastfmArtists = async () => {
+    if (!seedArtist) return null;
     try {
-      const track = await pickFromQuery(p, `${artist} songs`, "ytm");
-      if (track) {
-        p._autoplayPreferredPoolVid = null;
-        return track;
+      const similar = await lf.getSimilarArtists(seedArtist, 12);
+      for (const a of shuffle(similar.filter(x => x.name)).slice(0, 4)) {
+        const track = await searchAccepted(
+          p, `${a.name} songs`,
+          async (t) => artistMatches(artistOf(t), a.name) && await genreOk(t),
+        );
+        if (track) return track;
       }
+    } catch (e) { logger.warn("[Autoplay] Last.fm similar-artists strategy failed:", e?.message); }
+    return null;
+  };
+
+  const trySameArtist = async () => {
+    if (!seedArtist) return null;
+    try {
+      return await searchAccepted(p, `${seedArtist} songs`, (t) => artistMatches(artistOf(t), seedArtist));
     } catch (e) { logger.warn("[Autoplay] Artist strategy failed:", e?.message); }
-  }
-  if (name) {
-    try {
-      const track = await pickFromQuery(p, `${name}`, "ytm");
-      if (track) {
-        p._autoplayPreferredPoolVid = null;
-        return track;
-      }
-    } catch (_) {}
-  }
+    return null;
+  };
 
-  if (videoId) {
+  const tryMix = async () => {
+    if (!seedVid) return null;
     try {
-      const mixUrl = `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`;
+      const mixUrl = `https://www.youtube.com/watch?v=${seedVid}&list=RD${seedVid}`;
       const candidates = await resolveCandidates(p, mixUrl, "yt");
-      if (candidates.length) {
-        storePool(p, videoId, candidates);
-        p._autoplayPreferredPoolVid = videoId;
-        return candidates[Math.floor(Math.random() * Math.min(PICK_POOL, candidates.length))];
-      }
+      if (!candidates.length) return null;
+      storePool(p, seedVid, candidates);
+      const track = await takeFromPool(p, seedVid, genreOk);
+      if (track) p._autoplayPreferredPoolVid = seedVid;
+      return track;
     } catch (e) { logger.warn("[Autoplay] Mix strategy failed:", e?.message); }
-  }
+    return null;
+  };
 
+  const order = lf
+    ? [tryLastfmSimilar, tryLastfmArtists, trySameArtist, tryMix]
+    : [tryMix, trySameArtist];
+
+  for (const strat of order) {
+    const track = await strat();
+    if (track) return strat === tryMix ? track : finish(track);
+  }
   return null;
 }
 
@@ -231,7 +479,7 @@ function pickSerialized(p, ctx, lastTrack) {
   const run = async () => {
     try {
       const track = await pickAutoplayTrack(p, ctx, lastTrack);
-      if (track) rememberTrack(p, track);
+      if (track) { rememberTrack(p, track); markPicked(p, track); }
       return track;
     } catch (e) {
       logger.warn("[Autoplay] Pick error:", e?.message);
@@ -353,6 +601,10 @@ export async function run(msg, data) {
     p._autoplayPreferredPoolVid = null;
     p._autoplayPickChain = null;
     p._autoplayQueueEndPicking = false;
+    p._autoplaySeed = null;
+    p._autoplaySeedKey = null;
+    p._autoplaySeedTags = null;
+    p._autoplayPickedVids = null;
 
     return msg.reply({
       embeds: [new EmbedBuilder()

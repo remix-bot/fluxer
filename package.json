@@ -4,7 +4,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@fluxerjs/core": "^3.1.0",
+    "@fluxerjs/core": "^3.2.0",
     "@fluxerjs/sharding": "^3.0.0",
     "@fluxerjs/util": "^3.1.0",
     "@fluxerjs/voice": "^3.1.0",
