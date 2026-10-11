@@ -15,6 +15,160 @@ import { PROVIDERS, PROVIDER_NAMES } from "../providers.mjs";
 import { bilibiliEnabled, isBilibiliUrl, resolveBilibiliVideo } from "../bilibili/index.mjs";
 
 /**
+ * Broad music genres are ambiguous when used by themselves: searching for
+ * `pop`, for example, often returns a song literally named "Pop" instead of
+ * pop music.  Keep this deliberately conservative so artist and song names
+ * continue to be searched exactly as the user entered them.
+ */
+const GENRE_TERMS = new Set([
+  "pop", "rock", "rap", "hip hop", "hip-hop", "rnb", "r&b", "jazz", "blues",
+  "country", "metal", "classical", "edm", "electronic", "dance", "house",
+  "techno", "trance", "reggae", "latin", "kpop", "k-pop", "indie", "folk",
+  "punk", "soul", "funk", "disco", "gospel", "ambient", "lofi", "lo-fi",
+]);
+
+/**
+ * Return the provider queries to try, ordered by the most useful intent.
+ * A one-genre query becomes e.g. `pop music`, which asks providers for the
+ * topic/genre rather than an exact track title.  The untouched input remains
+ * a fallback for providers whose catalogues do better with the short term.
+ *
+ * @param {string} query
+ * @param {string} source Lavalink search prefix.
+ * @returns {string[]}
+ */
+function searchQueryVariants(query, source) {
+  const original = String(query ?? "").trim().replace(/\s+/g, " ");
+  if (!original) return [];
+
+  if (source === "gtts" || source === "ftts") return [original];
+
+  const normalized = original.toLowerCase().replace(/[.!?,]+$/g, "");
+  if (!GENRE_TERMS.has(normalized)) return [original];
+
+  return [`${original} music`, `${original} songs`, original];
+}
+
+/** @param {unknown} value @returns {string} */
+function normalizeSearchText(value) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9&]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Small bounded edit-distance helper used only for ranking already-returned
+ * tracks. It never invents a new query or makes an extra network request.
+ * @param {string} left
+ * @param {string} right
+ * @returns {number}
+ */
+function editDistance(left, right) {
+  if (left === right) return 0;
+  if (!left) return right.length;
+  if (!right) return left.length;
+
+  let previous = Array.from({ length: right.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= left.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= right.length; j++) {
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + (left[i - 1] === right[j - 1] ? 0 : 1),
+      );
+    }
+    previous = current;
+  }
+  return previous[right.length];
+}
+
+/**
+ * Return the best spelling similarity of a user term against words in a
+ * result. A conservative threshold prevents loosely-related tracks from
+ * jumping ahead merely because they share a couple of letters.
+ * @param {string} term
+ * @param {string} haystack
+ * @returns {number}
+ */
+function bestTokenSimilarity(term, haystack) {
+  if (term.length < 4) return 0;
+  let best = 0;
+  for (const candidate of haystack.split(" ")) {
+    if (candidate.length < 4) continue;
+    const maxLength = Math.max(term.length, candidate.length);
+    const similarity = 1 - editDistance(term, candidate) / maxLength;
+    if (similarity > best) best = similarity;
+  }
+  return best;
+}
+
+/**
+ * Assign a relevance score without relying on provider-specific ordering.
+ * Lavalink providers do not all sort results the same way, so title/artist
+ * matching gives users predictable results across YouTube Music, YouTube,
+ * SoundCloud, and the optional catalog providers.
+ *
+ * @param {object} track
+ * @param {string} query
+ * @returns {number}
+ */
+function scoreSearchTrack(track, query) {
+  const info = track?.info ?? track ?? {};
+  const needle = normalizeSearchText(query);
+  const terms = needle.split(" ").filter(Boolean);
+  const title = normalizeSearchText(info.title);
+  const author = normalizeSearchText(info.author);
+  const album = normalizeSearchText(info.albumName ?? info.album?.name);
+  const isGenreQuery = GENRE_TERMS.has(needle);
+  let score = 0;
+
+  if (title === needle) score += isGenreQuery ? 8 : 100;
+  else if (title.includes(needle)) score += isGenreQuery ? 12 : 50;
+  if (author === needle) score += 55;
+  else if (author.includes(needle)) score += 25;
+
+  for (const term of terms) {
+    if (title.includes(term)) score += 14;
+    if (author.includes(term)) score += 10;
+    if (album.includes(term)) score += 4;
+
+    if (!title.includes(term) && !author.includes(term) && !album.includes(term)) {
+      const similarity = Math.max(
+        bestTokenSimilarity(term, title),
+        bestTokenSimilarity(term, author),
+        bestTokenSimilarity(term, album),
+      );
+      if (similarity >= 0.84) score += 8 + Math.round((similarity - 0.84) * 50);
+    }
+  }
+
+  if (author.includes("topic")) score += isGenreQuery ? 45 : 8;
+  if (info.isStream) score -= 8;
+  if (info.isSeekable === false) score -= 3;
+
+  for (const qualifier of ["cover", "tribute", "karaoke", "instrumental", "nightcore", "slowed", "reverb"]) {
+    if (title.includes(qualifier) && !needle.includes(qualifier)) score -= 60;
+  }
+  if (title.includes("live") && !needle.includes("live")) score -= 15;
+
+  const length = Number(info.length ?? info.durationMs ?? 0);
+  if (length >= 30_000 && length <= 30 * 60_000) score += 3;
+  return score;
+}
+
+/** @param {object} track @returns {string} */
+function searchTrackKey(track) {
+  const info = track?.info ?? track ?? {};
+  return String(track?.encoded ?? info.identifier ?? info.uri ?? "") ||
+    `${normalizeSearchText(info.title)}|${normalizeSearchText(info.author)}`;
+}
+
+/**
  * @type {object}
  * @description Search mixin — applied to Player.
  */
@@ -32,9 +186,10 @@ const SearchMixin = {
       if (!this._lavalink) return { type: "error", data: "Audio node not ready." };
       await this._lavalink.waitForNode({ timeoutMs: 15_000 });
       const isUrl = typeof query === "string" && Utils.isValidUrl(query);
+      const source = this._getSource(provider);
       const result = isUrl
         ? await this._lavalink.search(query)
-        : await this._lavalink.search(query, { source: this._getSource(provider) });
+        : await this._searchFreeText(query, source);
       const tracks = (result?.tracks ?? []).map(t => this._lcTrackToVideo(t, trackMeta)).filter(Boolean);
       if (!tracks.length) return null;
       return tracks.length === 1 ? { type: "video", data: tracks[0] } : { type: "list", data: tracks };
@@ -60,7 +215,7 @@ const SearchMixin = {
       await this._lavalink.waitForNode({ timeoutMs: 15_000 });
 
       const source = this._getSource(provider);
-      const result = await this._lavalink.search(query, { source });
+      const result = await this._searchFreeText(query, source);
       const lcTracks = result?.tracks ?? [];
 
       const results = lcTracks.slice(0, this.resultLimit).map(t => this._lcTrackToVideo(t)).filter(Boolean);
@@ -189,6 +344,53 @@ const SearchMixin = {
   },
 
   /**
+   * Search free text with a topic-aware first pass.  This is shared by
+   * `%play`, `%search`, and internal queries so they all interpret broad
+   * genre requests consistently.
+   *
+   * @private
+   * @this {import('./Player.mjs').Player}
+   * @param {string} query
+   * @param {string} source Lavalink search prefix.
+   * @returns {Promise<object|null>}
+   */
+  async _searchFreeText(query, source) {
+    const variants = searchQueryVariants(query, source);
+    const attempts = await Promise.allSettled(
+      variants.map(candidate => this._lavalink.search(candidate, { source }))
+    );
+    const successful = attempts
+      .filter(attempt => attempt.status === "fulfilled")
+      .map(attempt => attempt.value)
+      .filter(Boolean);
+
+    if (successful.length === 0) {
+      const failed = attempts.find(attempt => attempt.status === "rejected");
+      if (failed) throw failed.reason;
+      return null;
+    }
+
+    const unique = new Map();
+    for (const result of successful) {
+      for (const track of result?.tracks ?? []) {
+        const key = searchTrackKey(track);
+        if (!unique.has(key)) unique.set(key, track);
+      }
+    }
+
+    const tracks = [...unique.values()]
+      .map((track, index) => ({ track, index, score: scoreSearchTrack(track, query) }))
+      .sort((a, b) => b.score - a.score || a.index - b.index)
+      .map(({ track }) => track);
+
+    if (variants.length > 1) {
+      logger.player(`[Player] Topic-aware search for "${query}": ${tracks.length} unique results ranked from ${variants.length} queries.`);
+    }
+
+    return { ...successful[0], tracks };
+  },
+
+  /**
    * Search for a track and add it to the queue. Handles URL loading with
    * YouTube normalization + oEmbed title fallback and playlist expansion;
    * Bilibili links are routed to {@link _playBilibili} before Lavalink.
@@ -249,7 +451,7 @@ const SearchMixin = {
             if (isUrl) {
               result = await this._lavalink.search(searchQuery);
             } else {
-              result = await this._lavalink.search(searchQuery, { source });
+              result = await this._searchFreeText(searchQuery, source);
             }
           } catch (searchErr) {
             logger.warn("[Player] URL/primary search failed:", searchErr?.message);
@@ -304,7 +506,7 @@ const SearchMixin = {
               events.emit("message", "No results yet — trying **" + fb.label + "**...");
               let fbResult = null;
               try {
-                fbResult = await this._lavalink.search(searchQuery, { source: fb.source });
+                fbResult = await this._searchFreeText(searchQuery, fb.source);
               } catch (_) { fbResult = null; }
               if (fbResult?.tracks?.length > 0) {
                 const video = this._lcTrackToVideo(fbResult.tracks[0], trackMeta);
@@ -377,7 +579,7 @@ const SearchMixin = {
     if (!this._lavalink) return [];
     try {
       const source = this._getSource(provider);
-      const result = await this._lavalink.search(query, { source });
+      const result = await this._searchFreeText(query, source);
       return result.tracks || [];
     } catch (e) {
       logger.error(`[Player] lavalink search error:`, e?.message);

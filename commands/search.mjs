@@ -21,6 +21,7 @@ export const command = new CommandBuilder()
     .setCategory("music")
     .addExamples(
         "$prefixsearch never gonna give you up",
+        "$prefixsearch pop",
         "$prefixsearch sp: blinding lights",
         "$prefixsearch -p dz get lucky"
     )
@@ -33,7 +34,7 @@ export const command = new CommandBuilder()
         , true)
     .addTextOption(o =>
         o.setName("query")
-            .setDescription("The query to search for, or a provider-prefixed query like `sp: song name`.", "options.search.query")
+            .setDescription("The song, artist, or music genre to search for; provider prefixes such as `sp: song name` also work.", "options.search.query")
             .setRequired(true)
     );
 

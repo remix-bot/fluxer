@@ -166,6 +166,7 @@ export const command = new CommandBuilder()
     )
     .addExamples(
         "$prefixplay take over league of legends",
+        "$prefixplay pop",
         "$prefixplay sp: blinding lights",
         "$prefixplay dz: get lucky",
         "$prefixplay -p yt take over league of legends",
@@ -183,7 +184,7 @@ export const command = new CommandBuilder()
     )
     .addTextOption(option =>
         option.setName("query")
-            .setDescription("A search query, URL, or provider-prefixed query like `sp: song name`.", "options.play.query")
+            .setDescription("A search query, music genre (for example `pop`), URL, or provider-prefixed query like `sp: song name`.", "options.play.query")
             .setRequired(true)
     )
     .addChoiceOption(o =>
