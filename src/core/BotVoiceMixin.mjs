@@ -497,11 +497,13 @@ const BotVoiceMixin = {
           system: true,
         });
 
-        await player.playNext();
-
-        if (current && pos > 0 && dur > 0) {
-          await new Promise((r) => setTimeout(r, 800)); // let the bridge settle
-          try { await player.seekToPosition(pos); } catch (_) {}
+        if (current && pos > 0 && dur > 0) player._resumeSeekMs = pos;
+        if (!player.queue.getCurrent()) {
+          player.playNext().catch((e) => logger.warn(`[Restore] playNext failed for guild ${guildId}:`, e?.message ?? e));
+        } else if (player._resumeSeekMs > 0) {
+          const seekTo = player._resumeSeekMs;
+          player._resumeSeekMs = 0;
+          setTimeout(() => { player.seekToPosition(seekTo).catch(() => {}); }, 800).unref?.();
         }
 
         logger.player(`[Restore] Guild ${guildId}: ${player.queue.data.length} track(s) restored, resuming at ${pos}ms.`);

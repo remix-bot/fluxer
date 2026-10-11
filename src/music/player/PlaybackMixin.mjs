@@ -175,7 +175,12 @@ const PlaybackMixin = {
     this._radioReconnects   = 0;
 
     if (songData.type !== "radio" || !this._radioAnnounced) {
-      this.announceSong(songData);
+      const now  = Date.now();
+      const last = this._lastAnnounce;
+      const dup  = last && !this.queue.songLoop && last.key === (songData.url || songData.title) && now - last.at < 8_000;
+      if (!dup) this.announceSong(songData);
+      else logger.player(`[Player:${this._guildId}] Suppressed duplicate now-playing for: ${songData.title}`);
+      this._lastAnnounce = { key: songData.url || songData.title, at: now };
       if (songData.type === "radio") this._radioAnnounced = true;
     }
     this._skipVotes.clear();
@@ -183,7 +188,12 @@ const PlaybackMixin = {
 
     try {
       const playUri = songData.url;
-      const seekSec = trackOptMatch?.startMs > 0 ? trackOptMatch.startMs / 1000 : 0;
+      const resumeMs = this._resumeSeekMs > 0 ? this._resumeSeekMs : 0;
+      this._resumeSeekMs = 0;
+      const seekSec = resumeMs > 0
+          ? resumeMs / 1000
+          : (trackOptMatch?.startMs > 0 ? trackOptMatch.startMs / 1000 : 0);
+      if (resumeMs > 0) this.startedPlaying = Date.now() - resumeMs;
 
       if (!playUri || !Utils.isValidUrl(playUri)) {
         logger.warn(`[Player] No valid URL for track: ${songData.title} (url=${songData.url}), trying search...`);
