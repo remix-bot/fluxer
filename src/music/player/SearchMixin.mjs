@@ -107,6 +107,11 @@ function bestTokenSimilarity(term, haystack) {
   return best;
 }
 
+/** @param {string} haystack @param {string} term @returns {boolean} */
+function hasExactToken(haystack, term) {
+  return haystack.split(" ").includes(term);
+}
+
 /**
  * Assign a relevance score without relying on provider-specific ordering.
  * Lavalink providers do not all sort results the same way, so title/artist
@@ -133,11 +138,21 @@ function scoreSearchTrack(track, query) {
   else if (author.includes(needle)) score += 25;
 
   for (const term of terms) {
-    if (title.includes(term)) score += 14;
-    if (author.includes(term)) score += 10;
-    if (album.includes(term)) score += 4;
+    const titleHasTerm = hasExactToken(title, term);
+    const authorHasTerm = hasExactToken(author, term);
+    const albumHasTerm = hasExactToken(album, term);
+    const titlePartial = term.length >= 4 && title.includes(term);
+    const authorPartial = term.length >= 4 && author.includes(term);
+    const albumPartial = term.length >= 4 && album.includes(term);
 
-    if (!title.includes(term) && !author.includes(term) && !album.includes(term)) {
+    if (titleHasTerm) score += 14;
+    else if (titlePartial) score += 3;
+    if (authorHasTerm) score += 10;
+    else if (authorPartial) score += 2;
+    if (albumHasTerm) score += 4;
+    else if (albumPartial) score += 1;
+
+    if (!titleHasTerm && !authorHasTerm && !albumHasTerm && !titlePartial && !authorPartial && !albumPartial) {
       const similarity = Math.max(
         bestTokenSimilarity(term, title),
         bestTokenSimilarity(term, author),
@@ -151,7 +166,7 @@ function scoreSearchTrack(track, query) {
   if (info.isStream) score -= 8;
   if (info.isSeekable === false) score -= 3;
 
-  for (const qualifier of ["cover", "tribute", "karaoke", "instrumental", "nightcore", "slowed", "reverb"]) {
+  for (const qualifier of ["cover", "tribute", "karaoke", "instrumental", "nightcore", "slowed", "reverb", "remix", "mashup"]) {
     if (title.includes(qualifier) && !needle.includes(qualifier)) score -= 60;
   }
   if (title.includes("live") && !needle.includes("live")) score -= 15;
