@@ -639,6 +639,8 @@ To add a new language, place a JSON file in `storage/locales/bot/` following the
 - [`NodeLink`](https://github.com/PerformanC/NodeLink) — Lavalink-compatible audio node
 - [`prism-media`](https://github.com/discordjs/prism-media) — Opus encoding and stream demuxing
 
+---
+
 <p align="center">
   &copy; 2026 Remix. Code licensed under the <a href="LICENSE">MIT License</a>.<br>
   <em>The Remix name, logo, and branding are proprietary and may not be reused.</em>
