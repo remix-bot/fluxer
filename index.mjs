@@ -5,6 +5,9 @@
  * graceful shutdown. All boot logic lives in src/core/Bot.mjs.
  */
 
+import { EventEmitter } from "node:events";
+EventEmitter.defaultMaxListeners = 100;
+
 import { logger } from "./src/core/Logger.mjs";
 import Remix from "./src/core/Bot.mjs";
 import { initErrorChannel, reportCrash } from "./src/core/ErrorChannel.mjs";

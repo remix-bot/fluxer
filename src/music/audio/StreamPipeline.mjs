@@ -10,6 +10,7 @@
  * FluxerAudioBridge instance.
  */
 
+import { isLoadstreamEnabled } from "./AudioSettings.mjs";
 import { logger } from "../../core/Logger.mjs";
 import { WebMOpusMuxer, OPUS_FRAME_MS } from "./WebMOpusMuxer.mjs";
 import { StreamPositioner } from "./StreamPositioner.mjs";
@@ -20,6 +21,7 @@ const { Encoder: PrismOpusEncoder, OggDemuxer: PrismOggDemuxer } = prismMedia.op
 /** Prefetched trackstream results keyed by encoded track (shared across players). */
 const _tsCache = new Map();
 const TS_CACHE_TTL_MS = 4 * 60_000;
+let _lastProbeAt = 0;
 
 /** @type {number} @description PCM sample rate expected from NodeLink loadstream (48kHz stereo s16le). */
 const PCM_RATE = 48000;
@@ -313,6 +315,11 @@ const StreamPipeline = {
         if (enc) song.encoded = enc;
       }
       if (!song.encoded || _tsCache.has(song.encoded)) return;
+      // While trackstream is known-bad, probe at most once a minute (each probe is a hung request on the node).
+      if (this._tsBreakerOpen?.()) {
+        if (Date.now() - _lastProbeAt < 60_000) return;
+        _lastProbeAt = Date.now();
+      }
       const info = { encoded: song.encoded, guildId };
       const entry = { at: Date.now(), result: null, promise: null };
       entry.promise = this._queryTrackstream(info).then(
@@ -348,7 +355,9 @@ const StreamPipeline = {
 
     logger.player("[AudioBridge] Querying /v4/trackstream...");
 
-    const body = await this._httpGetJson(url, headers);
+    // A healthy trackstream answers in a few seconds. When loadstream can take over,
+    // fail fast (8s) instead of making the listener wait the full 15s.
+    const body = await this._httpGetJson(url, headers, 0, isLoadstreamEnabled() ? 8_000 : 15_000);
 
     const directUrl = body?.url;
     if (!directUrl || typeof directUrl !== "string") {

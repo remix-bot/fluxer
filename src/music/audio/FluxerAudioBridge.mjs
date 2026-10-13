@@ -64,6 +64,7 @@ export class FluxerAudioBridge extends EventEmitter {
 
   /** Called by prefetch on success: a working trackstream closes the circuit breaker. */
   _tsOk() { tsBreakerOk(); }
+  _tsBreakerOpen() { return tsBreakerOpen(); }
 
   /** @param {LavalinkManager|null} lavalinkManager - LavalinkManager for trackstream/loadstream. */
   constructor(lavalinkManager = null) {
@@ -431,8 +432,13 @@ export class FluxerAudioBridge extends EventEmitter {
     }
 
     if (!/webm|opus/i.test(String(direct.format || ""))) {
-      logger.player("[AudioBridge] trackstream format not opus/webm (" + (direct.format || "?") + "), refreshing encoded track once...");
-      const freshEncoded = trackInfo.url && trackInfo.url.startsWith("http")
+      // A fresh resolve only helps when YouTube handed us a non-WebM itag (googlevideo).
+      // Mirror sources (JioSaavn/Deezer/SoundCloud... AAC/MP3/MP4) return the same thing
+      // again, so skip the ~7-13s loadtracks round-trip for them.
+      const refreshable = /googlevideo\.com|youtube\.com|ytimg/i.test(String(direct.url || ""));
+      logger.player("[AudioBridge] trackstream format not opus/webm (" + (direct.format || "?") + ")" +
+          (refreshable ? ", refreshing encoded track once..." : " from a non-YouTube source, skipping refresh."));
+      const freshEncoded = refreshable && trackInfo.url && trackInfo.url.startsWith("http")
           ? await this._resolveUrlViaLavalink(trackInfo.url, trackInfo.guildId)
           : null;
       if (stale()) return "stopped";
