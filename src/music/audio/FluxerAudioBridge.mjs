@@ -62,6 +62,9 @@ export class FluxerAudioBridge extends EventEmitter {
   /** @type {boolean} @description Whether the current track was served via /v4/trackstream. */
   get usedTrackstream() { return this._usedTrackstream; }
 
+  /** Called by prefetch on success: a working trackstream closes the circuit breaker. */
+  _tsOk() { tsBreakerOk(); }
+
   /** @param {LavalinkManager|null} lavalinkManager - LavalinkManager for trackstream/loadstream. */
   constructor(lavalinkManager = null) {
     super();

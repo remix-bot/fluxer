@@ -254,6 +254,26 @@ const PlaybackMixin = {
   },
 
   /**
+   * @private Shortly after a track starts, warm the NEXT queued track (resolve +
+   * trackstream URL) so the transition does not wait on NodeLink.
+   * @this {import('./Player.mjs').Player}
+   */
+  _schedulePrefetchNext() {
+    if (this._prefetchTimer) clearTimeout(this._prefetchTimer);
+    this._prefetchTimer = setTimeout(() => {
+      this._prefetchTimer = null;
+      try {
+        if (this._destroyed || this.leaving || !this._audioBridge?.prefetchTrack) return;
+        if (this.queue.songLoop) return; // next track is the same one
+        const next = this.queue.data?.[0];
+        if (!next) return;
+        this._audioBridge.prefetchTrack(next, this._guildId);
+      } catch (_) {}
+    }, 6_000);
+    this._prefetchTimer.unref?.();
+  },
+
+  /**
    * @private @async Play a track through the FluxerAudioBridge. For
    * radio/external tracks without an encoded payload, attempts Lavalink URL
    * resolution first so MP3/AAC streams can use the loadstream pipeline.
@@ -317,6 +337,8 @@ const PlaybackMixin = {
 
     const totalMs   = this._getTrackDurationMs(songData);
     const durationMs = totalMs > 0 ? Math.max(0, totalMs - seekMs) : 0;
+
+    this._schedulePrefetchNext();
 
     const result = await this._audioBridge.play(this._voiceConn, {
       encoded: songData.encoded,
