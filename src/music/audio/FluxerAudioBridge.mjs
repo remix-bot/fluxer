@@ -17,23 +17,6 @@ const pendingUnpublishSids = new WeakMap();
 /** @type {number} @description Max time to wait for a stale-track unpublish to settle before publishing anyway (defensive — an unpublish should resolve almost instantly; this only guards against a hung/never-resolving LiveKit promise blocking playback indefinitely). */
 const UNPUBLISH_WAIT_TIMEOUT_MS = 1200;
 
-/**
- * Trackstream circuit breaker (shared by all bridges — they all talk to the
- * same NodeLink). When /v4/trackstream keeps timing out and loadstream is
- * enabled, every track used to burn ~15s (timeout) + ~13s (loadtracks retry)
- * before reaching the route that actually works. After TS_BREAKER_THRESHOLD
- * consecutive failures we skip trackstream for TS_BREAKER_COOLDOWN_MS, then
- * probe it once again.
- */
-const TS_BREAKER_THRESHOLD = 2;
-const TS_BREAKER_COOLDOWN_MS = 5 * 60_000;
-const _tsBreaker = { failures: 0, openUntil: 0 };
-const tsBreakerOpen = () => _tsBreaker.failures >= TS_BREAKER_THRESHOLD && Date.now() < _tsBreaker.openUntil;
-const tsBreakerFail = () => { _tsBreaker.failures++; if (_tsBreaker.failures >= TS_BREAKER_THRESHOLD) _tsBreaker.openUntil = Date.now() + TS_BREAKER_COOLDOWN_MS; };
-const tsBreakerOk = () => { _tsBreaker.failures = 0; _tsBreaker.openUntil = 0; };
-/** Timeouts/connection errors mean the node is slow — a fresh encoded track will not help. */
-const isSlowNodeError = (e) => /timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN/i.test(String(e?.message || e));
-
 /** @extends {EventEmitter} */
 export class FluxerAudioBridge extends EventEmitter {
   _conn = null;
@@ -61,10 +44,6 @@ export class FluxerAudioBridge extends EventEmitter {
   get currentUri() { return this._currentUri; }
   /** @type {boolean} @description Whether the current track was served via /v4/trackstream. */
   get usedTrackstream() { return this._usedTrackstream; }
-
-  /** Called by prefetch on success: a working trackstream closes the circuit breaker. */
-  _tsOk() { tsBreakerOk(); }
-  _tsBreakerOpen() { return tsBreakerOpen(); }
 
   /** @param {LavalinkManager|null} lavalinkManager - LavalinkManager for trackstream/loadstream. */
   constructor(lavalinkManager = null) {
@@ -131,9 +110,7 @@ export class FluxerAudioBridge extends EventEmitter {
       const trackstreamGate = loadstreamEnabled
           ? (seekMs === 0 && !filterPayload) // loadstream owns seek/filter cases when enabled
           : true;
-      const skipTrackstream = loadstreamEnabled && tsBreakerOpen();
-      if (skipTrackstream) logger.player("[AudioBridge] Trackstream circuit open (recent timeouts) — going straight to loadstream.");
-      if (trackstreamGate && !skipTrackstream && trackInfo.encoded && this._lavalink) {
+      if (trackstreamGate && trackInfo.encoded && this._lavalink) {
         const result = await this._playViaTrackstream(conn, trackInfo, { seekMs, durationMs, generation });
         if (result !== null) return result;
         // Trackstream could not serve this track (returned null for a LIVE play).
@@ -400,11 +377,6 @@ export class FluxerAudioBridge extends EventEmitter {
       if (stale()) return "stopped";
       // The encoded payload may be stale (expired googlevideo URL → HTTP 403)
       // — resolve a fresh one once and retry before giving up.
-      if (isSlowNodeError(e)) {
-        tsBreakerFail();
-        logger.warn("[AudioBridge] Trackstream failed (" + e.message + ") — node is slow, skipping fresh-encoded retry.");
-        return null;
-      }
       logger.warn("[AudioBridge] Trackstream failed (" + e.message + ") — trying one fresh-encoded retry...");
       const freshEncoded = trackInfo.url && trackInfo.url.startsWith("http")
           ? await this._resolveUrlViaLavalink(trackInfo.url, trackInfo.guildId).catch(() => null)
@@ -424,21 +396,9 @@ export class FluxerAudioBridge extends EventEmitter {
 
     if (stale()) return "stopped";
 
-    if (/mpegts|m3u8|hls/i.test(String(direct.format || "")) || /\.m3u8(\?|$)/i.test(direct.url)) {
-      // HLS/MPEG-TS can never be positioned/passed through in-process, and a
-      // fresh loadtracks resolve returns the same HLS — skip the ~13s detour.
-      logger.player("[AudioBridge] trackstream returned HLS (" + (direct.format || "m3u8") + ") — not playable in-process.");
-      return null;
-    }
-
     if (!/webm|opus/i.test(String(direct.format || ""))) {
-      // A fresh resolve only helps when YouTube handed us a non-WebM itag (googlevideo).
-      // Mirror sources (JioSaavn/Deezer/SoundCloud... AAC/MP3/MP4) return the same thing
-      // again, so skip the ~7-13s loadtracks round-trip for them.
-      const refreshable = /googlevideo\.com|youtube\.com|ytimg/i.test(String(direct.url || ""));
-      logger.player("[AudioBridge] trackstream format not opus/webm (" + (direct.format || "?") + ")" +
-          (refreshable ? ", refreshing encoded track once..." : " from a non-YouTube source, skipping refresh."));
-      const freshEncoded = refreshable && trackInfo.url && trackInfo.url.startsWith("http")
+      logger.player("[AudioBridge] trackstream format not opus/webm (" + (direct.format || "?") + "), refreshing encoded track once...");
+      const freshEncoded = trackInfo.url && trackInfo.url.startsWith("http")
           ? await this._resolveUrlViaLavalink(trackInfo.url, trackInfo.guildId)
           : null;
       if (stale()) return "stopped";
@@ -475,7 +435,6 @@ export class FluxerAudioBridge extends EventEmitter {
     }
 
     // WebM/Opus direct URL — play with zero re-encode.
-    tsBreakerOk();
     this._usedTrackstream = true;
     logger.player("[AudioBridge] Passthrough webm/opus via trackstream" +
         (seekMs > 0 ? " [positioned seek " + seekMs + "ms]" : " (zero-copy)") + ": " +

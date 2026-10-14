@@ -10,18 +10,12 @@
  * FluxerAudioBridge instance.
  */
 
-import { isLoadstreamEnabled } from "./AudioSettings.mjs";
 import { logger } from "../../core/Logger.mjs";
 import { WebMOpusMuxer, OPUS_FRAME_MS } from "./WebMOpusMuxer.mjs";
 import { StreamPositioner } from "./StreamPositioner.mjs";
 import prismMedia from "prism-media";
 
 const { Encoder: PrismOpusEncoder, OggDemuxer: PrismOggDemuxer } = prismMedia.opus;
-
-/** Prefetched trackstream results keyed by encoded track (shared across players). */
-const _tsCache = new Map();
-const TS_CACHE_TTL_MS = 4 * 60_000;
-let _lastProbeAt = 0;
 
 /** @type {number} @description PCM sample rate expected from NodeLink loadstream (48kHz stereo s16le). */
 const PCM_RATE = 48000;
@@ -279,67 +273,6 @@ const StreamPipeline = {
    * @private
    */
   async _getTrackstreamUrl(trackInfo) {
-    const key = trackInfo.encoded;
-    const hit = _tsCache.get(key);
-    if (hit) {
-      // One-shot: a prefetched URL is consumed by the play that needs it (a replay
-      // or loop re-queries, so we never reuse an expired direct URL).
-      if (hit.result && Date.now() - hit.at < TS_CACHE_TTL_MS) {
-        _tsCache.delete(key);
-        logger.player("[AudioBridge] trackstream: using prefetched URL (instant start)");
-        return hit.result;
-      }
-      if (hit.promise) {
-        logger.player("[AudioBridge] trackstream: joining in-flight prefetch...");
-        return hit.promise;
-      }
-      _tsCache.delete(key);
-    }
-    return this._queryTrackstream(trackInfo);
-  },
-
-  /**
-   * Warm the next track: resolve its encoded payload (if missing) and its
-   * trackstream URL in the background so the track change is near-instant.
-   * Never throws. Doubles as a free health probe for the trackstream circuit
-   * breaker (success closes it, so playback returns to the fast route).
-   * @param {object} song - Queue track object (its .encoded is filled in when resolved).
-   * @param {string} [guildId]
-   * @returns {Promise<void>}
-   */
-  async prefetchTrack(song, guildId) {
-    try {
-      if (!this._lavalink || !song || song.type === "bilibili" || song.type === "external") return;
-      if (!song.encoded && song.url && String(song.url).startsWith("http")) {
-        const enc = await this._resolveUrlViaLavalink(song.url, guildId);
-        if (enc) song.encoded = enc;
-      }
-      if (!song.encoded || _tsCache.has(song.encoded)) return;
-      // While trackstream is known-bad, probe at most once a minute (each probe is a hung request on the node).
-      if (this._tsBreakerOpen?.()) {
-        if (Date.now() - _lastProbeAt < 60_000) return;
-        _lastProbeAt = Date.now();
-      }
-      const info = { encoded: song.encoded, guildId };
-      const entry = { at: Date.now(), result: null, promise: null };
-      entry.promise = this._queryTrackstream(info).then(
-        (r) => { entry.result = r; entry.at = Date.now(); entry.promise = null; this._tsOk?.(); return r; },
-        (e) => { _tsCache.delete(song.encoded); throw e; },
-      );
-      entry.promise.catch(() => {}); // prefetch failures are silent
-      _tsCache.set(song.encoded, entry);
-      while (_tsCache.size > 40) _tsCache.delete(_tsCache.keys().next().value);
-      await entry.promise.catch(() => {});
-      if (entry.result) logger.player("[AudioBridge] Prefetched next track: " + (song.title || "unknown"));
-    } catch (_) { /* never block playback */ }
-  },
-
-  /**
-   * @param {object} trackInfo
-   * @returns {Promise<{url: string, format: string}>}
-   * @private
-   */
-  async _queryTrackstream(trackInfo) {
     const nlInfo = this._lavalink.getNodeLinkInfo?.();
     if (!nlInfo) throw new Error("NodeLink info not available");
 
@@ -355,9 +288,7 @@ const StreamPipeline = {
 
     logger.player("[AudioBridge] Querying /v4/trackstream...");
 
-    // A healthy trackstream answers in a few seconds. When loadstream can take over,
-    // fail fast (8s) instead of making the listener wait the full 15s.
-    const body = await this._httpGetJson(url, headers, 0, isLoadstreamEnabled() ? 8_000 : 15_000);
+    const body = await this._httpGetJson(url, headers);
 
     const directUrl = body?.url;
     if (!directUrl || typeof directUrl !== "string") {
