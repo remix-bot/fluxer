@@ -669,20 +669,17 @@ const SearchMixin = {
    * @param {string} [title]
    * @param {string} [artist]
    * @param {string} [trackType="external"]
-   * @param {object} [meta=null] - Optional metadata ({durationMs, artist, thumbnail}).
    * @returns {object}
    */
-  _buildExternalTrack(url, title = null, artist = null, trackType = "external", meta = null) {
+  _buildExternalTrack(url, title = null, artist = null, trackType = "external") {
     const displayTitle = title || this._extractFilenameFromUrl(url);
-    const track = {
+    return {
       type:      trackType,
       title:     displayTitle,
       url:       url,
-      artist:    artist || meta?.artist || null,
-      thumbnail: meta?.thumbnail ?? null,
+      artist:    artist || null,
+      thumbnail: null,
     };
-    if (meta?.durationMs > 0) track._durationMs = Math.round(meta.durationMs);
-    return track;
   },
 
   /**
@@ -770,16 +767,14 @@ const SearchMixin = {
    * @param {string} [artist] - Optional artist name.
    * @param {boolean} [top=false] - Insert at top of queue.
    * @param {string} [trackType="external"] - "external" or "stream".
-   * @param {object} [meta=null] - Optional metadata ({durationMs, artist, thumbnail})
-   *   e.g. from an audio file attachment (see module:src/music/attachments).
    * @returns {EventEmitter} Emits "message" events with status strings.
    */
-  playExternal(url, title = null, artist = null, top = false, trackType = "external", meta = null) {
+  playExternal(url, title = null, artist = null, top = false, trackType = "external") {
     const events = new EventEmitter();
 
     (async () => {
       try {
-        const track = this._buildExternalTrack(url, title, artist, trackType, meta);
+        const track = this._buildExternalTrack(url, title, artist, trackType);
         this.addToQueue(track, top);
         events.emit("message", "Added **[" + track.title + "](" + url + ")** to the queue.");
 

@@ -11,9 +11,6 @@
  */
 
 import { logger } from "../../core/Logger.mjs";
-import { Readable } from "node:stream";
-import { spawn as spawnProcess } from "node:child_process";
-import { createRequire } from "node:module";
 import { WebMOpusMuxer, OPUS_FRAME_MS } from "./WebMOpusMuxer.mjs";
 import { StreamPositioner } from "./StreamPositioner.mjs";
 import prismMedia from "prism-media";
@@ -33,60 +30,6 @@ const OPUS_BITRATE = 128000;
 const WEBM_MAGIC = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
 /** @type {Buffer} @description OGG container magic bytes ("OggS"). */
 const OGG_MAGIC = Buffer.from("OggS", "ascii");
-/** @type {Buffer} @description ISOBMFF box header (MP4/M4A/MOV/3GP family) — sits at byte offset 4, after the 4-byte big-endian box size. */
-const FTYP_MAGIC = Buffer.from("ftyp", "ascii");
-
-/** @type {number} @description Bytes of a WebM stream inspected to find its track codecs (EBML header + Info + Tracks sit at the very start). */
-const WEBM_CODEC_PEEK_BYTES = 16384;
-/** @type {Buffer} @description Matroska CodecID of Opus audio. */
-const WEBM_CODEC_OPUS = Buffer.from("A_OPUS", "ascii");
-/** @type {string[]} @description Matroska CodecIDs that @fluxerjs/voice's WebmDemuxer (prism-media) cannot play: any non-Opus audio and any video track (prism throws "Audio codec is not Opus!" on their CodecPrivate). */
-const WEBM_UNSUPPORTED_CODECS = [
-  "A_VORBIS", "A_AAC", "A_FLAC", "A_MPEG", "A_AC3", "A_EAC3", "A_DTS", "A_PCM", "A_TTA1", "A_WAVPACK4",
-  "V_VP8", "V_VP9", "V_AV1", "V_MPEG", "V_MS/", "V_THEORA", "V_REAL", "V_UNCOMPRESSED", "V_PRORES",
-];
-
-/** @type {string} @description User-Agent sent for direct media fetches (kept identical across the bridge and ffmpeg's own HTTP client). */
-const HTTP_UA = "Mozilla/5.0 (compatible; Bot/1.0)";
-
-/** @type {string|null} @description Resolved ffmpeg binary (null = not installed). Checked once per process. */
-let _ffmpegCmd = null;
-/** @type {boolean} @description Whether the ffmpeg binary lookup already ran. */
-let _ffmpegChecked = false;
-
-/**
- * Locate a usable ffmpeg binary: ffmpeg-static (when installed) first, then
- * the system PATH. Result is memoized for the process lifetime.
- * @returns {Promise<string|null>}
- * @private
- */
-async function _resolveFfmpegCmd() {
-  if (_ffmpegChecked) return _ffmpegCmd;
-  _ffmpegChecked = true;
-  const candidates = [];
-  try {
-    candidates.push(createRequire(import.meta.url)("ffmpeg-static"));
-  } catch (_) {}
-  candidates.push("ffmpeg");
-  for (const cmd of candidates) {
-    if (!cmd) continue;
-    const ok = await new Promise((resolve) => {
-      let probe;
-      try {
-        probe = spawnProcess(cmd, ["-version"], { stdio: "ignore" });
-      } catch (_) {
-        return resolve(false);
-      }
-      probe.on("error", () => resolve(false));
-      probe.on("close", (code) => resolve(code === 0));
-    });
-    if (ok) {
-      _ffmpegCmd = cmd;
-      return cmd;
-    }
-  }
-  return null;
-}
 
 /**
  * @type {object}
@@ -116,14 +59,13 @@ const StreamPipeline = {
 
       const stream = this._stream;
       if (stream) {
-        if (durationMs <= 0 && (stream.readableEnded || stream.destroyed)) {
+        if (stream.readableEnded || stream.destroyed) {
+          // Stream already finished before the wait started (very short
+          // sources, or the consumer drained it during conn.play setup).
           this._endResolve = null;
           this._endReject = null;
           return resolve();
         }
-        // Finite tracks: never short-circuit on stream state — conn.play can
-        // drain the whole stream into its playback buffer far faster than
-        // realtime, so only the duration timer reflects actual playback end.
         const onEnd = () => {
           if (durationMs > 0 && this._playing && !this._stopped) return;
           resolve();
@@ -145,29 +87,6 @@ const StreamPipeline = {
       if (this._encoder) {
         this._encoder.once("error", failFast);
       }
-    });
-  },
-
-  /**
-   * Wait until the bridge's source stream is fully consumed (end/close) so
-   * downstream frame counts (durations) are final. Stop-safe: cleanup()
-   * destroys the source, which fires "close". Resolves on source errors.
-   * @returns {Promise<void>}
-   * @private
-   */
-  _awaitSourceEnd() {
-    return new Promise((resolve) => {
-      const src = this._sourceStream;
-      if (!src || src.readableEnded || src.destroyed) return resolve();
-      const done = () => {
-        src.off("end", done);
-        src.off("close", done);
-        src.off("error", done);
-        resolve();
-      };
-      src.once("end", done);
-      src.once("close", done);
-      src.once("error", done);
     });
   },
 
@@ -222,17 +141,6 @@ const StreamPipeline = {
       );
     }
 
-    if (routed.kind === "webm") {
-      try {
-        await this._assertWebmOpus(routed.stream);
-      } catch (err) {
-        loaded.stream.destroy();
-        this._sourceStream = null;
-        this._sourceReq = null;
-        throw err;
-      }
-    }
-
     const positioner = new StreamPositioner({ kind: routed.kind, seekMs });
     const out = routed.stream.pipe(positioner);
     logger.player("[AudioBridge] Positioned stream open (kind=" + routed.kind + ", seek=" + seekMs + "ms)");
@@ -240,58 +148,16 @@ const StreamPipeline = {
   },
 
   /**
-   * Verify a WebM stream carries only Opus audio before it is handed to
-   * conn.play(). @fluxerjs/voice pipes the stream into prism-media's
-   * WebmDemuxer WITHOUT an error listener, so a Vorbis/AAC/video track makes
-   * the demuxer throw "Audio codec is not Opus!" as an uncaught exception.
-   * Detecting it up front lets the caller fall back (ffmpeg) instead.
-   * The peeked bytes are pushed back, so the stream stays intact.
-   * @param {Readable} stream - WebM stream (paused mode, magic already sniffed)
-   * @returns {Promise<void>}
-   * @throws {Error} err.code === "WEBM_NOT_OPUS" when a non-Opus codec is found
-   * @private
-   */
-  async _assertWebmOpus(stream) {
-    const head = await this._peek(stream, WEBM_CODEC_PEEK_BYTES);
-    const bad = WEBM_UNSUPPORTED_CODECS.find((c) => head.includes(c));
-    if (bad) {
-      const err = new Error("WebM stream is not Opus-only (found " + bad + ") — cannot play without decoding");
-      err.code = "WEBM_NOT_OPUS";
-      throw err;
-    }
-  },
-
-  /**
-   * Best-effort safety net: @fluxerjs/voice's internal demuxer has no error
-   * listener, so any late demux failure (corrupt data, truncated header)
-   * would crash the process. Attach a logger to it right after play().
-   * @param {object} conn - Fluxer voice connection
-   * @private
-   */
-  _guardDemuxer(conn) {
-    const demuxer = conn?.currentStream;
-    if (!demuxer || typeof demuxer.on !== "function" || demuxer.__fluxerGuarded) return;
-    demuxer.__fluxerGuarded = true;
-    demuxer.on("error", (err) => {
-      logger.warn("[AudioBridge] Demuxer error (ignored, track will end): " + (err?.message || err));
-    });
-  },
-
-  /**
    * Peek at the first bytes of a stream and classify it, pushing the peeked
-   * bytes back so nothing is lost. MP4/M4A/MOV (ISOBMFF) is detected via the
-   * "ftyp" box header at offset 4 — those files must be decoded by ffmpeg
-   * fetching the URL itself (their moov atom often trails mdat, which a
-   * non-seekable pipe cannot reach back into).
+   * bytes back so nothing is lost.
    * @param {Readable} stream
-   * @returns {Promise<{stream: Readable, kind: "webm"|"ogg"|"mp4"|"pcm"}>}
+   * @returns {Promise<{stream: Readable, kind: "webm"|"ogg"|"pcm"}>}
    * @private
    */
   async _routeByMagic(stream) {
-    const head = await this._peek(stream, 8);
+    const head = await this._peek(stream, 4);
     if (head.length >= 4 && head.subarray(0, 4).equals(WEBM_MAGIC)) return { stream, kind: "webm" };
     if (head.length >= 4 && head.subarray(0, 4).equals(OGG_MAGIC)) return { stream, kind: "ogg" };
-    if (head.length >= 8 && head.subarray(4, 8).equals(FTYP_MAGIC)) return { stream, kind: "mp4" };
     return { stream, kind: "pcm" };
   },
 
@@ -304,63 +170,39 @@ const StreamPipeline = {
    */
   _peek(stream, n) {
     return new Promise((resolve, reject) => {
-      const chunks = [];
-      let total = 0;
-      let settled = false;
-
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        const buf = Buffer.concat(chunks);
-        if (buf.length > 0) stream.unshift(buf);
-        resolve(buf.subarray(0, n));
-      };
-      const drain = () => {
+      const tryRead = () => {
+        const chunks = [];
+        let total = 0;
         let chunk;
         while (total < n && (chunk = stream.read()) !== null) {
           chunks.push(chunk);
           total += chunk.length;
         }
-        const ended = stream.readableEnded || stream._readableState?.ended === true;
-        if (total >= n || ended) finish();
+        if (total >= n || stream.readableEnded) {
+          const buf = Buffer.concat(chunks);
+          cleanup();
+          if (buf.length > 0) stream.unshift(buf);
+          resolve(buf.subarray(0, n));
+          return;
+        }
       };
-      const onError = (err) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(err);
-      };
+      const onReadable = () => { cleanup(); tryRead(); };
+      const onEnd = () => { cleanup(); tryRead(); };
+      const onError = (err) => { cleanup(); reject(err); };
       const cleanup = () => {
-        stream.off("readable", drain);
-        stream.off("end", finish);
+        stream.off("readable", onReadable);
+        stream.off("end", onEnd);
         stream.off("error", onError);
       };
-      stream.on("readable", drain);
-      stream.once("end", finish);
+      stream.once("readable", onReadable);
+      stream.once("end", onEnd);
       stream.once("error", onError);
-      drain();
+      tryRead();
     });
   },
 
   /**
-   * Wall-clock ms still left to play: durationMs (already remaining-after-seek
-   * when the player knows the track length) or, when unknown, the pipeline's
-   * measured frame/byte count — minus playback time elapsed since start.
-   * @param {number} durationMs
-   * @param {number} [measuredMs=0]
-   * @returns {number}
-   * @private
-   */
-  _remainingPlayMs(durationMs, measuredMs = 0) {
-    const total = durationMs > 0 ? durationMs : measuredMs;
-    return Math.max(0, total - (Date.now() - this._startedAt));
-  },
-
-  /**
-   * Build the in-process PCM -> Opus -> WebM pipeline. The returned wrapper
-   * exposes getDurationMs() derived from counted PCM bytes (final once the
-   * PCM source ends) so unknown-duration tracks can still be timed.
+   * Build the in-process PCM -> Opus -> WebM pipeline.
    * @param {Readable} pcmStream - s16le 48kHz stereo byte stream
    * @returns {WebMOpusMuxer} - byte stream consumable by conn.play()
    * @private
@@ -384,103 +226,20 @@ const StreamPipeline = {
     const muxer = new WebMOpusMuxer({ sampleRate: PCM_RATE, channels: PCM_CHANNELS });
     this._encoder = encoder;
 
-    let pcmBytes = 0;
-    pcmStream.on("data", (chunk) => { pcmBytes += chunk.length; });
-
-    pcmStream.pipe(encoder).pipe(muxer);
-    muxer.getDurationMs = () => Math.round((pcmBytes / (PCM_RATE * PCM_CHANNELS * 2)) * 1000);
-    return muxer;
-  },
-
-  /**
-   * Spawn a local ffmpeg process decoding an audio URL to s16le 48kHz stereo
-   * PCM on stdout (fed through _buildPcmPipeline). Last-resort route for
-   * formats the in-process pipeline cannot handle (FLAC, MP4/M4A/MOV, MP3/AAC
-   * files the NodeLink worker refuses, ...).
-   *
-   * Input modes:
-   *  - piped (default): the bot fetches the URL itself and pipes the body into
-   *    ffmpeg's stdin, so request headers match the other direct-URL routes.
-   *    Works for streamable containers (FLAC, OGG, MP3, WAV, faststart MP4).
-   *  - directInput: ffmpeg fetches the URL itself via its HTTP protocol (range
-   *    requests, proper seeking). Required for MP4/MOV files whose moov atom
-   *    trails mdat — a non-seekable pipe can never reach back to demux it.
-   * @param {string} url - Audio URL (signed attachment URL, radio, ...)
-   * @param {number} [seekSeconds=0]
-   * @param {object} [options]
-   * @param {boolean} [options.directInput=false] - Let ffmpeg fetch the URL itself.
-   * @returns {Promise<{stream: WebMOpusMuxer, source: Readable|null, proc: ChildProcess, getDurationMs: function, hasAudio: function, stderrText: function}|null>} null when no usable ffmpeg binary is installed
-   * @private
-   */
-  async _spawnFfmpegPcm(url, seekSeconds = 0, { directInput = false } = {}) {
-    const cmd = await _resolveFfmpegCmd();
-    if (!cmd) return null;
-
-    const args = ["-hide_banner", "-loglevel", "error"];
-    if (seekSeconds > 0) args.push("-ss", String(Math.floor(seekSeconds)));
-    if (directInput) {
-      args.push("-user_agent", HTTP_UA, "-i", url);
-    } else {
-      args.push("-i", "pipe:0");
-    }
-    args.push("-vn", "-f", "s16le", "-ar", String(PCM_RATE), "-ac", String(PCM_CHANNELS), "pipe:1");
-
-    let proc;
-    try {
-      proc = spawnProcess(cmd, args, { stdio: ["pipe", "pipe", "pipe"] });
-    } catch (_) {
-      return null;
-    }
-
-    let source = null;
-    if (!directInput) {
-      try {
-        const response = await fetch(url, {
-          headers: { "User-Agent": HTTP_UA },
-          redirect: "follow",
-        });
-        if (!response.ok) throw new Error("HTTP " + response.status + " for " + url);
-        source = Readable.fromWeb(response.body);
-      } catch (e) {
-        try { proc.kill("SIGKILL"); } catch (_) {}
-        throw e;
+    pcmStream.on("error", (err) => {
+      if (this._stopped || !this._playing) {
+        logger.player("[AudioBridge] PCM source torn down after stop: " + err.message);
+      } else {
+        logger.warn("[AudioBridge] PCM source error: " + err.message);
+        encoder.destroy(err);
       }
-    }
-
-    const stderrChunks = [];
-    proc.stderr.on("data", (chunk) => { if (stderrChunks.length < 16) stderrChunks.push(chunk); });
-    let gotPcm = false;
-    proc.stdout.once("data", () => { gotPcm = true; });
-    let closeResolve;
-    const exited = new Promise((resolve) => { closeResolve = resolve; });
-    proc.stdin.on("error", () => {}); // EPIPE when ffmpeg exits early — not fatal
-    if (source) {
-      source.on("error", (err) => {
-        try { proc.stdin.destroy(); } catch (_) {}
-        try { proc.kill("SIGKILL"); } catch (_) {}
-        logger.warn("[AudioBridge] ffmpeg source error: " + err.message);
-      });
-    }
-    proc.on("close", (code, signal) => {
-      if (!gotPcm) logger.warn("[AudioBridge] ffmpeg exited early (code=" + code + " signal=" + signal + ")");
-      closeResolve();
-      if (source) { try { source.destroy(); } catch (_) {} }
+    });
+    encoder.on("error", (err) => {
+      muxer.destroy(err);
     });
 
-    if (source) source.pipe(proc.stdin);
-    const pipeline = this._buildPcmPipeline(proc.stdout);
-    return {
-      stream: pipeline,
-      source,
-      proc,
-      exited,
-      getDurationMs: () => pipeline.getDurationMs(),
-      hasAudio: () => gotPcm,
-      stderrText: () => {
-        const text = Buffer.concat(stderrChunks).toString("utf8").trim();
-        return text.length > 400 ? text.substring(text.length - 400) : text;
-      },
-    };
+    pcmStream.pipe(encoder).pipe(muxer);
+    return muxer;
   },
 
   /**
@@ -503,8 +262,9 @@ const StreamPipeline = {
     });
     oggStream.pipe(demuxer).pipe(muxer);
     await headPromise;
-    muxer.getDurationMs = () => frameCount * OPUS_FRAME_MS;
-    return muxer;
+    const wrapper = Object.create(muxer);
+    wrapper.getDurationMs = () => frameCount * OPUS_FRAME_MS;
+    return wrapper;
   },
 
   /**

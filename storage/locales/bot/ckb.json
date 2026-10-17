@@ -380,10 +380,6 @@
       "bilibiliResolving": "📺 ڤیدیۆی Bilibili چارەسەر دەکرێت...",
       "bilibiliNoAudio": "❌ هیچ دەنگێکی لێدراو نییە بۆ **{{title}}** — لەوانەیە ڤیدیۆکە بە ناوچە دەبەسترێت، پارەدار بێت یان سڕدرابێتەوە.",
       "bilibiliError": "❌ Bilibili: {{message}}",
-      "noQuery": "❌ ناوی گۆرانی یان بەستەرێک بنووسە — یان پەڕگەیەکی دەنگی هاوپێچ بکە (Opus، MP3، OGG، FLAC، WAV…) بۆ لێدانی.\nنموونە: `$prefixplay blinding lights`",
-      "attachmentNotAudio": "❌ پەڕگە هاوپێچکراوەکە جۆرێکی دەنگی پشتگیریکراو نییە (Opus، OGG، WebM، MP3، MP4، MOV، M4A، AAC، FLAC، WAV).",
-      "loadingAttachment": "📄 بارکردنی **{{filename}}**...",
-      "loadingAttachments": "📄 بارکردنی **{{count}}** پەڕگەی هاوپێچ...",
       "bilibiliDisabled": "❌ لێدانی Bilibili ناچالاک کراوە (config.json → bilibili.enabled)."
     },
     "playnext": {

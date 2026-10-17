@@ -497,10 +497,6 @@
       "bilibiliResolving": "📺 Resolving Bilibili video...",
       "bilibiliNoAudio": "❌ No playable audio for **{{title}}** — the video may be region-locked, premium-only, or deleted.",
       "bilibiliError": "❌ Bilibili: {{message}}",
-      "noQuery": "❌ Type a song name or URL — or attach an audio file (Opus, MP3, OGG, FLAC, WAV…) to play it.\nExample: `$prefixplay blinding lights`",
-      "attachmentNotAudio": "❌ The attached file isn't a supported audio format (Opus, OGG, WebM, MP3, MP4, MOV, M4A, AAC, FLAC, WAV).",
-      "loadingAttachment": "📄 Loading **{{filename}}**...",
-      "loadingAttachments": "📄 Loading **{{count}}** attached files...",
       "bilibiliDisabled": "❌ Bilibili playback is disabled (config.json → bilibili.enabled)."
     },
     "playnext": {

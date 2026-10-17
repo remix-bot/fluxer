@@ -380,10 +380,6 @@
       "bilibiliResolving": "📺 Resolvendo vídeo do Bilibili...",
       "bilibiliNoAudio": "❌ Nenhum áudio reproduzível para **{{title}}** — o vídeo pode estar bloqueado por região, ser pago ou ter sido excluído.",
       "bilibiliError": "❌ Bilibili: {{message}}",
-      "noQuery": "❌ Digite o nome de uma música ou URL — ou anexe um arquivo de áudio (Opus, MP3, OGG, FLAC, WAV…) para tocá-lo.\nExemplo: `$prefixplay blinding lights`",
-      "attachmentNotAudio": "❌ O arquivo anexado não é um formato de áudio suportado (Opus, OGG, WebM, MP3, MP4, MOV, M4A, AAC, FLAC, WAV).",
-      "loadingAttachment": "📄 Carregando **{{filename}}**...",
-      "loadingAttachments": "📄 Carregando **{{count}}** arquivos anexados...",
       "bilibiliDisabled": "❌ A reprodução do Bilibili está desativada (config.json → bilibili.enabled)."
     },
     "playnext": {

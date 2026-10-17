@@ -24,7 +24,6 @@ export class FluxerAudioBridge extends EventEmitter {
   _encoder = null;
   _sourceStream = null;
   _sourceReq = null;
-  _ffmpegProc = null;
   _playing = false;
   _stopped = false;
   _startedAt = 0;
@@ -68,11 +67,6 @@ export class FluxerAudioBridge extends EventEmitter {
    *      (Bilibili proxy, radio, direct links); magic-byte sniff: WebM
    *      passthrough or Ogg/Opus remux; other formats need the loadstream
    *      route or a Lavalink resolve + trackstream retry.
-   *   4. local ffmpeg decode (Route 3d) — last resort for direct files the
-   *      in-process pipeline and NodeLink cannot serve (FLAC, MP4/M4A/MOV,
-   *      odd MP3/AAC): ffmpeg decodes to PCM which is Opus-encoded in-process.
-   *      Requires an ffmpeg binary (ffmpeg-static or system PATH); skipped
-   *      otherwise.
    * Every await is followed by a play-generation check so a stop()/new play()
    * can never leave a superseded play() publishing audio (double-audio race).
    * @param {object} conn - Fluxer voice connection
@@ -140,41 +134,24 @@ export class FluxerAudioBridge extends EventEmitter {
         if (routed.kind === "webm") {
           logger.player("[AudioBridge] Playing loadstream webm/opus passthrough: " + (trackInfo.title || "unknown") +
               (seekMs > 0 ? " [seek: " + seekMs + "ms]" : ""));
-          await this._assertWebmOpus(routed.stream);
           this._stream = routed.stream;
           await conn.play(routed.stream);
-          this._guardDemuxer(conn);
         } else if (routed.kind === "ogg") {
           logger.player("[AudioBridge] Playing loadstream ogg/opus (remux to webm): " + (trackInfo.title || "unknown"));
           const oggResult = await this._remuxOggToWebM(routed.stream);
           this._stream = oggResult;
-          await conn.play(this._stream);
-          if (generation !== this._playGeneration) return "stopped";
-
-          await this._awaitSourceEnd();
-          if (generation !== this._playGeneration) return "stopped";
           if (durationMs <= 0) durationMs = oggResult.getDurationMs();
+          await conn.play(this._stream);
         } else {
-          if (routed.kind === "mp4") {
-            loaded.stream.destroy();
-            throw new Error("loadstream returned undecoded MP4/MOV audio (no PCM) — the audio node could not decode this file");
-          }
           logger.player("[AudioBridge] Playing via loadstream PCM -> in-process Opus: " + (trackInfo.title || "unknown") +
               (seekMs > 0 ? " [seek: " + seekMs + "ms]" : "") +
               (filterPayload ? " [filters]" : ""));
           this._stream = this._buildPcmPipeline(routed.stream);
           await conn.play(this._stream);
-          if (generation !== this._playGeneration) return "stopped";
-
-          await this._awaitSourceEnd();
-          if (generation !== this._playGeneration) return "stopped";
-          if (durationMs <= 0 && this._stream?.getDurationMs) durationMs = this._stream.getDurationMs();
         }
         if (generation !== this._playGeneration) return "stopped";
 
-        const measuredMs = this._stream?.getDurationMs?.() ?? 0;
-        const finite = durationMs > 0 || measuredMs > 0;
-        await this._awaitEnd(finite ? this._remainingPlayMs(durationMs, measuredMs) : 0);
+        await this._awaitEnd(durationMs);
         if (generation !== this._playGeneration) return "stopped";
 
         if (this._playing && !this._stopped) {
@@ -204,10 +181,8 @@ export class FluxerAudioBridge extends EventEmitter {
         const routed = await this._routeByMagic(stream);
         if (routed.kind === "webm") {
           logger.player("[AudioBridge] Route 3a: webm/opus passthrough: " + (trackInfo.title || "unknown"));
-          await this._assertWebmOpus(routed.stream);
           this._stream = routed.stream;
           await conn.play(routed.stream);
-          this._guardDemuxer(conn);
         } else if (routed.kind === "ogg") {
           logger.player("[AudioBridge] Route 3b: ogg/opus remux to webm: " + (trackInfo.title || "unknown"));
           const oggResult = await this._remuxOggToWebM(routed.stream);
@@ -215,10 +190,12 @@ export class FluxerAudioBridge extends EventEmitter {
           await conn.play(this._stream);
           if (generation !== this._playGeneration) return "stopped";
 
-          // Wait for the SOURCE OGG to finish downloading so the demuxed frame
-          // count (duration) is final; the remuxed muxer stream itself ends
-          // when conn.play drains it, not when playback ends.
-          await this._awaitSourceEnd();
+          await new Promise(r => {
+            if (this._stream.readableEnded) return r();
+            const done = () => { this._stream.off("end", done); this._stream.off("close", done); r(); };
+            this._stream.once("end", done);
+            this._stream.once("close", done);
+          });
           if (generation !== this._playGeneration) return "stopped";
 
           const fullDurationMs = oggResult.getDurationMs();
@@ -238,7 +215,7 @@ export class FluxerAudioBridge extends EventEmitter {
         } else {
           stream.destroy();
           this._sourceStream = null;
-          logger.player("[AudioBridge] Route 3c: Direct stream is " + routed.kind + " (needs decode) — resolving through Lavalink...");
+          logger.player("[AudioBridge] Route 3c: Direct stream is " + routed.kind + " (MP3/AAC?) — resolving through Lavalink...");
 
           const encoded = this._lavalink
               ? await this._resolveUrlViaLavalink(trackInfo.url, trackInfo.guildId)
@@ -250,87 +227,54 @@ export class FluxerAudioBridge extends EventEmitter {
             if (result3c !== null) return result3c;
             if (generation !== this._playGeneration) return "stopped";
             // Trackstream could not serve the resolved track either — fall
-            // through to loadstream when allowed, else the ffmpeg fallback.
+            // through to loadstream when allowed, else the explicit error.
             if (loadstreamEnabled) {
-              try {
-                const loaded3c = await this._streamFromLoadstream(trackInfo, seekMs, null);
-                if (generation !== this._playGeneration) {
-                  loaded3c.stream.destroy();
-                  return "stopped";
-                }
-                const routed3c = await this._routeByMagic(loaded3c.stream);
-                this._sourceStream = loaded3c.stream;
-                this._sourceReq = loaded3c.req || null;
-                if (routed3c.kind === "webm") {
-                  logger.player("[AudioBridge] Route 3c (loadstream): webm/opus passthrough");
-                  await this._assertWebmOpus(routed3c.stream);
-                  this._stream = routed3c.stream;
-                  await conn.play(routed3c.stream);
-                  this._guardDemuxer(conn);
-                } else if (routed3c.kind === "ogg") {
-                  logger.player("[AudioBridge] Route 3c (loadstream): ogg/opus remux to webm");
-                  const oggResult3c = await this._remuxOggToWebM(routed3c.stream);
-                  this._stream = oggResult3c;
-                  await conn.play(this._stream);
-                  if (generation !== this._playGeneration) return "stopped";
-
-                  await this._awaitSourceEnd();
-                  if (generation !== this._playGeneration) return "stopped";
-                  if (durationMs <= 0) durationMs = oggResult3c.getDurationMs();
-                } else {
-                  if (routed3c.kind === "mp4") {
-                    loaded3c.stream.destroy();
-                    throw new Error("loadstream returned undecoded MP4/MOV audio (no PCM)");
-                  }
-                  logger.player("[AudioBridge] Route 3c (loadstream): PCM -> Opus -> WebM");
-                  this._stream = this._buildPcmPipeline(routed3c.stream);
-                  await conn.play(this._stream);
-                  if (generation !== this._playGeneration) return "stopped";
-
-                  await this._awaitSourceEnd();
-                  if (generation !== this._playGeneration) return "stopped";
-                  if (durationMs <= 0 && this._stream?.getDurationMs) durationMs = this._stream.getDurationMs();
-                }
-                if (generation !== this._playGeneration) return "stopped";
-
-                const measured3c = this._stream?.getDurationMs?.() ?? 0;
-                const finite3c = durationMs > 0 || measured3c > 0;
-                await this._awaitEnd(finite3c ? this._remainingPlayMs(durationMs, measured3c) : 0);
-                if (generation !== this._playGeneration) return "stopped";
-
-                if (this._playing && !this._stopped) {
-                  this._playing = false;
-                  logger.player("[AudioBridge] Track finished naturally (Route 3c Lavalink resolve)");
-                  return "finished";
-                }
+              const loaded3c = await this._streamFromLoadstream(trackInfo, seekMs, null);
+              if (generation !== this._playGeneration) {
+                loaded3c.stream.destroy();
                 return "stopped";
-              } catch (e) {
-                if (generation !== this._playGeneration) return "stopped";
-                if (this._stopped || !this._playing) return "stopped";
-                logger.warn("[AudioBridge] loadstream failed (" + String(e.message).substring(0, 140) + ") — trying local ffmpeg fallback");
               }
+              const routed3c = await this._routeByMagic(loaded3c.stream);
+              this._sourceStream = loaded3c.stream;
+              this._sourceReq = loaded3c.req || null;
+              if (routed3c.kind === "webm") {
+                logger.player("[AudioBridge] Route 3c (loadstream): webm/opus passthrough");
+                this._stream = routed3c.stream;
+                await conn.play(routed3c.stream);
+              } else if (routed3c.kind === "ogg") {
+                logger.player("[AudioBridge] Route 3c (loadstream): ogg/opus remux to webm");
+                const oggResult3c = await this._remuxOggToWebM(routed3c.stream);
+                this._stream = oggResult3c;
+                if (durationMs <= 0) durationMs = oggResult3c.getDurationMs();
+                await conn.play(this._stream);
+              } else {
+                logger.player("[AudioBridge] Route 3c (loadstream): PCM -> Opus -> WebM");
+                this._stream = this._buildPcmPipeline(routed3c.stream);
+                await conn.play(this._stream);
+              }
+              if (generation !== this._playGeneration) return "stopped";
+
+              await this._awaitEnd(durationMs);
+              if (generation !== this._playGeneration) return "stopped";
+
+              if (this._playing && !this._stopped) {
+                this._playing = false;
+                logger.player("[AudioBridge] Track finished naturally (Route 3c Lavalink resolve)");
+                return "finished";
+              }
+              return "stopped";
             }
           }
 
-          const ffResult = await this._playViaFfmpeg(conn, trackInfo, {
-            seekMs,
-            durationMs,
-            generation,
-            directInput: routed.kind === "mp4", // MP4/MOV: ffmpeg must fetch + range-seek the URL itself
-          });
-          if (ffResult !== null) return ffResult;
-
           throw new Error(
-              "[AudioBridge] Direct stream is " + routed.kind + " — no decoder available for this format. " +
-              "Install ffmpeg (or npm i ffmpeg-static) so the bot can decode it locally, " +
-              "or update your NodeLink so /v4/loadstream handles it."
+              "[AudioBridge] Direct stream is " + routed.kind + " (MP3/AAC/PCM?) — this format needs server-side decoding. " +
+              "Set audio.allowLoadstream to true in config.json (requires a NodeLink exposing /v4/loadstream), " +
+              "or play a WebM/Opus source."
           );
         }
         if (generation !== this._playGeneration) return "stopped";
 
-        const measured3a = this._stream?.getDurationMs?.() ?? 0;
-        const finite3a = durationMs > 0 || measured3a > 0;
-        await this._awaitEnd(finite3a ? this._remainingPlayMs(durationMs, measured3a) : 0);
+        await this._awaitEnd(durationMs);
         if (generation !== this._playGeneration) return "stopped";
 
         if (this._playing && !this._stopped) {
@@ -381,7 +325,6 @@ export class FluxerAudioBridge extends EventEmitter {
       }
       this._stream = opened.stream;
       await conn.play(opened.stream);
-      this._guardDemuxer(conn);
     } catch (e) {
       if (generation !== this._playGeneration) return "stopped";
       if (this._stopped || !this._playing) return "stopped";
@@ -397,76 +340,6 @@ export class FluxerAudioBridge extends EventEmitter {
     if (this._playing && !this._stopped) {
       this._playing = false;
       logger.player("[AudioBridge] Track finished naturally (trackstream)");
-      return "finished";
-    }
-    return "stopped";
-  }
-
-  /**
-   * Route 3d: play a direct URL through a local ffmpeg decode (PCM -> Opus ->
-   * WebM in-process). Last resort when trackstream/loadstream cannot serve a
-   * format (FLAC, MP4/M4A/MOV, odd MP3/AAC files). MP4-family files play via
-   * directInput (ffmpeg fetches the URL itself — their moov atom can trail
-   * mdat, which a piped non-seekable stream cannot decode). Returns null when
-   * no ffmpeg binary is available so the caller can raise the actionable error.
-   * @param {object} conn - Fluxer voice connection
-   * @param {object} trackInfo - Track metadata (url, title, guildId)
-   * @param {object} ctx - { seekMs, durationMs, generation, directInput }
-   * @returns {Promise<"finished"|"stopped"|null>} null when ffmpeg is unavailable
-   * @private
-   */
-  async _playViaFfmpeg(conn, trackInfo, ctx) {
-    const { seekMs, durationMs, generation, directInput = false } = ctx;
-    let ff;
-    try {
-      ff = await this._spawnFfmpegPcm(trackInfo.url, seekMs / 1000, { directInput });
-    } catch (e) {
-      if (generation !== this._playGeneration) return "stopped";
-      if (this._stopped || !this._playing) return "stopped";
-      logger.warn("[AudioBridge] ffmpeg fallback fetch failed: " + e.message);
-      return null;
-    }
-    if (!ff) return null;
-
-    logger.player("[AudioBridge] Route 3d: local ffmpeg decode" + (directInput ? " (direct URL fetch)" : " (piped)") + ": " +
-        (trackInfo.title || trackInfo.url || "unknown") +
-        (seekMs > 0 ? " [seek " + seekMs + "ms]" : ""));
-    this._sourceStream = ff.source;
-    this._ffmpegProc = ff.proc;
-    this._stream = ff.stream;
-    try {
-      await conn.play(ff.stream);
-    } catch (e) {
-      if (generation !== this._playGeneration) return "stopped";
-      if (this._stopped || !this._playing) return "stopped";
-      logger.warn("[AudioBridge] ffmpeg playback failed: " + e.message);
-      return null;
-    }
-    if (generation !== this._playGeneration) return "stopped";
-
-    // Wait for the ffmpeg PROCESS (not just the HTTP body) — the decode keeps
-    // running after the download ends, and PCM frames trail the source.
-    await ff.exited;
-    if (generation !== this._playGeneration) return "stopped";
-
-    if (!ff.hasAudio()) {
-      const detail = ff.stderrText();
-      throw new Error(
-          "ffmpeg decode produced no audio (exit=" + ff.proc.exitCode + " signal=" + ff.proc.signalCode + ")" +
-          (detail ? ": " + detail : "")
-      );
-    }
-
-    const decodedMs = ff.getDurationMs();
-    const remainingMs = this._remainingPlayMs(durationMs, decodedMs);
-    logger.player("[AudioBridge] Route 3d: " + decodedMs + "ms decoded, " + (Date.now() - this._startedAt) + "ms elapsed, waiting " + remainingMs + "ms more");
-
-    await this._awaitEnd(remainingMs);
-    if (generation !== this._playGeneration) return "stopped";
-
-    if (this._playing && !this._stopped) {
-      this._playing = false;
-      logger.player("[AudioBridge] Track finished naturally (Route 3d ffmpeg)");
       return "finished";
     }
     return "stopped";
@@ -556,9 +429,6 @@ export class FluxerAudioBridge extends EventEmitter {
         } catch (e3) {
           if (stale()) return "stopped";
           logger.player("[AudioBridge] trackstream direct URL not playable in-process (" + e3.message + ")");
-          if (e3?.code === "WEBM_NOT_OPUS" && !this._stopped) {
-            return await this._playViaFfmpeg(conn, { ...trackInfo, url: direct.url }, { seekMs, durationMs, generation });
-          }
           return null;
         }
       }
@@ -571,22 +441,36 @@ export class FluxerAudioBridge extends EventEmitter {
         (trackInfo.title || "unknown"));
 
     try {
-      const opened = await this._openPositionedStream(direct.url, seekMs);
-      if (stale()) {
-        opened.stream.destroy();
-        return "stopped";
+      if (seekMs > 0 || durationMs <= 0) {
+        // Streamed route: byte-positioned for seeks; also gives an
+        // end-of-stream handle when the duration is unknown.
+        const opened = await this._openPositionedStream(direct.url, seekMs);
+        if (stale()) {
+          opened.stream.destroy();
+          return "stopped";
+        }
+        return await this._playOpened(conn, opened, durationMs, generation);
       }
-      return await this._playOpened(conn, opened, durationMs, generation);
+      // Zero-copy: the voice connection fetches the URL itself.
+      await conn.play(direct.url);
     } catch (e) {
       if (stale()) return "stopped";
       if (this._stopped || !this._playing) return "stopped";
-      if (e?.code === "WEBM_NOT_OPUS") {
-        logger.warn("[AudioBridge] " + e.message + " — trying local ffmpeg decode");
-        return await this._playViaFfmpeg(conn, { ...trackInfo, url: direct.url }, { seekMs, durationMs, generation });
-      }
       logger.warn("[AudioBridge] Trackstream playback failed, falling back: " + e.message);
       return null;
     }
+
+    if (stale()) return "stopped";
+
+    await this._waitDuration(durationMs);
+    if (stale()) return "stopped";
+
+    if (this._playing && !this._stopped) {
+      this._playing = false;
+      logger.player("[AudioBridge] Track finished naturally (trackstream)");
+      return "finished";
+    }
+    return "stopped";
   }
 
   /** Stop current playback and clean up resources. */
@@ -727,11 +611,6 @@ export class FluxerAudioBridge extends EventEmitter {
       this._endResolve = null;
       this._endReject = null;
       resolve();
-    }
-    if (this._ffmpegProc) {
-      const proc = this._ffmpegProc;
-      this._ffmpegProc = null;
-      try { proc.kill("SIGKILL"); } catch (_) {}
     }
     for (const s of [this._stream, this._encoder, this._sourceStream]) {
       if (s) {
