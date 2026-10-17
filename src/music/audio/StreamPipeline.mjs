@@ -321,9 +321,8 @@ const StreamPipeline = {
     pcmStream.on("data", (chunk) => { pcmBytes += chunk.length; });
 
     pcmStream.pipe(encoder).pipe(muxer);
-    const wrapper = Object.create(muxer);
-    wrapper.getDurationMs = () => Math.round((pcmBytes / (PCM_RATE * PCM_CHANNELS * 2)) * 1000);
-    return wrapper;
+    muxer.getDurationMs = () => Math.round((pcmBytes / (PCM_RATE * PCM_CHANNELS * 2)) * 1000);
+    return muxer;
   },
 
   /**
@@ -437,9 +436,8 @@ const StreamPipeline = {
     });
     oggStream.pipe(demuxer).pipe(muxer);
     await headPromise;
-    const wrapper = Object.create(muxer);
-    wrapper.getDurationMs = () => frameCount * OPUS_FRAME_MS;
-    return wrapper;
+    muxer.getDurationMs = () => frameCount * OPUS_FRAME_MS;
+    return muxer;
   },
 
   /**
