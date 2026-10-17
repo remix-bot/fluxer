@@ -36,6 +36,16 @@ const OGG_MAGIC = Buffer.from("OggS", "ascii");
 /** @type {Buffer} @description ISOBMFF box header (MP4/M4A/MOV/3GP family) — sits at byte offset 4, after the 4-byte big-endian box size. */
 const FTYP_MAGIC = Buffer.from("ftyp", "ascii");
 
+/** @type {number} @description Bytes of a WebM stream inspected to find its track codecs (EBML header + Info + Tracks sit at the very start). */
+const WEBM_CODEC_PEEK_BYTES = 16384;
+/** @type {Buffer} @description Matroska CodecID of Opus audio. */
+const WEBM_CODEC_OPUS = Buffer.from("A_OPUS", "ascii");
+/** @type {string[]} @description Matroska CodecIDs that @fluxerjs/voice's WebmDemuxer (prism-media) cannot play: any non-Opus audio and any video track (prism throws "Audio codec is not Opus!" on their CodecPrivate). */
+const WEBM_UNSUPPORTED_CODECS = [
+  "A_VORBIS", "A_AAC", "A_FLAC", "A_MPEG", "A_AC3", "A_EAC3", "A_DTS", "A_PCM", "A_TTA1", "A_WAVPACK4",
+  "V_VP8", "V_VP9", "V_AV1", "V_MPEG", "V_MS/", "V_THEORA", "V_REAL", "V_UNCOMPRESSED", "V_PRORES",
+];
+
 /** @type {string} @description User-Agent sent for direct media fetches (kept identical across the bridge and ffmpeg's own HTTP client). */
 const HTTP_UA = "Mozilla/5.0 (compatible; Bot/1.0)";
 
@@ -212,10 +222,59 @@ const StreamPipeline = {
       );
     }
 
+    if (routed.kind === "webm") {
+      try {
+        await this._assertWebmOpus(routed.stream);
+      } catch (err) {
+        loaded.stream.destroy();
+        this._sourceStream = null;
+        this._sourceReq = null;
+        throw err;
+      }
+    }
+
     const positioner = new StreamPositioner({ kind: routed.kind, seekMs });
     const out = routed.stream.pipe(positioner);
     logger.player("[AudioBridge] Positioned stream open (kind=" + routed.kind + ", seek=" + seekMs + "ms)");
     return { stream: out, kind: routed.kind };
+  },
+
+  /**
+   * Verify a WebM stream carries only Opus audio before it is handed to
+   * conn.play(). @fluxerjs/voice pipes the stream into prism-media's
+   * WebmDemuxer WITHOUT an error listener, so a Vorbis/AAC/video track makes
+   * the demuxer throw "Audio codec is not Opus!" as an uncaught exception.
+   * Detecting it up front lets the caller fall back (ffmpeg) instead.
+   * The peeked bytes are pushed back, so the stream stays intact.
+   * @param {Readable} stream - WebM stream (paused mode, magic already sniffed)
+   * @returns {Promise<void>}
+   * @throws {Error} err.code === "WEBM_NOT_OPUS" when a non-Opus codec is found
+   * @private
+   */
+  async _assertWebmOpus(stream) {
+    const head = await this._peek(stream, WEBM_CODEC_PEEK_BYTES);
+    const bad = WEBM_UNSUPPORTED_CODECS.find((c) => head.includes(c));
+    if (bad) {
+      const err = new Error("WebM stream is not Opus-only (found " + bad + ") — cannot play without decoding");
+      err.code = "WEBM_NOT_OPUS";
+      throw err;
+    }
+  },
+
+  /**
+   * Best-effort safety net: @fluxerjs/voice's internal demuxer has no error
+   * listener, so any late demux failure (corrupt data, truncated header)
+   * would crash the process. Attach a logger to it right after play().
+   * @param {object} conn - Fluxer voice connection
+   * @private
+   */
+  _guardDemuxer(conn) {
+    const demuxer = conn?.currentStream;
+    if (!demuxer || typeof demuxer.on !== "function" || demuxer.__fluxerGuarded) return;
+    demuxer.__fluxerGuarded = true;
+    demuxer.on("error", (err) => {
+      logger.warn("[AudioBridge] Demuxer error (ignored, track will end): " + (err?.message || err));
+    });
   },
 
   /**
@@ -245,34 +304,42 @@ const StreamPipeline = {
    */
   _peek(stream, n) {
     return new Promise((resolve, reject) => {
-      const tryRead = () => {
-        const chunks = [];
-        let total = 0;
+      const chunks = [];
+      let total = 0;
+      let settled = false;
+
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        const buf = Buffer.concat(chunks);
+        if (buf.length > 0) stream.unshift(buf);
+        resolve(buf.subarray(0, n));
+      };
+      const drain = () => {
         let chunk;
         while (total < n && (chunk = stream.read()) !== null) {
           chunks.push(chunk);
           total += chunk.length;
         }
-        if (total >= n || stream.readableEnded) {
-          const buf = Buffer.concat(chunks);
-          cleanup();
-          if (buf.length > 0) stream.unshift(buf);
-          resolve(buf.subarray(0, n));
-          return;
-        }
+        const ended = stream.readableEnded || stream._readableState?.ended === true;
+        if (total >= n || ended) finish();
       };
-      const onReadable = () => { cleanup(); tryRead(); };
-      const onEnd = () => { cleanup(); tryRead(); };
-      const onError = (err) => { cleanup(); reject(err); };
+      const onError = (err) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(err);
+      };
       const cleanup = () => {
-        stream.off("readable", onReadable);
-        stream.off("end", onEnd);
+        stream.off("readable", drain);
+        stream.off("end", finish);
         stream.off("error", onError);
       };
-      stream.once("readable", onReadable);
-      stream.once("end", onEnd);
+      stream.on("readable", drain);
+      stream.once("end", finish);
       stream.once("error", onError);
-      tryRead();
+      drain();
     });
   },
 

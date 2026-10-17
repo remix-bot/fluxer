@@ -140,8 +140,10 @@ export class FluxerAudioBridge extends EventEmitter {
         if (routed.kind === "webm") {
           logger.player("[AudioBridge] Playing loadstream webm/opus passthrough: " + (trackInfo.title || "unknown") +
               (seekMs > 0 ? " [seek: " + seekMs + "ms]" : ""));
+          await this._assertWebmOpus(routed.stream);
           this._stream = routed.stream;
           await conn.play(routed.stream);
+          this._guardDemuxer(conn);
         } else if (routed.kind === "ogg") {
           logger.player("[AudioBridge] Playing loadstream ogg/opus (remux to webm): " + (trackInfo.title || "unknown"));
           const oggResult = await this._remuxOggToWebM(routed.stream);
@@ -202,8 +204,10 @@ export class FluxerAudioBridge extends EventEmitter {
         const routed = await this._routeByMagic(stream);
         if (routed.kind === "webm") {
           logger.player("[AudioBridge] Route 3a: webm/opus passthrough: " + (trackInfo.title || "unknown"));
+          await this._assertWebmOpus(routed.stream);
           this._stream = routed.stream;
           await conn.play(routed.stream);
+          this._guardDemuxer(conn);
         } else if (routed.kind === "ogg") {
           logger.player("[AudioBridge] Route 3b: ogg/opus remux to webm: " + (trackInfo.title || "unknown"));
           const oggResult = await this._remuxOggToWebM(routed.stream);
@@ -259,8 +263,10 @@ export class FluxerAudioBridge extends EventEmitter {
                 this._sourceReq = loaded3c.req || null;
                 if (routed3c.kind === "webm") {
                   logger.player("[AudioBridge] Route 3c (loadstream): webm/opus passthrough");
+                  await this._assertWebmOpus(routed3c.stream);
                   this._stream = routed3c.stream;
                   await conn.play(routed3c.stream);
+                  this._guardDemuxer(conn);
                 } else if (routed3c.kind === "ogg") {
                   logger.player("[AudioBridge] Route 3c (loadstream): ogg/opus remux to webm");
                   const oggResult3c = await this._remuxOggToWebM(routed3c.stream);
@@ -375,6 +381,7 @@ export class FluxerAudioBridge extends EventEmitter {
       }
       this._stream = opened.stream;
       await conn.play(opened.stream);
+      this._guardDemuxer(conn);
     } catch (e) {
       if (generation !== this._playGeneration) return "stopped";
       if (this._stopped || !this._playing) return "stopped";
@@ -549,6 +556,9 @@ export class FluxerAudioBridge extends EventEmitter {
         } catch (e3) {
           if (stale()) return "stopped";
           logger.player("[AudioBridge] trackstream direct URL not playable in-process (" + e3.message + ")");
+          if (e3?.code === "WEBM_NOT_OPUS" && !this._stopped) {
+            return await this._playViaFfmpeg(conn, { ...trackInfo, url: direct.url }, { seekMs, durationMs, generation });
+          }
           return null;
         }
       }
@@ -561,36 +571,22 @@ export class FluxerAudioBridge extends EventEmitter {
         (trackInfo.title || "unknown"));
 
     try {
-      if (seekMs > 0 || durationMs <= 0) {
-        // Streamed route: byte-positioned for seeks; also gives an
-        // end-of-stream handle when the duration is unknown.
-        const opened = await this._openPositionedStream(direct.url, seekMs);
-        if (stale()) {
-          opened.stream.destroy();
-          return "stopped";
-        }
-        return await this._playOpened(conn, opened, durationMs, generation);
+      const opened = await this._openPositionedStream(direct.url, seekMs);
+      if (stale()) {
+        opened.stream.destroy();
+        return "stopped";
       }
-      // Zero-copy: the voice connection fetches the URL itself.
-      await conn.play(direct.url);
+      return await this._playOpened(conn, opened, durationMs, generation);
     } catch (e) {
       if (stale()) return "stopped";
       if (this._stopped || !this._playing) return "stopped";
+      if (e?.code === "WEBM_NOT_OPUS") {
+        logger.warn("[AudioBridge] " + e.message + " — trying local ffmpeg decode");
+        return await this._playViaFfmpeg(conn, { ...trackInfo, url: direct.url }, { seekMs, durationMs, generation });
+      }
       logger.warn("[AudioBridge] Trackstream playback failed, falling back: " + e.message);
       return null;
     }
-
-    if (stale()) return "stopped";
-
-    await this._waitDuration(durationMs);
-    if (stale()) return "stopped";
-
-    if (this._playing && !this._stopped) {
-      this._playing = false;
-      logger.player("[AudioBridge] Track finished naturally (trackstream)");
-      return "finished";
-    }
-    return "stopped";
   }
 
   /** Stop current playback and clean up resources. */
