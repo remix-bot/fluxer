@@ -2,6 +2,8 @@
  * @module commands/play
  * @description Play a song or playlist from a URL or search query.
  * Supports YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, Bilibili, and Last.fm integration.
+ * Audio files attached to the command message (Opus, OGG, WebM, MP3, M4A, AAC, FLAC, WAV)
+ * are played directly when no text query is given.
  */
 
 import { CommandBuilder } from "../src/commands/index.mjs";
@@ -9,6 +11,7 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/ui/index.mjs";
 import { logger } from "../src/core/Logger.mjs";
 import { PROVIDER_CHOICES, parseInlineProvider } from "../src/music/providers.mjs";
+import { getAudioAttachments, attachmentTitle, attachmentTrackMeta, attachmentUrl } from "../src/music/attachments.mjs";
 import { playLastFmCategory } from "./lastfm.mjs";
 import { parseLastFmUrl, isLastFmUrl } from "../src/services/lastfm/LastFmManager.mjs";
 import { ERROR_COLOR } from "../src/utils/UI.mjs";
@@ -161,6 +164,7 @@ export const command = new CommandBuilder()
         "Play a song or playlist from a URL or search query.\n" +
         "Supports YouTube, Spotify, SoundCloud, Deezer, Apple Music, Tidal, Bilibili, and more.\n" +
         "Also accepts direct audio URLs (MP3, OGG, AAC, radio streams) and Bilibili video links (incl. b23.tv and ?p= parts).\n" +
+        "Attach an audio file (Opus, OGG, WebM, MP3, M4A, AAC, FLAC, WAV) to this command with no text to play it directly.\n" +
         "Default search: YouTube Music. Use `-p <provider>` or inline prefix e.g. `sp: blinding lights`.",
         "commands.play"
     )
@@ -174,6 +178,7 @@ export const command = new CommandBuilder()
         "$prefixplay https://www.bilibili.com/video/BV1y7bg6kEhY",
         "$prefixplay https://example.com/stream.mp3",
         "$prefixplay https://radio.example.com:8000/live",
+        "$prefixplay (attach an Opus/MP3 audio file, no text needed)",
         "$prefixplay https://www.last.fm/music/Drake/_/Make+Them+Cry",
         "$prefixplay lastfm:loved",
         "$prefixplay lastfm:soda pop",
@@ -184,8 +189,8 @@ export const command = new CommandBuilder()
     )
     .addTextOption(option =>
         option.setName("query")
-            .setDescription("A search query, music genre (for example `pop`), URL, or provider-prefixed query like `sp: song name`.", "options.play.query")
-            .setRequired(true)
+            .setDescription("A search query, music genre (for example `pop`), URL, or provider-prefixed query like `sp: song name`. Leave empty when attaching an audio file.", "options.play.query")
+            .setRequired(false)
     )
     .addChoiceOption(o =>
             o.setName("provider")
@@ -205,10 +210,58 @@ export const command = new CommandBuilder()
  * @returns {Promise<void>}
  */
 export async function run(message, data) {
-  const rawQuery     = data.get("query").value;
+  const rawQuery     = data.get("query")?.value ?? "";
   const flagProvider = data.get("provider")?.value;
   const { provider: inlineProvider, query } = parseInlineProvider(rawQuery);
   const provider = inlineProvider ?? flagProvider ?? "ytm";
+
+  /* Audio file attachments — `%p` with an attached Opus/OGG/WebM/MP3/etc.
+     file and no text query queues the file(s) directly through the audio
+     bridge (Ogg/Opus and WebM play natively, others resolve via Lavalink). */
+  if (!rawQuery.trim()) {
+    const attachments = getAudioAttachments(message);
+
+    if (attachments.length === 0) {
+      const hasAnyAttachment = (message.message?.attachments?.size ?? 0) > 0;
+      return message.reply({
+        embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(
+          this.t(message, hasAnyAttachment ? "responses.play.attachmentNotAudio" : "responses.play.noQuery")
+        )]
+      });
+    }
+
+    const p = await this.getPlayer(message, true, true, true);
+    if (!p) return;
+
+    const statusEmbed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setDescription(attachments.length === 1
+        ? this.t(message, "responses.play.loadingAttachment", { filename: attachmentTitle(attachments[0]) })
+        : this.t(message, "responses.play.loadingAttachments", { count: attachments.length }));
+    let statusMsg = null;
+    try { statusMsg = await message.reply({ embeds: [statusEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
+
+    const post = (desc) => {
+      const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc);
+      if (statusMsg) { statusMsg.edit({ embeds: [embed] }).catch(() => {}); }
+      else { message.reply({ embeds: [embed] }).catch(() => {}); }
+    };
+
+    if (attachments.length === 1) {
+      const att = attachments[0];
+      const url = attachmentUrl(att);
+      const messages = p.playExternal(url, attachmentTitle(att), null, false, "external", attachmentTrackMeta(att));
+      messages.on("message", post);
+      return;
+    }
+
+    attachments.forEach(att => {
+      p.playExternal(attachmentUrl(att), attachmentTitle(att), null, false, "external", attachmentTrackMeta(att))
+        .on("message", () => {});
+    });
+    post(this.t(message, "responses.play.addedPlaylist", { count: attachments.length }));
+    return;
+  }
 
   if (isNativeAudioUrl(rawQuery)) {
     const p = await this.getPlayer(message, true, true, true);

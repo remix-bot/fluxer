@@ -486,6 +486,10 @@
       "bilibiliResolving": "📺 Bilibili videosu çözümleniyor...",
       "bilibiliNoAudio": "❌ **{{title}}** için çalınabilir ses yok — video bölge kilitli, ücretli olabilir veya silinmiş olabilir.",
       "bilibiliError": "❌ Bilibili: {{message}}",
+      "noQuery": "❌ Bir şarkı adı veya URL yaz — ya da çalmak için bir ses dosyası ekle (Opus, MP3, OGG, FLAC, WAV…).\nÖrnek: `$prefixplay blinding lights`",
+      "attachmentNotAudio": "❌ Eklenen dosya desteklenen bir ses biçimi değil (Opus, OGG, WebM, MP3, MP4, MOV, M4A, AAC, FLAC, WAV).",
+      "loadingAttachment": "📄 **{{filename}}** yükleniyor...",
+      "loadingAttachments": "📄 **{{count}}** ekli dosya yükleniyor...",
       "bilibiliDisabled": "❌ Bilibili oynatma devre dışı (config.json → bilibili.enabled)."
     },
     "playnext": {
