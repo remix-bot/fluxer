@@ -252,26 +252,28 @@ export class WebMOpusMuxer extends Transform {
    * @protected
    */
   _transform(packet, _encoding, callback) {
+    let error = null;
     try {
       if (Buffer.isBuffer(packet) && packet.length > 0) {
         this._addBlock(packet);
       }
-      callback();
     } catch (err) {
-      callback(err);
+      error = err;
     }
+    callback(error);
   }
 
   /**
    * @param {Function} callback
    * @protected
    */
-  _final(callback) {
+  _flush(callback) {
+    let error = null;
     try {
       this._flushCluster();
-      callback();
     } catch (err) {
-      callback(err);
+      error = err;
     }
+    callback(error);
   }
 }

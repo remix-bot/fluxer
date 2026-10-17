@@ -162,17 +162,15 @@ export class StreamPositioner extends Transform {
 
   /** @param {Buffer} chunk @param {string} _enc @param {Function} cb @protected */
   _transform(chunk, _enc, cb) {
+    let error = null;
     try {
-      if (this._done) {
-        this.push(chunk);
-        return cb();
-      }
-      if (this._kind === "ogg") this._feedOgg(chunk);
+      if (this._done) this.push(chunk);
+      else if (this._kind === "ogg") this._feedOgg(chunk);
       else this._feedWebm(chunk);
-      cb();
     } catch (err) {
-      cb(err);
+      error = err;
     }
+    cb(error);
   }
 
   /** @param {Function} cb @protected */
