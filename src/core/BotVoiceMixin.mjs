@@ -413,6 +413,81 @@ const BotVoiceMixin = {
     }
   },
 
+  async _applyPlayerSnapshot(player, snap, { announce = true } = {}) {
+    const tcId = cleanId(snap.textChannelId);
+    if (tcId) {
+      const tc = this.client?.channels?.get?.(tcId);
+      if (tc) player.textChannel = tc;
+    }
+
+    if (Number.isFinite(snap.volume) && snap.volume > 0) {
+      try { player.setVolume(Math.min(Number(snap.volume), 2)); } catch (_) {}
+    }
+    player.queue.loop     = !!snap.loop;
+    player.queue.songLoop = !!snap.songLoop;
+
+    const restoredQueue = (Array.isArray(snap.queue) ? snap.queue : [])
+        .filter((t) => t && (t.url || t.encoded));
+
+    let current = (snap.current && (snap.current.url || snap.current.encoded)) ? snap.current : null;
+    let pos = Math.max(0, Number(snap.positionMs) || 0);
+    const dur = Number(current?._durationMs) || 0;
+    if (current && dur > 0 && pos > dur * 0.9) {
+      if (snap.songLoop || snap.loop) pos = 0;
+      else current = null;
+    }
+
+    player.queue.data = [];
+    if (current) player.queue.data.push(current);
+    for (const t of restoredQueue) player.queue.data.push(t);
+
+    const count = player.queue.data.length;
+    if (!count) return { count: 0, pos };
+
+    if (announce) {
+      player.emit("message", {
+        embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
+            player._t?.("responses._common.queueRestored", { count })
+            ?? `Bot restarted — restored **${count}** song(s) to the queue.`)],
+        system: true,
+      });
+    }
+
+    if (current && pos > 0 && dur > 0) player._resumeSeekMs = pos;
+    if (!player.queue.getCurrent()) {
+      player.playNext().catch((e) => logger.warn(`[Restore] playNext failed for guild ${player._guildId}:`, e?.message ?? e));
+    } else if (player._resumeSeekMs > 0) {
+      const seekTo = player._resumeSeekMs;
+      player._resumeSeekMs = 0;
+      setTimeout(() => { player.seekToPosition(seekTo).catch(() => {}); }, 800).unref?.();
+    }
+
+    return { count, pos };
+  },
+
+  async restorePlayerStateForChannel(guildId, channelId, player) {
+    const store = this.playerState;
+    if (!store || !player || player._destroyed) return 0;
+    if (player.queue?.getCurrent?.() || !player.queue?.isEmpty?.()) return 0;
+
+    let row = null;
+    try {
+      row = await store.load(guildId);
+    } catch (e) {
+      logger.warn("[Restore] Could not load saved player state for rejoin:", e?.message);
+      return 0;
+    }
+    if (!row || cleanId(row.data?.channelId) !== cleanId(channelId)) return 0;
+
+    const applied = await this._applyPlayerSnapshot(player, row.data, { announce: false });
+    if (!applied.count) {
+      await store.clearSnapshot(guildId);
+      return 0;
+    }
+    logger.voice247(`[Restore] Rejoined ${channelId}: restored ${applied.count} track(s) from the previous player.`);
+    return applied.count;
+  },
+
   /**
    * Restore music players saved before a restart/crash (PlayerStateStore).
    * Called from GatewayHandler.onReady after the 24/7 boot recovery.
@@ -461,52 +536,13 @@ const BotVoiceMixin = {
 
         const player = await this._spawnPlayer(guildId, channelId);
 
-        const tcId = cleanId(snap.textChannelId);
-        if (tcId) {
-          const tc = this.client?.channels?.get?.(tcId);
-          if (tc) player.textChannel = tc;
-        }
-
-        if (Number.isFinite(snap.volume) && snap.volume > 0) {
-          try { player.setVolume(Math.min(Number(snap.volume), 2)); } catch (_) {}
-        }
-        player.queue.loop     = !!snap.loop;
-        player.queue.songLoop = !!snap.songLoop;
-
-        const restoredQueue = (Array.isArray(snap.queue) ? snap.queue : [])
-            .filter((t) => t && (t.url || t.encoded));
-
-        let current = (snap.current && (snap.current.url || snap.current.encoded)) ? snap.current : null;
-        const pos = Math.max(0, Number(snap.positionMs) || 0);
-        const dur = Number(current?._durationMs) || 0;
-        if (current && dur > 0 && pos > dur * 0.9) current = null;
-
-        player.queue.data = [];
-        if (current) player.queue.data.push(current);
-        for (const t of restoredQueue) player.queue.data.push(t);
-
-        if (!player.queue.data.length) {
+        const applied = await this._applyPlayerSnapshot(player, snap, { announce: true });
+        if (!applied.count) {
           await store.clearSnapshot(guildId);
           continue;
         }
 
-        player.emit("message", {
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
-              player._t?.("responses._common.queueRestored", { count: player.queue.data.length })
-              ?? `Bot restarted — restored **${player.queue.data.length}** song(s) to the queue.`)],
-          system: true,
-        });
-
-        if (current && pos > 0 && dur > 0) player._resumeSeekMs = pos;
-        if (!player.queue.getCurrent()) {
-          player.playNext().catch((e) => logger.warn(`[Restore] playNext failed for guild ${guildId}:`, e?.message ?? e));
-        } else if (player._resumeSeekMs > 0) {
-          const seekTo = player._resumeSeekMs;
-          player._resumeSeekMs = 0;
-          setTimeout(() => { player.seekToPosition(seekTo).catch(() => {}); }, 800).unref?.();
-        }
-
-        logger.player(`[Restore] Guild ${guildId}: ${player.queue.data.length} track(s) restored, resuming at ${pos}ms.`);
+        logger.player(`[Restore] Guild ${guildId}: ${applied.count} track(s) restored, resuming at ${applied.pos}ms.`);
       } catch (e) {
         logger.warn(`[Restore] Failed to restore guild ${guildId}:`, e?.message ?? e);
       }

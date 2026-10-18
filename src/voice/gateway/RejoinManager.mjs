@@ -131,6 +131,11 @@ const RejoinManager = {
       const player = await this._attemptRejoin(cleanChannelId, cleanGuildId, maxRetries, 5_000, "Rejoin");
       if (player) {
         this._rejoinAttempts.delete(cleanChannelId);
+        try {
+          await remix.restorePlayerStateForChannel?.(cleanGuildId, cleanChannelId, player);
+        } catch (err) {
+          logger.warn(`[Rejoin] Queue restore failed for ${cleanChannelId}:`, err?.message ?? err);
+        }
       } else {
         this._rejoinAttempts.delete(cleanChannelId);
       }

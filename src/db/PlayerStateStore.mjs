@@ -207,6 +207,27 @@ export class PlayerStateStore {
     }
   }
 
+  async load(guildId) {
+    const gId = cleanId(guildId);
+    if (!gId) return null;
+    await this.init();
+    const rows = await this._exec(
+      `SELECT guild_id, data, position_ms FROM player_state WHERE bot_id = ? AND guild_id = ?`,
+      [this.botId, gId]
+    );
+    const row = Array.isArray(rows) ? rows[0] : null;
+    if (!row) return null;
+    try {
+      const parsed = typeof row.data === "string" ? JSON.parse(row.data) : row.data;
+      if (parsed && parsed.channelId) {
+        return { guildId: String(row.guild_id), data: parsed, positionMs: Number(row.position_ms) || 0 };
+      }
+    } catch (e) {
+      logger.warn("[PlayerState] Skipping malformed snapshot for guild", row.guild_id, ":", e?.message);
+    }
+    return null;
+  }
+
   /**
    * Load every snapshot belonging to this bot.
    * @returns {Promise<Array<{guildId: string, data: object, positionMs: number}>>}
