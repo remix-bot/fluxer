@@ -52,9 +52,33 @@ let _dropped = 0;
 let _flushing = false;
 let _announced = false;
 
-const _forwardDedup = new Map();
-const _crashDedup = new Map();
+let _forwardDedup = new Map();
+let _crashDedup = new Map();
 let _lastFailLog = 0;
+let _rateLimitedUntil = 0;
+let _consecutiveFailures = 0;
+let _lastCrashReportTime = 0;
+const CRASH_MIN_INTERVAL_MS = 5_000;
+const MAX_CONSECUTIVE_FAILURES = 5;
+
+/** @private Check if we are currently rate-limited before sending. */
+function _isRateLimited() {
+  return Date.now() < _rateLimitedUntil;
+}
+
+/** @private Apply an explicit rate-limit backoff delay. */
+function _applyRateLimit(seconds = 15) {
+  const ms = Math.max(10_000, Number(seconds) * 1_000);
+  _rateLimitedUntil = Date.now() + ms;
+  console.warn(`[ErrorChannel] Rate limit (429) active — backing off all error channel sends for ${Math.round(ms / 1000)}s.`);
+}
+
+/** @private Handle permanent permission failures (403/404) by permanently disabling the reporter. */
+function _disablePermissionFailure(status) {
+  _enabled = false;
+  _queue = [];
+  console.error(`[ErrorChannel] FATAL: Bot lacks permission (HTTP ${status}) for channel ${_channelId}. ErrorChannel has been PERMANENTLY DISABLED to prevent API flooding.`);
+}
 
 const _originals = { error: null, warn: null, info: null };
 
@@ -123,7 +147,12 @@ function _announceOnce() {
  * @returns {Promise<boolean>} True when the message was delivered.
  */
 export async function reportCrash(title, err, { fatal = false } = {}) {
-  if (!_enabled || !_channelId) return false;
+  if (!_enabled || !_channelId || _isRateLimited()) return false;
+  const now = Date.now();
+  if (now - _lastCrashReportTime < CRASH_MIN_INTERVAL_MS) {
+    return false;
+  }
+  _lastCrashReportTime = now;
   try {
     const body = _formatArgs([err]).split("```").join("‹›");
     const now = Date.now();
@@ -236,11 +265,20 @@ async function _runFlush() {
   _flushing = true;
   try {
     while (_queue.length > 0) {
+      if (!_enabled) {
+        _queue = [];
+        break;
+      }
+      if (_isRateLimited()) {
+        const waitMs = Math.max(1_000, _rateLimitedUntil - Date.now() + 500);
+        await _sleep(waitMs);
+        continue;
+      }
       const content = _queue.shift();
       await _sendQuietly(content);
       await _sleep(_minIntervalMs);
     }
-    if (_dropped > 0) {
+    if (_dropped > 0 && _enabled) {
       const n = _dropped;
       _dropped = 0;
       await _sendQuietly(`📦 ${n} additional error log message(s) were dropped during a flood to protect rate limits.`);
@@ -265,35 +303,82 @@ async function _sendQuietly(content) {
 
 /** @private Send through the client's REST client when available, else raw fetch. */
 async function _send(content) {
+  if (!_enabled || _isRateLimited()) return;
   const rest = _client?.rest;
   if (typeof rest?.post === "function") {
-    await rest.post(`/channels/${_channelId}/messages`, { body: { content } });
-    return;
+    try {
+      await rest.post(`/channels/${_channelId}/messages`, { body: { content } });
+      _consecutiveFailures = 0;
+      return;
+    } catch (err) {
+      const status = err?.statusCode ?? err?.status;
+      if (status === 403 || status === 404) {
+        _disablePermissionFailure(status);
+        throw err;
+      }
+      if (status === 429) {
+        const retryAfter = err?.retryAfter ?? 15;
+        _applyRateLimit(retryAfter);
+        throw err;
+      }
+      throw err;
+    }
   }
   await _sendRaw(content);
 }
 
 /** @private Send via client REST, retrying once via raw fetch when that throws. */
 async function _sendWithFallback(content) {
+  if (!_enabled || _isRateLimited()) return;
   try {
     await _send(content);
   } catch (_) {
+    if (!_enabled || _isRateLimited()) return;
     await _sendRaw(content);
   }
 }
 
 /** @private Send via a direct Fluxer REST call (Authorization: Bot <token>). */
 async function _sendRaw(content) {
-  const res = await fetch(`${API_BASE}/channels/${_channelId}/messages`, {
-    method: "POST",
-    headers: { "Authorization": `Bot ${_token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
-    signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
-  });
+  if (!_enabled || _isRateLimited()) return;
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/channels/${_channelId}/messages`, {
+      method: "POST",
+      headers: { "Authorization": `Bot ${_token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    });
+  } catch (err) {
+    _consecutiveFailures++;
+    if (_consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      _applyRateLimit(30);
+    }
+    throw err;
+  }
+
+  if (res.status === 403 || res.status === 404) {
+    _disablePermissionFailure(res.status);
+    throw new Error(`Fluxer API HTTP ${res.status}: Permission denied or channel not found`);
+  }
+
+  if (res.status === 429) {
+    const rawRetry = res.headers.get("retry-after");
+    const retrySec = Number(rawRetry) || 15;
+    _applyRateLimit(retrySec);
+    throw new Error(`Fluxer API HTTP 429: Rate limited, retry after ${retrySec}s`);
+  }
+
   if (!res.ok) {
+    _consecutiveFailures++;
+    if (_consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      _applyRateLimit(30);
+    }
     const text = await res.text().catch(() => "");
     throw new Error(`Fluxer API HTTP ${res.status}: ${text.slice(0, 200)}`);
   }
+
+  _consecutiveFailures = 0;
 }
 
 /** @private Human-readable process uptime. */
