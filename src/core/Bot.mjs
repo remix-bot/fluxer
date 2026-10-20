@@ -383,7 +383,6 @@ class Remix {
             `[Startup] Sharding child attached — ${ShardingUtils.describeSharding(client)}.`
           );
         } catch (e) {
-   
           logger.error(
             "[Startup] FATAL: running under a ShardingManager but the sharding attach failed:",
             e?.message
@@ -391,15 +390,27 @@ class Remix {
           process.exit(1);
         }
       }
-      await client.login(config.token);
-      if (this.shardUtil) {
-        try { this.shardUtil.notifyReady(); }
-        catch (e) { logger.warn("[Startup] Sharding ready report failed:", e?.message); }
+
+      let attempt = 0;
+      while (true) {
+        attempt++;
+        try {
+          await client.login(config.token);
+          if (this.shardUtil) {
+            try { this.shardUtil.notifyReady(); }
+            catch (e) { logger.warn("[Startup] Sharding ready report failed:", e?.message); }
+          }
+          break;
+        } catch (err) {
+          const msg = err?.message ?? String(err);
+          logger.error(`[Startup] Login attempt ${attempt} failed: ${msg}`);
+          logger.warn("[Startup] Gateway connection error. Retrying in 10s...");
+          await new Promise(r => setTimeout(r, 10_000));
+        }
       }
     };
     startLogin().catch(e => {
-      logger.error("[Startup] Login failed:", e?.message ?? e);
-      process.exit(1);
+      logger.error("[Startup] Unhandled login loop error:", e?.message ?? e);
     });
   }
 
