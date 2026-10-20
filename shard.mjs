@@ -37,9 +37,6 @@
  *     its children — never export them manually.
  */
 
-import dns from "node:dns";
-dns.setDefaultResultOrder("ipv4first");
-
 import * as fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ShardingManager } from "@fluxerjs/sharding";
@@ -99,8 +96,7 @@ const totalShards      = envPositiveInt("FLUXER_TOTAL_SHARDS")
 const shardsPerProcess = envPositiveInt("FLUXER_SHARDS_PER_PROCESS")
     ?? cfgPositiveInt(shardingCfg, "shardsPerProcess", 1);
 const respawn          = shardingCfg.respawn !== false;
-const spawnTimeout     = envPositiveInt("FLUXER_SPAWN_TIMEOUT")
-    ?? Math.max(300_000, cfgPositiveInt(shardingCfg, "spawnTimeout", 300_000));
+const spawnTimeout     = cfgPositiveInt(shardingCfg, "spawnTimeout", 30_000);
 const spawnDelay       = Math.max(0, Number(shardingCfg.spawnDelay) >= 0 ? Number(shardingCfg.spawnDelay) : 5_000);
 
 const entryFile = fileURLToPath(new URL("./index.mjs", import.meta.url));
@@ -112,7 +108,6 @@ const manager = new ShardingManager(entryFile, {
   respawn,
   spawnTimeout,
   spawnDelay,
-  execArgv: ["--dns-result-order=ipv4first", "--tls-max-v1.2"],
 });
 
 manager.on("shardCreate", (shard) => {
@@ -149,21 +144,12 @@ process.once("SIGINT",  () => shutdown("SIGINT"));
 process.once("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGPIPE", () => {});
 
-const spawnWithRetry = async () => {
-  while (!shuttingDown) {
-    try {
-      const shards = await manager.spawn();
-      logger.player(
-        `[Sharding] ${shards.size} shard process(es) online — ${totalShards} gateway shard(s), ` +
-        `${shardsPerProcess} per process (respawn ${respawn ? "on" : "off"}).`
-      );
-      break;
-    } catch (e) {
-      if (shuttingDown) break;
-      logger.error("[Sharding] Spawn attempt failed:", e?.message ?? e);
-      logger.warn("[Sharding] Retrying manager.spawn() in 15 seconds...");
-      await new Promise((r) => setTimeout(r, 15_000));
-    }
-  }
-};
-spawnWithRetry();
+manager.spawn().then((shards) => {
+  logger.player(
+    `[Sharding] ${shards.size} shard process(es) online — ${totalShards} gateway shard(s), ` +
+    `${shardsPerProcess} per process (respawn ${respawn ? "on" : "off"}).`
+  );
+}).catch((e) => {
+  logger.error("[Sharding] Spawn failed:", e?.message ?? e);
+  process.exit(1);
+});

@@ -330,8 +330,8 @@ class Remix {
 
     const __dirname = import.meta.dirname;
     try {
-      this.comHash     = childProcess.execSync("git rev-parse --short HEAD", { cwd: __dirname, timeout: 3000, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
-      this.comHashLong = childProcess.execSync("git rev-parse HEAD",         { cwd: __dirname, timeout: 3000, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+      this.comHash     = childProcess.execSync("git rev-parse --short HEAD", { cwd: __dirname, timeout: 3000 }).toString().trim();
+      this.comHashLong = childProcess.execSync("git rev-parse HEAD",         { cwd: __dirname, timeout: 3000 }).toString().trim();
     } catch (e) {
       logger.warn("[Git] comhash error:", e?.message);
       this.comHash     = "Newest";
@@ -383,6 +383,7 @@ class Remix {
             `[Startup] Sharding child attached — ${ShardingUtils.describeSharding(client)}.`
           );
         } catch (e) {
+   
           logger.error(
             "[Startup] FATAL: running under a ShardingManager but the sharding attach failed:",
             e?.message
@@ -390,27 +391,15 @@ class Remix {
           process.exit(1);
         }
       }
-
-      let attempt = 0;
-      while (true) {
-        attempt++;
-        try {
-          await client.login(config.token);
-          if (this.shardUtil) {
-            try { this.shardUtil.notifyReady(); }
-            catch (e) { logger.warn("[Startup] Sharding ready report failed:", e?.message); }
-          }
-          break;
-        } catch (err) {
-          const msg = err?.message ?? String(err);
-          logger.error(`[Startup] Login attempt ${attempt} failed: ${msg}`);
-          logger.warn("[Startup] Gateway connection error. Retrying in 10s...");
-          await new Promise(r => setTimeout(r, 10_000));
-        }
+      await client.login(config.token);
+      if (this.shardUtil) {
+        try { this.shardUtil.notifyReady(); }
+        catch (e) { logger.warn("[Startup] Sharding ready report failed:", e?.message); }
       }
     };
     startLogin().catch(e => {
-      logger.error("[Startup] Unhandled login loop error:", e?.message ?? e);
+      logger.error("[Startup] Login failed:", e?.message ?? e);
+      process.exit(1);
     });
   }
 

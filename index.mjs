@@ -5,9 +5,6 @@
  * graceful shutdown. All boot logic lives in src/core/Bot.mjs.
  */
 
-import dns from "node:dns";
-dns.setDefaultResultOrder("ipv4first");
-
 import { logger } from "./src/core/Logger.mjs";
 import Remix from "./src/core/Bot.mjs";
 import { initErrorChannel, reportCrash } from "./src/core/ErrorChannel.mjs";

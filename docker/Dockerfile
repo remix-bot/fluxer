@@ -20,7 +20,6 @@ RUN apt-get update && \
       tini \
       curl \
       ca-certificates \
-      git \
     && \
     rm -rf /var/lib/apt/lists/*
 
@@ -29,11 +28,6 @@ RUN groupadd -r -g 10001 remix && useradd -r -u 10001 -g remix -d /app -s /sbin/
 WORKDIR /app
 
 COPY --from=builder --chown=10001:10001 /app ./
-
-RUN cp /app/docker/openssl.cnf /etc/ssl/openssl.cnf
-
-ENV OPENSSL_CONF=/etc/ssl/openssl.cnf
-ENV NODE_OPTIONS="--dns-result-order=ipv4first --tls-max-v1.2 --openssl-shared-config"
 
 RUN chmod +x docker/docker-entrypoint.sh && \
     mkdir -p /app/storage && chown -R 10001:10001 /app
@@ -47,4 +41,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker/docker-entrypoint.sh"]
 
-CMD ["npm", "start"]
+CMD ["node", "index.mjs"]

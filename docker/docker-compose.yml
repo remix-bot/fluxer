@@ -5,7 +5,6 @@ services:
       dockerfile: docker/Dockerfile
     container_name: remix-bot
     restart: unless-stopped
-    command: npm start
     depends_on:
       mysql:
         condition: service_healthy
@@ -18,8 +17,6 @@ services:
       - ../storage:/app/storage
     environment:
       - TZ=${TZ:-UTC}
-      - OPENSSL_CONF=/etc/ssl/openssl.cnf
-      - NODE_OPTIONS=--dns-result-order=ipv4first --tls-max-v1.2 --openssl-shared-config
     ports:
       - "${WEB_PORT:-8080}:80"
     networks:
