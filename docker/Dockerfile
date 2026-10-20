@@ -41,4 +41,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker/docker-entrypoint.sh"]
 
-CMD ["node", "index.mjs"]
+CMD ["npm", "run", "shard"]

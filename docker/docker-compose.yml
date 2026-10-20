@@ -5,6 +5,7 @@ services:
       dockerfile: docker/Dockerfile
     container_name: remix-bot
     restart: unless-stopped
+    command: npm run shard
     depends_on:
       mysql:
         condition: service_healthy
