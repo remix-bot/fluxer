@@ -330,8 +330,8 @@ class Remix {
 
     const __dirname = import.meta.dirname;
     try {
-      this.comHash     = childProcess.execSync("git rev-parse --short HEAD", { cwd: __dirname, timeout: 3000 }).toString().trim();
-      this.comHashLong = childProcess.execSync("git rev-parse HEAD",         { cwd: __dirname, timeout: 3000 }).toString().trim();
+      this.comHash     = childProcess.execSync("git rev-parse --short HEAD", { cwd: __dirname, timeout: 3000, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+      this.comHashLong = childProcess.execSync("git rev-parse HEAD",         { cwd: __dirname, timeout: 3000, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
     } catch (e) {
       logger.warn("[Git] comhash error:", e?.message);
       this.comHash     = "Newest";

@@ -18,6 +18,8 @@ services:
       - ../storage:/app/storage
     environment:
       - TZ=${TZ:-UTC}
+      - OPENSSL_CONF=/etc/ssl/openssl.cnf
+      - NODE_OPTIONS=--openssl-shared-config
     ports:
       - "${WEB_PORT:-8080}:80"
     networks:
