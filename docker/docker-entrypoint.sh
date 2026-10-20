@@ -32,8 +32,18 @@ if [ "$1" = "node" ] && [ "$2" = "shard.mjs" ]; then
   echo "[Docker] Starting Remix bot (sharded supervisor)..."
 fi
 
+if [ "$1" = "npm" ] && [ "$2" = "start" ]; then
+  echo "[Docker] Starting Remix bot (standard start)..."
+fi
+
 if [ "$1" = "npm" ] && [ "$2" = "run" ] && [ "$3" = "shard" ]; then
   echo "[Docker] Starting Remix bot (sharded supervisor via npm run shard)..."
 fi
+
+echo "[Docker] Testing cluster egress IP and api.fluxer.app TLS connection..."
+echo -n "[Docker] Cluster Public IP: "
+curl -s -m 5 https://api.ipify.org || echo "Failed to get IP"
+echo ""
+curl -v -m 5 https://api.fluxer.app/v1/gateway/bot 2>&1 | head -n 25 || true
 
 exec "$@"
