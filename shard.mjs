@@ -108,6 +108,7 @@ const manager = new ShardingManager(entryFile, {
   respawn,
   spawnTimeout,
   spawnDelay,
+  execArgv: ["--tls-max-v1.2"],
 });
 
 manager.on("shardCreate", (shard) => {

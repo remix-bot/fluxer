@@ -1,6 +1,13 @@
 #!/bin/sh
 set -e
 
+export OPENSSL_CONF="${OPENSSL_CONF:-/etc/ssl/openssl.cnf}"
+if [ -z "$NODE_OPTIONS" ]; then
+  export NODE_OPTIONS="--tls-max-v1.2 --openssl-shared-config"
+elif ! echo "$NODE_OPTIONS" | grep -q -- "--tls-max-v1.2"; then
+  export NODE_OPTIONS="--tls-max-v1.2 $NODE_OPTIONS"
+fi
+
 CONFIG_FILE="/app/config.json"
 
 if [ ! -f "$CONFIG_FILE" ]; then
