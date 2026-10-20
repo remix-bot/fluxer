@@ -37,6 +37,9 @@
  *     its children — never export them manually.
  */
 
+import dns from "node:dns";
+dns.setDefaultResultOrder("ipv4first");
+
 import * as fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ShardingManager } from "@fluxerjs/sharding";
@@ -108,7 +111,7 @@ const manager = new ShardingManager(entryFile, {
   respawn,
   spawnTimeout,
   spawnDelay,
-  execArgv: ["--tls-max-v1.2"],
+  execArgv: ["--dns-result-order=ipv4first", "--tls-max-v1.2"],
 });
 
 manager.on("shardCreate", (shard) => {

@@ -3,9 +3,9 @@ set -e
 
 export OPENSSL_CONF="${OPENSSL_CONF:-/etc/ssl/openssl.cnf}"
 if [ -z "$NODE_OPTIONS" ]; then
-  export NODE_OPTIONS="--tls-max-v1.2 --openssl-shared-config"
-elif ! echo "$NODE_OPTIONS" | grep -q -- "--tls-max-v1.2"; then
-  export NODE_OPTIONS="--tls-max-v1.2 $NODE_OPTIONS"
+  export NODE_OPTIONS="--dns-result-order=ipv4first --tls-max-v1.2 --openssl-shared-config"
+elif ! echo "$NODE_OPTIONS" | grep -q -- "--dns-result-order=ipv4first"; then
+  export NODE_OPTIONS="--dns-result-order=ipv4first $NODE_OPTIONS"
 fi
 
 CONFIG_FILE="/app/config.json"

@@ -17,9 +17,9 @@
     "redis": "^6.3.0"
   },
   "scripts": {
-    "dev": "node --inspect --tls-max-v1.2 index.mjs --trace-warnings",
-    "start": "node --tls-max-v1.2 index.mjs",
-    "shard": "node --tls-max-v1.2 shard.mjs",
+    "dev": "node --inspect --dns-result-order=ipv4first --tls-max-v1.2 index.mjs --trace-warnings",
+    "start": "node --dns-result-order=ipv4first --tls-max-v1.2 index.mjs",
+    "shard": "node --dns-result-order=ipv4first --tls-max-v1.2 shard.mjs",
     "migrate": "node settings/migrate.mjs"
   }
 }

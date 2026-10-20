@@ -82,7 +82,13 @@ export function initErrorChannel({ config, client } = {}) {
   const forwardInfo = cfg.forwardInfo === true;
   if (!_originals.error) _tapLogger(forwardWarn, forwardInfo);
   console.info(`[ErrorChannel] Active — forwarding errors${forwardWarn ? " + warnings" : ""}${forwardInfo ? " + info" : ""} to channel ${_channelId}.`);
-  if (cfg.startupMessage !== false) _announceOnce();
+  if (cfg.startupMessage !== false) {
+    if (_client && typeof _client.once === "function") {
+      _client.once("ready", () => _announceOnce());
+    } else {
+      _announceOnce();
+    }
+  }
 }
 
 /**
