@@ -18,7 +18,7 @@ export const command = new CommandBuilder()
     .setCategory("music")
     .addNumberOption(o =>
         o.setName("pitch")
-            .setDescription("Audio pitch multiplier between 0.5 and 2.0 (e.g. 1.25). Omit to reset to 1.0×.")
+            .setDescription("Audio pitch multiplier between 0.5 and 2.0 (e.g. 1.25). Omit to reset to 1.0×.", "options.pitch.pitch")
             .setRequired(false)
     )
     .addAliases("semitone", "tune");

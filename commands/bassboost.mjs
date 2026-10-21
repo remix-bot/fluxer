@@ -55,16 +55,11 @@ export const command = new CommandBuilder()
     .setName("bassboost")
     .setDescription("Apply a low, medium, or hard bass boost equalizer effect.", "commands.bassboost")
     .setCategory("music")
-    .addStringOption(o =>
+    .addChoiceOption(o =>
         o.setName("level")
-            .setDescription("Bass boost level: 'low', 'medium', 'hard', or 'off'.")
+            .setDescription("Bass boost level: 'low', 'medium', 'hard', or 'off'.", "options.bassboost.level")
+            .addChoices("low", "medium", "hard", "off")
             .setRequired(false)
-            .addChoices(
-                { name: "low", value: "low" },
-                { name: "medium", value: "medium" },
-                { name: "hard", value: "hard" },
-                { name: "off", value: "off" }
-            )
     )
     .addAliases("bb", "bass");
 

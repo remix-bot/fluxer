@@ -18,7 +18,7 @@ export const command = new CommandBuilder()
     .setCategory("music")
     .addNumberOption(o =>
         o.setName("rate")
-            .setDescription("Playback speed multiplier between 0.5 and 2.0 (e.g. 1.25). Omit to reset to 1.0×.")
+            .setDescription("Playback speed multiplier between 0.5 and 2.0 (e.g. 1.25). Omit to reset to 1.0×.", "options.speed.rate")
             .setRequired(false)
     )
     .addAliases("rate", "tempo");

@@ -17,15 +17,11 @@ export const command = new CommandBuilder()
     .setName("normalize")
     .setDescription("Toggle dynamic volume normalization (ReplayGain leveling) across music sources.", "commands.normalize")
     .setCategory("music")
-    .addStringOption(o =>
+    .addChoiceOption(o =>
         o.setName("state")
-            .setDescription("Turn on/off or check status ('on', 'off', 'status'). Omit to toggle.")
+            .setDescription("Turn on/off or check status ('on', 'off', 'status'). Omit to toggle.", "options.normalize.state")
+            .addChoices("on", "off", "status")
             .setRequired(false)
-            .addChoices(
-                { name: "on", value: "on" },
-                { name: "off", value: "off" },
-                { name: "status", value: "status" }
-            )
     )
     .addAliases("replaygain", "volumenormalize", "norm");
 
