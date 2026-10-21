@@ -19,6 +19,7 @@ import VoiceStateRouting from "./VoiceStateRouting.mjs";
 import GuildSync from "./GuildSync.mjs";
 import RejoinManager from "./RejoinManager.mjs";
 import Watchdog247 from "./Watchdog247.mjs";
+import RejoinBackoff from "./RejoinBackoff.mjs";
 
 const RAW_GATEWAY_INTEREST =
     /"(?:t|op)":\s*(?:"(?:VOICE_STATE_UPDATE|VOICE_SERVER_UPDATE|GUILD_CREATE|READY|RESUMED)"|(?:7|9|10|12)\b)/;
@@ -40,6 +41,8 @@ class GatewayHandler {
 
     this.presenceContents = remix.config.presenceContents ?? [];
     this.presenceInterval = remix.config.presenceInterval ?? 30_000;
+
+    this.rejoinBackoff = new RejoinBackoff();
 
     this.wsListenerAttached = false;
     this.presenceTimer = null;
@@ -521,6 +524,16 @@ class GatewayHandler {
 
     for (let i = 0; i < channelsToRejoin.length; i++) {
       const { guildId, channelId, mode } = channelsToRejoin[i];
+      const cleanG = cleanId(guildId);
+      const cleanC = cleanId(channelId);
+
+      const guild = remix.client?.guilds?.get?.(cleanG);
+      if (!guild) {
+        logger.voice247(
+            `[BootRecovery] Bot is not currently in guild ${cleanG} — skipping channel ${cleanC} (setting kept intact).`
+        );
+        continue;
+      }
 
       if (i > 0) {
         let staggerDelay = baseStagger;
@@ -581,13 +594,15 @@ class GatewayHandler {
       const player = await this._attemptRejoin(channelId, guildId, 3, 5_000, "BootRecovery");
 
       if (player) {
+        this.rejoinBackoff?.recordSuccess?.(channelId);
         logger.voice247(
             `[BootRecovery] Successfully rejoined channel ${channelId} (mode: ${mode}) [${i + 1}/${channelsToRejoin.length}]`
         );
       } else {
+        this.rejoinBackoff?.recordFailure?.(channelId);
         logger.warn(
-            `[BootRecovery] Failed to rejoin channel ${channelId} in guild ${guildId} after retries — ` +
-            `keeping 24/7 setting intact, will retry on next disconnect/restart.`
+            `[BootRecovery] Could not rejoin channel ${channelId} in guild ${guildId} — ` +
+            `keeping 24/7 setting intact (backed off).`
         );
       }
     }

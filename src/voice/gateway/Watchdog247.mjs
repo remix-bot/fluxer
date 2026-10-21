@@ -167,7 +167,22 @@ const Watchdog247 = {
     }
 
     for (const { guildId, channelId } of savedChannels) {
-      if (remix.intentionalLeaves?.has?.(channelId)) {
+      const cleanG = cleanId(guildId);
+      const cleanCh = cleanId(channelId);
+
+      const guild = remix.client?.guilds?.get?.(cleanG);
+      if (!guild) {
+        // Bot is not in this guild — keep 24/7 setting intact for future invite, but skip sweep
+        skipped++;
+        continue;
+      }
+
+      if (this.rejoinBackoff?.remainingMs?.(cleanCh) > 0) {
+        skipped++;
+        continue;
+      }
+
+      if (remix.intentionalLeaves?.has?.(cleanCh)) {
         skipped++;
         continue;
       }

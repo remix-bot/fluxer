@@ -608,7 +608,7 @@ class Player extends EventEmitter {
 
     } catch (e) {
       const causeStr = e.cause ? ` (Cause: ${e.cause})` : "";
-      logger.error("[Player] Join failed:", e.message, causeStr);
+      logger.warn("[Player] Join failed:", e.message, causeStr);
 
       if (this._voiceConn) {
         try { await this._voiceConn.disconnect(); } catch(err) { logger.warn("[Player] voiceConn disconnect on join failure:", err?.message); }

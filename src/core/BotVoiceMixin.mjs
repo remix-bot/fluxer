@@ -188,6 +188,18 @@ const BotVoiceMixin = {
       return;
     }
 
+    const guild = this.client?.guilds?.get?.(cleanG);
+    if (!guild) {
+      logger.voice247(`[247] Bot is not currently in guild ${cleanG} — skipping rejoin for ${cleanCh} (setting kept intact)`);
+      return;
+    }
+
+    const backoffRemaining = this.gatewayHandler?.rejoinBackoff?.remainingMs?.(cleanCh) ?? 0;
+    if (backoffRemaining > 0 && delayMs === null) {
+      logger.voice247(`[247] Channel ${cleanCh} in backoff cooldown (${Math.round(backoffRemaining / 1000)}s left) — skipping immediate rejoin`);
+      return;
+    }
+
     if (!this._247RejoinTimers) this._247RejoinTimers = new Map();
     if (this._247RejoinTimers.has(cleanCh)) return;
 
@@ -407,8 +419,7 @@ const BotVoiceMixin = {
         this.players._pendingJoins.delete(cleanChannelId);
       }
       this.players.playerMap.delete(cleanChannelId);
-      try { player.destroy(); } catch(e) { logger.warn("[_spawnPlayer] Cleanup destroy error:", e?.message); }
-      logger.warn(`[_spawnPlayer] Failed to spawn player for channel ${cleanChannelId}:`, err.message);
+      try { player.destroy(); } catch(e) {}
       throw err;
     }
   },

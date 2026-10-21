@@ -57,8 +57,7 @@ const RejoinManager = {
         }
 
         logger.warn(
-            `[${context}] Failed to rejoin channel ${channelId} (attempt ${attempt}/${maxRetries}): ${errMsg}` +
-            (attempt > 1 ? ` (after ${attempt} attempts)` : '')
+            `[${context}] Failed to rejoin channel ${channelId}: ${errMsg} — keeping 24/7 setting intact.`
         );
         return null;
       }
@@ -78,6 +77,17 @@ const RejoinManager = {
     const { remix } = this;
     const cleanGuildId   = cleanId(guildId);
     const cleanChannelId = cleanId(channelId);
+
+    const guild = remix.client?.guilds?.get?.(cleanGuildId);
+    if (!guild) {
+      logger.voice247(`[Rejoin] Bot is not currently in guild ${cleanGuildId} — skipping ${cleanChannelId} (setting kept intact).`);
+      return;
+    }
+
+    if (this.rejoinBackoff?.remainingMs?.(cleanChannelId) > 0) {
+      logger.voice247(`[Rejoin] Channel ${cleanChannelId} in backoff cooldown — skipping.`);
+      return;
+    }
 
     if (this._rejoinInProgress.has(cleanChannelId)) {
       logger.voice247(`[Rejoin] Channel ${cleanChannelId} rejoin already in progress — skipping.`);
@@ -131,6 +141,7 @@ const RejoinManager = {
       const player = await this._attemptRejoin(cleanChannelId, cleanGuildId, maxRetries, 5_000, "Rejoin");
       if (player) {
         this._rejoinAttempts.delete(cleanChannelId);
+        this.rejoinBackoff?.recordSuccess?.(cleanChannelId);
         try {
           await remix.restorePlayerStateForChannel?.(cleanGuildId, cleanChannelId, player);
         } catch (err) {
@@ -138,6 +149,7 @@ const RejoinManager = {
         }
       } else {
         this._rejoinAttempts.delete(cleanChannelId);
+        this.rejoinBackoff?.recordFailure?.(cleanChannelId);
       }
       return player;
     } finally {
