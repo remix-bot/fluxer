@@ -46,9 +46,10 @@ export async function run(message, data) {
       const existingPayload = { ...(p.activeFilterPayload || {}) };
       delete existingPayload.timescale;
       await p.applyFilter(existingPayload, Object.keys(existingPayload).length > 0 ? p.activeFilter : null);
-      embed.setDescription("⏩ Playback speed reset to normal **1.0×**.");
+      embed.setDescription(this.t(message, "responses.speed.reset"));
     } else {
-      embed.setDescription(`⏩ Current playback speed: **1.0×**.\nUse \`%speed <0.5-2.0>\` to change playback speed.`);
+      const prefix = this.handler?.getPrefix?.(message.message?.guildId ?? message.guild?.id) ?? "%";
+      embed.setDescription(this.t(message, "responses.speed.current", { speed: "1.0", prefix }));
     }
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
@@ -77,10 +78,10 @@ export async function run(message, data) {
 
   const res = await p.applyFilter(payload, filterMeta);
   if (!res.ok) {
-    embed.setDescription(`❌ Failed to adjust speed: ${res.reason || "Unknown error"}`);
+    embed.setDescription(this.t(message, "responses.speed.failed", { reason: res.reason || "Unknown error" }));
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
 
-  embed.setDescription(`${speed > 1 ? "⏩" : "🐢"} Playback speed set to **${speed}×**.`);
+  embed.setDescription(this.t(message, "responses.speed.set", { emoji: speed > 1 ? "⏩" : "🐢", speed }));
   message.reply({ embeds: [embed] }).catch(() => {});
 }

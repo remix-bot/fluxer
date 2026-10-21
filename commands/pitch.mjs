@@ -44,9 +44,10 @@ export async function run(message, data) {
       const existingPayload = { ...(p.activeFilterPayload || {}) };
       delete existingPayload.timescale;
       await p.applyFilter(existingPayload, Object.keys(existingPayload).length > 0 ? p.activeFilter : null);
-      embed.setDescription("🎵 Audio pitch reset to normal **1.0×**.");
+      embed.setDescription(this.t(message, "responses.pitch.reset"));
     } else {
-      embed.setDescription(`🎵 Current audio pitch: **1.0×**.\nUse \`%pitch <0.5-2.0>\` to change pitch.`);
+      const prefix = this.handler?.getPrefix?.(message.message?.guildId ?? message.guild?.id) ?? "%";
+      embed.setDescription(this.t(message, "responses.pitch.current", { pitch: "1.0", prefix }));
     }
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
@@ -74,10 +75,10 @@ export async function run(message, data) {
 
   const res = await p.applyFilter(payload, filterMeta);
   if (!res.ok) {
-    embed.setDescription(`❌ Failed to adjust pitch: ${res.reason || "Unknown error"}`);
+    embed.setDescription(this.t(message, "responses.pitch.failed", { reason: res.reason || "Unknown error" }));
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
 
-  embed.setDescription(`🎵 Audio pitch set to **${pitch}×**.`);
+  embed.setDescription(this.t(message, "responses.pitch.set", { pitch }));
   message.reply({ embeds: [embed] }).catch(() => {});
 }

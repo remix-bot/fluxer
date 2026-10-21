@@ -82,7 +82,11 @@
     "seek": "Vá para uma posição específica na faixa que está tocando.",
     "move": "Mova uma faixa de uma posição para outra na fila.",
     "autoplay": "Alterne o autoplay — toque faixas similares automaticamente quando a fila terminar.",
-    "trackopt": "Defina horários de início/fim personalizados para faixas. Suporta aliases nomeados — salve múltiplos recortes por faixa para diferentes seções."
+    "trackopt": "Defina horários de início/fim personalizados para faixas. Suporta aliases nomeados — salve múltiplos recortes por faixa para diferentes seções.",
+    "normalize": "Alternar normalização dinâmica de volume (nivelamento ReplayGain) entre diferentes fontes de música.",
+    "bassboost": "Aplicar equalizador de reforço de graves (baixo, médio ou pesado).",
+    "speed": "Ajustar a velocidade de reprodução da faixa atual (0.5× a 2.0×).",
+    "pitch": "Ajustar o tom (pitch) do áudio da faixa atual (0.5× a 2.0×)."
   },
   "options": {
     "debug": {
@@ -162,6 +166,18 @@
     },
     "trackopt": {
       "times": "Horário de início e fim opcional, ex: '0:30' ou '0:30 3:45'"
+    },
+    "normalize": {
+      "state": "Ativar/desativar ou verificar status ('on', 'off', 'status'). Omita para alternar."
+    },
+    "bassboost": {
+      "level": "Nível de reforço de graves: 'low', 'medium', 'hard' ou 'off'."
+    },
+    "speed": {
+      "rate": "Multiplicador de velocidade entre 0.5 e 2.0 (ex: 1.25). Omita para redefinir para 1.0×."
+    },
+    "pitch": {
+      "pitch": "Multiplicador de tom entre 0.5 e 2.0 (ex: 1.25). Omita para redefinir para 1.0×."
     }
   },
   "pagination": {
@@ -513,6 +529,7 @@
       "labelPfp": "Estilo do avatar do bot",
       "labelLocale": "Idioma",
       "labelVolume": "Volume padrão",
+      "labelNormalize": "Normalização de volume",
       "labelVoteSkip": "Votação para pular",
       "labelVoteSkipThreshold": "Limite de votação para pular",
       "labelAnnouncementChannel": "Canal de anúncios",
@@ -825,6 +842,29 @@
       "listTitle": "📋 **Suas Opções de Faixa** ({{count}})",
       "listEntry": "• **{{title}}** — {{start}} → {{end}}",
       "listHint": "Use `{{prefix}}trackopt play <alias>` para aplicar um recorte nomeado, ou `{{prefix}}trackopt remove [alias]` para excluir um."
+    },
+    "normalize": {
+      "statusEnabled": "🔊 A normalização dinâmica de volume (ReplayGain) está atualmente **Ativada** para este servidor.",
+      "statusDisabled": "🔇 A normalização dinâmica de volume (ReplayGain) está atualmente **Desativada** para este servidor.",
+      "info": "Quando ativado, o volume de reprodução é nivelado dinamicamente para o padrão internacional de -14 LUFS, equilibrando faixas acústicas suaves e faixas com masterização pesada.",
+      "trackInfo": "Informações da faixa atual:\n• Fonte: `{{source}}`\n• Ajuste de ganho: `{{gainDb}} dB` ({{gainPct}}%)\n• Volume efetivo: `{{effective}}%`"
+    },
+    "bassboost": {
+      "disabled": "🔇 Reforço de graves desativado — equilíbrio de áudio original restaurado.",
+      "applied": "🔊 **Reforço de Graves ({{level}})** aplicado! Equalizador em tempo real ativo.",
+      "failed": "❌ Falha ao aplicar reforço de graves: {{reason}}"
+    },
+    "speed": {
+      "reset": "⏩ Velocidade de reprodução redefinida para **1.0×** normal.",
+      "current": "⏩ Velocidade de reprodução atual: **{{speed}}×**.\nUse `{{prefix}}speed <0.5-2.0>` para alterar a velocidade.",
+      "set": "{{emoji}} Velocidade de reprodução definida para **{{speed}}×**.",
+      "failed": "❌ Falha ao ajustar velocidade: {{reason}}"
+    },
+    "pitch": {
+      "reset": "🎵 Tom de áudio redefinido para **1.0×** normal.",
+      "current": "🎵 Tom de áudio atual: **{{pitch}}×**.\nUse `{{prefix}}pitch <0.5-2.0>` para alterar o tom.",
+      "set": "🎵 Tom de áudio definido para **{{pitch}}×**.",
+      "failed": "❌ Falha ao ajustar tom: {{reason}}"
     }
   }
 }

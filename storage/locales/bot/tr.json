@@ -82,6 +82,10 @@
     "move": "Kuyrukta bir parçayı bir konumdan diğerine taşıyın.",
     "autoplay": "Otomatik çalmayı açın/kapatın — kuyruk bittiğinde benzer parçaları otomatik olarak çalar.",
     "trackopt": "Parçalar için özel başlangıç/bitiş süreleri ayarlayın. Adlandırılmış kısayolları destekler — her parça için farklı bölümlerde birden fazla kırpma kaydedin.",
+    "normalize": "Müzik kaynakları arasında dinamik ses normalleştirmesini (ReplayGain seviyeleme) açın/kapatın.",
+    "bassboost": "Düşük, orta veya sert bas güçlendirme ekolayzer efekti uygulayın.",
+    "speed": "Mevcut parçanın oynatma hızını ayarlayın (0.5× ile 2.0× arası).",
+    "pitch": "Mevcut parçanın ses perdesini (pitch) ayarlayın (0.5× ile 2.0× arası).",
     "vote": "FluxerList üzerinde sunucunuz/botunuz için oylama bilgilerini görüntüleyin veya oy verenleri kontrol edin"
   },
   "options": {
@@ -158,6 +162,18 @@
     },
     "trackopt": {
       "times": "Başlangıç ve isteğe bağlı bitiş süresi, örn. '0:30' veya '0:30 3:45'"
+    },
+    "normalize": {
+      "state": "Açın/kapatın veya durumu kontrol edin ('on', 'off', 'status'). Değiştirmek için boş bırakın."
+    },
+    "bassboost": {
+      "level": "Bas güçlendirme seviyesi: 'low', 'medium', 'hard' veya 'off'."
+    },
+    "speed": {
+      "rate": "0.5 ile 2.0 arasında oynatma hızı çarpanı (ör. 1.25). 1.0× yapmak için boş bırakın."
+    },
+    "pitch": {
+      "pitch": "0.5 ile 2.0 arasında ses perdesi çarpanı (ör. 1.25). 1.0× yapmak için boş bırakın."
     },
     "vote": {
       "action": "Yapılacak işlem: info, check, voters",
@@ -663,6 +679,7 @@
       "labelPfp": "Bot avatar stili",
       "labelLocale": "Yerel ayar",
       "labelVolume": "Varsayılan ses",
+      "labelNormalize": "Ses normalleştirme",
       "labelVoteSkip": "Atlama oylaması",
       "labelVoteSkipThreshold": "Atlama oylaması eşiği",
       "labelAnnouncementChannel": "Duyuru kanalı",
@@ -785,6 +802,29 @@
       "listTitle": "📋 **Parça Seçenekleriniz** ({{count}})",
       "listEntry": "• **{{title}}** — {{start}} → {{end}}",
       "listHint": "Adlandırılmış bir kırpma uygulamak için `{{prefix}}trackopt play <kısayol>` veya birini silmek için `{{prefix}}trackopt remove [kısayol]` kullanın."
+    },
+    "normalize": {
+      "statusEnabled": "🔊 Dinamik ses normalleştirmesi (ReplayGain) bu sunucu için şu anda **Etkin**.",
+      "statusDisabled": "🔇 Dinamik ses normalleştirmesi (ReplayGain) bu sunucu için şu anda **Devre Dışı**.",
+      "info": "Etkinleştirildiğinde, çalma ses yüksekliği uluslararası -14 LUFS standardına göre dinamik olarak dengelenir, böylece sessiz akustik parçalar ve yüksek sesli parçalar dengeli bir dinleme seviyesinde çalar.",
+      "trackInfo": "Mevcut Parça Bilgisi:\n• Kaynak: `{{source}}`\n• Kazanç ayarı: `{{gainDb}} dB` ({{gainPct}}%)\n• Etkili ses seviyesi: `{{effective}}%`"
+    },
+    "bassboost": {
+      "disabled": "🔇 Bas güçlendirme devre dışı bırakıldı — orijinal ses dengesi geri yüklendi.",
+      "applied": "🔊 **Bas Güçlendirme ({{level}})** uygulandı! Gerçek zamanlı ekolayzer aktif.",
+      "failed": "❌ Bas güçlendirme uygulanamadı: {{reason}}"
+    },
+    "speed": {
+      "reset": "⏩ Oynatma hızı normal **1.0×** seviyesine sıfırlandı.",
+      "current": "⏩ Mevcut oynatma hızı: **{{speed}}×**.\nHızı değiştirmek için `{{prefix}}speed <0.5-2.0>` kullanın.",
+      "set": "{{emoji}} Oynatma hızı **{{speed}}×** olarak ayarlandı.",
+      "failed": "❌ Hız ayarlanamadı: {{reason}}"
+    },
+    "pitch": {
+      "reset": "🎵 Ses perdesi normal **1.0×** seviyesine sıfırlandı.",
+      "current": "🎵 Mevcut ses perdesi: **{{pitch}}×**.\nPerdeyi değiştirmek için `{{prefix}}pitch <0.5-2.0>` kullanın.",
+      "set": "🎵 Ses perdesi **{{pitch}}×** olarak ayarlandı.",
+      "failed": "❌ Ses perdesi ayarlanamadı: {{reason}}"
     },
     "gateway": {
       "missingPermsFallback": "⚠️ Düzgün çalışmak için ihtiyacım olan izinler eksik! Eksik: **{{perms}}**. Lütfen bir sunucu yöneticisinden bu izinleri Sunucu Ayarları → Roller'den vermesini isteyin."

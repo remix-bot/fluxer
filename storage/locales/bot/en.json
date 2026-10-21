@@ -82,7 +82,11 @@
     "seek": "Seek to a specific position in the currently playing track.",
     "move": "Move a track from one position to another in the queue.",
     "autoplay": "Toggle autoplay — automatically play similar tracks when the queue ends.",
-    "trackopt": "Set custom start/end times for tracks. Supports named aliases — save multiple trims per track for different sections."
+    "trackopt": "Set custom start/end times for tracks. Supports named aliases — save multiple trims per track for different sections.",
+    "normalize": "Toggle dynamic volume normalization (ReplayGain leveling) across music sources.",
+    "bassboost": "Apply a low, medium, or hard bass boost equalizer effect.",
+    "speed": "Adjust the playback speed of the current track (0.5× to 2.0×).",
+    "pitch": "Adjust the audio pitch of the current track (0.5× to 2.0×)."
   },
   "options": {
     "debug": {
@@ -162,6 +166,18 @@
     },
     "trackopt": {
       "times": "Start and optional end time, e.g. '0:30' or '0:30 3:45'"
+    },
+    "normalize": {
+      "state": "Turn on/off or check status ('on', 'off', 'status'). Omit to toggle."
+    },
+    "bassboost": {
+      "level": "Bass boost level: 'low', 'medium', 'hard', or 'off'."
+    },
+    "speed": {
+      "rate": "Playback speed multiplier between 0.5 and 2.0 (e.g. 1.25). Omit to reset to 1.0×."
+    },
+    "pitch": {
+      "pitch": "Audio pitch multiplier between 0.5 and 2.0 (e.g. 1.25). Omit to reset to 1.0×."
     }
   },
   "pagination": {
@@ -630,6 +646,7 @@
       "labelPfp": "Bot avatar style",
       "labelLocale": "Locale",
       "labelVolume": "Default volume",
+      "labelNormalize": "Volume normalization",
       "labelVoteSkip": "Vote to skip",
       "labelVoteSkipThreshold": "Vote to skip threshold",
       "labelAnnouncementChannel": "Announcement channel",
@@ -825,6 +842,29 @@
       "listTitle": "📋 **Your Track Options** ({{count}})",
       "listEntry": "• **{{title}}** — {{start}} → {{end}}",
       "listHint": "Use `{{prefix}}trackopt play <alias>` to apply a named trim, or `{{prefix}}trackopt remove [alias]` to delete one."
+    },
+    "normalize": {
+      "statusEnabled": "🔊 Volume normalization (ReplayGain) is currently **Enabled** for this server.",
+      "statusDisabled": "🔇 Volume normalization (ReplayGain) is currently **Disabled** for this server.",
+      "info": "When enabled, playback loudness is dynamically leveled to the international -14 LUFS standard so quiet acoustic songs and loud EDM/SoundCloud tracks play at a balanced listening volume.",
+      "trackInfo": "Current Track Info:\n• Source: `{{source}}`\n• Gain adjustment: `{{gainDb}} dB` ({{gainPct}}%)\n• Effective volume: `{{effective}}%`"
+    },
+    "bassboost": {
+      "disabled": "🔇 Bass boost disabled — restored original audio balance.",
+      "applied": "🔊 Applied **Bass Boost ({{level}})**! Real-time equalizer active.",
+      "failed": "❌ Failed to apply bass boost: {{reason}}"
+    },
+    "speed": {
+      "reset": "⏩ Playback speed reset to normal **1.0×**.",
+      "current": "⏩ Current playback speed: **{{speed}}×**.\nUse `{{prefix}}speed <0.5-2.0>` to change playback speed.",
+      "set": "{{emoji}} Playback speed set to **{{speed}}×**.",
+      "failed": "❌ Failed to adjust speed: {{reason}}"
+    },
+    "pitch": {
+      "reset": "🎵 Audio pitch reset to normal **1.0×**.",
+      "current": "🎵 Current audio pitch: **{{pitch}}×**.\nUse `{{prefix}}pitch <0.5-2.0>` to change pitch.",
+      "set": "🎵 Audio pitch set to **{{pitch}}×**.",
+      "failed": "❌ Failed to adjust pitch: {{reason}}"
     }
   }
 }

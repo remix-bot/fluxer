@@ -82,7 +82,11 @@
     "seek": "Springe zu einer bestimmten Position im aktuell spielenden Track.",
     "move": "Verschiebe einen Track von einer Position an eine andere in der Warteschlange.",
     "autoplay": "Schalte Autoplay um — spiele automatisch ähnliche Tracks, wenn die Warteschlange endet.",
-    "trackopt": "Setze benutzerdefinierte Start-/Endzeiten für Tracks. Unterstützt benannte Aliase — speichere mehrere Schnitte pro Track für verschiedene Abschnitte."
+    "trackopt": "Setze benutzerdefinierte Start-/Endzeiten für Tracks. Unterstützt benannte Aliase — speichere mehrere Schnitte pro Track für verschiedene Abschnitte.",
+    "normalize": "Dynamische Lautstärkenormalisierung (ReplayGain-Pegel) über verschiedene Musikquellen umschalten.",
+    "bassboost": "Equalizer-Bass-Boost mit Voreinstellungen (niedrig, mittel, stark) anwenden.",
+    "speed": "Wiedergabegeschwindigkeit des aktuellen Tracks anpassen (0.5× bis 2.0×).",
+    "pitch": "Tonhöhe (Pitch) des aktuellen Tracks anpassen (0.5× bis 2.0×)."
   },
   "options": {
     "debug": {
@@ -162,6 +166,18 @@
     },
     "trackopt": {
       "times": "Start- und optionale Endzeit, z.B. '0:30' oder '0:30 3:45'"
+    },
+    "normalize": {
+      "state": "Ein-/ausschalten oder Status prüfen ('on', 'off', 'status'). Leer lassen zum Umschalten."
+    },
+    "bassboost": {
+      "level": "Bass-Boost-Stufe: 'low', 'medium', 'hard' oder 'off'."
+    },
+    "speed": {
+      "rate": "Geschwindigkeitsmultiplikator zwischen 0.5 und 2.0 (z. B. 1.25). Leer lassen für 1.0×."
+    },
+    "pitch": {
+      "pitch": "Tonhöhenmultiplikator zwischen 0.5 und 2.0 (z. B. 1.25). Leer lassen für 1.0×."
     }
   },
   "pagination": {
@@ -513,6 +529,7 @@
       "labelPfp": "Bot-Avatar-Stil",
       "labelLocale": "Sprache",
       "labelVolume": "Standardlautstärke",
+      "labelNormalize": "Lautstärkenormalisierung",
       "labelVoteSkip": "Abstimmung zum Überspringen",
       "labelVoteSkipThreshold": "Schwellenwert für Skip-Abstimmung",
       "labelAnnouncementChannel": "Ankündigungskanal",
@@ -825,6 +842,29 @@
       "listTitle": "📋 **Deine Track-Optionen** ({{count}})",
       "listEntry": "• **{{title}}** — {{start}} → {{end}}",
       "listHint": "Verwende `{{prefix}}trackopt play <alias>`, um einen benannten Trim anzuwenden, oder `{{prefix}}trackopt remove [alias]`, um einen zu löschen."
+    },
+    "normalize": {
+      "statusEnabled": "🔊 Dynamische Lautstärkenormalisierung (ReplayGain) ist für diesen Server derzeit **Aktiviert**.",
+      "statusDisabled": "🔇 Dynamische Lautstärkenormalisierung (ReplayGain) ist für diesen Server derzeit **Deaktiviert**.",
+      "info": "Wenn aktiviert, wird die Lautstärke dynamisch an den internationalen Standard von -14 LUFS angepasst, sodass leise akustische Lieder und laute Tracks mit ausgeglichener Lautstärke spielen.",
+      "trackInfo": "Aktuelle Track-Info:\n• Quelle: `{{source}}`\n• Verstärkungsanpassung: `{{gainDb}} dB` ({{gainPct}}%)\n• Effektive Lautstärke: `{{effective}}%`"
+    },
+    "bassboost": {
+      "disabled": "🔇 Bass-Boost deaktiviert — ursprüngliche Audiobalance wiederhergestellt.",
+      "applied": "🔊 **Bass-Boost ({{level}})** angewendet! Echtzeit-Equalizer aktiv.",
+      "failed": "❌ Bass-Boost konnte nicht angewendet werden: {{reason}}"
+    },
+    "speed": {
+      "reset": "⏩ Wiedergabegeschwindigkeit auf normale **1.0×** zurückgesetzt.",
+      "current": "⏩ Aktuelle Wiedergabegeschwindigkeit: **{{speed}}×**.\nVerwende `{{prefix}}speed <0.5-2.0>`, um die Geschwindigkeit zu ändern.",
+      "set": "{{emoji}} Wiedergabegeschwindigkeit auf **{{speed}}×** gesetzt.",
+      "failed": "❌ Geschwindigkeit konnte nicht geändert werden: {{reason}}"
+    },
+    "pitch": {
+      "reset": "🎵 Tonhöhe auf normale **1.0×** zurückgesetzt.",
+      "current": "🎵 Aktuelle Tonhöhe: **{{pitch}}×**.\nVerwende `{{prefix}}pitch <0.5-2.0>`, um die Tonhöhe zu ändern.",
+      "set": "🎵 Tonhöhe auf **{{pitch}}×** gesetzt.",
+      "failed": "❌ Tonhöhe konnte nicht geändert werden: {{reason}}"
     }
   }
 }

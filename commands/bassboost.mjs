@@ -85,7 +85,7 @@ export async function run(message, data) {
 
   if (levelArg === "off" || levelArg === "none" || levelArg === "reset") {
     await p.applyFilter({}, null);
-    embed.setDescription("🔇 Bass boost disabled — restored original audio balance.");
+    embed.setDescription(this.t(message, "responses.bassboost.disabled"));
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
 
@@ -98,10 +98,10 @@ export async function run(message, data) {
 
   const res = await p.applyFilter({ equalizer: preset.equalizer }, filterMeta);
   if (!res.ok) {
-    embed.setDescription(`❌ Failed to apply bass boost: ${res.reason || "Unknown error"}`);
+    embed.setDescription(this.t(message, "responses.bassboost.failed", { reason: res.reason || "Unknown error" }));
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
 
-  embed.setDescription(`🔊 Applied **Bass Boost (${preset.label})**! Real-time equalizer active.`);
+  embed.setDescription(this.t(message, "responses.bassboost.applied", { level: preset.label }));
   message.reply({ embeds: [embed] }).catch(() => {});
 }

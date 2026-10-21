@@ -70,11 +70,12 @@ export async function run(message, data) {
   }
 
   const embed = new EmbedBuilder().setColor(getGlobalColor());
-  const statusEmoji = newState ? "🔊" : "🔇";
-  const statusText = newState ? "**Enabled**" : "**Disabled**";
+  const statusMsg = newState
+      ? this.t(message, "responses.normalize.statusEnabled")
+      : this.t(message, "responses.normalize.statusDisabled");
+  const infoMsg = this.t(message, "responses.normalize.info");
 
-  let desc = `${statusEmoji} Volume normalization (ReplayGain) is currently ${statusText} for this server.\n\n` +
-      `*When enabled, playback loudness is dynamically leveled to the international -14 LUFS standard so quiet acoustic songs and loud EDM/SoundCloud tracks play at a balanced listening volume.*`;
+  let desc = `${statusMsg}\n\n*${infoMsg}*`;
 
   if (p) {
     const current = p.queue?.getCurrent?.();
@@ -83,10 +84,12 @@ export async function run(message, data) {
       const gain = calculateNormalizationGain(current);
       const gainDb = (20 * Math.log10(gain)).toFixed(1);
       const gainSign = gain >= 1 ? "+" : "";
-      desc += `\n\n**Current Track Info:**\n` +
-          `• Source: \`${source}\`\n` +
-          `• Gain adjustment: \`${gainSign}${gainDb} dB\` (${(gain * 100).toFixed(0)}%)\n` +
-          `• Effective volume: \`${Math.round(p.getEffectiveVolume())}%\``;
+      desc += "\n\n" + this.t(message, "responses.normalize.trackInfo", {
+        source,
+        gainDb: `${gainSign}${gainDb}`,
+        gainPct: (gain * 100).toFixed(0),
+        effective: Math.round(p.getEffectiveVolume()),
+      });
     }
   }
 
