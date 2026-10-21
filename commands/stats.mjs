@@ -10,6 +10,7 @@ import { Utils } from "../src/utils/Utils.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/ui/index.mjs";
 import { logger } from "../src/core/Logger.mjs";
+import * as ShardingUtils from "../src/utils/ShardingUtils.mjs";
 
 /**
  * @type {CommandBuilder}
@@ -226,49 +227,94 @@ async function withRateLimitRetry(fn, label = "send") {
 }
 
 /**
- * Count players with active voice connections.
+ * Gather real-time music playback and player statistics.
+ * Deduplicates active players by instance and computes connected, playing,
+ * total queued tracks, and 24/7 radio sessions.
  * @private
  * @param {Map} playerMap - The player map from PlayerManager.
- * @returns {number} Number of live connected players.
+ * @returns {{totalPlayers: number, playingCount: number, queuedTracks: number, radios247: number}}
  */
-function getLivePlayerCount(playerMap) {
-  let live = 0;
-
-  for (const [mapKey, player] of playerMap ?? []) {
-    if (!player || player._destroyed || player.leaving) continue;
-    if (player._isJoining) continue;
-
-    const conn = player.connection;
-    if (conn) {
-      const room = conn.room;
-      if (room) {
-        const isConnected     = room.isConnected;
-        const connectionState = room.connectionState;
-        if (!isConnected && (connectionState === 0 || connectionState === "disconnected")) continue;
+function getMusicStats(playerMap) {
+  const uniquePlayers = new Set();
+  if (playerMap) {
+    for (const player of playerMap.values()) {
+      if (!player || player._destroyed || player.leaving || player._isJoining) continue;
+      const conn = player.connection;
+      if (conn) {
+        const room = conn.room;
+        if (room) {
+          const isConnected     = room.isConnected;
+          const connectionState = room.connectionState;
+          if (!isConnected && (connectionState === 0 || connectionState === "disconnected")) continue;
+        }
+      } else {
+        continue;
       }
-    } else {
-      continue;
+      uniquePlayers.add(player);
     }
-
-    live++;
   }
 
-  return live;
+  let totalPlayers = uniquePlayers.size;
+  let playingCount = 0;
+  let queuedTracks = 0;
+  let radios247    = 0;
+
+  for (const player of uniquePlayers) {
+    const cur = player.queue?.getCurrent?.();
+    const isPlaying = !!cur && !player.paused;
+    if (isPlaying) playingCount++;
+
+    const qSize = (player.queue?.size?.() ?? 0) + (cur ? 1 : 0);
+    queuedTracks += qSize;
+
+    if (player._is247Enabled?.()) {
+      radios247++;
+    }
+  }
+
+  return {
+    totalPlayers,
+    playingCount,
+    queuedTracks,
+    radios247,
+  };
 }
 
 /**
- * Translate with a hardcoded fallback. Locale lookups that miss (custom or
- * outdated locale files make translate() return the raw dot-notation key)
+ * Resolve the current shard assignment string (e.g. "0/2" when sharded, or "0" in single-process mode).
+ * @private
+ * @param {object} client - The bot client instance.
+ * @param {string|null} guildId - The guild ID where the command was invoked.
+ * @returns {string} Formatted shard info.
+ */
+function getShardInfo(client, guildId) {
+  try {
+    const isSharded = ShardingUtils.isShardedProcess();
+    const currentShard = ShardingUtils.shardIdForGuild(client, guildId);
+    if (isSharded) {
+      const totalShards = Number(process.env.FLUXER_SHARD_COUNT) || 1;
+      return totalShards > 1 ? `${currentShard}/${totalShards}` : `${currentShard}`;
+    }
+    return `${currentShard}`;
+  } catch (_) {
+    return "0";
+  }
+}
+
+/**
+ * Translate with a hardcoded fallback and optional placeholders. Locale lookups
+ * that miss (custom or outdated locale files make translate() return the raw dot-notation key)
  * render the readable fallback instead of an ugly key path in the embed.
  * @private
  * @param {Function} t - Translation function.
  * @param {object} msg - The command message wrapper.
  * @param {string} key - Locale key.
  * @param {string} fallback - Label used when the key is missing.
+ * @param {object} [vars={}] - Optional interpolation variables.
  * @returns {string}
  */
-function tOr(t, msg, key, fallback) {
-  const value = t(msg, key);
+function tOr(t, msg, key, fallback, vars = {}) {
+  const value = t(msg, key, vars);
   return value === key ? fallback : value;
 }
 
@@ -280,7 +326,11 @@ function tOr(t, msg, key, fallback) {
  * @param {object} s - Statistics data object.
  * @param {number} s.guildCount - Number of guilds.
  * @param {number} s.userCount - Number of users.
- * @param {number} s.playerCount - Number of active players.
+ * @param {number} s.playerCount - Number of active connected players.
+ * @param {number} s.playingCount - Number of players actively streaming.
+ * @param {number} s.queuedTracks - Total tracks across all player queues.
+ * @param {number} s.radios247 - Number of active 24/7 radio sessions.
+ * @param {string} s.shard - Shard assignment string.
  * @param {number} s.scrobbleCount - Total Last.fm scrobbles.
  * @param {number} s.linkedUsers - Number of Last.fm linked users.
  * @param {number} s.ping - Bot response ping in ms (REST reply round trip).
@@ -298,10 +348,19 @@ function buildEmbed(t, msg, s, pending = []) {
   const num   = (v) => Utils.formatNumber(v);
   const field = (key, value) => `\`${pending.includes(key) ? "..." : value}\``;
 
+  const playerVal = s.playingCount > 0
+      ? tOr(t, msg, "responses.stats.playersWithPlaying", `${num(s.playerCount)} (${num(s.playingCount)} playing)`, {
+          total:   num(s.playerCount),
+          playing: num(s.playingCount),
+        })
+      : num(s.playerCount);
+
   const description = [
     `${t(msg, "responses.stats.servers")} — ${field("guilds", num(s.guildCount))}`,
     `${t(msg, "responses.stats.users")} — ${field("users", num(s.userCount))}`,
-    `${t(msg, "responses.stats.players")} — ${field("players", num(s.playerCount))}`,
+    `${t(msg, "responses.stats.players")} — ${field("players", playerVal)}`,
+    `${tOr(t, msg, "responses.stats.queuedTracks", "🎶  **Queued Tracks**")} — ${field("queuedTracks", num(s.queuedTracks))}`,
+    s.radios247 > 0 ? `${tOr(t, msg, "responses.stats.radios", "📻  **24/7 Radios**")} — ${field("radios", num(s.radios247))}` : null,
   ];
 
   if (s.lastfmEnabled) {
@@ -314,6 +373,7 @@ function buildEmbed(t, msg, s, pending = []) {
   description.push(
       `${t(msg, "responses.stats.ping")} — ${field("ping", `${num(s.ping)}ms`)}`,
       s.gatewayPing >= 0 ? `${tOr(t, msg, "responses.stats.gateway", GATEWAY_FALLBACK_LABEL)} — \`${num(s.gatewayPing)}ms\`` : null,
+      `${tOr(t, msg, "responses.stats.shard", "🧩  **Shard**")} — \`${s.shard}\``,
       `${t(msg, "responses.stats.uptime")} — \`${s.uptime}\``,
       `${t(msg, "responses.stats.build")} — [\`${s.comHash}\`](${s.comLink})`,
       s.reason ? `${t(msg, "responses.stats.lastRestart")} — \`${s.reason}\`` : null,
@@ -349,6 +409,8 @@ export async function run(message) {
   const t             = (...a) => this.t(...a);
 
   const totals = getTotals(this.client);
+  const music  = getMusicStats(this.players?.playerMap);
+  const shard  = getShardInfo(this.client, message.guildId ?? message.guild?.id);
 
   scheduleBackgroundRefresh(this.client, lastfmEnabled ? lastfm : null);
 
@@ -363,7 +425,11 @@ export async function run(message) {
   const embedData = {
     guildCount:    totals.guildCount,
     userCount:     totals.userCount,
-    playerCount:   getLivePlayerCount(this.players.playerMap),
+    playerCount:   music.totalPlayers,
+    playingCount:  music.playingCount,
+    queuedTracks:  music.queuedTracks,
+    radios247:     music.radios247,
+    shard,
     scrobbleCount: lastfmEnabled ? (cache.scrobbles ?? 0) : 0,
     linkedUsers:   lastfmEnabled ? (cache.linkedUsers ?? 0) : 0,
     lastfmEnabled,
@@ -405,11 +471,16 @@ export async function run(message) {
         persistCache();
       }
 
-      const fresh = getTotals(this.client);
+      const fresh      = getTotals(this.client);
+      const freshMusic = getMusicStats(this.players?.playerMap);
       const fill  = {
         ...embedData,
         guildCount:    fresh.guildCount,
         userCount:     fresh.userCount,
+        playerCount:   freshMusic.totalPlayers,
+        playingCount:  freshMusic.playingCount,
+        queuedTracks:  freshMusic.queuedTracks,
+        radios247:     freshMusic.radios247,
         scrobbleCount: lastfmEnabled ? (cache.scrobbles ?? 0) : 0,
         linkedUsers:   lastfmEnabled ? (cache.linkedUsers ?? 0) : 0,
         ping:          lastPing ?? 0,
