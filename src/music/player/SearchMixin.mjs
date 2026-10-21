@@ -554,9 +554,78 @@ const SearchMixin = {
         }
 
         if (isUrl && !fromTitleFallback && lcTracks.length > 1) {
-          const videos = lcTracks.map(t => this._lcTrackToVideo(t, trackMeta)).filter(Boolean);
-          this.addManyToQueue(videos, top);
-          events.emit("message", "Successfully added **" + videos.length + "** songs to the queue.");
+          const playlistName = result?.playlistInfo?.name ?? result?.info?.name ?? "playlist";
+          const allRawTracks = [...lcTracks];
+
+          // Check if there are additional pages from NodeLink / LavaSrc pagination (Issue #17)
+          let nextPageToken = result?.pluginInfo?.nextPageToken ?? result?.playlistInfo?.nextPageToken;
+          let page = 1;
+          const maxPages = 10;
+          while (nextPageToken && page < maxPages) {
+            try {
+              page++;
+              events.emit("message", `Fetching next page of **${playlistName}** (page ${page})...`);
+              const nextResult = await this._lavalink.search(query, {
+                page,
+                pageToken: nextPageToken,
+              });
+              const nextTracks = nextResult?.tracks ?? [];
+              if (nextTracks.length === 0) break;
+              allRawTracks.push(...nextTracks);
+              nextPageToken = nextResult?.pluginInfo?.nextPageToken ?? nextResult?.playlistInfo?.nextPageToken;
+            } catch (pageErr) {
+              logger.warn(`[Player] Playlist pagination page ${page} error:`, pageErr?.message);
+              break;
+            }
+          }
+
+          const BATCH_SIZE = 50;
+          if (allRawTracks.length <= BATCH_SIZE) {
+            const videos = allRawTracks.map(t => this._lcTrackToVideo(t, trackMeta)).filter(Boolean);
+            this.addManyToQueue(videos, top);
+            events.emit("message", `Successfully added **${videos.length}** songs to the queue.`);
+          } else {
+            // Paginated background queue ingestion (Issue #17)
+            const initialRaw = allRawTracks.slice(0, BATCH_SIZE);
+            const initialVideos = initialRaw.map(t => this._lcTrackToVideo(t, trackMeta)).filter(Boolean);
+            this.addManyToQueue(initialVideos, top);
+
+            // Start playing immediately if idle so user hears music right away!
+            if (!this.queue.getCurrent()) {
+              this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
+            }
+
+            events.emit("message", `Queued first **${initialVideos.length}** songs and started playback! Ingesting **${allRawTracks.length - initialVideos.length}** more tracks in the background...`);
+
+            // Ingest remaining tracks in the background without blocking the event loop
+            (async () => {
+              let loaded = initialVideos.length;
+              let lastStatusTime = Date.now();
+              const remainingRaw = allRawTracks.slice(BATCH_SIZE);
+
+              for (let i = 0; i < remainingRaw.length; i += BATCH_SIZE) {
+                await new Promise(r => setTimeout(r, 150));
+                if (this._destroyed || this.leaving) break;
+
+                const chunk = remainingRaw.slice(i, i + BATCH_SIZE)
+                    .map(t => this._lcTrackToVideo(t, trackMeta))
+                    .filter(Boolean);
+                this.addManyToQueue(chunk, false);
+                loaded += chunk.length;
+
+                const now = Date.now();
+                if (now - lastStatusTime >= 2000 && loaded < allRawTracks.length) {
+                  lastStatusTime = now;
+                  events.emit("message", `Importing playlist: **${loaded}/${allRawTracks.length}** tracks queued...`);
+                }
+              }
+
+              events.emit("message", `Successfully added all **${loaded}** songs to the queue from **${playlistName}**.`);
+            })().catch(ingestErr => {
+              logger.warn("[Player] Background playlist ingestion error:", ingestErr?.message);
+            });
+            return;
+          }
         } else {
           const video = this._lcTrackToVideo(firstTrack, trackMeta);
           if (video) {

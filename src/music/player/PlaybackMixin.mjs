@@ -146,8 +146,9 @@ const PlaybackMixin = {
 
     if (!this._voiceConn || this.leaving) return;
 
-    if (this.preferredVolume !== 1 && this._voiceConn) {
-      try { this._voiceConn.setVolume(this.preferredVolume * 100); } catch(_) {}
+    if (this._voiceConn) {
+      const vol = this.getEffectiveVolume ? this.getEffectiveVolume(songData) : (this.preferredVolume * 100);
+      try { this._voiceConn.setVolume(vol); } catch(_) {}
     }
 
     if (!this._voiceConn || this.leaving) return;
@@ -491,22 +492,22 @@ const PlaybackMixin = {
       return { ok: false, reason: "Player not bound to a guild." };
     }
 
-    if (filterMeta && !isLoadstreamEnabled()) {
-      logger.warn("[Player] applyFilter rejected — loadstream route disabled (audio.allowLoadstream), filters are NodeLink server-side effects");
-      return {
-        ok: false,
-        reason: "filters need the NodeLink loadstream route — set audio.allowLoadstream to true in config.json; playback is unfiltered in trackstream mode",
-      };
-    }
-
     const current = this.queue.getCurrent();
 
     this.activeFilter = filterMeta ?? null;
-    this.activeFilterPayload = filterMeta ? filterPayload : null;
+    this.activeFilterPayload = filterMeta && Object.keys(filterPayload || {}).length > 0 ? filterPayload : null;
     this.emit("filter", this.activeFilter);
 
     if (!current?.encoded || !this._voiceConn) {
       return { ok: true, pending: true };
+    }
+
+    // Hot-apply filter immediately to currently playing song
+    const pos = this.computePosition ? this.computePosition() : (Date.now() - (this.startedPlaying || Date.now()));
+    try {
+      await this.seekToPosition(Math.max(0, pos));
+    } catch (e) {
+      logger.warn("[Player] Hot-apply filter re-seek error:", e?.message);
     }
 
     return { ok: true };

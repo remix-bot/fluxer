@@ -15,6 +15,12 @@
     "defaultSource": "ytmusic",
     "fallback": true
   },
+  "spotify": {
+    "playlistLoadLimit": 10
+  },
+  "soundcloud": {
+    "playlistLoadLimit": 10
+  },
   "audio": {
     "normalization": true
   },

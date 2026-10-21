@@ -21,6 +21,20 @@ const FILTERS = [
     payload: {},
   },
   {
+    emoji:   "🔉",
+    key:     "bassboost_low",
+    label:   "Bass Boost (Low)",
+    desc:    "Subtle low-end boost for acoustic & gentle tracks",
+    payload: {
+      equalizer: [
+        { band: 0, gain: 0.25 },
+        { band: 1, gain: 0.20 },
+        { band: 2, gain: 0.15 },
+        { band: 3, gain: 0.10 },
+      ],
+    },
+  },
+  {
     emoji:   "🔊",
     key:     "bassboost",
     label:   "Bass Boost",
@@ -41,6 +55,25 @@ const FILTERS = [
         { band: 11, gain: -0.75 },
         { band: 12, gain: -0.70 },
         { band: 13, gain: -0.65 },
+      ],
+    },
+  },
+  {
+    emoji:   "💥",
+    key:     "bassboost_hard",
+    label:   "Bass Boost (Hard)",
+    desc:    "Maximum sub-bass boost — skull-shattering low end",
+    payload: {
+      equalizer: [
+        { band: 0,  gain:  1.00 },
+        { band: 1,  gain:  1.10 },
+        { band: 2,  gain:  0.80 },
+        { band: 3,  gain:  0.50 },
+        { band: 4,  gain:  0.25 },
+        { band: 5,  gain: -0.20 },
+        { band: 6,  gain: -0.45 },
+        { band: 7,  gain: -0.65 },
+        { band: 8,  gain: -0.80 },
       ],
     },
   },

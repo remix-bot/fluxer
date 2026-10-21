@@ -97,11 +97,7 @@ export class FluxerAudioBridge extends EventEmitter {
     const seekMs = Math.floor((options.seekSeconds ?? 0) * 1000);
     let durationMs = options.durationMs || 0;
     const filterPayload = options.filterPayload ?? null;
-    const loadstreamEnabled = isLoadstreamEnabled();
-
-    if (filterPayload && !loadstreamEnabled) {
-      logger.warn("[AudioBridge] Audio filter ignored — the loadstream route is disabled (config.json -> audio.allowLoadstream). Playing unfiltered.");
-    }
+    const loadstreamEnabled = isLoadstreamEnabled() || !!filterPayload;
 
     try {
       // ── Route A: /v4/trackstream — primary path, never touches /v4/loadstream.

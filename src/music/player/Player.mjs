@@ -18,6 +18,7 @@ import { logger } from "../../core/Logger.mjs";
 import { get247ChannelMode, detachPlayerFromManager } from "../../utils/Helpers247.mjs";
 import { hasHumansInChannel } from "../../voice/VoiceStateResolver.mjs";
 import { FluxerAudioBridge } from "../audio/FluxerAudioBridge.mjs";
+import { getEffectiveVolume } from "../audio/VolumeNormalizer.mjs";
 import { applyMixins } from "../../utils/mixins.mjs";
 import { Queue } from "./Queue.mjs";
 import PlaybackMixin from "./PlaybackMixin.mjs";
@@ -890,6 +891,18 @@ class Player extends EventEmitter {
   }
 
   /**
+   * Get the effective playback volume percentage (0-200), applying dynamic
+   * volume normalization (ReplayGain / EBU R128) if enabled.
+   * @param {object|null} [track=null]
+   * @returns {number} Effective volume percentage (0-200).
+   */
+  getEffectiveVolume(track = null) {
+    const cur = track || this.queue?.getCurrent?.();
+    const isNorm = this.volumeNormalization !== false;
+    return getEffectiveVolume(this.preferredVolume, cur, isNorm);
+  }
+
+  /**
    * Set the playback volume.
    * @param {number} v - Volume as a decimal (0–2, where 1 = 100%).
    * @returns {string} Status message.
@@ -898,7 +911,9 @@ class Player extends EventEmitter {
     this.preferredVolume = Utils.clamp(v, 0, 2);
     this.emit("volume", this.preferredVolume);
     if (this._voiceConn) {
-      this._voiceConn.setVolume(this.preferredVolume * 100);
+      try {
+        this._voiceConn.setVolume(this.getEffectiveVolume());
+      } catch (_) {}
     }
     if (!this._voiceConn)
       return `Volume set to \`${Math.round(this.preferredVolume * 100)}%\` — will apply when connected.`;

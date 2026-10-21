@@ -129,7 +129,9 @@ A few things worth knowing:
 - **Seek** — jump to a specific position in the current track
 - **Track options** — set custom start/end times per track, great for album compilations and hidden tracks
 - **Queue move** — reorder tracks by moving them to a different position
-- **Audio filters** — bassboost, speed, nightcore and more (applied server-side by NodeLink)
+- **Audio filters & DSP effects** — real-time equalizer bassboost (low/medium/hard), nightcore, vaporwave, 8D audio, and fine-grained `%speed` & `%pitch` controls
+- **Dynamic volume normalization** — ReplayGain & EBU R128 loudness leveling across YouTube, Spotify, and SoundCloud (`%normalize`)
+- **Large playlist streaming** — background chunked ingestion for massive Spotify & SoundCloud playlists (>100 tracks) with instant playback start
 - **Server settings** — per-guild configuration (prefix, volume, locale, 24/7 channels, …) stored in MySQL
 - **Dashboard backend** — optional Redis-RPC backend that an external web frontend uses to monitor players and control playback remotely
 - **Multi-language support** — English, Arabic, German, Kurdish (Sorani), Brazilian Portuguese, and Turkish
@@ -174,7 +176,11 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 | `lyrics` | Display synced lyrics from NodeLink | `%lyrics` | `lyric`, `ly` |
 | `thumbnail` | Get the thumbnail of the current track | `%thumbnail` | `thumb` |
 | `radio` | Play a built-in or custom radio station | `%radio` | `r` |
-| `filter` | Manage audio filters (bass, speed, nightcore, etc.) | `%filter bass 50` | `filters`, `fx`, `effect` |
+| `filter` | Interactive audio filter picker (bass, speed, nightcore, 8D, etc.) | `%filter` | `filters`, `fx`, `effect` |
+| `bassboost` | Apply a low, medium, or hard bass boost equalizer | `%bassboost hard` | `bb`, `bass` |
+| `speed` | Adjust playback speed multiplier (0.5×–2.0×) in real time | `%speed 1.25` | `rate`, `tempo` |
+| `pitch` | Adjust audio pitch multiplier (0.5×–2.0×) in real time | `%pitch 1.2` | `semitone`, `tune` |
+| `normalize` | Toggle dynamic volume normalization & ReplayGain leveling | `%normalize` / `%normalize on` | `replaygain`, `volumenormalize`, `norm` |
 | `player` | Create an interactive emoji control panel with live progress | `%player` | |
 | `join` | Make the bot join a specific voice channel | `%join 123456789` | |
 | `leave` | Make the bot leave the current voice channel | `%leave` | `l`, `stop` |
@@ -439,7 +445,7 @@ fluxer/
 │                                #   one child process per shard slice, each running index.mjs
 ├── config_example.json          # Configuration template
 ├── package.json
-├── commands/                    # 39 command entry files (one per command); the three
+├── commands/                    # 43 command entry files (one per command); the three
 │   │   # largest (lastfm, settings, debug) are split into action-family
 │   │   #   modules inside commands/<name>/ subdirectories
 │   ├── lastfm/                 # lastfm action families (account, playback, listening,
