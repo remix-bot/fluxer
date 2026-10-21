@@ -2,6 +2,7 @@
 import mysql from "mysql2";
 import { logger } from "../core/Logger.mjs";
 import { MYSQL_POOL_DEFAULTS, attachMysqlPoolGuard } from "../db/MysqlGuard.mjs";
+import { getSharedMysqlPool } from "../db/PoolManager.mjs";
 
 const DEFAULT_ALIAS = "default";
 const MAX_ALIAS_LEN = 32;
@@ -23,11 +24,15 @@ export class TrackOptionsManager {
   /** @private @type {number} */
   _cacheMaxSize = 2000;
 
-  /** @param {object} mysqlConfig - MySQL connection config. */
+  /** @param {object} mysqlConfig - MySQL connection config or shared Pool instance. */
   constructor(mysqlConfig) {
-    this.db = mysql.createPool({ ...MYSQL_POOL_DEFAULTS, connectionLimit: 10, ...mysqlConfig });
+    if (mysqlConfig && typeof mysqlConfig.query === "function") {
+      this.db = mysqlConfig;
+    } else {
+      this.db = getSharedMysqlPool(mysqlConfig);
+    }
     attachMysqlPoolGuard(this.db, "TrackOptions");
-    this.db.on("error", (err) => {
+    this.db.on?.("error", (err) => {
       logger.error("[TrackOptions] MySQL pool error:", err.code ?? err.message);
     });
     this._readyPromise = this._ensureTable();

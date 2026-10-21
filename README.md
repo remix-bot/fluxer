@@ -134,7 +134,7 @@ A few things worth knowing:
 - **Dashboard backend** — optional Redis-RPC backend that an external web frontend uses to monitor players and control playback remotely
 - **Multi-language support** — English, Arabic, German, Kurdish (Sorani), Brazilian Portuguese, and Turkish
 - **Configurable logging** — granular control over which log categories appear in the console
-- **Graceful shutdown** — destroys players and closes MySQL/Redis/NodeLink sessions cleanly on SIGINT/SIGTERM/SIGUSR2
+- **Graceful shutdown & Queue Persistence** — flushes active player queues and playback positions into MySQL (`player_state`) before cleanly destroying players and closing MySQL/Redis/NodeLink sessions on SIGINT/SIGTERM/SIGUSR2
 - **Module system** — pluggable module architecture for extending bot functionality (`storage/modules.json`)
 
 ---
@@ -413,7 +413,7 @@ Key configuration options in `config.json`:
 | `customStatsFooter` | string | — | Custom text shown in the `%stats` embed footer |
 | `presenceInterval` | number | `30000` | Interval in ms for rotating bot presence status |
 | `presenceContents` | array | `[]` | Presence status messages to cycle through (strings or objects with `text`/`emoji_name`/`emoji_id`/`activity`) |
-| `mysql` | object | — | **Required.** MySQL connection settings |
+| `mysql` | object | — | **Required.** MySQL connection settings (`host`, `port`, `user`, `password`, `database`, `connectionLimit`) |
 | `nodelink` | object | — | NodeLink connection (`host`, `port`, `password`, `requestTimeout`) |
 | `audio` | object | — | Audio streaming options (`allowLoadstream: false` for zero-re-encode `/v4/trackstream`) |
 | `bilibili` | object | — | Anonymous Bilibili proxy (`enabled`, `bind`, `port`, `advertiseHost`, `remoteProxy`, `remoteSecret`) |
@@ -518,6 +518,7 @@ fluxer/
     │       ├── constants.mjs    # Signed API-call plumbing
     │       └── urlUtils.mjs     # lastfm:// URL parsing
     ├── db/                      # Persistence
+    │   ├── PoolManager.mjs      # Unified MySQL pool manager (callback & promise APIs)
     │   ├── Settings.mjs         # SettingsManager / ServerSettings / RemoteSettingsManager
     │   │                        #   (MySQL-backed, debounced JSON_SET writes)
     │   └── DatabaseManager.mjs  # mysql2 pool + parameterized queries + bcrypt helpers

@@ -9,6 +9,7 @@ import fs from "node:fs";
 import mysql from "mysql2";
 import { EventEmitter } from "node:events";
 import { MYSQL_POOL_DEFAULTS, attachMysqlPoolGuard } from "./MysqlGuard.mjs";
+import { getSharedMysqlPool } from "./PoolManager.mjs";
 import { logger } from "../core/Logger.mjs";
 
 /**
@@ -180,16 +181,22 @@ export class RemoteSettingsManager extends SettingsManager {
 
   /**
    * Create a new RemoteSettingsManager backed by a MySQL pool.
-   * @param {object} config - mysql2 pool configuration (host, user, password, database).
+   * @param {object} config - mysql2 pool or configuration (host, user, password, database).
    * @param {string} defaultsPath - Path to a JSON file with default values and descriptions.
    * @param {string|null} [botId=null] - The bot user ID for multi-bot support.
    */
   constructor(config, defaultsPath, botId = null) {
     super();
     this.botId = botId;
-    this.db = mysql.createPool({ ...MYSQL_POOL_DEFAULTS, connectionLimit: 15, ...config });
+    if (config && typeof config.query === "function") {
+      this.db = config;
+      this._ownsPool = false;
+    } else {
+      this.db = getSharedMysqlPool(config);
+      this._ownsPool = false;
+    }
     attachMysqlPoolGuard(this.db, "DB");
-    this.db.on('error', (err) => {
+    this.db.on?.('error', (err) => {
       logger.error('[DB] MySQL pool error:', err.code ?? err.message);
     });
     if (defaultsPath) this.loadDefaultsSync(defaultsPath);
@@ -219,7 +226,7 @@ export class RemoteSettingsManager extends SettingsManager {
     }
     await Promise.allSettled(pendingServers.map(server => this._doSave(server)));
     try {
-      if (this.db?.end) {
+      if (this._ownsPool && this.db?.end) {
         await new Promise(r => this.db.end(() => r()));
       }
     } catch (_) {}

@@ -38,6 +38,8 @@
  */
 
 import * as fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ShardingManager } from "@fluxerjs/sharding";
 import { logger } from "./src/core/Logger.mjs";
@@ -126,18 +128,58 @@ manager.on("error", (err) => {
   logger.error("[Sharding] Manager error:", err?.message ?? err);
 });
 
-/** Graceful shutdown: destroy all children, then exit.
+// Event loop health heartbeat for Docker container healthcheck (Issue #12)
+const healthFile = path.join(os.tmpdir(), ".remix-health");
+const updateHealth = () => {
+  try {
+    fs.writeFile(healthFile, Date.now().toString(), () => {});
+  } catch (_) {}
+};
+updateHealth();
+const healthInterval = setInterval(updateHealth, 10_000);
+healthInterval.unref?.();
+
+/** Graceful shutdown: signal shard children to flush queue snapshots, await exit, then destroy.
  * @param {string} sig - The received signal name. */
 let shuttingDown = false;
 const shutdown = async (sig) => {
   if (shuttingDown) return;
   shuttingDown = true;
-  logger.recovery(`\n[Sharding] ${sig} received — destroying shard processes...`);
+  manager.respawn = false;
+  logger.recovery(`\n[Sharding] ${sig} received — waiting for shard processes to flush queue snapshots and exit...`);
+
+  // Send SIGTERM to all child processes so their saveAndExit / Bot.gracefulShutdown runs
+  const exitPromises = [];
+  if (manager.shards) {
+    for (const shard of manager.shards.values()) {
+      const cp = shard.process;
+      if (cp && !cp.killed) {
+        exitPromises.push(new Promise((resolve) => {
+          cp.once("exit", resolve);
+          setTimeout(resolve, 8000);
+        }));
+        try {
+          cp.kill("SIGTERM");
+        } catch (_) {}
+      }
+    }
+  }
+
+  if (exitPromises.length > 0) {
+    await Promise.all(exitPromises);
+  }
+
   try {
     await manager.destroy();
   } catch (e) {
     logger.warn("[Sharding] destroy error:", e?.message);
   }
+
+  try {
+    clearInterval(healthInterval);
+    fs.unlink(healthFile, () => {});
+  } catch (_) {}
+
   process.exit(0);
 };
 process.once("SIGINT",  () => shutdown("SIGINT"));

@@ -8,7 +8,8 @@
     "port": 3306,
     "user": "remix",
     "password": "remix_pw",
-    "database": "remix"
+    "database": "remix",
+    "connectionLimit": 15
   },
   "nodelink": {
     "host": "nodelink",

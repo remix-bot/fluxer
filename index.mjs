@@ -140,60 +140,18 @@ process.on("uncaughtExceptionMonitor", (err, origin) => {
 });
 
 /**
- * Graceful shutdown handler: destroys all active players, closes Lavalink,
- * Redis, and Dashboard DB connections, then exits.
+ * Graceful shutdown handler: flushes player queue snapshots to MySQL,
+ * cleans up active players, services, and connections, then exits.
  * @async
  * @returns {Promise<void>}
  */
 const saveAndExit = async () => {
-  logger.recovery("\n[Shutdown] Cleaning up before exit...");
   try {
-    await remix.playerState?.saveAllFrom?.(remix.players);
-  } catch (e) {
-    logger.warn("[Shutdown] Player state save failed:", e?.message);
-  }
-  try {
-    if (remix.players?.playerMap) {
-      for (const [channelId, player] of remix.players.playerMap) {
-        try { player.destroy(); } catch (e) { logger.warn("[Shutdown] Player destroy error:", e?.message); }
-      }
-      remix.players.playerMap.clear();
+    if (remix?.gracefulShutdown) {
+      await remix.gracefulShutdown();
     }
   } catch (e) {
-    logger.warn("[Shutdown] Player cleanup error:", e?.message);
-  }
-  try {
-    if (remix.lavalink) {
-      remix.lavalink.destroy();
-    }
-  } catch (e) {
-    logger.warn("[Shutdown] Lavalink cleanup error:", e?.message);
-  }
-  try {
-    if (remix.dashboard?.redis?.destroy) {
-      await remix.dashboard.redis.destroy();
-    }
-  } catch (e) {
-    logger.error("[Shutdown] Failed to close Redis:", e.message);
-  }
-  try {
-    if (remix.dashboard?.db?.close) {
-      await remix.dashboard.db.close();
-    }
-  } catch (e) {
-    logger.error("[Shutdown] Failed to close Dashboard DB:", e.message);
-  }
-  try {
-    remix.gatewayHandler?.stop247Watchdog?.();
-  } catch (e) {
-    logger.warn("[Shutdown] Watchdog stop error:", e?.message);
-  }
-  try {
-    if (remix.settingsMgr?.shutdown) {
-      await remix.settingsMgr.shutdown();
-    }
-  } catch (e) {
-    logger.error("[Shutdown] Settings flush failed:", e.message);
+    logger.error("[Shutdown] Error during graceful shutdown:", e?.message ?? e);
   }
   process.exit(0);
 };

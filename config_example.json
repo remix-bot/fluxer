@@ -97,7 +97,9 @@
     "port": 3306,
     "user": "youruser",
     "password": "password of your user",
-    "database": "name of the target database"
+    "database": "name of the target database",
+    "connectionLimit": 15,
+    "connectionLimit-Comment": "Maximum simultaneous MySQL connections shared across all bot services (default: 15). Prevents connection pool exhaustion in multi-shard deployments."
   },
   "dashboard": {
     "enabled": false,

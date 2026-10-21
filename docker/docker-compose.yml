@@ -20,6 +20,12 @@ services:
       - TZ=${TZ:-UTC}
     ports:
       - "${WEB_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs = require('fs'); try { const diff = Date.now() - fs.statSync('/tmp/.remix-health').mtimeMs; process.exit(diff < 30000 ? 0 : 1); } catch { process.exit(1); }"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
     networks:
       - remix-net
 

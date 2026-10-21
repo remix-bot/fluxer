@@ -7,6 +7,7 @@
  */
 
 import * as fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import childProcess from "node:child_process";
 import { Client, Events } from "@fluxerjs/core";
@@ -20,6 +21,7 @@ import { resolveIsBotUser } from "../voice/VoiceStateResolver.mjs";
 import * as ShardingUtils from "../utils/ShardingUtils.mjs";
 import { RemoteSettingsManager } from "../db/Settings.mjs";
 import { PlayerStateStore } from "../db/PlayerStateStore.mjs";
+import { getSharedMysqlPool, getSharedPromisePool, closeSharedMysqlPool } from "../db/PoolManager.mjs";
 import { PlayerManager } from "../music/PlayerManager.mjs";
 import { LavalinkManager } from "../music/LavalinkManager.mjs";
 import { Dashboard } from "../dashboard/Dashboard.mjs";
@@ -134,10 +136,14 @@ class Remix {
     this.locale = new Locale(typeof config.prefix === "string" && config.prefix ? config.prefix : "%");
     this.locale.load();
 
+    // Centralized MySQL connection pool (Issue #21)
+    const sharedPool = getSharedMysqlPool(config.mysql);
+    const sharedPromisePool = getSharedPromisePool(config.mysql);
+
     this.dashboard = new Dashboard(this, {
       enabled: config.dashboard?.enabled,
       redis: config.dashboard?.redis,
-      mysql: config.mysql,
+      mysql: sharedPromisePool,
     });
 
     const presenceContents = config.presenceContents ?? [];
@@ -192,10 +198,10 @@ class Remix {
     const messages = new MessageHandler(this.client);
     this.messages  = messages;
 
-    const settings    = new RemoteSettingsManager(config.mysql, "./storage/defaults.json");
+    const settings    = new RemoteSettingsManager(sharedPool, "./storage/defaults.json");
     this.settingsMgr  = settings;
 
-    this.playerState  = new PlayerStateStore(settings.db);
+    this.playerState  = new PlayerStateStore(sharedPool);
 
     const configPrefix = config.prefix ?? null;
     if (configPrefix && settings.defaults) {
@@ -255,9 +261,28 @@ class Remix {
     this.gatewayHandler = new GatewayHandler(this);
     this.gatewayHandler.setupEventHandlers();
 
-    this.lastfm = new LastFmManager(config.lastfm, config.mysql);
+    this.lastfm = new LastFmManager(config.lastfm, sharedPromisePool);
     this.fluxerlist = new FluxerListManager(config.fluxerlist);
-    this.trackOptions = new TrackOptionsManager(config.mysql);
+    this.trackOptions = new TrackOptionsManager(sharedPool);
+
+    // Event loop health heartbeat for Docker container healthcheck (Issue #12)
+    const healthFile = path.join(os.tmpdir(), ".remix-health");
+    const updateHealth = () => {
+      try {
+        fs.writeFile(healthFile, Date.now().toString(), () => {});
+      } catch (_) {}
+    };
+    updateHealth();
+    this._healthInterval = setInterval(updateHealth, 10_000);
+    this._healthInterval.unref?.();
+
+    // Direct process signal fallback handlers
+    process.once("SIGINT", () => {
+      this.gracefulShutdown().then(() => process.exit(0)).catch(() => process.exit(1));
+    });
+    process.once("SIGTERM", () => {
+      this.gracefulShutdown().then(() => process.exit(0)).catch(() => process.exit(1));
+    });
 
     settings.on("ready", () => this._onSettingsReady());
 
@@ -618,6 +643,96 @@ class Remix {
     } catch (e) {
       logger.warn("[WS] Failed to attach WS error handlers:", e.message);
     }
+  }
+
+  /**
+   * Graceful shutdown: flush player queue snapshots to MySQL (Issue #12),
+   * destroy players, close Lavalink, Redis, dashboard DB, settings, and pool.
+   * @async
+   * @returns {Promise<void>}
+   */
+  async gracefulShutdown() {
+    if (this._shuttingDown) return;
+    this._shuttingDown = true;
+    logger.recovery("\n[Shutdown] Cleaning up before exit...");
+
+    // 1. Flush active player queue snapshots to MySQL (Issue #12)
+    try {
+      if (this.playerState && this.players) {
+        await this.playerState.saveAllFrom(this.players);
+      }
+    } catch (e) {
+      logger.warn("[Shutdown] Player state save failed:", e?.message);
+    }
+
+    // 2. Destroy live players
+    try {
+      if (this.players?.playerMap) {
+        for (const [channelId, player] of this.players.playerMap) {
+          try { player.destroy(); } catch (e) { logger.warn("[Shutdown] Player destroy error:", e?.message); }
+        }
+        this.players.playerMap.clear();
+      }
+    } catch (e) {
+      logger.warn("[Shutdown] Player cleanup error:", e?.message);
+    }
+
+    // 3. Destroy Lavalink
+    try {
+      if (this.lavalink) {
+        this.lavalink.destroy();
+      }
+    } catch (e) {
+      logger.warn("[Shutdown] Lavalink cleanup error:", e?.message);
+    }
+
+    // 4. Close Redis if dashboard enabled
+    try {
+      if (this.dashboard?.redis?.destroy) {
+        await this.dashboard.redis.destroy();
+      }
+    } catch (e) {
+      logger.error("[Shutdown] Failed to close Redis:", e.message);
+    }
+
+    // 5. Close Dashboard DB if present
+    try {
+      if (this.dashboard?.db?.close) {
+        await this.dashboard.db.close();
+      }
+    } catch (e) {
+      logger.error("[Shutdown] Failed to close Dashboard DB:", e.message);
+    }
+
+    // 6. Stop 24/7 watchdog
+    try {
+      this.gatewayHandler?.stop247Watchdog?.();
+    } catch (e) {
+      logger.warn("[Shutdown] Watchdog stop error:", e?.message);
+    }
+
+    // 7. Flush pending settings writes
+    try {
+      if (this.settingsMgr?.shutdown) {
+        await this.settingsMgr.shutdown();
+      }
+    } catch (e) {
+      logger.error("[Shutdown] Settings flush failed:", e.message);
+    }
+
+    // 8. Close unified shared MySQL pool (Issue #21)
+    try {
+      await closeSharedMysqlPool();
+    } catch (e) {
+      logger.warn("[Shutdown] MySQL pool close failed:", e?.message);
+    }
+
+    // 9. Clean up event-loop health heartbeat
+    try {
+      if (this._healthInterval) clearInterval(this._healthInterval);
+      const healthFile = path.join(os.tmpdir(), ".remix-health");
+      fs.unlink(healthFile, () => {});
+    } catch (_) {}
   }
 }
 

@@ -36,8 +36,8 @@ USER 10001:10001
 
 EXPOSE 80
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD pgrep -f "node .*index.mjs" >/dev/null 2>&1 || pgrep -f "node .*shard.mjs" >/dev/null 2>&1 || exit 1
+HEALTHCHECK --interval=15s --timeout=5s --start-period=45s --retries=3 \
+  CMD node -e "const fs = require('fs'); try { const diff = Date.now() - fs.statSync('/tmp/.remix-health').mtimeMs; process.exit(diff < 30000 ? 0 : 1); } catch { process.exit(1); }"
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker/docker-entrypoint.sh"]
 

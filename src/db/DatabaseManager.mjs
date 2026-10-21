@@ -8,6 +8,7 @@ import { compare, genSalt, hash } from "bcryptjs";
 import { createPool } from "mysql2/promise";
 import { logger } from "../core/Logger.mjs";
 import { MYSQL_POOL_DEFAULTS, attachMysqlPoolGuard } from "./MysqlGuard.mjs";
+import { getSharedPromisePool } from "./PoolManager.mjs";
 
 /**
  * @class
@@ -17,14 +18,19 @@ import { MYSQL_POOL_DEFAULTS, attachMysqlPoolGuard } from "./MysqlGuard.mjs";
 export class DatabaseManager {
   /**
    * Create a new DatabaseManager.
-   * @param {object} config - mysql2 pool configuration (host, user, password, database, etc.).
+   * @param {object} config - mysql2 pool configuration or shared PromisePool instance.
    */
   constructor(config) {
-    this.db = createPool({
-      ...MYSQL_POOL_DEFAULTS,
-      connectionLimit: 15,
-      ...config,
-    });
+    if (config && typeof config.execute === "function") {
+      this.db = config;
+      this._ownsPool = false;
+    } else if (config && typeof config.promise === "function") {
+      this.db = config.promise();
+      this._ownsPool = false;
+    } else {
+      this.db = getSharedPromisePool(config);
+      this._ownsPool = false;
+    }
     attachMysqlPoolGuard(this.db, "DashboardDB");
   }
 
@@ -73,10 +79,13 @@ export class DatabaseManager {
   }
 
   /**
-   * Close the underlying MySQL connection pool.
+   * Close the underlying MySQL connection pool (no-op if using a shared pool).
    * @returns {Promise<void>}
    */
   close() {
-    return this.db.end();
+    if (this._ownsPool && this.db?.end) {
+      return this.db.end();
+    }
+    return Promise.resolve();
   }
 }
