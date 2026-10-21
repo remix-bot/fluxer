@@ -41,15 +41,19 @@ const RejoinManager = {
         return player;
       } catch (err) {
         const errMsg = err?.message ?? String(err);
-        const isTrackTimeout = errMsg.includes("track publication timed out")
+        const isTransientError = errMsg.includes("track publication timed out")
+            || errMsg.includes("Voice connection timeout")
+            || errMsg.includes("LiveKit connection timeout")
             || errMsg.includes("lavalink player create failed")
             || errMsg.includes("Failed to create audio player")
-            || errMsg.includes("internal error");
+            || errMsg.includes("internal error")
+            || errMsg.includes("ETIMEDOUT")
+            || errMsg.includes("ECONNRESET");
 
-        if (isTrackTimeout && attempt < maxRetries) {
+        if (isTransientError && attempt < maxRetries) {
           const backoffMs = baseDelay * Math.pow(2, attempt - 1);
           logger.warn(
-              `[${context}] Track publication failed for channel ${channelId} (attempt ${attempt}/${maxRetries}) — ` +
+              `[${context}] Voice connection/track failed for channel ${channelId} (attempt ${attempt}/${maxRetries}) — ` +
               `retrying in ${backoffMs / 1000}s: ${errMsg}`
           );
           await new Promise(resolve => setTimeout(resolve, backoffMs));

@@ -48,8 +48,10 @@ export async function run(msg, data) {
     return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.seek.live"))] });
   }
 
-  let seekMs = Utils.parseDuration(positionInput);
-  if (!seekMs || seekMs < 0) {
+  const trimmed = String(positionInput ?? "").trim();
+  const isZero = /^0+(:0+)?(:0+)?$/.test(trimmed);
+  const seekMs = isZero ? 0 : Utils.parseDuration(trimmed);
+  if (seekMs === null || isNaN(seekMs) || seekMs < 0 || (!isZero && seekMs === 0)) {
     return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.seek.invalidFormat"))] });
   }
 

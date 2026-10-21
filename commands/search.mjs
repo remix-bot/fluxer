@@ -143,6 +143,7 @@ export async function run(msg, data) {
     await clearReactions();
 
     if (e.emoji_id === CANCEL_EMOJI) {
+      p.searches.delete(msg.authorId);
       rawMsg.edit({
         embeds: [makeEmbed(this.t(msg, "responses.search.cancelled"), null, this.t(msg, "responses.search.resultsTitle", { provider: name }))]
       }).catch(() => {});
@@ -167,6 +168,7 @@ export async function run(msg, data) {
   const SESSION_MS = this.config?.timers?.searchSessionTimeout ?? 30_000;
   const timer = setTimeout(() => {
     unobserve();
+    p.searches.delete(msg.authorId);
     clearReactions().catch(() => {});
     rawMsg.edit({
       embeds: [makeEmbed(this.t(msg, "responses.search.timedOut"), this.t(msg, "responses.search.sessionClosed"), this.t(msg, "responses.search.resultsTitle", { provider: name }))]

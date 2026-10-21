@@ -222,25 +222,7 @@ export class RichPaginator {
     const next     = this._next;
     const buildEmbed = this._buildEmbed.bind(this);
 
-    const unobserve = wrapped.onReaction(allReactions, async (e) => {
-      const emoji = e.emoji_id;
-
-      if (emoji === prev || emoji === next) {
-        const tab        = tabs[state.tab];
-        const totalPages = Math.max(1, tab.pages.length);
-        if (totalPages <= 1) return;
-        state.page = emoji === prev
-            ? (state.page - 1 + totalPages) % totalPages
-            : (state.page + 1) % totalPages;
-      } else {
-        const idx = tabEmojis.indexOf(emoji);
-        if (idx === -1 || idx === state.tab) return;
-        state.tab  = idx;
-        state.page = 0;
-      }
-
-      rawMsg.edit({ embeds: [buildEmbed(state.tab, state.page)] }).catch(() => {});
-    });
+    let unobserve = () => {};
 
     /** @private Clear all reactions on the paginator message. */
     const clearReactions = async () => {
@@ -279,11 +261,26 @@ export class RichPaginator {
       timer = setTimeout(closeSession, this._timeout);
     };
 
-    const origHandler = wrapped.handler.observedReactions.get(rawMsg.id);
-    if (origHandler) {
-      const origCb = origHandler.cb;
-      origHandler.cb = (e, m) => { resetTimer(); origCb(e, m); };
-    }
+    unobserve = wrapped.onReaction(allReactions, async (e) => {
+      resetTimer();
+      const emoji = e.emoji_id;
+
+      if (emoji === prev || emoji === next) {
+        const tab        = tabs[state.tab];
+        const totalPages = Math.max(1, tab.pages.length);
+        if (totalPages <= 1) return;
+        state.page = emoji === prev
+            ? (state.page - 1 + totalPages) % totalPages
+            : (state.page + 1) % totalPages;
+      } else {
+        const idx = tabEmojis.indexOf(emoji);
+        if (idx === -1 || idx === state.tab) return;
+        state.tab  = idx;
+        state.page = 0;
+      }
+
+      rawMsg.edit({ embeds: [buildEmbed(state.tab, state.page)] }).catch(() => {});
+    });
 
     return rawMsg;
   }
