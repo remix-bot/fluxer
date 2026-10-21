@@ -799,32 +799,20 @@ class Player extends EventEmitter {
     this._radioAnnounced = false;
     this._activeTrackOpt = null;
     this._clearTrackEndTimer();
-    this.queue.current   = null;
 
     this._bridgeStop();
 
     this.emit("trackSkip", this._lastPlayedTrack);
 
-    if (this.queue.isEmpty() && !this._wasRadio && !this._queueEndedSent) {
-      this._queueEndedSent = true;
-      this.emit("queueEnd");
-      if (!this._autoplay) {
-        const prefix = this._getPrefix?.(this._guildId) ?? "%";
-        this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.queueEnded", { prefix }))], system: true });
-      }
-    }
-
     this._playingNext = false;
-    if (!this.queue.isEmpty() && !this.leaving) {
-      this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
+    if (!this.leaving) {
+      this.playNext({ ignoreSongLoop: true })
+        .catch(e => logger.error("[Player] playNext error:", e.message))
+        .finally(() => { this._skipping = false; });
     } else {
-      this.emit("stopplay");
-      if (!this._is247Enabled()) {
-        this._startInactivityTimer();
-      }
+      this._skipping = false;
     }
 
-    this._skipping = false;
     return ":track_next: Skipped";
   }
 
@@ -840,34 +828,29 @@ class Player extends EventEmitter {
     if (idx < 0 || idx >= this.queue.size())
       return `:negative_squared_cross_mark: Position ${position} out of range (queue has ${this.queue.size()} tracks).`;
     this._lastPlayedTrack = this.queue.getCurrent();
-    this.queue.data.splice(0, idx);
+    const skipped = [this._lastPlayedTrack, ...this.queue.data.splice(0, idx)];
+    if (this.queue.loop) {
+      this.queue.data.push(...skipped);
+    }
     this.queue.current = null;
     this._skipping     = true;
+    this._radioAnnounced = false;
+    this._activeTrackOpt = null;
+    this._clearTrackEndTimer();
 
     this._bridgeStop();
 
     this.emit("trackSkip", this._lastPlayedTrack);
 
-    if (this.queue.isEmpty() && !this._wasRadio && !this._queueEndedSent) {
-      this._queueEndedSent = true;
-      this.emit("queueEnd");
-      if (!this._autoplay) {
-        const prefix = this._getPrefix?.(this._guildId) ?? "%";
-        this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.queueEnded", { prefix }))], system: true });
-      }
-    }
-
     this._playingNext = false;
-    if (!this.queue.isEmpty() && !this.leaving) {
-      this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
+    if (!this.leaving) {
+      this.playNext({ ignoreSongLoop: true })
+        .catch(e => logger.error("[Player] playNext error:", e.message))
+        .finally(() => { this._skipping = false; });
     } else {
-      this.emit("stopplay");
-      if (!this._is247Enabled()) {
-        this._startInactivityTimer();
-      }
+      this._skipping = false;
     }
 
-    this._skipping = false;
     return `:track_next: Skipped to position ${position}`;
   }
 

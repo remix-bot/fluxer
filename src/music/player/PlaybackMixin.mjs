@@ -44,7 +44,6 @@ const PlaybackMixin = {
 
     if (!this._paused) {
       this._lastPlayedTrack = this.queue.getCurrent() ?? songData;
-      if (!this.queue.songLoop) this.queue.current = null;
       this._playingNext = false;
       this.playNext().catch(e => logger.error("[Player] auto-advance playNext error:", e.message));
     }
@@ -99,13 +98,14 @@ const PlaybackMixin = {
    * generation counter ensures an older run's cleanup never clears the
    * in-flight flag of a newer run (which previously allowed double-advances).
    * @this {import('./Player.mjs').Player}
+   * @param {object} [opts] - Advancement options forwarded to Queue.next.
    * @returns {Promise<void>}
    */
-  async playNext() {
+  async playNext(opts = {}) {
     if (this._playingNext) return;
     this._playingNext = true;
     const generation = (this._playNextGeneration = (this._playNextGeneration ?? 0) + 1);
-    try { await this._doPlayNext(); }
+    try { await this._doPlayNext(opts); }
     finally { if (generation === this._playNextGeneration) this._playingNext = false; }
   },
 
@@ -114,13 +114,14 @@ const PlaybackMixin = {
    * track options, announces, starts playback via the bridge, arms the
    * track-end timer, and handles the queue-end path.
    * @this {import('./Player.mjs').Player}
+   * @param {object} [opts] - Advancement options forwarded to Queue.next.
    */
-  async _doPlayNext() {
+  async _doPlayNext(opts = {}) {
     this._bridgeStop();
 
     const currentBeforeNext = this.queue.getCurrent();
     if (currentBeforeNext) this._lastPlayedTrack = currentBeforeNext;
-    const songData = this.queue.next();
+    const songData = this.queue.next(opts);
     if (!songData) {
       this.emit("stopplay");
       this.emit("queueEnd");
@@ -352,24 +353,13 @@ const PlaybackMixin = {
     this._playingNext = false;
     this._lastPlayedTrack = this.queue.getCurrent() ?? this._lastPlayedTrack;
     this.emit("trackSkip", this._lastPlayedTrack);
-    if (!this.queue.isEmpty() && !this.leaving) {
-      this.playNext().catch(e => logger.error("[Player] TrackEnd playNext error:", e.message));
+    if (!this.leaving) {
+      this.playNext()
+        .catch(e => logger.error("[Player] TrackEnd playNext error:", e.message))
+        .finally(() => { this._skipping = false; });
     } else {
-      this.queue.current = null;
-      if (!this._wasRadio && !this._queueEndedSent) {
-        this._queueEndedSent = true;
-        this.emit("queueEnd");
-        if (!this._autoplay) {
-          const prefix = this._getPrefix?.(this._guildId) ?? "%";
-          this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.queueEnded", { prefix }))], system: true });
-        }
-      }
-      this.emit("stopplay");
-      if (!this._is247Enabled()) {
-        this._startInactivityTimer();
-      }
+      this._skipping = false;
     }
-    this._skipping = false;
   },
 
   /**

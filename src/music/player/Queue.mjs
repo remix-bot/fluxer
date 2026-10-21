@@ -40,12 +40,14 @@ export class Queue extends EventEmitter {
   /**
    * Advance to the next track in the queue. If songLoop is active, returns
    * the current track. If queue loop is active, re-appends the current track.
+   * @param {object} [options]
+   * @param {boolean} [options.ignoreSongLoop=false] - Bypass songLoop (used when explicitly skipping).
    * @returns {object|null} The next track, or null if the queue is empty.
    */
-  next() {
+  next({ ignoreSongLoop = false } = {}) {
     const previous = this.current;
 
-    if (this.songLoop && this.current) return this.current;
+    if (!ignoreSongLoop && this.songLoop && this.current) return this.current;
     if (this.loop && this.current) this.data.push(this.current);
 
     if (this.isEmpty()) {
