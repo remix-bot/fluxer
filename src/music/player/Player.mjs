@@ -11,7 +11,7 @@ import { getVoiceManager } from "@fluxerjs/voice";
 import { EventEmitter } from "node:events";
 import http from "node:http";
 import https from "node:https";
-import { EmbedBuilder } from "@fluxerjs/core";
+import { EmbedBuilder, PermissionFlags } from "@fluxerjs/core";
 import { getGlobalColor } from "../../ui/index.mjs";
 import { Utils, cleanId } from "../../utils/Utils.mjs";
 import { logger } from "../../core/Logger.mjs";
@@ -515,6 +515,24 @@ class Player extends EventEmitter {
       this._guildId   = cleanId(channel.guildId);
       this._lastConnectedAt = Date.now();
       this.leaving    = false;
+
+      // Fail-fast permission check before initiating gateway voice handshake
+      try {
+        const me = channel.guild?.members?.me ?? (this.client?.user?.id ? channel.guild?.members?.get?.(this.client.user.id) : null);
+        if (me) {
+          const perms = channel.permissionsFor?.(me) ?? me.permissionsIn?.(channel);
+          if (perms && !perms.has?.(PermissionFlags?.Administrator)) {
+            if (PermissionFlags?.ViewChannel && !perms.has(PermissionFlags.ViewChannel)) {
+              throw new Error(`Bot lacks ViewChannel permission in channel ${channelId}`);
+            }
+            if (PermissionFlags?.Connect && !perms.has(PermissionFlags.Connect)) {
+              throw new Error(`Bot lacks Connect permission in channel ${channelId}`);
+            }
+          }
+        }
+      } catch (permErr) {
+        if (permErr?.message?.includes?.("Bot lacks")) throw permErr;
+      }
 
       logger.player(`[Player] Joining channel ${channelId} via vm.join() (LiveKit)...`);
       const vm = getVoiceManager(this.client);

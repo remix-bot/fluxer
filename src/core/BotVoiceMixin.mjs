@@ -556,6 +556,7 @@ const BotVoiceMixin = {
         logger.player(`[Restore] Guild ${guildId}: ${applied.count} track(s) restored, resuming at ${applied.pos}ms.`);
       } catch (e) {
         logger.warn(`[Restore] Failed to restore guild ${guildId}:`, e?.message ?? e);
+        await store.clearSnapshot(guildId).catch(() => {});
       }
     }
   },

@@ -41,14 +41,22 @@ const RejoinManager = {
         return player;
       } catch (err) {
         const errMsg = err?.message ?? String(err);
-        const isTransientError = errMsg.includes("track publication timed out")
+        const isPermissionError = errMsg.includes("permission")
+            || errMsg.includes("Permission")
+            || errMsg.includes("Bot lacks")
+            || errMsg.includes("403")
+            || errMsg.includes("Unauthorized");
+
+        const isTransientError = !isPermissionError && (
+               errMsg.includes("track publication timed out")
             || errMsg.includes("Voice connection timeout")
             || errMsg.includes("LiveKit connection timeout")
             || errMsg.includes("lavalink player create failed")
             || errMsg.includes("Failed to create audio player")
             || errMsg.includes("internal error")
             || errMsg.includes("ETIMEDOUT")
-            || errMsg.includes("ECONNRESET");
+            || errMsg.includes("ECONNRESET")
+        );
 
         if (isTransientError && attempt < maxRetries) {
           const backoffMs = baseDelay * Math.pow(2, attempt - 1);
