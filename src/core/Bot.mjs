@@ -288,12 +288,21 @@ class Remix {
           this.lavalink = new LavalinkManager(config.nodelink ?? {}, client, { id: botId, username: client.user?.username ?? "bot" });
           this.lavalink.on("ready", () => {
             logger.lavalink("[Lavalink] Session ready");
+            if (this._hasBooted) {
+              this.players?.resumeAllOnNodeReconnect?.();
+            }
+          });
+          this.lavalink.on("nodeReconnect", () => {
+            if (this._hasBooted) {
+              this.players?.resumeAllOnNodeReconnect?.();
+            }
           });
           await this.lavalink.init();
           this.playerContext.lavalink = this.lavalink;
         }
 
         this.gatewayHandler.onReady();
+        this._hasBooted = true;
 
         this.fluxerlist?.startAutoStats?.(client);
 

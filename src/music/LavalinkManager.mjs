@@ -416,6 +416,7 @@ export class LavalinkManager extends EventEmitter {
           "[Lavalink] Node ready: " + node.id + " | session: " + this._sessionId
         );
         this.emit("ready", this._sessionId);
+        this.emit("nodeConnect", node);
       } catch (e) {
         logger.warn(
           "[Lavalink] nodeConnect handler error:",
@@ -425,6 +426,10 @@ export class LavalinkManager extends EventEmitter {
     };
 
     this.lavalink.on("nodeConnect", onNodeConnect);
+    this.lavalink.on("nodeReconnect", (node) => {
+      onNodeConnect(node);
+      this.emit("nodeReconnect", node);
+    });
 
     setTimeout(() => {
       if (!this._nodeConnected) {

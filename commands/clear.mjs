@@ -13,20 +13,43 @@ import { getGlobalColor } from "../src/ui/index.mjs";
  */
 export const command = new CommandBuilder()
   .setName("clear")
-  .setDescription("Remove all songs from the queue.", "commands.clear")
+  .setDescription("Remove all songs, or a slice of songs, from the queue.", "commands.clear")
   .addAliases("c")
-  .setCategory("music");
+  .setCategory("music")
+  .addNumberOption(o =>
+    o.setName("from")
+      .setDescription("Starting queue position to clear from (optional, 1-based).")
+      .setRequired(false)
+  )
+  .addNumberOption(o =>
+    o.setName("to")
+      .setDescription("Ending queue position to clear to (optional, 1-based).")
+      .setRequired(false)
+  );
 
 /**
  * Run handler for the clear command.
- * Clears the entire queue and sends a confirmation embed.
+ * Clears the entire queue, or a specified range of tracks, and sends a confirmation embed.
  *
  * @param {object} msg - The command message wrapper.
+ * @param {object} [data] - Parsed options.
  * @returns {Promise<void>}
  */
-export async function run(msg) {
+export async function run(msg, data) {
   const p = await this.getPlayer(msg, false, false, false);
   if (!p) return;
+
+  const fromVal = data?.get?.("from")?.value;
+  const toVal = data?.get?.("to")?.value;
+
+  if (fromVal != null && fromVal !== undefined) {
+    if (fromVal < 1) return msg.replyEmbed("Queue position must be 1 or greater.").catch(() => {});
+    const startIdx = Math.floor(fromVal) - 1;
+    const endIdx = (toVal != null && toVal !== undefined && toVal >= 1) ? Math.floor(toVal) - 1 : startIdx;
+    const res = p.removeRange(startIdx, endIdx);
+    return msg.replyEmbed(res).catch(() => {});
+  }
+
   p.clear();
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())

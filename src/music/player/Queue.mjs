@@ -77,6 +77,23 @@ export class Queue extends EventEmitter {
   }
 
   /**
+   * Remove a range of tracks from the queue (0-based indices, inclusive).
+   * @param {number} from - Starting 0-based index.
+   * @param {number} to - Ending 0-based index.
+   * @returns {{ count: number, removed: Array<object> }|string}
+   */
+  removeRange(from, to) {
+    if (this.isEmpty()) return "The queue is empty.";
+    const start = Math.max(0, Math.min(from, to));
+    const end = Math.min(this.data.length - 1, Math.max(from, to));
+    if (start >= this.data.length) return "Index out of bounds";
+    const deleteCount = (end - start) + 1;
+    const removed = this.data.splice(start, deleteCount);
+    this.emit("queue", { type: "removeRange", data: { start, end, count: removed.length, old: this.data.slice(), removed, new: this.data } });
+    return { count: removed.length, removed };
+  }
+
+  /**
    * Move a track from one position to another (0-based indices).
    * @param {number} from - Source index.
    * @param {number} to - Destination index.

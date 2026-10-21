@@ -643,12 +643,27 @@ const PlaybackMixin = {
    * @this {import('./Player.mjs').Player}
    * @returns {Promise<{text: string, source: string, synced: boolean, lines: Array}|null>}
    */
-  async lyrics() {
-    const current = this.queue.getCurrent();
-    if (!current) return null;
-
-    const query = this._buildLyricsQuery(current);
-    if (!query.title) return null;
+  async lyrics(customQuery = null) {
+    let query;
+    if (customQuery) {
+      const parts = String(customQuery).split(/\s*[-–—]\s*/);
+      let artist = null;
+      let title = customQuery.trim();
+      if (parts.length >= 2) {
+        artist = parts[0].trim();
+        title = parts.slice(1).join(" - ").trim();
+      }
+      query = {
+        title: Utils.cleanTitle(title),
+        artist: artist ? Utils.cleanTitle(artist) : null,
+        candidates: [customQuery.trim(), `${artist || ""} ${title}`.trim()].filter(Boolean)
+      };
+    } else {
+      const current = this.queue.getCurrent();
+      if (!current) return null;
+      query = this._buildLyricsQuery(current);
+      if (!query.title) return null;
+    }
 
     try {
       const result = await this._fetchVerifiedLyrics(query);
@@ -725,8 +740,9 @@ const PlaybackMixin = {
    * @returns {Promise<{text: string, source: string, synced: boolean, lines: Array}|null>}
    */
   async _fetchVerifiedLyrics(query) {
-    const durationMs = this._getTrackDurationMs(this.queue.getCurrent());
-    const durationSec = Math.round(durationMs / 1000);
+    const current = this.queue.getCurrent();
+    const durationMs = current ? this._getTrackDurationMs(current) : 0;
+    const durationSec = durationMs > 0 ? Math.round(durationMs / 1000) : null;
     const headers = { "User-Agent": "FluxerBot/1.0 (music bot lyrics lookup)" };
 
     const urls = [];
@@ -753,7 +769,7 @@ const PlaybackMixin = {
       title: query.title,
       artist: query.artist,
       durationSec,
-    });
+    }) || candidates[0];
     if (!best) return null;
 
     if (best.instrumental) {

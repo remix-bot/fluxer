@@ -787,6 +787,41 @@ class Player extends EventEmitter {
   }
 
   /**
+   * Compute the current track playback position in milliseconds.
+   * @returns {number} Elapsed playback position in ms.
+   */
+  computePosition() {
+    if (!this.startedPlaying) return 0;
+    if (this._paused && this._pausedAt) {
+      return Math.max(0, this._pausedAt - this.startedPlaying);
+    }
+    return Math.max(0, Date.now() - this.startedPlaying);
+  }
+
+  /**
+   * Seamlessly resume playback after a NodeLink/Lavalink node reconnects.
+   * Re-requests the stream at the last computed position so listeners experience
+   * minimal interruption.
+   * @returns {Promise<boolean>}
+   */
+  async resumePlaybackAfterNodeReconnect() {
+    if (this._destroyed || this.leaving || !this._voiceConn) return false;
+    const current = this.queue?.getCurrent();
+    if (!current || !this._audioBridge?.playing) return false;
+
+    const posMs = this.computePosition();
+    logger.player(`[Player:${this._guildId}] Node reconnected — resuming "${current.title}" at ${Math.round(posMs / 1000)}s`);
+
+    try {
+      await this._playTrackViaBridge(current, { seekSeconds: posMs / 1000 });
+      return true;
+    } catch (err) {
+      logger.warn(`[Player:${this._guildId}] Failed to auto-resume on node reconnect:`, err?.message);
+      return false;
+    }
+  }
+
+  /**
    * Skip the current track and advance to the next. Emits "trackSkip" with
    * the skipped track so autoplay (when enabled) can replenish the queue.
    * @returns {string} Status message.
@@ -969,6 +1004,25 @@ class Player extends EventEmitter {
       this._startInactivityTimer();
     }
     return msg;
+  }
+
+  /**
+   * Remove a slice or range of tracks from the queue (0-based indices, inclusive).
+   * @param {number} from - Starting 0-based index.
+   * @param {number} to - Ending 0-based index.
+   * @returns {string} Result message.
+   */
+  removeRange(from, to) {
+    if (this.isEmpty()) return "The queue is empty.";
+    const oldSize = this.queue.size();
+    const result = this.queue.removeRange(from, to);
+    if (typeof result === "string") return result;
+    if (oldSize !== this.queue.size()) this.emit("update", "queue");
+
+    if (this.isEmpty() && !this.queue.getCurrent()) {
+      this._startInactivityTimer();
+    }
+    return `:wastebasket: Successfully removed **${result.count}** track${result.count === 1 ? "" : "s"} from the queue.`;
   }
 
   /** @private Stop the audio bridge if currently playing. */

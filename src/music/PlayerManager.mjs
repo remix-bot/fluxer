@@ -117,13 +117,28 @@ export class PlayerManager {
   }
 
   /** Find a player by both guild and channel. @param {string} guildId @param {string} channelId @returns {Player|null} */
- getPlayerByGuildAndChannel(guildId, channelId) {
+  getPlayerByGuildAndChannel(guildId, channelId) {
     const cId = cleanId(channelId);
     const players = this.getGuildPlayers(guildId);
     for (const [mapChannelId, player] of players) {
       if (getPlayerChannelId(player, mapChannelId) === cId) return player;
     }
     return null;
+  }
+
+  /**
+   * Auto-resume all active players after a Lavalink/NodeLink node reconnection.
+   * @async
+   */
+  async resumeAllOnNodeReconnect() {
+    const activePlayers = [...new Set(this.playerMap.values())].filter(p => p && !p._destroyed && !p.leaving);
+    if (activePlayers.length === 0) return;
+    logger.lavalink(`[PlayerManager] Auto-resuming ${activePlayers.length} player(s) after node reconnection...`);
+    for (const player of activePlayers) {
+      player.resumePlaybackAfterNodeReconnect?.().catch(e =>
+        logger.warn(`[PlayerManager] Resume failed for guild ${player._guildId}:`, e?.message)
+      );
+    }
   }
 
   /**

@@ -13,9 +13,14 @@ import { EMOJI_REMOVE_TIMEOUT } from "../src/utils/UI.mjs";
 /** @type {CommandBuilder} @description Command definition for the lyrics command. */
 export const command = new CommandBuilder()
     .setName("lyrics")
-    .setDescription("Display synced lyrics from NodeLink", "commands.lyrics")
+    .setDescription("Display synced or unsynced lyrics for the current track or a queried song.", "commands.lyrics")
     .addAliases("lyric", "ly")
-    .setCategory("music");
+    .setCategory("music")
+    .addTextOption(o =>
+        o.setName("query")
+            .setDescription("The song title and artist to search lyrics for (optional).", "options.lyrics.query")
+            .setRequired(false)
+    );
 
 /** @private @type {string[]} Loading animation frames. */
 const LOADING_FRAMES     = ["◐", "◓", "◑", "◒"];
@@ -23,41 +28,149 @@ const LOADING_FRAMES     = ["◐", "◓", "◑", "◒"];
 const SESSION_MS           = 180_000;
 
 /**
+ * @private
+ * Search LRCLIB and NodeLink directly for lyrics when no player is active or a custom query is passed.
+ * @param {object|null} lavalink
+ * @param {string} rawQuery
+ * @param {string} searchTitle
+ * @param {string|null} searchArtist
+ * @returns {Promise<object|null>}
+ */
+async function fetchDirectLyrics(lavalink, rawQuery, searchTitle, searchArtist) {
+  const headers = { "User-Agent": "FluxerBot/1.0 (music bot lyrics lookup)" };
+  const urls = [];
+  if (searchArtist) {
+    const p1 = new URLSearchParams({ track_name: searchTitle, artist_name: searchArtist });
+    urls.push("https://lrclib.net/api/search?" + p1.toString());
+  }
+  const p2 = new URLSearchParams({ q: rawQuery });
+  urls.push("https://lrclib.net/api/search?" + p2.toString());
+
+  let candidates = [];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) continue;
+      const body = await res.json();
+      if (Array.isArray(body) && body.length) {
+        candidates = body;
+        break;
+      }
+    } catch (_) {}
+  }
+
+  if (candidates.length) {
+    const best = Utils.pickBestLyrics(candidates, {
+      title: searchTitle,
+      artist: searchArtist,
+      durationSec: null,
+    }) || candidates[0];
+
+    if (best) {
+      if (best.instrumental) {
+        return { text: "", source: "LRCLIB", synced: false, lines: [], title: best.trackName, artist: best.artistName };
+      }
+      const parsed = Utils.parseSyncedLyrics(best.syncedLyrics);
+      if (parsed) {
+        return {
+          text:   parsed.map(l => l.text).join("\n"),
+          source: "LRCLIB",
+          synced: true,
+          lines:  parsed,
+          title:  best.trackName,
+          artist: best.artistName,
+        };
+      }
+      if (best.plainLyrics) {
+        const text = String(best.plainLyrics).trim();
+        return {
+          text,
+          source: "LRCLIB",
+          synced: false,
+          lines:  text.split("\n").map(l => ({ text: l })),
+          title:  best.trackName,
+          artist: best.artistName,
+        };
+      }
+    }
+  }
+
+  const node = lavalink?.getNode?.() ?? null;
+  if (node) {
+    try {
+      const path = `/loadlyrics?identifier=${encodeURIComponent(rawQuery)}`;
+      const results = await node.request(path);
+      if (results?.data?.lines?.length) {
+        return {
+          text:   results.data.lines.map(l => l.text).join("\n"),
+          source: "Lavalink",
+          synced: results.data.lines.some(l => l.startTimeMs != null),
+          lines:  results.data.lines,
+          title:  searchTitle,
+          artist: searchArtist,
+        };
+      }
+    } catch (_) {}
+  }
+
+  return null;
+}
+
+/**
  * @async
  * Run handler for the lyrics command.
  * Fetches lyrics for the currently playing track and displays them with
  * paginated embeds and reaction-based navigation.
  * @param {object} message - The command message wrapper.
+ * @param {object} [data] - Parsed options.
  * @returns {Promise<void>}
  */
-export async function run(message) {
+export async function run(message, data) {
+  const query = data?.get?.("query")?.value?.trim() || null;
   const p = await this.getPlayer(message, false, false, false);
-  if (!p) return;
 
-  const current = p.queue.getCurrent();
-  if (!current) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.lyrics.nothingPlaying"));
-    return message.reply({ embeds: [embed] });
+  let searchTitle = null;
+  let searchArtist = null;
+  let current = null;
+
+  if (query) {
+    searchTitle = query;
+    const parts = query.split(/\s*[-–—]\s*/);
+    if (parts.length >= 2) {
+      searchArtist = parts[0].trim();
+      searchTitle = parts.slice(1).join(" - ").trim();
+    }
+  } else {
+    current = p?.queue?.getCurrent() ?? null;
+    if (!current) {
+      const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.lyrics.nothingPlaying"));
+      return message.reply({ embeds: [embed] });
+    }
+    searchTitle = current.title;
+    searchArtist = current.artists?.[0]?.name || current.author?.name || "Unknown Artist";
   }
 
   let frame = 0;
   const loadingMsg = await message.reply({ embeds: [
     new EmbedBuilder().setColor(getGlobalColor())
-      .setDescription(`${LOADING_FRAMES[0]} ` + this.t(message, "responses.lyrics.searching", { title: Utils.truncate(current.title, 40) }))
-
+      .setDescription(`${LOADING_FRAMES[0]} ` + this.t(message, "responses.lyrics.searching", { title: Utils.truncate(searchTitle, 40) }))
   ] });
 
   const loadingInterval = setInterval(() => {
     frame = (frame + 1) % LOADING_FRAMES.length;
     loadingMsg.edit({ embeds: [
       new EmbedBuilder().setColor(getGlobalColor())
-      .setDescription(`${LOADING_FRAMES[frame]} ` + this.t(message, "responses.lyrics.searching", { title: Utils.truncate(current.title, 40) }))
-
+      .setDescription(`${LOADING_FRAMES[frame]} ` + this.t(message, "responses.lyrics.searching", { title: Utils.truncate(searchTitle, 40) }))
     ] }).catch(() => {});
   }, 800);
 
   try {
-    const result = await p.lyrics();
+    let result = null;
+    if (p) {
+      result = await p.lyrics(query);
+    } else {
+      result = await fetchDirectLyrics(this.lavalink, query, searchTitle, searchArtist);
+    }
 
     clearInterval(loadingInterval);
 
@@ -65,7 +178,7 @@ export async function run(message) {
       return loadingMsg.edit({ embeds: [
         new EmbedBuilder().setColor(getGlobalColor())
           .setDescription(
-            this.t(message, "responses.lyrics.noLyrics", { title: Utils.truncate(current.title, 40) })
+            this.t(message, "responses.lyrics.noLyrics", { title: Utils.truncate(searchTitle, 40) })
           )
       ] });
     }
@@ -73,8 +186,8 @@ export async function run(message) {
     try { await loadingMsg.message.delete(); } catch(e) { logger.warn("[Lyrics] Error:", e?.message); }
 
     const syncIndicator = result.synced ? this.t(message, "responses.lyrics.syncedBadge") : "";
-    const displayTitle  = Utils.cleanTitle(current.title);
-    const artist        = current.artists?.[0]?.name || current.author?.name || "Unknown Artist";
+    const displayTitle  = result.title || (current ? Utils.cleanTitle(current.title) : Utils.cleanTitle(searchTitle));
+    const artist        = result.artist || (current?.artists?.[0]?.name || current?.author?.name) || searchArtist || "Unknown Artist";
     const lines         = result.text.split("\n").filter(l => l.trim());
     const totalLines    = lines.length;
 
