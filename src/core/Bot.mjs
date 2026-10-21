@@ -156,7 +156,7 @@ class Remix {
       intentionalLeaveTTL: timers.intentionalLeaveTTL  ?? 10_000,
     };
 
-    const client = new Client({
+    const clientOptions = {
       waitForGuilds: true,
       cache: {
         guilds: 10_000,
@@ -167,7 +167,17 @@ class Remix {
       },
       ...config["fluxer.js"],
       presence: presenceContents.length === 0 ? undefined : buildRuntimePresence(presenceContents[0]),
-    });
+    };
+
+    if (config.instanceUrl) {
+      const url = String(config.instanceUrl).trim().replace(/\/+$/, "");
+      if (url) {
+        clientOptions.instance = { api: url };
+        logger.info(`[Startup] Self-hosted instance configured: ${url}`);
+      }
+    }
+
+    const client = new Client(clientOptions);
 
     client.setMaxListeners(50);
     this.client = client;
