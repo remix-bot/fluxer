@@ -82,7 +82,7 @@ Configuration (config.json, all optional — defaults shown):
               "spawnTimeout": 30000, "spawnDelay": 5000 }
 ```
 
-`FLUXER_TOTAL_SHARDS` / `FLUXER_SHARDS_PER_PROCESS` env vars override the config (useful in Docker, where you switch the container command to `node shard.mjs`). Prefer an explicit `totalShards` — Fluxer's `/gateway/bot` always reports `shards: 1`, so there is no reliable `"auto"`.
+`FLUXER_TOTAL_SHARDS` / `FLUXER_SHARDS_PER_PROCESS` env vars override the config (Docker Compose runs `node shard.mjs` by default). Prefer an explicit `totalShards` — Fluxer's `/gateway/bot` always reports `shards: 1`, so there is no reliable `"auto"`.
 
 Beta caveats worth knowing: DMs and guild-less events only reach shard 0 (library limitation); each child opens its own MySQL/Redis/Lavalink connections and its own dashboard RPC subscription, so the dashboard is currently single-process-first — guilds on other shards won't be reachable from it, and concurrent `storage/stats.json` writes across children can race. The stock `node index.mjs` deployment has none of these issues.
 
@@ -132,7 +132,7 @@ A few things worth knowing:
 - **Audio filters** — bassboost, speed, nightcore and more (applied server-side by NodeLink)
 - **Server settings** — per-guild configuration (prefix, volume, locale, 24/7 channels, …) stored in MySQL
 - **Dashboard backend** — optional Redis-RPC backend that an external web frontend uses to monitor players and control playback remotely
-- **Multi-language support** — English, Arabic, German, Kurdish (Sorani), and Brazilian Portuguese
+- **Multi-language support** — English, Arabic, German, Kurdish (Sorani), Brazilian Portuguese, and Turkish
 - **Configurable logging** — granular control over which log categories appear in the console
 - **Graceful shutdown** — destroys players and closes MySQL/Redis/NodeLink sessions cleanly on SIGINT/SIGTERM/SIGUSR2
 - **Module system** — pluggable module architecture for extending bot functionality (`storage/modules.json`)
@@ -188,12 +188,14 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 
 | Command | Description | Usage | Aliases |
 | :--- | :--- | :--- | :--- |
+| `ping` | Check the bot's latency and connection health | `%ping` | `latency`, `pong` |
 | `settings` | View or change server settings (requires Manage Server) | `%settings set` | `prefix`, `pfx`, `247` |
-| `stats` | Display bot stats (uptime, ping, player count, stored scrobbles) | `%stats` | `info` |
+| `stats` | Display bot stats (uptime, ping, player count, stored scrobbles) | `%stats` | `info`, `botinfo`, `about` |
 | `invite` | Get the bot invite link | `%invite` | `addbot`, `remix` |
 | `support` | Get an invite to the support server | `%support` | `server` |
 | `lastfm` | Link Last.fm, toggle scrobbling, view profile, love/unlove tracks, top artists, play tracks, leaderboard | `%lastfm link` / `%lastfm love` / `%lastfm artists` / `%lastfm lb` | `lf`, `lfm` |
 | `vote` | Check FluxerList voters for the bot | `%vote` | |
+| `logtest` | Send a test entry to your error-log channel (owner) | `%logtest` | |
 | `reload` | Reload commands or modules at runtime (owner) | `%reload` | |
 | `servers` | List servers the bot is in (owner) | `%servers` | |
 | `eval` | Evaluate JavaScript (owner only) | `%eval 1+1` | |
@@ -403,6 +405,7 @@ Key configuration options in `config.json`:
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `token` | string | — | **Required.** Fluxer bot token |
+| `instanceUrl` | string/null | `null` | Base URL of a self-hosted Fluxer instance (leave null for fluxer.app) |
 | `prefix` | string | `%` | Default command prefix |
 | `embedColor` | string | `0xe9196c` | Hex color for embed messages |
 | `owners` | string[] | `[]` | User IDs with owner privileges |
@@ -412,12 +415,16 @@ Key configuration options in `config.json`:
 | `presenceContents` | array | `[]` | Presence status messages to cycle through (strings or objects with `text`/`emoji_name`/`emoji_id`/`activity`) |
 | `mysql` | object | — | **Required.** MySQL connection settings |
 | `nodelink` | object | — | NodeLink connection (`host`, `port`, `password`, `requestTimeout`) |
+| `audio` | object | — | Audio streaming options (`allowLoadstream: false` for zero-re-encode `/v4/trackstream`) |
+| `bilibili` | object | — | Anonymous Bilibili proxy (`enabled`, `bind`, `port`, `advertiseHost`, `remoteProxy`, `remoteSecret`) |
 | `lastfm` | object | — | Last.fm integration (`apiKey`, `apiSecret`, `scrobbleThreshold`, `scrobbleMinMs`) |
 | `fluxerlist` | object | — | FluxerList integration (`apiKey`, `serverId`, `botId`, `serverSlug`, `botSlug`) |
 | `dashboard` | object | — | Dashboard backend: `enabled`, `redis.url` |
+| `errorLogChannel` | object | — | Error log forwarding to Fluxer channel (`enabled`, `channelId`, `forwardWarn`, `forwardInfo`, `startupMessage`) |
 | `radio` | array | `[]` | Custom radio station definitions |
 | `logging` | object | — | Per-category log toggles: `enabled`, `warn`, and 14 categories (`player`, `inactivity`, `aloneCheck`, `voiceState`, `voice247`, `voice`, `mediaplayer`, `commands`, `guild`, `recovery`, `settings`, `lavalink`, `dashboard`, `redis`) |
 | `timers` | object | — | Timing values in ms: `inactivityTimeout`, `aloneCheckInterval`, `aloneCheckDebounce`, `rejoin247Delay`, `leave247RejoinDelay`, `playerUpdateInterval`, `searchSessionTimeout`, `playerSessionTimeout`, `intentionalLeaveTTL` |
+| `sharding` | object | — | Sharding supervisor options (`totalShards`, `shardsPerProcess`, `respawn`, `spawnTimeout`, `spawnDelay`) |
 | `fluxer.js` | object | — | Fluxer.js REST options (`timeout`, `retries`) |
 
 ---
@@ -432,7 +439,7 @@ fluxer/
 │                                #   one child process per shard slice, each running index.mjs
 ├── config_example.json          # Configuration template
 ├── package.json
-├── commands/                    # 37 command entry files (one per command); the three
+├── commands/                    # 39 command entry files (one per command); the three
 │   │   # largest (lastfm, settings, debug) are split into action-family
 │   │   #   modules inside commands/<name>/ subdirectories
 │   ├── lastfm/                 # lastfm action families (account, playback, listening,
