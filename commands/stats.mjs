@@ -18,7 +18,7 @@ import { logger } from "../src/core/Logger.mjs";
 export const command = new CommandBuilder()
     .setName("stats")
     .setDescription("Display stats about the bot like the uptime.", "commands.stats")
-    .addAliases("info")
+    .addAliases("info", "botinfo", "about")
     .setCategory("util");
 
 /** Cache is considered fresh for this long; older values trigger a background refresh. */

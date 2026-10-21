@@ -159,7 +159,7 @@ export class CommandHandler extends EventEmitter {
     }
 
     if (!this.commandNames.includes(args[0].toLowerCase())) {
-      this.replyHandler(this.t(guildId, "cmdHandler.command.invalid", { command: this.format("$prefix$helpCmd", guildId) }), msg);
+      this.replyHandler(this.t(guildId, "cmdHandler.command.invalid", { command: `${prefix}${args[0]}` }), msg);
       return;
     }
     return this.processCommand(this.commands.find(e => e.aliases.includes(args[0].toLowerCase())), args, msg);

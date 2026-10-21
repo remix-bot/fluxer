@@ -56,9 +56,16 @@ const RejoinManager = {
           continue;
         }
 
-        logger.warn(
-            `[${context}] Failed to rejoin channel ${channelId}: ${errMsg} — keeping 24/7 setting intact.`
-        );
+        const failCount = this.rejoinBackoff?.failures?.(channelId) ?? 0;
+        if (failCount >= 2) {
+          logger.voice247(
+              `[${context}] Background rejoin failed for channel ${channelId} (failure #${failCount + 1}): ${errMsg} — keeping 24/7 setting intact.`
+          );
+        } else {
+          logger.warn(
+              `[${context}] Failed to rejoin channel ${channelId}: ${errMsg} — keeping 24/7 setting intact.`
+          );
+        }
         return null;
       }
     }
