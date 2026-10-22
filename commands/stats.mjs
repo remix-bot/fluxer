@@ -371,18 +371,22 @@ function buildEmbed(t, msg, s, pending = []) {
     inline: false,
   });
 
-  const musicParts = [
+  const musicLines = [
     `${t(msg, "responses.stats.players")} — ${field("players", playerVal)}`,
   ];
+  const musicExtra = [];
   if (s.queuedTracks > 0) {
-    musicParts.push(`${tOr(t, msg, "responses.stats.queuedTracks", "🎶  **Queued Tracks**")} — ${field("queuedTracks", num(s.queuedTracks))}`);
+    musicExtra.push(`${tOr(t, msg, "responses.stats.queuedTracks", "🎶  **Queued Tracks**")} — ${field("queuedTracks", num(s.queuedTracks))}`);
   }
   if (s.radios247 > 0) {
-    musicParts.push(`${tOr(t, msg, "responses.stats.radios", "📻  **24/7 Radios**")} — ${field("radios", num(s.radios247))}`);
+    musicExtra.push(`${tOr(t, msg, "responses.stats.radios", "📻  **24/7 Radios**")} — ${field("radios", num(s.radios247))}`);
+  }
+  if (musicExtra.length > 0) {
+    musicLines.push(musicExtra.join("  •  "));
   }
   fields.push({
     name: tOr(t, msg, "responses.stats.categoryMusic", "🎧 Music Activity"),
-    value: musicParts.join("  •  "),
+    value: musicLines.join("\n"),
     inline: false,
   });
 
@@ -398,16 +402,19 @@ function buildEmbed(t, msg, s, pending = []) {
     });
   }
 
-  const perfParts = [
+  const latencyParts = [
     `${t(msg, "responses.stats.ping")} — ${field("ping", `${num(s.ping)}ms`)}`,
   ];
   if (s.gatewayPing >= 0) {
-    perfParts.push(`${tOr(t, msg, "responses.stats.gateway", GATEWAY_FALLBACK_LABEL)} — \`${num(s.gatewayPing)}ms\``);
+    latencyParts.push(`${tOr(t, msg, "responses.stats.gateway", GATEWAY_FALLBACK_LABEL)} — \`${num(s.gatewayPing)}ms\``);
   }
-  perfParts.push(`${t(msg, "responses.stats.uptime")} — \`${s.uptime}\``);
+  const perfLines = [
+    latencyParts.join("  •  "),
+    `${t(msg, "responses.stats.uptime")} — \`${s.uptime}\``,
+  ];
   fields.push({
     name: tOr(t, msg, "responses.stats.categoryPerformance", "⚡ System & Network"),
-    value: perfParts.join("  •  "),
+    value: perfLines.join("\n"),
     inline: false,
   });
 
