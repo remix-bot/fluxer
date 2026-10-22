@@ -419,17 +419,30 @@ function buildEmbed(t, msg, s, pending = []) {
   ];
 
   const authorOptions = { name: t(msg, "responses.stats.title") };
-  if (s.botIcon) authorOptions.iconURL = s.botIcon;
+  if (typeof s.botIcon === "string" && s.botIcon.startsWith("http")) {
+    authorOptions.iconURL = s.botIcon;
+  }
 
   const builder = new EmbedBuilder()
       .setColor(getGlobalColor())
       .setAuthor(authorOptions)
       .setDescription(descLines.join("\n"))
-      .addFields(fields)
       .setFooter({ text: s.footer || t(msg, "responses.stats.title") });
 
-  if (s.botIcon) {
-    builder.setThumbnail(s.botIcon);
+  if (fields.length > 0) {
+    try {
+      builder.addFields(...fields);
+    } catch (_) {
+      if (typeof builder.setFields === "function") {
+        try { builder.setFields(fields); } catch (__) { builder.data.fields = fields; }
+      } else {
+        builder.data.fields = fields;
+      }
+    }
+  }
+
+  if (typeof s.botIcon === "string" && s.botIcon.startsWith("http")) {
+    try { builder.setThumbnail(s.botIcon); } catch (_) {}
   }
 
   if (typeof builder.setTimestamp === "function") builder.setTimestamp();
@@ -453,7 +466,11 @@ export async function run(message) {
   const totals = getTotals(this.client);
   const music  = getMusicStats(this.players?.playerMap);
   const shard  = getShardInfo(this.client, message.guildId ?? message.guild?.id);
-  const botIcon = this.client?.user?.displayAvatarURL?.() || this.client?.user?.avatarURL?.() || null;
+  let botIcon = null;
+  try {
+    const raw = this.client?.user?.displayAvatarURL?.() || this.client?.user?.avatarURL?.();
+    if (typeof raw === "string" && raw.startsWith("http")) botIcon = raw;
+  } catch (_) {}
 
   scheduleBackgroundRefresh(this.client, lastfmEnabled ? lastfm : null);
 
