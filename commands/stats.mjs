@@ -291,13 +291,10 @@ function getShardInfo(client, guildId) {
   try {
     const isSharded = ShardingUtils.isShardedProcess();
     const currentShard = ShardingUtils.shardIdForGuild(client, guildId);
-    if (isSharded) {
-      const totalShards = Number(process.env.FLUXER_SHARD_COUNT) || 1;
-      return totalShards > 1 ? `${currentShard}/${totalShards}` : `${currentShard}`;
-    }
-    return `${currentShard}`;
+    const totalShards = isSharded ? (Number(process.env.FLUXER_SHARD_COUNT) || 1) : 1;
+    return `${currentShard}/${totalShards}`;
   } catch (_) {
-    return "0";
+    return "0/1";
   }
 }
 
