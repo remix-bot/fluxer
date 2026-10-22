@@ -11,6 +11,7 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/ui/index.mjs";
 import { logger } from "../src/core/Logger.mjs";
 import * as ShardingUtils from "../src/utils/ShardingUtils.mjs";
+import { TrackStats } from "../src/music/TrackStats.mjs";
 
 /**
  * @type {CommandBuilder}
@@ -366,6 +367,7 @@ function buildEmbed(t, msg, s, pending = []) {
   const musicLines = [
     `### ${tOr(t, msg, "responses.stats.categoryMusic", "🎧 Music Activity")}`,
     `${t(msg, "responses.stats.players")} — ${field("players", playerVal)}`,
+    `${tOr(t, msg, "responses.stats.tracksPlayed", "▶️  **Tracks Played**")} — ${field("tracksPlayed", num(s.tracksPlayed))}`,
   ];
   if (s.queuedTracks > 0) {
     musicLines.push(`${tOr(t, msg, "responses.stats.queuedTracks", "🎶  **Queued Tracks**")} — ${field("queuedTracks", num(s.queuedTracks))}`);
@@ -437,6 +439,7 @@ export async function run(message) {
   const totals = getTotals(this.client);
   const music  = getMusicStats(this.players?.playerMap);
   const shard  = getShardInfo(this.client, message.guildId ?? message.guild?.id);
+  const tracksPlayed = await TrackStats.getTracksPlayed();
   let botIcon = null;
   try {
     const raw = this.client?.user?.displayAvatarURL?.() || this.client?.user?.avatarURL?.();
@@ -460,6 +463,7 @@ export async function run(message) {
     playingCount:  music.playingCount,
     queuedTracks:  music.queuedTracks,
     radios247:     music.radios247,
+    tracksPlayed,
     shard,
     botIcon,
     scrobbleCount: lastfmEnabled ? (cache.scrobbles ?? 0) : 0,
@@ -505,6 +509,7 @@ export async function run(message) {
 
       const fresh      = getTotals(this.client);
       const freshMusic = getMusicStats(this.players?.playerMap);
+      const freshTracks = await TrackStats.getTracksPlayed();
       const fill  = {
         ...embedData,
         guildCount:    fresh.guildCount,
@@ -513,6 +518,7 @@ export async function run(message) {
         playingCount:  freshMusic.playingCount,
         queuedTracks:  freshMusic.queuedTracks,
         radios247:     freshMusic.radios247,
+        tracksPlayed:  freshTracks,
         scrobbleCount: lastfmEnabled ? (cache.scrobbles ?? 0) : 0,
         linkedUsers:   lastfmEnabled ? (cache.linkedUsers ?? 0) : 0,
         ping:          lastPing ?? 0,

@@ -13,6 +13,7 @@
 import { cleanId } from "../utils/Utils.mjs";
 import { getMessageGuildId } from "../ui/index.mjs";
 import { Dashboard } from "../dashboard/Dashboard.mjs";
+import { TrackStats } from "./TrackStats.mjs";
 
 /** @private @param {Player} player @param {object|null} [fallbackChannel=null] @returns {string} Cleaned guild ID. */
 function getPlayerGuildId(player, fallbackChannel = null) {
@@ -94,6 +95,10 @@ const PlayerEventsMixin = {
       emit("startplay", Dashboard.convertVideo(song ?? player.queue?.current));
       emit("streamStartPlay", Date.now());
       this.dashboard.playerUpdate({ type: "startplay" }, player);
+
+      if (!player._radioReconnects) {
+        TrackStats.increment();
+      }
 
       if (this._lastfm?.enabled && song) {
         this._handleLastFmStartPlay(player, song);

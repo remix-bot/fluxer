@@ -747,7 +747,8 @@
       "build": "🔧  **Build**",
       "lastRestart": "🪛  **Last restart**",
       "supportKofi": "☕ [Support us on Ko-fi](https://ko-fi.com/remixbot)",
-      "community": "💬 [Community](https://fluxer.gg/Remix)"
+      "community": "💬 [Community](https://fluxer.gg/Remix)",
+      "tracksPlayed": "▶️  **Tracks Played**"
     },
     "support": {
       "title": "💬 Support",

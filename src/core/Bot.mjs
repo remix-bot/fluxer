@@ -30,6 +30,7 @@ import { GatewayHandler } from "../voice/gateway/GatewayHandler.mjs";
 import { LastFmManager } from "../services/lastfm/LastFmManager.mjs";
 import { FluxerListManager } from "../services/FluxerListManager.mjs";
 import { TrackOptionsManager } from "../services/TrackOptionsManager.mjs";
+import { TrackStats } from "../music/TrackStats.mjs";
 import { configureBilibili } from "../music/bilibili/index.mjs";
 import { configureAudio } from "../music/audio/AudioSettings.mjs";
 import { applyMixins } from "../utils/mixins.mjs";
@@ -145,6 +146,9 @@ class Remix {
       redis: config.dashboard?.redis,
       mysql: sharedPromisePool,
     });
+    if (this.dashboard?.redis) {
+      TrackStats.setRedis(this.dashboard.redis);
+    }
 
     const presenceContents = config.presenceContents ?? [];
     const presenceInterval = config.presenceInterval ?? 30_000;
@@ -685,6 +689,10 @@ class Remix {
     } catch (e) {
       logger.warn("[Shutdown] Lavalink cleanup error:", e?.message);
     }
+
+    try {
+      TrackStats.save();
+    } catch (_) {}
 
     // 4. Close Redis if dashboard enabled
     try {
