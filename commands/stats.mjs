@@ -360,63 +360,67 @@ function buildEmbed(t, msg, s, pending = []) {
 
   const fields = [];
 
-  const overviewLines = [
+  const overviewParts = [
     `${t(msg, "responses.stats.servers")} — ${field("guilds", num(s.guildCount))}`,
     `${t(msg, "responses.stats.users")} — ${field("users", num(s.userCount))}`,
     `${tOr(t, msg, "responses.stats.shard", "🧩  **Shard**")} — \`${s.shard}\``,
   ];
   fields.push({
     name: tOr(t, msg, "responses.stats.categoryOverview", "📊 Overview"),
-    value: overviewLines.join("\n"),
-    inline: true,
+    value: overviewParts.join("  •  "),
+    inline: false,
   });
 
-  const musicLines = [
+  const musicParts = [
     `${t(msg, "responses.stats.players")} — ${field("players", playerVal)}`,
   ];
   if (s.queuedTracks > 0) {
-    musicLines.push(`${tOr(t, msg, "responses.stats.queuedTracks", "🎶  **Queued Tracks**")} — ${field("queuedTracks", num(s.queuedTracks))}`);
+    musicParts.push(`${tOr(t, msg, "responses.stats.queuedTracks", "🎶  **Queued Tracks**")} — ${field("queuedTracks", num(s.queuedTracks))}`);
   }
   if (s.radios247 > 0) {
-    musicLines.push(`${tOr(t, msg, "responses.stats.radios", "📻  **24/7 Radios**")} — ${field("radios", num(s.radios247))}`);
+    musicParts.push(`${tOr(t, msg, "responses.stats.radios", "📻  **24/7 Radios**")} — ${field("radios", num(s.radios247))}`);
   }
   fields.push({
     name: tOr(t, msg, "responses.stats.categoryMusic", "🎧 Music Activity"),
-    value: musicLines.join("\n"),
-    inline: true,
+    value: musicParts.join("  •  "),
+    inline: false,
   });
 
   if (s.lastfmEnabled) {
-    const lastfmLines = [
+    const lastfmParts = [
       `${t(msg, "responses.stats.scrobbles")} — ${field("scrobbles", num(s.scrobbleCount))}`,
       `${t(msg, "responses.stats.linkedUsers")} — ${field("linkedUsers", num(s.linkedUsers))}`,
     ];
     fields.push({
       name: tOr(t, msg, "responses.stats.categoryLastfm", "🎵 Last.fm"),
-      value: lastfmLines.join("\n"),
-      inline: true,
+      value: lastfmParts.join("  •  "),
+      inline: false,
     });
   }
 
-  const perfLines = [
+  const perfParts = [
     `${t(msg, "responses.stats.ping")} — ${field("ping", `${num(s.ping)}ms`)}`,
   ];
   if (s.gatewayPing >= 0) {
-    perfLines.push(`${tOr(t, msg, "responses.stats.gateway", GATEWAY_FALLBACK_LABEL)} — \`${num(s.gatewayPing)}ms\``);
+    perfParts.push(`${tOr(t, msg, "responses.stats.gateway", GATEWAY_FALLBACK_LABEL)} — \`${num(s.gatewayPing)}ms\``);
   }
-  perfLines.push(`${t(msg, "responses.stats.uptime")} — \`${s.uptime}\``);
+  perfParts.push(`${t(msg, "responses.stats.uptime")} — \`${s.uptime}\``);
   fields.push({
     name: tOr(t, msg, "responses.stats.categoryPerformance", "⚡ System & Network"),
-    value: perfLines.join("\n"),
-    inline: true,
+    value: perfParts.join("  •  "),
+    inline: false,
   });
 
-  const descLines = [
+  const bottomLines = [
     `${t(msg, "responses.stats.build")} — [\`${s.comHash}\`](${s.comLink})` +
       (s.reason ? `  •  ${t(msg, "responses.stats.lastRestart")} — \`${s.reason}\`` : ""),
-    ``,
     `${t(msg, "responses.stats.supportKofi")}  •  ${t(msg, "responses.stats.community")}`,
   ];
+  fields.push({
+    name: "\u200B",
+    value: bottomLines.join("\n"),
+    inline: false,
+  });
 
   const authorOptions = { name: t(msg, "responses.stats.title") };
   if (typeof s.botIcon === "string" && s.botIcon.startsWith("http")) {
@@ -426,7 +430,6 @@ function buildEmbed(t, msg, s, pending = []) {
   const builder = new EmbedBuilder()
       .setColor(getGlobalColor())
       .setAuthor(authorOptions)
-      .setDescription(descLines.join("\n"))
       .setFooter({ text: s.footer || t(msg, "responses.stats.title") });
 
   if (fields.length > 0) {
