@@ -630,7 +630,8 @@
       "build": "🔧  **Build**",
       "lastRestart": "🪛  **Letzter Neustart**",
       "supportKofi": "☕ [Unterstütze uns auf Ko-fi](https://ko-fi.com/remixbot)",
-      "community": "💬 [Community](https://fluxer.gg/Remix)"
+      "community": "💬 [Community](https://fluxer.gg/Remix)",
+      "tracksPlayed": "▶️  **Gespielte Titel**"
     },
     "support": {
       "title": "💬 Support",

@@ -736,7 +736,8 @@
       "build": "🔧  **Yapı**",
       "lastRestart": "🪛  **Son yeniden başlatma**",
       "supportKofi": "☕ [Bizi Ko-fi'de destekleyin](https://ko-fi.com/remixbot)",
-      "community": "💬 [Topluluk](https://fluxer.gg/Remix)"
+      "community": "💬 [Topluluk](https://fluxer.gg/Remix)",
+      "tracksPlayed": "▶️  **Oynatılan Parçalar**"
     },
     "support": {
       "title": "💬 Destek",

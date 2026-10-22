@@ -630,7 +630,8 @@
       "build": "🔧  **بەرنامە**",
       "lastRestart": "🪛  **دوایین دەستپێکردنەوە**",
       "supportKofi": "☕ [پشتگیری ئێمە لە Ko-fi](https://ko-fi.com/remixbot)",
-      "community": "💬 [کۆمەڵگە](https://fluxer.gg/Remix)"
+      "community": "💬 [کۆمەڵگە](https://fluxer.gg/Remix)",
+      "tracksPlayed": "▶️  **گۆرانییە لێدراوەکان**"
     },
     "support": {
       "title": "💬 پشتگیری",
