@@ -611,6 +611,10 @@
     },
     "stats": {
       "title": "Bot de Música Remix",
+      "categoryOverview": "📊 Visão Geral",
+      "categoryMusic": "🎧 Atividade Musical",
+      "categoryLastfm": "🎵 Last.fm",
+      "categoryPerformance": "⚡ Sistema e Rede",
       "servers": "📂  **Servidores**",
       "users": "👥  **Usuários**",
       "players": "🎧  **Players**",

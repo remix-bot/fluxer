@@ -516,7 +516,6 @@ class Player extends EventEmitter {
       this._lastConnectedAt = Date.now();
       this.leaving    = false;
 
-      // Fail-fast permission check before initiating gateway voice handshake
       try {
         const me = channel.guild?.members?.me ?? (this.client?.user?.id ? channel.guild?.members?.get?.(this.client.user.id) : null);
         if (me) {

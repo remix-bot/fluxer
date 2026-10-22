@@ -320,6 +320,8 @@ function tOr(t, msg, key, fallback, vars = {}) {
 
 /**
  * Build the stats embed with all bot information.
+ * Uses a clean multi-column grid layout (addFields) with category sections
+ * and a top-right bot avatar thumbnail.
  * @private
  * @param {Function} t - Translation function.
  * @param {object} msg - The command message wrapper.
@@ -331,6 +333,7 @@ function tOr(t, msg, key, fallback, vars = {}) {
  * @param {number} s.queuedTracks - Total tracks across all player queues.
  * @param {number} s.radios247 - Number of active 24/7 radio sessions.
  * @param {string} s.shard - Shard assignment string.
+ * @param {string|null} [s.botIcon] - Bot avatar URL.
  * @param {number} s.scrobbleCount - Total Last.fm scrobbles.
  * @param {number} s.linkedUsers - Number of Last.fm linked users.
  * @param {number} s.ping - Bot response ping in ms (REST reply round trip).
@@ -355,40 +358,79 @@ function buildEmbed(t, msg, s, pending = []) {
         })
       : num(s.playerCount);
 
-  const description = [
+  const fields = [];
+
+  const overviewLines = [
     `${t(msg, "responses.stats.servers")} — ${field("guilds", num(s.guildCount))}`,
     `${t(msg, "responses.stats.users")} — ${field("users", num(s.userCount))}`,
-    `${t(msg, "responses.stats.players")} — ${field("players", playerVal)}`,
-    `${tOr(t, msg, "responses.stats.queuedTracks", "🎶  **Queued Tracks**")} — ${field("queuedTracks", num(s.queuedTracks))}`,
-    s.radios247 > 0 ? `${tOr(t, msg, "responses.stats.radios", "📻  **24/7 Radios**")} — ${field("radios", num(s.radios247))}` : null,
+    `${tOr(t, msg, "responses.stats.shard", "🧩  **Shard**")} — \`${s.shard}\``,
   ];
+  fields.push({
+    name: tOr(t, msg, "responses.stats.categoryOverview", "📊 Overview"),
+    value: overviewLines.join("\n"),
+    inline: true,
+  });
+
+  const musicLines = [
+    `${t(msg, "responses.stats.players")} — ${field("players", playerVal)}`,
+  ];
+  if (s.queuedTracks > 0) {
+    musicLines.push(`${tOr(t, msg, "responses.stats.queuedTracks", "🎶  **Queued Tracks**")} — ${field("queuedTracks", num(s.queuedTracks))}`);
+  }
+  if (s.radios247 > 0) {
+    musicLines.push(`${tOr(t, msg, "responses.stats.radios", "📻  **24/7 Radios**")} — ${field("radios", num(s.radios247))}`);
+  }
+  fields.push({
+    name: tOr(t, msg, "responses.stats.categoryMusic", "🎧 Music Activity"),
+    value: musicLines.join("\n"),
+    inline: true,
+  });
 
   if (s.lastfmEnabled) {
-    description.push(
-        `${t(msg, "responses.stats.scrobbles")} — ${field("scrobbles", num(s.scrobbleCount))}`,
-        `${t(msg, "responses.stats.linkedUsers")} — ${field("linkedUsers", num(s.linkedUsers))}`,
-    );
+    const lastfmLines = [
+      `${t(msg, "responses.stats.scrobbles")} — ${field("scrobbles", num(s.scrobbleCount))}`,
+      `${t(msg, "responses.stats.linkedUsers")} — ${field("linkedUsers", num(s.linkedUsers))}`,
+    ];
+    fields.push({
+      name: tOr(t, msg, "responses.stats.categoryLastfm", "🎵 Last.fm"),
+      value: lastfmLines.join("\n"),
+      inline: true,
+    });
   }
 
-  description.push(
-      `${t(msg, "responses.stats.ping")} — ${field("ping", `${num(s.ping)}ms`)}`,
-      s.gatewayPing >= 0 ? `${tOr(t, msg, "responses.stats.gateway", GATEWAY_FALLBACK_LABEL)} — \`${num(s.gatewayPing)}ms\`` : null,
-      `${tOr(t, msg, "responses.stats.shard", "🧩  **Shard**")} — \`${s.shard}\``,
-      `${t(msg, "responses.stats.uptime")} — \`${s.uptime}\``,
-      `${t(msg, "responses.stats.build")} — [\`${s.comHash}\`](${s.comLink})`,
-      s.reason ? `${t(msg, "responses.stats.lastRestart")} — \`${s.reason}\`` : null,
-      ``,
-      t(msg, "responses.stats.supportKofi"),
-      t(msg, "responses.stats.community"),
-  );
+  const perfLines = [
+    `${t(msg, "responses.stats.ping")} — ${field("ping", `${num(s.ping)}ms`)}`,
+  ];
+  if (s.gatewayPing >= 0) {
+    perfLines.push(`${tOr(t, msg, "responses.stats.gateway", GATEWAY_FALLBACK_LABEL)} — \`${num(s.gatewayPing)}ms\``);
+  }
+  perfLines.push(`${t(msg, "responses.stats.uptime")} — \`${s.uptime}\``);
+  fields.push({
+    name: tOr(t, msg, "responses.stats.categoryPerformance", "⚡ System & Network"),
+    value: perfLines.join("\n"),
+    inline: true,
+  });
 
-  const desc = description.filter(l => l !== null).join("\n");
+  const descLines = [
+    `${t(msg, "responses.stats.build")} — [\`${s.comHash}\`](${s.comLink})` +
+      (s.reason ? `  •  ${t(msg, "responses.stats.lastRestart")} — \`${s.reason}\`` : ""),
+    ``,
+    `${t(msg, "responses.stats.supportKofi")}  •  ${t(msg, "responses.stats.community")}`,
+  ];
+
+  const authorOptions = { name: t(msg, "responses.stats.title") };
+  if (s.botIcon) authorOptions.iconURL = s.botIcon;
 
   const builder = new EmbedBuilder()
       .setColor(getGlobalColor())
-      .setAuthor({ name: t(msg, "responses.stats.title") })
-      .setDescription(desc)
+      .setAuthor(authorOptions)
+      .setDescription(descLines.join("\n"))
+      .addFields(fields)
       .setFooter({ text: s.footer || t(msg, "responses.stats.title") });
+
+  if (s.botIcon) {
+    builder.setThumbnail(s.botIcon);
+  }
 
   if (typeof builder.setTimestamp === "function") builder.setTimestamp();
   return builder;
@@ -411,6 +453,7 @@ export async function run(message) {
   const totals = getTotals(this.client);
   const music  = getMusicStats(this.players?.playerMap);
   const shard  = getShardInfo(this.client, message.guildId ?? message.guild?.id);
+  const botIcon = this.client?.user?.displayAvatarURL?.() || this.client?.user?.avatarURL?.() || null;
 
   scheduleBackgroundRefresh(this.client, lastfmEnabled ? lastfm : null);
 
@@ -430,6 +473,7 @@ export async function run(message) {
     queuedTracks:  music.queuedTracks,
     radios247:     music.radios247,
     shard,
+    botIcon,
     scrobbleCount: lastfmEnabled ? (cache.scrobbles ?? 0) : 0,
     linkedUsers:   lastfmEnabled ? (cache.linkedUsers ?? 0) : 0,
     lastfmEnabled,

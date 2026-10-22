@@ -611,6 +611,10 @@
     },
     "stats": {
       "title": "بۆتی موزیکی Remix",
+      "categoryOverview": "📊 کورتە",
+      "categoryMusic": "🎧 چالاکی موزیک",
+      "categoryLastfm": "🎵 Last.fm",
+      "categoryPerformance": "⚡ سیستەم و هێڵ",
       "servers": "📂  **سێرڤەرەکان**",
       "users": "👥  **بەکارهێنەران**",
       "players": "🎧  **پەخشکەرەکان**",

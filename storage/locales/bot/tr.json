@@ -717,6 +717,10 @@
     },
     "stats": {
       "title": "Remix Müzik Botu",
+      "categoryOverview": "📊 Genel Bakış",
+      "categoryMusic": "🎧 Müzik Aktivitesi",
+      "categoryLastfm": "🎵 Last.fm",
+      "categoryPerformance": "⚡ Sistem ve Ağ",
       "servers": "📂  **Sunucular**",
       "users": "👥  **Kullanıcılar**",
       "players": "🎧  **Oynatıcılar**",

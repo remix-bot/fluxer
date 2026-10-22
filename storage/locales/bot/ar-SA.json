@@ -611,6 +611,10 @@
     },
     "stats": {
       "title": "بوت Remix الموسيقي",
+      "categoryOverview": "📊 نظرة عامة",
+      "categoryMusic": "🎧 النشاط الموسيقي",
+      "categoryLastfm": "🎵 Last.fm",
+      "categoryPerformance": "⚡ النظام والشبكة",
       "servers": "📂  **الخوادم**",
       "users": "👥  **المستخدمون**",
       "players": "🎧  **المشغّلات**",
