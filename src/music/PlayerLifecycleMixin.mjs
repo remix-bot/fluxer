@@ -557,7 +557,7 @@ const PlayerLifecycleMixin = {
       });
     });
 
-    const statusMsg = await message.reply(this._t(message, "responses.join.joining"));
+    const statusMsg = await message.reply(this._t(message, "responses.join.joining")).catch(() => null);
     try {
       await player.join(cid);
 
@@ -565,7 +565,7 @@ const PlayerLifecycleMixin = {
       this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
       this._pendingJoins.delete(cleanChannelId);
 
-      await statusMsg.edit(this._t(message, "responses.join.joined", { channel: cid }));
+      await statusMsg?.edit?.(this._t(message, "responses.join.joined", { channel: cid })).catch(() => {});
 
       const guildId = cleanId(channel.guildId ?? getMessageGuildId(message));
       this._restorePlayerVolume(player, guildId);
@@ -584,7 +584,7 @@ const PlayerLifecycleMixin = {
 
           this.playerMap.set(cleanChannelId, player);
           this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
-          await statusMsg.edit(this._t(message, "responses.join.joined", { channel: cid }));
+          await statusMsg?.edit?.(this._t(message, "responses.join.joined", { channel: cid })).catch(() => {});
 
           const retryGuildId = cleanId(channel.guildId ?? getMessageGuildId(message));
           this._restorePlayerVolume(player, retryGuildId);
@@ -602,7 +602,7 @@ const PlayerLifecycleMixin = {
       } else {
         errorMsg = this._t(message, "responses.join.joinFailed", { error: err.message });
       }
-      await statusMsg.edit(errorMsg).catch(() => {});
+      await statusMsg?.edit?.(errorMsg).catch(() => {});
       this.playerMap.delete(cleanChannelId);
       this._unindexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
       player.destroy();
