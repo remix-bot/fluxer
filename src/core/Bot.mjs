@@ -233,10 +233,10 @@ class Remix {
           ),
           false,
           {
-            icon_url: msg.channel.channel.guild?.icon
-                ? `https://cdn.fluxer.app/icons/${msg.channel.channel.guild.id}/${msg.channel.channel.guild.icon}.webp`
+            icon_url: (msg.channel?.channel?.guild?.icon || msg.server?.icon)
+                ? `https://cdn.fluxer.app/icons/${msg.channel?.channel?.guild?.id ?? msg.server?.id}/${msg.channel?.channel?.guild?.icon ?? msg.server?.icon}.webp`
                 : null,
-            title:    msg.channel.channel.guild?.name        ?? null,
+            title:    msg.channel?.channel?.guild?.name ?? msg.server?.name ?? null,
           }
       );
     };
