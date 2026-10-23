@@ -253,11 +253,13 @@ export async function run(message, data) {
     const parsed = parseLastFmUrl(lfUrl);
 
     if (parsed && parsed.track) {
+      const requester = message.author?.id ?? message.authorId ?? null;
       const lastfmTrackMeta = {
         artist: parsed.artist,
         name: parsed.track,
         source: "lastfm",
         url: parsed.url,
+        requester,
       };
 
       const p = await this.getPlayer(message, true, true, true);
@@ -280,6 +282,7 @@ export async function run(message, data) {
     }
 
     if (parsed && !parsed.track) {
+      const requester = message.author?.id ?? message.authorId ?? null;
       const p = await this.getPlayer(message, true, true, true);
       if (!p) return;
 
@@ -290,7 +293,7 @@ export async function run(message, data) {
       try { statusMsg = await message.reply({ embeds: [searchEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
 
       const playQuery = parsed.artist;
-      const messages = p.play(playQuery, false, provider === "lastfm" || provider === "lf" ? "yt" : provider);
+      const messages = p.play(playQuery, false, provider === "lastfm" || provider === "lf" ? "yt" : provider, { requester });
       messages.on("message", d => {
         const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
         if (statusMsg) { statusMsg.edit({ embeds: [embed] }).catch(() => {}); }
@@ -374,11 +377,13 @@ export async function run(message, data) {
           }
         }
 
+        const requester = message.author?.id ?? message.authorId ?? null;
         const lastfmTrackMeta = {
           artist: searchResult.artist,
           name: searchResult.name,
           source: "lastfm",
           url: searchResult.url ?? "",
+          requester,
         };
 
         const playProvider = resolveProvider && resolveProvider !== "lf" && resolveProvider !== "lastfm"
@@ -400,14 +405,18 @@ export async function run(message, data) {
     }
   }
 
+  const requester = message.author?.id ?? message.authorId ?? null;
   const resolvedProvider =
     provider === "lastfm" || provider === "lf"
       ? (flagProvider && flagProvider !== "lastfm" && flagProvider !== "lf" ? flagProvider : "yt")
       : provider;
-  const lastfmTrackMeta =
+  const parsedLastfmTrackMeta =
     provider === "lastfm" || provider === "lf"
       ? parseLastFmTrackQuery(query)
       : null;
+  const lastfmTrackMeta = parsedLastfmTrackMeta
+    ? { ...parsedLastfmTrackMeta, requester }
+    : { requester };
 
   const p = await this.getPlayer(message, true, true, true);
   if (!p) return;
@@ -424,11 +433,11 @@ export async function run(message, data) {
     logger.warn("[Play] Error:", err?.message);
   }
 
-  const playQuery = lastfmTrackMeta
-    ? `${lastfmTrackMeta.name} ${lastfmTrackMeta.artist}`.trim()
+  const playQuery = parsedLastfmTrackMeta
+    ? `${parsedLastfmTrackMeta.name} ${parsedLastfmTrackMeta.artist}`.trim()
     : query;
 
-  const messages = p.play(playQuery, false, resolvedProvider);
+  const messages = p.play(playQuery, false, resolvedProvider, lastfmTrackMeta);
   messages.on("message", d => {
     const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
     if (statusMsg) {

@@ -141,6 +141,8 @@ class Remix {
     const sharedPool = getSharedMysqlPool(config.mysql);
     const sharedPromisePool = getSharedPromisePool(config.mysql);
 
+    TrackStats.setPool(sharedPromisePool);
+
     this.dashboard = new Dashboard(this, {
       enabled: config.dashboard?.enabled,
       redis: config.dashboard?.redis,

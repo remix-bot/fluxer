@@ -333,6 +333,7 @@ const SearchMixin = {
         url:  info.uri    ?? null,
       },
       artists: null,
+      requester: trackMeta?.requester ?? trackMeta?.userId ?? null,
     };
     if (trackMeta) {
       video.artist          = trackMeta.artist ?? null;

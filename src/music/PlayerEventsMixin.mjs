@@ -97,7 +97,12 @@ const PlayerEventsMixin = {
       this.dashboard.playerUpdate({ type: "startplay" }, player);
 
       if (!player._radioReconnects) {
-        TrackStats.increment();
+        let userId = song?.requester ?? null;
+        if (!userId) {
+          const humans = player._getHumanParticipantIdentities?.() ?? [];
+          if (humans.length === 1) userId = humans[0];
+        }
+        TrackStats.increment(userId);
       }
 
       if (this._lastfm?.enabled && song) {
