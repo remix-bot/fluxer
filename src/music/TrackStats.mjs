@@ -39,7 +39,14 @@ class TrackStatsManager {
 
   setRedis(redisHandler) {
     this._redis = redisHandler;
-    this._syncRedis();
+    const client = this._redis?.client;
+    if (client) {
+      if (client.isOpen) {
+        this._syncRedis();
+      } else {
+        client.on("ready", () => this._syncRedis());
+      }
+    }
   }
 
   async _syncRedis() {
@@ -47,13 +54,19 @@ class TrackStatsManager {
     if (!client || !client.isOpen) return;
 
     try {
-      await client.set(REDIS_KEY, String(this._tracksPlayed), { NX: true });
       const val = await client.get(REDIS_KEY);
       if (val != null) {
         const parsed = parseInt(val, 10);
         if (Number.isFinite(parsed)) {
-          this._tracksPlayed = Math.max(this._tracksPlayed, parsed);
+          if (parsed > this._tracksPlayed) {
+            this._tracksPlayed = parsed;
+            this.save();
+          } else if (this._tracksPlayed > parsed) {
+            await client.set(REDIS_KEY, String(this._tracksPlayed));
+          }
         }
+      } else {
+        await client.set(REDIS_KEY, String(this._tracksPlayed));
       }
     } catch (e) {
       logger.warn("[TrackStats] Redis sync error:", e?.message);
@@ -103,9 +116,14 @@ class TrackStatsManager {
         if (val != null) {
           const parsed = parseInt(val, 10);
           if (Number.isFinite(parsed)) {
-            this._tracksPlayed = Math.max(this._tracksPlayed, parsed);
+            if (parsed > this._tracksPlayed) {
+              this._tracksPlayed = parsed;
+              this._scheduleSave();
+            }
             return this._tracksPlayed;
           }
+        } else {
+          await client.set(REDIS_KEY, String(this._tracksPlayed));
         }
       } catch (_) {}
     }
