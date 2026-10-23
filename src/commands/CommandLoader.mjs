@@ -44,31 +44,23 @@ export class CommandLoader {
     this.commands.on("run", (data) => {
       if (!this.runnables.has(data.command.uid)) return;
       const runFc = this.runnables.get(data.command.uid);
-      const isPermError = (err) => {
-        return err?.code === "MISSING_PERMISSIONS" ||
-               err?.code === "COMMUNICATION_DISABLED" ||
-               err?.statusCode === 403;
-      };
       const sendErrorReply = (id) => {
         Promise.resolve(data.message.reply("An error occurred. Error id: `#" + id + "`"))
           .catch(err => logger.warn("[CommandHandler] Failed to send error-reply; error id #" + id + ":", err?.message));
       };
-      const handleCmdError = (e) => {
-        if (isPermError(e)) {
-          logger.warn(`[CommandHandler] Missing permissions in channel ${data.message?.channelId ?? data.message?.channel?.id}: ${e.code ?? e.message}`);
-          return;
-        }
-        const id = Utils.uid();
-        logger.error("Error running command; error id #" + id, e);
-        sendErrorReply(id);
-      };
       try {
         const result = runFc.call(this.context, data.message, data);
         if (result && typeof result.catch === "function") {
-          result.catch(handleCmdError);
+          result.catch(e => {
+            const id = Utils.uid();
+            logger.error("Error running command; error id #" + id, e);
+            sendErrorReply(id);
+          });
         }
       } catch (e) {
-        handleCmdError(e);
+        const id = Utils.uid();
+        logger.error("Error running command; error id #" + id, e);
+        sendErrorReply(id);
       }
     });
   }

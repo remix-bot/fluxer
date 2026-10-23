@@ -70,10 +70,7 @@ export class CommandHandler extends EventEmitter {
     this.helpHandler = new HelpHandler(this);
     this.helpCommand = "help";
     this.replyHandler = (message, msg) => {
-      const guildId = msg?.channel?.guildId ?? msg?.channel?.channel?.guildId ?? msg?.guildId ?? msg?.message?.guildId ?? null;
-      Promise.resolve(msg.reply(this.format(message, guildId))).catch(err => {
-        logger.warn("[CommandHandler] Failed to reply:", err?.message);
-      });
+      msg.reply(this.format(message, msg.channel.channel.guildId));
     };
     this.messages.onMessage(this.messageHandler.bind(this));
   }
@@ -272,10 +269,7 @@ export class CommandHandler extends EventEmitter {
     if (cmd.requirements.length > 0 && !external) {
       if (!this.assertRequirements(cmd, msg)) return;
     }
-    if (previous === false) {
-      const prevGuildId = msg.channel?.guildId ?? msg.channel?.channel?.guildId ?? msg.message?.guildId ?? null;
-      previous = this.format("$prefix" + cmd.name, prevGuildId);
-    }
+    if (previous === false) previous = this.format("$prefix" + cmd.name, msg.channel?.channel?.guildId);
     if (!external) this.emit("command", { command: cmd, message: msg });
 
     if (cmd.subcommands.length !== 0) {

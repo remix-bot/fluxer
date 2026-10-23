@@ -395,15 +395,7 @@ export class MessageHandler {
     } else {
       opts = { ...message };
     }
-    try {
-      return new Message(await replyingTo.reply(opts, { ping: false }), this);
-    } catch (err) {
-      if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
-        logger.warn(`[MessageHandler] Cannot reply in channel ${replyingTo.channelId ?? replyingTo.channel?.id}: ${err.code ?? err.message}`);
-        return null;
-      }
-      throw err;
-    }
+    return new Message(await replyingTo.reply(opts, { ping: false }), this);
   }
 
   /**
@@ -417,15 +409,7 @@ export class MessageHandler {
     if (!(await this.assertPermissions(["SendMessages", "EmbedLinks"], replyingTo))) return null;
 
     if (typeof message === "object" && Array.isArray(message.embeds)) {
-      try {
-        return new Message(await replyingTo.reply(message, { ping: false }), this);
-      } catch (err) {
-        if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
-          logger.warn(`[MessageHandler] Cannot replyEmbed in channel ${replyingTo.channelId ?? replyingTo.channel?.id}: ${err.code ?? err.message}`);
-          return null;
-        }
-        throw err;
-      }
+      return new Message(await replyingTo.reply(message, { ping: false }), this);
     }
 
     options = {
@@ -439,15 +423,7 @@ export class MessageHandler {
       const { embedText, ...rest } = message;
       payload = { ...payload, ...rest };
     }
-    try {
-      return new Message(await replyingTo.reply(payload, { ping: false }), this);
-    } catch (err) {
-      if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
-        logger.warn(`[MessageHandler] Cannot replyEmbed in channel ${replyingTo.channelId ?? replyingTo.channel?.id}: ${err.code ?? err.message}`);
-        return null;
-      }
-      throw err;
-    }
+    return new Message(await replyingTo.reply(payload, { ping: false }), this);
   }
 
   /**
@@ -467,15 +443,7 @@ export class MessageHandler {
     } else {
       opts = message;
     }
-    try {
-      return new Message(await channel.send(opts), this);
-    } catch (err) {
-      if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
-        logger.warn(`[MessageHandler] Cannot sendMessage in channel ${channel.id}: ${err.code ?? err.message}`);
-        return null;
-      }
-      throw err;
-    }
+    return new Message(await channel.send(opts), this);
   }
 
   /**
@@ -490,15 +458,7 @@ export class MessageHandler {
       return this.sendMessage(channel, typeof content === "string" ? content : content?.embedText ?? "");
     }
     if (typeof content === "object" && Array.isArray(content.embeds)) {
-      try {
-        return new Message(await channel.send(content), this);
-      } catch (err) {
-        if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
-          logger.warn(`[MessageHandler] Cannot sendEmbed in channel ${channel.id}: ${err.code ?? err.message}`);
-          return null;
-        }
-        throw err;
-      }
+      return new Message(await channel.send(content), this);
     }
     const text = (typeof content === "object") ? content.embedText : content;
     const payload = this.#createEmbed(text, embedOptions);
@@ -506,15 +466,7 @@ export class MessageHandler {
       const { embedText, ...rest } = content;
       Object.assign(payload, rest);
     }
-    try {
-      return new Message(await channel.send(payload), this);
-    } catch (err) {
-      if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
-        logger.warn(`[MessageHandler] Cannot sendEmbed in channel ${channel.id}: ${err.code ?? err.message}`);
-        return null;
-      }
-      throw err;
-    }
+    return new Message(await channel.send(payload), this);
   }
 
   /**
@@ -548,11 +500,6 @@ export class MessageHandler {
       } catch (err) {
         if (err.code === ErrorCodes.MessageNotFound || String(err?.message ?? "").includes("Message wasn't found")) {
           logger.warn("[MessageHandler] editEmbed: Message no longer exists, skipping edit.");
-          return null;
-        }
-
-        if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
-          logger.warn(`[MessageHandler] editEmbed: missing permissions or communication disabled: ${err.code ?? err.message}`);
           return null;
         }
 
