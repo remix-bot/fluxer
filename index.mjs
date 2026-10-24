@@ -43,6 +43,15 @@ const isBenignAudioStopRace = (err) =>
 
 /**
  * @param {Error} err - The error to check.
+ * @returns {boolean} True if the error is a benign demuxer stream error.
+ */
+const isBenignDemuxerError = (err) => {
+  const msg = String(err?.message ?? err ?? "");
+  return msg.includes("Did not find the EBML tag") || msg.includes("EBML tag");
+};
+
+/**
+ * @param {Error} err - The error to check.
  * @returns {boolean} True if the error is the stream abort race.
  */
 const isBenignStreamAbortRace = (err) =>
@@ -107,6 +116,14 @@ process.on("uncaughtException", async (err, origin) => {
     }
     return;
   }
+  if (isBenignDemuxerError(err)) {
+    const now = Date.now();
+    if (now - _lastAudioRaceLog > WS_CRASH_LOG_COOLDOWN) {
+      _lastAudioRaceLog = now;
+      logger.warn("[Error_Handling] Suppressed corrupt audio stream demuxer error (" + (err?.message ?? err) + ") — track will be skipped/retried.");
+    }
+    return;
+  }
   if (isBenignStreamAbortRace(err)) {
     const now = Date.now();
     if (now - _lastAudioRaceLog > WS_CRASH_LOG_COOLDOWN) {
@@ -132,6 +149,7 @@ process.on("uncaughtException", async (err, origin) => {
 process.on("uncaughtExceptionMonitor", (err, origin) => {
   if (isIgnorableWsCrash(err)) return;
   if (isBenignAudioStopRace(err)) return;
+  if (isBenignDemuxerError(err)) return;
   if (isBenignStreamAbortRace(err)) return;
   if (isBenignTransportError(err)) return;
   logger.error("[Error_Handling] Uncaught Exception/Catch (MONITOR)");

@@ -141,6 +141,11 @@ const StreamPipeline = {
       );
     }
 
+    if (seekMs <= 0 && routed.kind === "webm") {
+      logger.player("[AudioBridge] Direct WebM stream open (zero-seek passthrough)");
+      return { stream: routed.stream, kind: "webm" };
+    }
+
     const positioner = new StreamPositioner({ kind: routed.kind, seekMs });
     const out = routed.stream.pipe(positioner);
     logger.player("[AudioBridge] Positioned stream open (kind=" + routed.kind + ", seek=" + seekMs + "ms)");
@@ -262,9 +267,8 @@ const StreamPipeline = {
     });
     oggStream.pipe(demuxer).pipe(muxer);
     await headPromise;
-    const wrapper = Object.create(muxer);
-    wrapper.getDurationMs = () => frameCount * OPUS_FRAME_MS;
-    return wrapper;
+    muxer.getDurationMs = () => frameCount * OPUS_FRAME_MS;
+    return muxer;
   },
 
   /**

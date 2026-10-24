@@ -319,8 +319,18 @@ export class FluxerAudioBridge extends EventEmitter {
         opened.stream.destroy();
         return "stopped";
       }
-      this._stream = opened.stream;
-      await conn.play(opened.stream);
+      let streamToPlay = opened.stream;
+      if (opened.kind === "ogg") {
+        logger.player("[AudioBridge] Remuxing Ogg stream to WebM for voice connection...");
+        const remuxed = await this._remuxOggToWebM(opened.stream);
+        if (generation !== this._playGeneration) {
+          remuxed?.destroy?.();
+          return "stopped";
+        }
+        streamToPlay = remuxed;
+      }
+      this._stream = streamToPlay;
+      await conn.play(streamToPlay);
     } catch (e) {
       if (generation !== this._playGeneration) return "stopped";
       if (this._stopped || !this._playing) return "stopped";

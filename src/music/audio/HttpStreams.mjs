@@ -155,12 +155,13 @@ const HttpStreams = {
         if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
         resetIdleTimeout();
 
+        const socket = res.socket;
         const rearmIdle = () => resetIdleTimeout();
         const stopIdleWatch = () => {
-          res.off("data", rearmIdle);
+          socket?.off("data", rearmIdle);
           if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
         };
-        res.on("data", rearmIdle);
+        socket?.on("data", rearmIdle);
         res.once("end", stopIdleWatch);
         res.once("close", stopIdleWatch);
 
