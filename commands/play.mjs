@@ -197,6 +197,30 @@ export const command = new CommandBuilder()
     .addAlias("p");
 
 /**
+ * Forward a play status message or rich embed to the status message.
+ * @param {string|object|EmbedBuilder} d
+ * @param {object|null} statusMsg
+ * @param {object} message
+ */
+function forwardPlayMessage(d, statusMsg, message) {
+  let embed;
+  if (d instanceof EmbedBuilder) {
+    embed = d;
+  } else if (d?.embeds?.[0]) {
+    embed = d.embeds[0];
+  } else if (typeof d === "object" && d?.embed) {
+    embed = d.embed;
+  } else {
+    embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(String(d?.msg || d));
+  }
+  if (statusMsg) {
+    statusMsg.edit({ embeds: [embed] }).catch(() => {});
+  } else {
+    message.reply({ embeds: [embed] }).catch(() => {});
+  }
+}
+
+/**
  * Run handler for the play command.
  * Handles URL detection, Last.fm integration, provider selection, and track searching.
  *
@@ -221,11 +245,7 @@ export async function run(message, data) {
     try { statusMsg = await message.reply({ embeds: [statusEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
 
     const messages = p.playExternal(rawQuery);
-    messages.on("message", d => {
-      const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
-      if (statusMsg) { statusMsg.edit({ embeds: [embed] }).catch(() => {}); }
-      else { message.reply({ embeds: [embed] }).catch(() => {}); }
-    });
+    messages.on("message", d => forwardPlayMessage(d, statusMsg, message));
     return;
   }
 
@@ -240,11 +260,7 @@ export async function run(message, data) {
     try { statusMsg = await message.reply({ embeds: [statusEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
 
     const messages = p.playExternal(rawQuery, null, null, false, "stream");
-    messages.on("message", d => {
-      const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
-      if (statusMsg) { statusMsg.edit({ embeds: [embed] }).catch(() => {}); }
-      else { message.reply({ embeds: [embed] }).catch(() => {}); }
-    });
+    messages.on("message", d => forwardPlayMessage(d, statusMsg, message));
     return;
   }
 
@@ -273,11 +289,7 @@ export async function run(message, data) {
 
       const playQuery = `${parsed.track} ${parsed.artist}`.trim();
       const messages = p.play(playQuery, false, provider === "lastfm" || provider === "lf" ? "yt" : provider, lastfmTrackMeta);
-      messages.on("message", d => {
-        const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
-        if (statusMsg) { statusMsg.edit({ embeds: [embed] }).catch(() => {}); }
-        else { message.reply({ embeds: [embed] }).catch(() => {}); }
-      });
+      messages.on("message", d => forwardPlayMessage(d, statusMsg, message));
       return;
     }
 
@@ -294,11 +306,7 @@ export async function run(message, data) {
 
       const playQuery = parsed.artist;
       const messages = p.play(playQuery, false, provider === "lastfm" || provider === "lf" ? "yt" : provider, { requester });
-      messages.on("message", d => {
-        const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
-        if (statusMsg) { statusMsg.edit({ embeds: [embed] }).catch(() => {}); }
-        else { message.reply({ embeds: [embed] }).catch(() => {}); }
-      });
+      messages.on("message", d => forwardPlayMessage(d, statusMsg, message));
       return;
     }
   }
@@ -395,11 +403,7 @@ export async function run(message, data) {
 
         const playQuery = `${searchResult.name} ${searchResult.artist}`.trim();
         const messages = p.play(playQuery, false, playProvider, lastfmTrackMeta);
-        messages.on("message", d => {
-          const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
-          if (statusMsg) { statusMsg.edit({ embeds: [embed] }).catch(() => {}); }
-          else { message.reply({ embeds: [embed] }).catch(() => {}); }
-        });
+        messages.on("message", d => forwardPlayMessage(d, statusMsg, message));
         return;
       }
     }
@@ -438,12 +442,5 @@ export async function run(message, data) {
     : query;
 
   const messages = p.play(playQuery, false, resolvedProvider, lastfmTrackMeta);
-  messages.on("message", d => {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
-    if (statusMsg) {
-      statusMsg.edit({ embeds: [embed] }).catch(() => {});
-    } else {
-      message.reply({ embeds: [embed] }).catch(() => {});
-    }
-  });
+  messages.on("message", d => forwardPlayMessage(d, statusMsg, message));
 }

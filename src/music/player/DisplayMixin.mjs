@@ -170,7 +170,7 @@ const DisplayMixin = {
    */
   async nowPlaying() {
     const current = this.queue.getCurrent();
-    if (!current) return { msg: "There's nothing playing at the moment." };
+    if (!current) return { msg: "There's nothing playing at the moment.", embed: null };
 
     const loopqueue = this.queue.loop     ? "🔄" : "⏹️";
     const songloop  = this.queue.songLoop ? "🔂" : "⏹️";
@@ -179,45 +179,107 @@ const DisplayMixin = {
 
     const vcLine = this._channelId ? `🔊 <#${this._channelId}>\n` : "";
 
+    let sourceName = "Music";
+    let sourceIcon = "🎵";
+    const sourceColor = 0xe9196c;
+
+    if (current.type === "radio") {
+      sourceName = "24/7 Radio";
+      sourceIcon = "📻";
+    } else if (current.spotifyUrl || current.type === "spotify") {
+      sourceName = "Spotify";
+      sourceIcon = "🟢";
+    } else if (current.type === "soundcloud" || current.url?.includes("soundcloud.com")) {
+      sourceName = "SoundCloud";
+      sourceIcon = "🟠";
+    } else if (current.type === "youtube" || current.url?.includes("youtube.com") || current.url?.includes("youtu.be")) {
+      sourceName = "YouTube";
+      sourceIcon = "▶️";
+    }
+
+    const trackUrl = current.spotifyUrl || current.url || null;
+    const rawAuthor = current.artist || (typeof current.author === "object" ? current.author?.name : current.author);
+    const artistName = rawAuthor || "Unknown";
+    const loopState = this.queue.songLoop ? "🔂 Song" : this.queue.loop ? "🔄 Queue" : "Off";
+    const nextTrack = this.queue.data?.[0]?.title ? Utils.truncate(this.queue.data[0].title, 35) : "End of queue";
+    const queueCount = this.queue.size();
+    const queueRemaining = this.getQueueRemainingTime();
+
+    let textMsg = "";
+    let radioLiveTitle = null;
+
     if (current.type === "radio") {
       try {
         const data = await meta(current.url);
-        return {
-          msg: `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n${current.description || ""}\n\n🎵 Now playing: ${data?.title || "Unknown"}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`,
-          image: current.thumbnail
-        };
+        radioLiveTitle = data?.title || null;
+        textMsg = `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n${current.description || ""}\n\n🎵 Now playing: ${radioLiveTitle || "Unknown"}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`;
       } catch (e) {
-          logger.warn("[Player] Error:", e?.message);
-          return {
-          msg: `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`,
-          image: current.thumbnail
-        };
+        logger.warn("[Player] Error:", e?.message);
+        textMsg = `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`;
       }
-    }
-
-    if (current.type === "external" || current.type === "stream") {
+    } else if (current.type === "external" || current.type === "stream") {
       const totalMs = this._getTrackDurationMs(current);
-      let progressLine = "";
-
-      if (totalMs > 0) {
-        progressLine = `\n${this._createProgressBar(20)}`;
+      const progressLine = totalMs > 0 ? `\n${this._createProgressBar(20)}` : "";
+      textMsg = `${vcLine}🎵 **[${current.title}](${current.url})** by ${artistName}${progressLine}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`;
+    } else {
+      const progressBar = this._createProgressBar(20);
+      let trackOptLine = "";
+      if (this._activeTrackOpt) {
+        const optStart = Utils.prettifyMS(this._activeTrackOpt.startMs);
+        const optEnd = this._activeTrackOpt.endMs > 0 ? Utils.prettifyMS(this._activeTrackOpt.endMs) : "end";
+        trackOptLine = `\n✂️ Custom: ${optStart} → ${optEnd}`;
       }
-      return {
-        msg: `${vcLine}🎵 **[${current.title}](${current.url})** by ${current.artist || "Unknown"}${progressLine}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`,
-        image: current.thumbnail
-      };
+      textMsg = `${vcLine}🎵 **[${current.title}](${trackUrl || current.url})**\n${progressBar}${trackOptLine}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`;
     }
 
-    const progressBar = this._createProgressBar(20);
-    let trackOptLine = "";
-    if (this._activeTrackOpt) {
-      const optStart = Utils.prettifyMS(this._activeTrackOpt.startMs);
-      const optEnd = this._activeTrackOpt.endMs > 0 ? Utils.prettifyMS(this._activeTrackOpt.endMs) : "end";
-      trackOptLine = `\n✂️ Custom: ${optStart} → ${optEnd}`;
+    const embed = new EmbedBuilder()
+      .setColor(sourceColor)
+      .setAuthor({
+        name: `${sourceIcon} Now Playing • ${sourceName}`,
+        url: trackUrl || undefined,
+      })
+      .setTitle(Utils.truncate(current.title || "Unknown Track", 250))
+      .setURL(trackUrl || undefined);
+
+    if (current.thumbnail) {
+      embed.setThumbnail(current.thumbnail);
     }
+
+    if (current.type === "radio") {
+      let desc = current.description ? `${current.description}\n\n` : "";
+      desc += `🎵 **Live Broadcast:** ${radioLiveTitle || "Live Stream"}`;
+      embed.setDescription(desc);
+      embed.addFields(
+        { name: "📻 Station", value: Utils.truncate(current.title, 40), inline: true },
+        { name: "🎧 Channel", value: this._channelId ? `<#${this._channelId}>` : "None", inline: true },
+        { name: "🔊 Volume", value: vol, inline: true }
+      );
+    } else {
+      let desc = `${this._createProgressBar(20)}`;
+      if (this._activeTrackOpt) {
+        const optStart = Utils.prettifyMS(this._activeTrackOpt.startMs);
+        const optEnd = this._activeTrackOpt.endMs > 0 ? Utils.prettifyMS(this._activeTrackOpt.endMs) : "end";
+        desc += `\n✂️ Custom Cut: \`${optStart} → ${optEnd}\``;
+      }
+      embed.setDescription(desc);
+      embed.addFields(
+        { name: "👤 Artist", value: Utils.truncate(artistName, 40), inline: true },
+        { name: "🎧 Channel", value: this._channelId ? `<#${this._channelId}>` : "None", inline: true },
+        { name: "⚙️ Mode / Vol", value: `${loopState} • ${vol}`, inline: true }
+      );
+    }
+
+    const footerText = queueCount > 0
+      ? `Queue: ${queueCount} ${queueCount === 1 ? "track" : "tracks"} (${queueRemaining}) • Next: ${nextTrack}`
+      : `Queue: Empty • Autoplay: ${this._autoplay ? "On" : "Off"}`;
+
+    embed.setFooter({ text: footerText });
+    if (typeof embed.setTimestamp === "function") embed.setTimestamp();
+
     return {
-      msg: `${vcLine}🎵 **[${current.title}](${current.spotifyUrl || current.url})**\n${progressBar}${trackOptLine}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`,
-      image: current.thumbnail
+      msg: textMsg,
+      image: current.thumbnail,
+      embed
     };
   },
 
@@ -257,6 +319,79 @@ const DisplayMixin = {
   },
 
   /**
+   * Build a rich localized Added-to-Queue embed.
+   * @this {import('./Player.mjs').Player}
+   * @param {object} video - The queued track object.
+   * @param {boolean} [top=false] - Whether added to the top of queue.
+   * @param {string} [requester=null] - User ID who queued the track.
+   * @returns {EmbedBuilder}
+   */
+  buildAddedToQueueEmbed(video, top = false, requester = null) {
+    const rawAuthor = video.artist || (typeof video.author === "object" ? video.author?.name : video.author);
+    const author = rawAuthor || "Unknown";
+    const trackUrl = video.spotifyUrl || video.url || null;
+    const durationStr = this.getDuration(video.duration);
+
+    const queueCount = this.queue.size();
+    let position = top ? 1 : queueCount;
+    if (position <= 0) position = 1;
+
+    let waitMs = 0;
+    const current = this.queue.getCurrent();
+    if (current?.duration && this.startedPlaying) {
+      const curTotal = this._getTrackDurationMs(current);
+      let elapsed = Date.now() - this.startedPlaying;
+      if (this._paused && this._pausedAt) {
+        elapsed = this._pausedAt - this.startedPlaying;
+      }
+      waitMs += Math.max(0, curTotal - elapsed);
+    }
+    const upToIndex = top ? 0 : Math.max(0, this.queue.data.length - 1);
+    for (let i = 0; i < upToIndex; i++) {
+      waitMs += this._getTrackDurationMs(this.queue.data[i]);
+    }
+
+    const waitStr = waitMs < 60_000
+      ? this._t("responses.play.estimatedWaitLessMinute")
+      : this._t("responses.play.estimatedWaitMinutes", { minutes: Math.max(1, Math.round(waitMs / 60_000)) });
+
+    const posStr = position === 1
+      ? this._t("responses.play.positionNext")
+      : this._t("responses.play.positionValue", { position });
+
+    const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setAuthor({
+        name: `➕ ${this._t("responses.play.addedToQueue")}`,
+        url: trackUrl || undefined
+      })
+      .setTitle(Utils.truncate(video.title || "Unknown Track", 250))
+      .setURL(trackUrl || undefined);
+
+    if (video.thumbnail) {
+      embed.setThumbnail(video.thumbnail);
+    }
+
+    embed.setDescription(`${this._t("responses.play.byAuthor", { author })}`);
+
+    embed.addFields(
+      { name: this._t("responses.play.position"), value: posStr, inline: true },
+      { name: this._t("responses.play.duration"), value: durationStr, inline: true },
+      { name: this._t("responses.play.estimatedWait"), value: waitStr, inline: true }
+    );
+
+    const userReq = requester || video.requester || null;
+    const reqText = userReq ? `${this._t("responses.play.requestedBy", { user: `<@${userReq}>` })} • ` : "";
+    const pluralStr = queueCount === 1 ? this._t("responses.play.trackSingle") : this._t("responses.play.trackPlural");
+    embed.setFooter({
+      text: `${reqText}${this._t("responses.play.queueCount", { count: queueCount, plural: pluralStr })}`
+    });
+
+    if (typeof embed.setTimestamp === "function") embed.setTimestamp();
+    return embed;
+  },
+
+  /**
    * Emit a now-playing announcement for the given track.
    * @this {import('./Player.mjs').Player}
    * @param {object} s
@@ -265,33 +400,54 @@ const DisplayMixin = {
     if (!s) return;
     if (this._destroyed || this.leaving || (!this._voiceConn && !this.connection)) return;
 
+    const prefix = this._getPrefix?.(this._guildId) ?? "%";
+
     if (s.type === "radio") {
-      this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses.radio.nowPlaying", {
-        title:  Utils.escapeMarkdown(s.title),
-        author: s.author?.name || "Unknown",
-        url:    s.author?.url || s.url || "",
-        channel: this._channelId || "",
-      }))] });
-      return;
-    }
-    const author = s.artists
-        ? s.artists.map(a => a.url ? `[${a.name}](${a.url})` : a.name).join(" & ")
-        : s.author?.url
-            ? `[${s.author.name}](${s.author.url})`
-            : s.author?.name || null;
-
-    if (!author && (s.type === "external" || s.type === "stream")) {
-      const desc = "🎵 Now playing [" + Utils.escapeMarkdown(s.title) + "](" + (s.url || "") + ") in <#" + (this._channelId || "") + ">";
-      this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] });
+      const embed = new EmbedBuilder()
+        .setColor(0xe9196c)
+        .setAuthor({ name: `📻 ${this._t("responses.play.autoNowPlaying")}` })
+        .setTitle(Utils.truncate(s.title || "24/7 Radio", 250))
+        .setURL(s.author?.url || s.url || undefined)
+        .setDescription(`🎵 **${s.description || "Live Broadcast"}**\n\n🔊 <#${this._channelId}>`)
+        .setFooter({ text: this._t("responses.play.controlsHint", { prefix }) });
+      if (s.thumbnail) embed.setThumbnail(s.thumbnail);
+      this.emit("message", { embeds: [embed] });
       return;
     }
 
-    this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses.play.nowPlaying", {
-      title:   Utils.escapeMarkdown(s.title),
-      url:     s.spotifyUrl || s.url,
-      author:  author || "Unknown",
-      channel: this._channelId || "",
-    }))] });
+    const rawAuthor = s.artist || (typeof s.author === "object" ? s.author?.name : s.author);
+    const author = rawAuthor || "Unknown";
+    const trackUrl = s.spotifyUrl || s.url || null;
+    const durationStr = this.getDuration(s.duration);
+    const nextTrack = this.queue.data?.[0]?.title ? Utils.truncate(this.queue.data[0].title, 35) : null;
+
+    const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setAuthor({
+        name: `🟢 ${this._t("responses.play.autoNowPlaying")}`,
+        url: trackUrl || undefined
+      })
+      .setTitle(Utils.truncate(s.title || "Unknown Track", 250))
+      .setURL(trackUrl || undefined);
+
+    if (s.thumbnail) {
+      embed.setThumbnail(s.thumbnail);
+    }
+
+    let desc = `${this._t("responses.play.byAuthor", { author })} • \`${durationStr}\``;
+    if (this._channelId) {
+      desc += `\n🔊 <#${this._channelId}>`;
+    }
+    embed.setDescription(desc);
+
+    const footerParts = [];
+    if (nextTrack) {
+      footerParts.push(`${this._t("responses.play.upNext")}: ${nextTrack}`);
+    }
+    footerParts.push(this._t("responses.play.controlsHint", { prefix }));
+    embed.setFooter({ text: footerParts.join(" • ") });
+
+    this.emit("message", { embeds: [embed] });
   },
 };
 

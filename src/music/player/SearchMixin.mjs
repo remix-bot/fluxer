@@ -528,7 +528,7 @@ const SearchMixin = {
                 const video = this._lcTrackToVideo(fbResult.tracks[0], trackMeta);
                 if (video) {
                   this.addToQueue(video, top);
-                  events.emit("message", "Successfully added [" + video.title + "](" + video.url + ") to the queue. *(found on " + fb.label + ")*");
+                  events.emit("message", this.buildAddedToQueueEmbed(video, top, trackMeta?.requester));
                   if (!this.queue.getCurrent()) {
                     this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
                   }
@@ -631,7 +631,7 @@ const SearchMixin = {
           const video = this._lcTrackToVideo(firstTrack, trackMeta);
           if (video) {
             this.addToQueue(video, top);
-            events.emit("message", "Successfully added [" + video.title + "](" + video.url + ") to the queue.");
+            events.emit("message", this.buildAddedToQueueEmbed(video, top, trackMeta?.requester));
             if (playlistQuery) {
               events.emit("message", "⚠️ Couldn't load the full playlist — added just this video.");
             }
@@ -805,10 +805,7 @@ const SearchMixin = {
 
         if (tracks.length === 1) {
           this.addToQueue(tracks[0], top);
-          events.emit("message", this._t("responses.play.added", {
-            title: tracks[0].title,
-            url:   tracks[0].url,
-          }));
+          events.emit("message", this.buildAddedToQueueEmbed(tracks[0], top, trackMeta?.requester));
         } else {
           this.addManyToQueue(tracks, top);
           events.emit("message", this._t("responses.play.addedPlaylist", { count: tracks.length }));
@@ -846,7 +843,7 @@ const SearchMixin = {
       try {
         const track = this._buildExternalTrack(url, title, artist, trackType);
         this.addToQueue(track, top);
-        events.emit("message", "Added **[" + track.title + "](" + url + ")** to the queue.");
+        events.emit("message", this.buildAddedToQueueEmbed(track, top));
 
         if (!this.queue.getCurrent()) {
           this.playNext().catch(e => {

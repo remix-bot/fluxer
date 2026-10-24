@@ -33,14 +33,14 @@ export async function run(msg) {
 
   try {
     const data = await p.nowPlaying();
-    if (!data?.msg) {
+    if (!data?.msg && !data?.embed) {
       loadingMsg.edit({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses._common.nothingPlaying"))] }).catch(() => {});
       return;
     }
-    const embed = new EmbedBuilder()
+    const embed = data.embed || new EmbedBuilder()
       .setColor(getGlobalColor())
       .setDescription(data.msg);
-    if (data.image) embed.setThumbnail(data.image);
+    if (!data.embed && data.image) embed.setThumbnail(data.image);
 
     loadingMsg.edit({ embeds: [embed] }).catch(() => {});
   } catch (e) {

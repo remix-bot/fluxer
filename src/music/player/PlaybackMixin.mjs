@@ -135,7 +135,25 @@ const PlaybackMixin = {
       if (!this._wasRadio && !this._queueEndedSent && !this._autoplay) {
         this._queueEndedSent = true;
         const prefix = this._getPrefix?.(this._guildId) ?? "%";
-        this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.queueEnded", { prefix }))], system: true });
+        const embed = new EmbedBuilder()
+          .setColor(0xe9196c)
+          .setAuthor({ name: `🎧 ${this._t("responses.play.queueEndedTitle")}` })
+          .setTitle(this._t("responses.play.queueEndedHeading"))
+          .setDescription(this._t("responses.play.queueEndedBody", { prefix }))
+          .addFields(
+            {
+              name: `📻 ${this._t("responses.play.radioSuggestionTitle")}`,
+              value: this._t("responses.play.radioSuggestionDesc", { prefix }),
+              inline: true
+            },
+            {
+              name: `🔁 ${this._t("responses.play.autoplaySuggestionTitle")}`,
+              value: this._t("responses.play.autoplaySuggestionDesc", { prefix }),
+              inline: true
+            }
+          )
+          .setFooter({ text: `Remix Music • ${this._t("responses.play.voiceSessionPaused")}` });
+        this.emit("message", { embeds: [embed], system: true });
       }
       this._wasRadio = false;
       return;
