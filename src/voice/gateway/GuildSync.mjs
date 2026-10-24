@@ -373,10 +373,34 @@ const GuildSync = {
 
     logger.guild(
         `[GuildDelete] Received GuildDelete for server ${guildId} — ` +
-        `skipping removal (24/7 removal system disabled). ` +
-        `Settings and players are preserved. If the server truly removed the bot, ` +
-        `the GuildCreate handler will re-initialise on re-invite.`
+        `cleaning up active players while preserving settings for potential re-invite.`
     );
+
+    const guildChannels = remix.players?._guildPlayerIndex?.get?.(cleanGuildId);
+    if (guildChannels) {
+      for (const channelId of [...guildChannels]) {
+        const p = remix.players.playerMap.get(channelId);
+        if (p) {
+          remix.players.playerMap.delete(channelId);
+          const homeCh = cleanId(p._home247Channel ?? "");
+          if (homeCh && homeCh !== channelId) remix.players.playerMap.delete(homeCh);
+          try {
+            p.queue?.reset?.();
+            p.destroy();
+          } catch (_) {}
+        }
+      }
+      remix.players._guildPlayerIndex.delete(cleanGuildId);
+    }
+    for (const [key, p] of [...(remix.players?.playerMap?.entries?.() ?? [])]) {
+      if (cleanId(p?._guildId) === cleanGuildId) {
+        remix.players.playerMap.delete(key);
+        try {
+          p.queue?.reset?.();
+          p.destroy();
+        } catch (_) {}
+      }
+    }
 
     remix.voiceCache.removeGuild(cleanGuildId);
     for (const [stateKey, info] of [...this._prevVoiceState]) {

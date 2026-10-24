@@ -416,6 +416,48 @@ class GatewayHandler {
     client.on(Events.VoiceStatesSync, (data) => {
       this._handleVoiceStatesSync(data);
     });
+
+    client.on(Events.ChannelDelete ?? "channelDelete", (channel) => {
+      this._handleChannelDelete(channel);
+    });
+  }
+
+  _handleChannelDelete(channel) {
+    const channelId = cleanId(channel?.id ?? channel?._id);
+    if (!channelId) return;
+
+    const { remix } = this;
+    const guildId = cleanId(channel?.guildId ?? channel?.guild?.id ?? "");
+
+    const player = remix?.players?.playerMap?.get?.(channelId)
+      ?? [...(remix?.players?.playerMap?.values?.() ?? [])].find(p => cleanId(p?._channelId) === channelId || cleanId(p?._home247Channel) === channelId);
+
+    if (player) {
+      logger.voice(`[ChannelDelete] Voice channel ${channelId} deleted — destroying associated player.`);
+      remix.players.playerMap.delete(channelId);
+      const homeCh = cleanId(player._home247Channel ?? "");
+      if (homeCh && homeCh !== channelId) remix.players.playerMap.delete(homeCh);
+      remix.players._unindexPlayer?.(player._guildId, channelId);
+
+      const pendingScrobble = remix.players._pendingScrobbleTimers?.get?.(channelId);
+      if (pendingScrobble) {
+        clearTimeout(pendingScrobble.timer);
+        remix.players._pendingScrobbleTimers.delete(channelId);
+      }
+
+      try {
+        player.queue?.reset?.();
+        player.destroy();
+      } catch (e) {
+        logger.warn("[ChannelDelete] Player destroy error:", e?.message);
+      }
+    }
+
+    try {
+      if (guildId) {
+        remix.voiceCache?.removeChannel?.(guildId, channelId);
+      }
+    } catch (_) {}
   }
 
   /**

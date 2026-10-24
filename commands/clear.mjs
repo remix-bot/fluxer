@@ -39,13 +39,15 @@ export async function run(msg, data) {
   const p = await this.getPlayer(msg, false, false, false);
   if (!p) return;
 
-  const fromVal = data?.get?.("from")?.value;
-  const toVal = data?.get?.("to")?.value;
+  const rawFrom = data?.get?.("from")?.value;
+  const rawTo = data?.get?.("to")?.value;
+  const fromVal = (typeof rawFrom === "number" && Number.isFinite(rawFrom)) ? rawFrom : null;
+  const toVal = (typeof rawTo === "number" && Number.isFinite(rawTo)) ? rawTo : null;
 
-  if (fromVal != null && fromVal !== undefined) {
+  if (fromVal !== null) {
     if (fromVal < 1) return msg.replyEmbed("Queue position must be 1 or greater.").catch(() => {});
     const startIdx = Math.floor(fromVal) - 1;
-    const endIdx = (toVal != null && toVal !== undefined && toVal >= 1) ? Math.floor(toVal) - 1 : startIdx;
+    const endIdx = (toVal !== null && toVal >= 1) ? Math.floor(toVal) - 1 : startIdx;
     const res = p.removeRange(startIdx, endIdx);
     return msg.replyEmbed(res).catch(() => {});
   }

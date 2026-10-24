@@ -263,6 +263,7 @@ const DisplayMixin = {
    */
   announceSong(s) {
     if (!s) return;
+    if (this._destroyed || this.leaving || (!this._voiceConn && !this.connection)) return;
 
     if (s.type === "radio") {
       this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses.radio.nowPlaying", {

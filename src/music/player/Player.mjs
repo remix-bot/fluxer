@@ -720,6 +720,7 @@ class Player extends EventEmitter {
           this._onLavalinkPlayerDisconnect = null;
         }
       }
+      this.queue?.reset();
       this.leaving          = true;
       this._stopInactivityTimer();
       this._autoplay = false;
@@ -747,6 +748,7 @@ class Player extends EventEmitter {
           vm.leaveChannel(this._channelId);
         } catch(e) { /* best effort */ }
       }
+      this.removeAllListeners();
     } catch (e) {
       logger.error("[Player] destroy error:", e.message);
     }

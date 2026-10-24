@@ -151,7 +151,7 @@ export class PlayerManager {
    * @returns {boolean} True if the player is playing/staying for its channel.
    */
   _isPlayerBusy(player) {
-    if (!player || player._destroyed) return false;
+    if (!player || player._destroyed || isPlayerConnectionDead(player)) return false;
     try {
       if (player._get247Mode?.() === "on") return true;
       if (player.queue?.getCurrent?.()) return true;
@@ -173,7 +173,7 @@ export class PlayerManager {
    * @returns {boolean} True if audio is actively playing (or paused).
    */
   _isPlayerActivelyPlaying(player) {
-    if (!player || player._destroyed) return false;
+    if (!player || player._destroyed || isPlayerConnectionDead(player)) return false;
     try {
       if (player.queue?.getCurrent?.()) return true;
       if (player.queue && !player.queue.isEmpty()) return true;

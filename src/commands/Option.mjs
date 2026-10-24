@@ -211,8 +211,11 @@ export class Option {
       case "text":
       case "string":
         return i;
-      case "number":
-        return parseFloat(i);
+      case "number": {
+        if (i === undefined || i === null || i === "") return null;
+        const parsed = parseFloat(i);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
       case "boolean":
         return i?.toLowerCase() === "true" || i === "1";
       case "choice":

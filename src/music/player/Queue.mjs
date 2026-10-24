@@ -84,10 +84,14 @@ export class Queue extends EventEmitter {
    */
   removeRange(from, to) {
     if (this.isEmpty()) return "The queue is empty.";
+    if (typeof from !== "number" || typeof to !== "number" || !Number.isFinite(from) || !Number.isFinite(to)) {
+      return "Invalid range.";
+    }
     const start = Math.max(0, Math.min(from, to));
     const end = Math.min(this.data.length - 1, Math.max(from, to));
-    if (start >= this.data.length) return "Index out of bounds";
+    if (start >= this.data.length || end < start) return "Index out of bounds";
     const deleteCount = (end - start) + 1;
+    if (deleteCount <= 0) return "Invalid range.";
     const removed = this.data.splice(start, deleteCount);
     this.emit("queue", { type: "removeRange", data: { start, end, count: removed.length, old: this.data.slice(), removed, new: this.data } });
     return { count: removed.length, removed };

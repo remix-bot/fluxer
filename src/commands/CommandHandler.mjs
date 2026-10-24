@@ -412,7 +412,10 @@ export class CommandHandler extends EventEmitter {
         const e = this._optionTypeError(errGuildId2, o, value, previous);
         return { opts, error: (!external) ? (this.replyHandler(e, msg) ?? true) : e };
       }
-      if (o.empty(value)) value = o.defaultValue;
+      if (o.empty(value)) {
+        if (o.defaultValue === undefined) continue;
+        value = o.defaultValue;
+      }
       opts.push({ value: o.formatInput(value, this.client, msg.message), name: o.name, id: o.id, uid: o.uid });
       usedOptions.push(o.uid);
       previous += " " + value;
