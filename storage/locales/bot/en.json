@@ -244,12 +244,16 @@
       "joinPermissionError": "❌ I don't have permission to join <#{{channel}}>. Please give me the **Connect** permission in that channel.",
       "joinFailedPermissions": "❌ Failed to join voice channel — missing permissions. Please make sure I have **Connect** and **Speak** permissions.",
       "joinFailedGeneric": "❌ Failed to join voice channel. Please try again.",
-      "joinFailedNotFound": "❌ Could not find that voice channel."
+      "joinFailedNotFound": "❌ Could not find that voice channel.",
+      "restoreAuthor": "🔄 24/7 Voice Watchdog",
+      "restoreTitle": "Playback Session Restored",
+      "restoreFooter": "24/7 Voice Persistence • Playback resuming automatically"
     },
     "clear": {
       "cleared": "🗑️ Queue cleared.",
       "clearedTitle": "Queue Cleared",
-      "clearedSummary": "Removed {{count}} {{plural}} from the queue"
+      "clearedSummary": "Removed {{count}} {{plural}} from the queue",
+      "footerHint": "Use {{prefix}}play <song> to start a new queue"
     },
     "debug": {
       "voiceTitle": "🔧 Voice Debug",
@@ -295,7 +299,10 @@
       "channelNotFound": "❌ Channel not found.",
       "wrongServer": "❌ This command has to be run in the same server as the voice channel.",
       "playerNotFound": "❌ Player not found.",
-      "playerNotInit": "❌ Player not initialized."
+      "playerNotInit": "❌ Player not initialized.",
+      "authorAdmin": "🚪 Voice Administration",
+      "titleEviction": "Channel Force Eviction",
+      "footerTip": "Target channel: {{channel}} • ManageChannels Operation"
     },
     "gateway": {
       "missingPermsFallback": "⚠️ I'm missing permissions I need to work properly! Missing: **{{perms}}**. Please ask a server administrator to grant these permissions in Server Settings → Roles."
@@ -323,7 +330,10 @@
       "connectedAuthor": "🟢 Connected to Voice",
       "selectVCAuthor": "🔊 Select a Voice Channel",
       "selectVCFooter": "React 1-9 to connect • Session expires in 30s",
-      "playPromptFooter": "Play music anytime with {{prefix}}play <song>"
+      "playPromptFooter": "Play music anytime with {{prefix}}play <song>",
+      "promptAuthor": "🔊 Voice Connection",
+      "promptTitle": "Connect to Voice Channel",
+      "promptFooter": "Join a channel or use {{prefix}}join <channel> • {{prefix}}help join"
     },
     "leave": {
       "noVoiceChannel": "⚠️ I can't find you in a voice channel. Please join one, or if you're already in one, make sure I have **View Channel** and **Connect** permissions. You can also specify a channel: `{{prefix}}leave <#channel>`",
@@ -466,7 +476,80 @@
       "artistFieldTags": "Genres & Tags",
       "artistFooterPro": "Server leaderboard: {{prefix}}whoknows {{artist}} • {{prefix}}lastfm albums",
       "coverAuthor": "🖼️ Album Artwork Gallery",
-      "coverFooterPro": "View song thumbnail: {{prefix}}thumbnail • {{prefix}}lastfm albuminfo"
+      "coverFooterPro": "View song thumbnail: {{prefix}}thumbnail • {{prefix}}lastfm albuminfo",
+      "helpAuthor": "🎵 Last.fm Command Center",
+      "helpTitle": "Command Directory",
+      "helpCategoryAccount": "👤 Account & Scrobbles",
+      "helpCategoryDiscovery": "🔍 Discovery & Artwork",
+      "helpCategorySocial": "👑 Social & Server Crowns",
+      "helpCategoryPlayback": "🎧 Playback & Streaming",
+      "helpFooterPro": "Play from Last.fm: {{prefix}}fm play top • Last.fm v2",
+      "crownsAuthor": "👑 Server Crown Collection",
+      "crownsMonopolyField": "Top Crown Monopoly",
+      "crownsOtherField": "Crown Vault",
+      "crownsUncontested": "uncontested",
+      "crownsLead": "+{{lead}} lead",
+      "crownsRunnerUp": "Runner-up: {{user}} ({{plays}})",
+      "crownsFooterPro": "View artist listeners: {{prefix}}whoknows <artist> • {{prefix}}lastfm crowns stolen",
+      "compareAuthor": "🤝 Music Compatibility Matrix",
+      "compareMeter": "Compatibility: {{level}} ({{score}}%)",
+      "compareFieldShared": "Top Shared Artists",
+      "compareFooterPro": "Check server affinity: {{prefix}}lastfm affinity • {{prefix}}lastfm compare",
+      "trendingAuthor": "🔥 Global Music Pulse",
+      "trendingTitleTracks": "Top Trending Tracks",
+      "trendingTitleArtists": "Top Trending Artists",
+      "trendingBadge": "VIRAL NOW",
+      "trendingPodium1": "#1 Global Trend",
+      "trendingRunnersUp": "Trending Runners-Up",
+      "trendingListenersCount": "{{count}} listeners today",
+      "trendingFooterPro": "Play trending: {{prefix}}lastfm play top • {{prefix}}lastfm trending artists",
+      "tagAuthor": "🏷️ Genre & Tag Spotlight",
+      "tagFieldReach": "Global Reach",
+      "tagFieldTaggings": "Total Taggings",
+      "tagFieldPillars": "Pillar Artists",
+      "tagFieldTopTracks": "Signature Tracks",
+      "tagFooterPro": "Explore top albums: {{prefix}}lastfm tagalbums {{tag}} • {{prefix}}lastfm tag",
+      "albumSpotlightAuthor": "💿 Album Spotlight",
+      "albumFieldArtist": "Artist",
+      "albumFieldYourPlays": "Your Scrobbles",
+      "albumFieldTracks": "Track Count",
+      "albumFieldTracklist": "Tracklist Excerpt",
+      "albumFieldTags": "Genres & Tags",
+      "albumFooterPro": "Play album: {{prefix}}play {{artist}} - {{album}} • {{prefix}}fm cover for artwork",
+      "trackSpotlightAuthor": "🎵 Track Spotlight",
+      "trackFieldArtist": "Artist",
+      "trackFieldAlbum": "Album",
+      "trackFieldListeners": "Global Listeners",
+      "trackFieldPlays": "Total Scrobbles",
+      "trackFieldUserPlays": "Your Scrobbles",
+      "trackFieldLoved": "Favorite Status",
+      "lovedStatusYes": "Loved ❤️",
+      "lovedStatusNo": "Not Loved 🖤",
+      "trackFieldTags": "Tags",
+      "trackFieldSimilar": "Similar Tracks",
+      "trackFooterPro": "Play track: {{prefix}}play {{artist}} - {{track}} • Last.fm: {{user}}",
+      "leaderboardAuthorPro": "👑 Music Hall of Fame",
+      "leaderboardChampion": "Champion",
+      "leaderboardRunnersUp": "Podium Contenders",
+      "trackListAuthorLoved": "❤️ Personal Favorites",
+      "trackListAuthorTop": "🏆 Top Tracks",
+      "trackListAuthorRecent": "⏱️ Recent Activity",
+      "playDirectoryAuthor": "🎧 Last.fm Streaming Center",
+      "playDirectoryTitle": "Smart Playback Directory",
+      "playDirectoryCollections": "Available Music Collections",
+      "playDirectoryProviders": "Supported Search Providers",
+      "playDirectoryFooter": "Play music: {{prefix}}fm play <category> • Last.fm v2",
+      "playCategoryLoved": "Loved tracks collection",
+      "playCategoryTop": "Top scrobbled tracks",
+      "playCategoryRecent": "Recent listening history",
+      "playCategoryAlbums": "Top album collections",
+      "playCategoryArtists": "Top artists collection",
+      "playCategoryPlaylist": "Custom playlists",
+      "playLoadingTitle": "Loading Tracks",
+      "playLoadingDesc": "{{emoji}} Loading **{{count}}** {{category}} tracks for **{{username}}**{{provider}}...",
+      "playDoneTitle": "Streaming Queue Updated",
+      "playDoneAdded": "Added **{{count}}** tracks to the queue",
+      "playDoneNotFound": "{{count}} tracks couldn't be resolved"
     },
     "list": {
       "empty": "📭 The queue is empty. Use `{{prefix}}play` to add songs!",
@@ -492,7 +575,8 @@
       "loopOffDesc": "Looping disabled",
       "songLoopBadge": "Single Track Loop",
       "queueLoopBadge": "Queue Loop",
-      "loopOffBadge": "Loop Off"
+      "loopOffBadge": "Loop Off",
+      "cycleFooter": "Cycle modes: {{prefix}}loop song • {{prefix}}loop queue"
     },
     "queue": {
       "empty": "The queue is empty.",
@@ -512,7 +596,8 @@
       "nodeLinkFooter": "NodeLink • {{lines}} lines",
       "sourceFooter": "{{source}} • {{lines}} lines",
       "controlsExpired": "⌛ Controls expired • NodeLink • {{lines}} lines",
-      "sessionClosed": "Session closed • NodeLink • {{lines}} lines"
+      "sessionClosed": "Session closed • NodeLink • {{lines}} lines",
+      "author": "Lyrics"
     },
     "messages": {
       "missingCriticalPermsTitle": "Missing Permissions — Bot Cannot Work Properly",
@@ -665,7 +750,8 @@
       "fetchingLyrics": "📜 Fetching lyrics...",
       "noLyricsFound": "❌ No lyrics found in NodeLink",
       "lyricsDisplayed": "Lyrics displayed ({{lines}} lines, {{pages}} pages)",
-      "lyricsError": "⚠️ Lyrics error: {{error}}"
+      "lyricsError": "⚠️ Lyrics error: {{error}}",
+      "deckAuthor": "🎛️ Hi-Fi Audio Controller • 48kHz Direct"
     },
     "radio": {
       "noStations": "❌ No radio stations are configured.",
@@ -724,7 +810,11 @@
       "noServers": "_No servers found._",
       "title": "🌐 Servers ({{count}})",
       "pageTitle": "🌐 Servers ({{count}}) - Page {{page}}/{{total}}",
-      "listComplete": "List complete"
+      "listComplete": "List complete",
+      "serversAuthor": "🌐 Network Topology",
+      "serversTitle": "Connected Guild Directory",
+      "serversActiveBadge": "{{count}} Guilds Active",
+      "serversTelemetryFooter": "Real-time guild telemetry • Page {{page}}/{{total}}"
     },
     "settings": {
       "unknownSetting": "❌ Unknown setting `{{setting}}`.",
@@ -848,14 +938,31 @@
       "inspectorTitle": "⚙️ Setting Inspector",
       "settingValueField": "Current Value",
       "settingDescField": "Description",
-      "inspectorFooter": "Use {{prefix}}settings set {{setting}} <val> to update"
+      "inspectorFooter": "Use {{prefix}}settings set {{setting}} <val> to update",
+      "handbookTitle": "⚙️ Settings Handbook",
+      "handbookAuthor": "⚙️ Server Configuration Guide",
+      "handbookDesc": "Configure bot behavior and features for this server.",
+      "handbookParamsField": "Configurable Parameters",
+      "handbookOpsField": "Command Operations",
+      "handbookOpGet": "View server configuration dashboard",
+      "handbookOpSet": "Update server setting",
+      "handbookOpReset": "Reset setting to default",
+      "handbookOpHelp": "Inspect parameter details & allowed values",
+      "handbookShortcutsField": "Quick Shortcuts",
+      "settingDefaultField": "Default Value",
+      "settingRangeField": "Allowed Values / Range",
+      "shortcutAuthor": "⚙️ Server Configuration",
+      "shortcutValueField": "Active Value",
+      "shortcutDefaultField": "Default",
+      "shortcutHintFooter": "Update: {{prefix}}{{shortcut}} <val> • {{prefix}}settings get for full panel"
     },
     "shuffle": {
       "emptyQueue": "There is nothing to shuffle in the queue.",
       "shuffled": "🔀 Shuffled queue",
       "shuffledTitle": "Queue Shuffled",
       "shuffledSummary": "{{count}} {{plural}} randomly reordered",
-      "newUpNext": "New #1 Up Next"
+      "newUpNext": "New #1 Up Next",
+      "viewOrderFooter": "Use {{prefix}}queue to view full order"
     },
     "skip": {
       "nothingPlaying": "❌ There's nothing playing at the moment!",
@@ -948,7 +1055,16 @@
       "unknownDate": "Unknown",
       "checkYes": "✅ You **have an active vote** for this {{type}} — thank you!",
       "checkNo": "❌ You haven't voted for this {{type}} yet (or your vote expired).\n**[Vote now!]({{url}})**",
-      "checkUnknown": "⚠️ Couldn't check your vote status right now — try again in a minute."
+      "checkUnknown": "⚠️ Couldn't check your vote status right now — try again in a minute.",
+      "voteCheckAuthor": "🗳️ FluxerList Community",
+      "voteCheckTitle": "Supporter Vote Verification",
+      "voteCheckYesDesc": "✅ You **have voted** for this {{type}} on FluxerList — thank you for your support!",
+      "voteCheckNoDesc": "❌ You haven't voted for this {{type}} on FluxerList yet.\n**[Vote now on FluxerList]({{url}})**",
+      "voteCheckFooter": "Browse voter leaderboard: {{prefix}}voters • FluxerList",
+      "voteVotersAuthor": "🏆 Top Community Supporters",
+      "voteAuthor": "🗳️ FluxerList Community",
+      "voteFooterHint": "Check your vote status: {{prefix}}vote check • {{prefix}}voters",
+      "defaultTitle": "Voting System Handbook"
     },
     "volumedefault": {
       "title": "🔊 Volume Settings",
@@ -963,7 +1079,8 @@
       "fieldDefault": "Default Volume",
       "fieldActive": "Active Session Volume",
       "authorSaved": "🔊 Server Default Volume Saved",
-      "fieldNewDefault": "New Default Level"
+      "fieldNewDefault": "New Default Level",
+      "footerHint": "Server default volume will apply to all future playback sessions"
     },
     "seek": {
       "nothingPlaying": "❌ There's nothing playing at the moment!",
@@ -984,7 +1101,11 @@
       "autoplayTitleDisabled": "Endless Autoplay Disabled",
       "autoplayDescEnabled": "Remix will automatically queue recommended tracks when the queue runs out.",
       "autoplayDescDisabled": "Autoplay has been turned off. Playback will stop when the queue ends.",
-      "autoplayEngine": "Engine: YouTube Mix + Last.fm"
+      "autoplayEngine": "Engine: YouTube Mix + Last.fm",
+      "statusActive": "🟢 Active",
+      "statusDisabled": "🔴 Disabled",
+      "disableHint": "{{prefix}}autoplay to disable",
+      "enableHint": "{{prefix}}autoplay to enable"
     },
     "trackopt": {
       "notAvailable": "❌ Track options feature is not available.",
@@ -1021,7 +1142,14 @@
       "savedListAuthor": "✂️ Saved Track Trims",
       "trimProfilesFooter": "{{count}} trim profile{{plural}} saved • Apply with {{prefix}}trackopt play <alias>",
       "appliedAuthor": "✂️ Track Trim Applied",
-      "activeCutRangeField": "Active Cut Range"
+      "activeCutRangeField": "Active Cut Range",
+      "autoApplyFooter": "Auto-applies whenever this track begins playing • {{prefix}}trackopt list",
+      "playFooterHint": "Active trim profile applied to current playback session",
+      "removeAuthor": "✂️ Track Trim Manager",
+      "removeFooter": "Set new custom trims anytime with {{prefix}}trackopt set",
+      "listAuthor": "✂️ Track Trim Directory",
+      "listTitleClean": "Saved Track Trims ({{count}})",
+      "listFooterHint": "Manage your trims with {{prefix}}trackopt set / play / remove"
     },
     "normalize": {
       "statusEnabled": "🔊 Volume normalization (ReplayGain) is currently **Enabled** for this server.",
@@ -1043,7 +1171,10 @@
       "subBass": "Sub-Bass",
       "midBass": "Mid-Bass",
       "high": "High",
-      "resetHint": "Reset anytime with {{prefix}}bassboost off"
+      "resetHint": "Reset anytime with {{prefix}}bassboost off",
+      "offTitle": "⏹️ Bass Boost Off",
+      "activeTitle": "🔊 Bass Boost: {{level}}",
+      "offFooter": "Apply with {{prefix}}bassboost <low|medium|hard>"
     },
     "speed": {
       "reset": "⏩ Playback speed reset to normal **1.0×**.",

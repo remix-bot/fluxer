@@ -594,9 +594,9 @@ export async function run(msg, data) {
     const embed = new EmbedBuilder()
       .setColor(0xe9196c)
       .setAuthor({ name: `🔁 ${this.t(msg, "responses.autoplay.autoplayTitleEnabled")}` })
-      .setTitle("🟢 Active")
+      .setTitle(this.t(msg, "responses.autoplay.statusActive"))
       .setDescription(this.t(msg, "responses.autoplay.autoplayDescEnabled"))
-      .setFooter({ text: `${this.t(msg, "responses.autoplay.autoplayEngine")} • ${prefix}autoplay to disable` });
+      .setFooter({ text: `${this.t(msg, "responses.autoplay.autoplayEngine")} • ${this.t(msg, "responses.autoplay.disableHint", { prefix })}` });
 
     return msg.reply({ embeds: [embed] });
   } else {
@@ -614,9 +614,9 @@ export async function run(msg, data) {
     const embed = new EmbedBuilder()
       .setColor(0xe9196c)
       .setAuthor({ name: `⏹️ ${this.t(msg, "responses.autoplay.autoplayTitleDisabled")}` })
-      .setTitle("🔴 Disabled")
+      .setTitle(this.t(msg, "responses.autoplay.statusDisabled"))
       .setDescription(this.t(msg, "responses.autoplay.autoplayDescDisabled"))
-      .setFooter({ text: `${prefix}autoplay to enable` });
+      .setFooter({ text: this.t(msg, "responses.autoplay.enableHint", { prefix }) });
 
     return msg.reply({ embeds: [embed] });
   }

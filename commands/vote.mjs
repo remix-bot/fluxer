@@ -112,6 +112,7 @@ function buildVotersEmbed(voters, total, page, limit, type, resourceId, expired 
 
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
+    .setAuthor({ name: t(guildId, "responses.vote.voteVotersAuthor") })
     .setTitle(`${title}`)
     .setDescription(desc)
     .setFooter({ text: footerText });
@@ -146,8 +147,10 @@ export async function run(msg, data) {
         return msg.reply({
           embeds: [new EmbedBuilder()
             .setColor(getGlobalColor())
+            .setAuthor({ name: this.t(msg, "responses.vote.voteAuthor") })
             .setTitle(this.t(msg, "responses.vote.infoTitle"))
-            .setDescription(this.t(msg, "responses.vote.infoDescription", { siteUrl: FLUXERLIST.SITE_URL, prefix }))]
+            .setDescription(this.t(msg, "responses.vote.infoDescription", { siteUrl: FLUXERLIST.SITE_URL, prefix }))
+            .setFooter({ text: this.t(msg, "responses.vote.voteFooterHint", { prefix }) })]
         });
       }
 
@@ -169,10 +172,10 @@ export async function run(msg, data) {
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setAuthor({ name: "🗳️ Vote for Remix" })
+        .setAuthor({ name: this.t(msg, "responses.vote.voteAuthor") })
         .setTitle(this.t(msg, "responses.vote.voteTitle"))
         .setDescription(descLines.join("\n"))
-        .setFooter({ text: `Check your vote status: ${prefix}vote check • %voters` });
+        .setFooter({ text: this.t(msg, "responses.vote.voteFooterHint", { prefix }) });
 
       return msg.reply({ embeds: [embed] });
     }
@@ -192,16 +195,21 @@ export async function run(msg, data) {
       const resolvedType = type || "bot";
       const voted = await fluxerlist.hasVoted(userId);
 
-      const embed = new EmbedBuilder().setColor(getGlobalColor());
+      const embed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setAuthor({ name: this.t(msg, "responses.vote.voteCheckAuthor") })
+        .setTitle(this.t(msg, "responses.vote.voteCheckTitle"));
+
       if (voted === null) {
         embed.setDescription(this.t(msg, "responses.vote.checkUnknown"));
       } else if (voted) {
-        embed.setDescription(this.t(msg, "responses.vote.checkYes", { type: resolvedType }));
+        embed.setDescription(this.t(msg, "responses.vote.voteCheckYesDesc", { type: resolvedType }));
       } else {
         const slug = resourceId || (resolvedType === "server" ? fluxerlist.serverSlug : fluxerlist.botSlug);
         const voteUrl = slug ? buildVoteLink(resolvedType, slug) : FLUXERLIST.SITE_URL;
-        embed.setDescription(this.t(msg, "responses.vote.checkNo", { type: resolvedType, url: voteUrl }));
+        embed.setDescription(this.t(msg, "responses.vote.voteCheckNoDesc", { type: resolvedType, url: voteUrl }));
       }
+      embed.setFooter({ text: this.t(msg, "responses.vote.voteCheckFooter", { prefix }) });
       return msg.reply({ embeds: [embed] });
     }
 
@@ -256,7 +264,7 @@ export async function run(msg, data) {
       const replyMsg = await msg.reply(buildPage(currentPage, voterData));
       if (!replyMsg?.message) return;
 
-      const navEmojis = ["\u25C0\uFE0F", "\u25B6\uFE0F", "\u274C"];
+      const navEmojis = ["◀️", "▶️", "❌"];
       for (const emoji of navEmojis) {
         await replyMsg.message.react(emoji).catch(() => {});
       }
@@ -292,7 +300,7 @@ export async function run(msg, data) {
       };
 
       const unobserve = replyMsg.onReaction(navEmojis, async (e) => {
-        if (e.emoji_id === "\u274C") {
+        if (e.emoji_id === "❌") {
           clearTimeout(emojiTimeout);
           unobserve?.();
           await replyMsg.message.delete().catch(() => {});
@@ -301,9 +309,9 @@ export async function run(msg, data) {
 
         resetTimer();
 
-        if (e.emoji_id === "\u25C0\uFE0F") {
+        if (e.emoji_id === "◀️") {
           currentPage = currentPage > 1 ? currentPage - 1 : totalPages;
-        } else if (e.emoji_id === "\u25B6\uFE0F") {
+        } else if (e.emoji_id === "▶️") {
           currentPage = currentPage < totalPages ? currentPage + 1 : 1;
         }
 
@@ -325,14 +333,17 @@ export async function run(msg, data) {
       return msg.reply({
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
+          .setAuthor({ name: this.t(msg, "responses.vote.voteAuthor") })
+          .setTitle(this.t(msg, "responses.vote.defaultTitle"))
           .setDescription([
             this.t(msg, "responses.vote.defaultCommandsTitle"),
-            ``,
+            "",
             this.t(msg, "responses.vote.defaultCommandsList", { prefix }),
-            ``,
+            "",
             this.t(msg, "responses.vote.optionsTitle"),
             this.t(msg, "responses.vote.optionsList", { prefix }),
-          ].join("\n"))]
+          ].join("\n"))
+          .setFooter({ text: this.t(msg, "responses.vote.voteFooterHint", { prefix }) })]
       });
   }
 }

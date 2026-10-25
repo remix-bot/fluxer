@@ -61,7 +61,7 @@ export async function run(msg, data) {
     .setAuthor({ name: `🗑️ ${this.t(msg, "responses.clear.clearedTitle")}` })
     .setTitle(this.t(msg, "responses.clear.cleared"))
     .setDescription(this.t(msg, "responses.clear.clearedSummary", { count, plural: pluralStr }))
-    .setFooter({ text: `${prefix}play <song> to start a new queue` });
+    .setFooter({ text: this.t(msg, "responses.clear.footerHint", { prefix }) });
 
   msg.reply({ embeds: [embed] }).catch(() => {});
 }

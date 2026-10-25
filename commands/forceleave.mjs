@@ -35,24 +35,27 @@ export const command = new CommandBuilder()
  */
 export async function run(msg, data) {
   const cid = cleanId(data.get("channelId").value);
+  const buildForceLeaveEmbed = (desc) => new EmbedBuilder()
+    .setColor(getGlobalColor())
+    .setAuthor({ name: this.t(msg, "responses.forceleave.authorAdmin") })
+    .setTitle(this.t(msg, "responses.forceleave.titleEviction"))
+    .setDescription(desc)
+    .setFooter({ text: this.t(msg, "responses.forceleave.footerTip", { channel: cid }) });
+
   const targetChannel = await resolveChannelCached(this.client, cid);
   if (!targetChannel) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.forceleave.channelNotFound"));
-    return msg.reply({ embeds: [embed] });
+    return msg.reply({ embeds: [buildForceLeaveEmbed(this.t(msg, "responses.forceleave.channelNotFound"))] });
   }
   if (cleanId(msg.message?.guildId) !== cleanId(targetChannel.guildId)) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.forceleave.wrongServer"));
-    return msg.reply({ embeds: [embed] });
+    return msg.reply({ embeds: [buildForceLeaveEmbed(this.t(msg, "responses.forceleave.wrongServer"))] });
   }
   const p = this.players.playerMap.get(cid)
     ?? [...this.players.playerMap.values()].find((player) => cleanId(player?._channelId) === cid);
   if (!p) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.forceleave.playerNotFound"));
-    return msg.reply({ embeds: [embed] });
+    return msg.reply({ embeds: [buildForceLeaveEmbed(this.t(msg, "responses.forceleave.playerNotFound"))] });
   }
   if (!p.connection) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.forceleave.playerNotInit"));
-    return msg.reply({ embeds: [embed] });
+    return msg.reply({ embeds: [buildForceLeaveEmbed(this.t(msg, "responses.forceleave.playerNotInit"))] });
   }
   await this.players.leave(msg, cid);
 }

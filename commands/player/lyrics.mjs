@@ -78,25 +78,38 @@ export async function openLyricsViewer(bot, msg, player, refresh, session) {
     let currentPage = 0;
 
     const buildLyricsContent = (pageIdx, expired = false, closed = false) => {
-      const title = Utils.truncate(
-          player.queue.getCurrent()?.title?.replace(/\(Official.*?\)/gi, '').trim() ?? '',
-          50
-      );
+      const current = player.queue.getCurrent();
+      const rawTitle = current?.title?.replace(/\(Official.*?\)/gi, '').trim() ?? 'Unknown Track';
+      const title = Utils.truncate(rawTitle, 50);
+      const artist = current?.artist || (typeof current?.author === "object" ? current?.author?.name : current?.author) || "";
       const lyricsSource = lyricsResult.source || "Lyrics";
       const footerText = closed
           ? `👋 Lyrics closed • ${lyricsSource} • ${totalLines} lines`
           : expired
               ? `⌛ Controls expired • ${lyricsSource} • ${totalLines} lines`
               : `${lyricsSource} • ${totalLines} lines total${lyricsResult.synced ? ' • Synced' : ''}`;
+      const headerLine = artist ? `by **${artist}**${syncBadge} • Page ${pageIdx + 1}/${totalPages}` : `Page ${pageIdx + 1}/${totalPages}${syncBadge}`;
       const desc = [
-        `**${title}**${syncBadge} • Page ${pageIdx + 1}/${totalPages}`,
-        ``,
-        '```',
+        headerLine,
+        "",
+        "```",
         pages[pageIdx],
-        totalPages > 1 && !expired && !closed ? `\n\n💡 ⬅️ ➡️ Navigate • ❌ Close` : '',
-        '```'
-      ].join('\n');
-      return { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc).setFooter({ text: footerText })] };
+        totalPages > 1 && !expired && !closed ? "\n\n💡 ⬅️ ➡️ Navigate • ❌ Close" : "",
+        "```"
+      ].join("\n");
+
+      const embed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setAuthor({ name: "🎤 " + (bot.t(msg, "responses.lyrics.author") || "Lyrics") })
+        .setTitle(title)
+        .setDescription(desc)
+        .setFooter({ text: footerText });
+
+      if (current?.thumbnail) {
+        embed.setThumbnail(current.thumbnail);
+      }
+
+      return { embeds: [embed] };
     };
 
     session.activeLyricsMsg = await msg.reply(buildLyricsContent(0));

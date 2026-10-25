@@ -192,25 +192,40 @@ export async function runWhoknowsActions(msg, data, lastfm, prefix, userId, targ
         });
       }
 
+      const pct = Math.min(100, Math.max(0, Math.round(comparison.matchPercentage ?? 0)));
+      const filledBars = Math.round(pct / 10);
+      const emptyBars = 10 - filledBars;
+      const bar = "█".repeat(filledBars) + "░".repeat(emptyBars);
+
+      let level = "Low";
+      if (pct >= 80) level = "Super";
+      else if (pct >= 60) level = "High";
+      else if (pct >= 40) level = "Medium";
+      else if (pct >= 20) level = "Fair";
+
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(this.t(msg, "responses.lastfm.compareTitle"))
-        .setDescription([
-          `**${comparison.user1.username}** vs **${comparison.user2.username}**`,
-          ``,
-          `📊 **${comparison.matchPercentage}%** match`,
-          ``,
-          `👤 ${comparison.user1.username}: ${comparison.user1.totalArtists} top artists`,
-          `👤 ${comparison.user2.username}: ${comparison.user2.totalArtists} top artists`,
-        ].join("\n"));
+        .setAuthor({ name: this.t(msg, "responses.lastfm.compareAuthor") })
+        .setTitle(`${comparison.user1.username} & ${comparison.user2.username}`)
+        .setDescription(
+          `📊 **[${bar}] ${pct}% MATCH**\n` +
+          `*${this.t(msg, "responses.lastfm.compareMeter", { level, score: pct })}*\n\n` +
+          `👤 **${comparison.user1.username}**: ${Utils.formatNumber(comparison.user1.totalArtists)} artists · ` +
+          `👤 **${comparison.user2.username}**: ${Utils.formatNumber(comparison.user2.totalArtists)} artists`
+        )
+        .setFooter({ text: this.t(msg, "responses.lastfm.compareFooterPro", { prefix }) });
 
       if (comparison.commonArtists?.length) {
-        const commonStr = comparison.commonArtists.slice(0, 15).map((a, i) => {
+        const commonStr = comparison.commonArtists.slice(0, 10).map((a, i) => {
           const num = String(i + 1).padStart(2, " ");
           const link = a.url ? `[${a.name}](${a.url})` : a.name;
-          return `\`${num}.\` ${link} (**${a.playcount}** ${this.t(msg, "responses.lastfm.plays")})`;
+          return `\`${num}.\` ${link} — **${Utils.formatNumber(a.playcount)}** ${this.t(msg, "responses.lastfm.plays")}`;
         }).join("\n");
-        embed.addFields({ name: `Common Artists (${comparison.commonArtists.length})`, value: commonStr.slice(0, 1024), inline: false });
+        embed.addFields({
+          name: `${this.t(msg, "responses.lastfm.compareFieldShared")} (${comparison.commonArtists.length})`,
+          value: commonStr.slice(0, 1024),
+          inline: false
+        });
       }
 
       return msg.reply({ embeds: [embed] });
@@ -340,22 +355,44 @@ export async function runWhoknowsActions(msg, data, lastfm, prefix, userId, targ
         filteredCrowns = crowns.slice(0, 10);
       }
 
-      const lines = filteredCrowns.slice(0, 20).map(c => {
-        const link = c.artistUrl ? `[${c.artist}](${c.artistUrl})` : c.artist;
-        const nextStr = c.nextBest ? ` (next: **${c.nextBest.username}** with ${Utils.formatNumber(c.nextBest.playcount)})` : "";
-        return `👑 ${link} — **${Utils.formatNumber(c.userPlaycount)}** ${this.t(msg, "responses.lastfm.plays")}${nextStr}`;
-      });
-
-      const desc = lines.join("\n").slice(0, 4096);
+      const topCrown = filteredCrowns[0];
+      const rest = filteredCrowns.slice(1, 15);
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
+        .setAuthor({ name: this.t(msg, "responses.lastfm.crownsAuthor") })
         .setTitle(this.t(msg, "responses.lastfm.crownsTitle", { username: user.username }))
-        .setDescription(desc)
-        .setFooter({ text: this.t(msg, "responses.lastfm.crownsFooter", { count: filteredCrowns.length, plural: filteredCrowns.length !== 1 ? "s" : "" }) });
+        .setFooter({ text: this.t(msg, "responses.lastfm.crownsFooterPro", { prefix }) });
 
-      if (filteredCrowns[0]?.image) {
-        embed.setThumbnail(filteredCrowns[0].image);
+      if (topCrown) {
+        const topLink = topCrown.artistUrl ? `[${topCrown.artist}](${topCrown.artistUrl})` : topCrown.artist;
+        let leadDesc = this.t(msg, "responses.lastfm.crownsUncontested");
+        if (topCrown.nextBest && topCrown.nextBest.playcount > 0) {
+          const lead = topCrown.userPlaycount - topCrown.nextBest.playcount;
+          leadDesc = `${this.t(msg, "responses.lastfm.crownsLead", { lead: Utils.formatNumber(lead) })} · ${this.t(msg, "responses.lastfm.crownsRunnerUp", { user: topCrown.nextBest.username, plays: Utils.formatNumber(topCrown.nextBest.playcount) })}`;
+        }
+        embed.addFields({
+          name: `👑 ${this.t(msg, "responses.lastfm.crownsMonopolyField")}`,
+          value: `**${topLink}** — **${Utils.formatNumber(topCrown.userPlaycount)}** ${this.t(msg, "responses.lastfm.plays")}\n*${leadDesc}*`,
+          inline: false
+        });
+      }
+
+      if (rest.length > 0) {
+        const otherLines = rest.map(c => {
+          const link = c.artistUrl ? `[${c.artist}](${c.artistUrl})` : c.artist;
+          const runner = c.nextBest ? ` (${c.nextBest.username}: ${Utils.formatNumber(c.nextBest.playcount)})` : "";
+          return `👑 ${link} — **${Utils.formatNumber(c.userPlaycount)}**${runner}`;
+        });
+        embed.addFields({
+          name: `🏛️ ${this.t(msg, "responses.lastfm.crownsOtherField")} (${filteredCrowns.length})`,
+          value: otherLines.join("\n").slice(0, 1024),
+          inline: false
+        });
+      }
+
+      if (topCrown?.image) {
+        embed.setThumbnail(topCrown.image);
       }
 
       const replyPayload = { embeds: [embed] };

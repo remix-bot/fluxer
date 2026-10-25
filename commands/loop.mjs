@@ -63,7 +63,7 @@ export async function run(message, data) {
     .setAuthor({ name: `${icon} ${this.t(message, "responses.loop.loopTitle")}` })
     .setTitle(badge)
     .setDescription(desc)
-    .setFooter({ text: `Cycle: ${prefix}loop song • ${prefix}loop queue` });
+    .setFooter({ text: this.t(message, "responses.loop.cycleFooter", { prefix }) });
 
   if (current?.thumbnail) {
     embed.setThumbnail(current.thumbnail);

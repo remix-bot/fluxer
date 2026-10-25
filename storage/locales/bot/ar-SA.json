@@ -244,12 +244,16 @@
       "joinPermissionError": "❌ ليس لدي إذن للانضمام إلى <#{{channel}}>. يرجى إعطائي إذن **الاتصال** في ذلك القناة.",
       "joinFailedPermissions": "❌ فشل الانضمام إلى القناة الصوتية — أذونات مفقودة. يرجى التأكد من أن لدي أذونات **الاتصال** و**التحدث**.",
       "joinFailedGeneric": "❌ فشل الانضمام إلى القناة الصوتية. يرجى المحاولة مرة أخرى.",
-      "joinFailedNotFound": "❌ لم يتم العثور على تلك القناة الصوتية."
+      "joinFailedNotFound": "❌ لم يتم العثور على تلك القناة الصوتية.",
+      "restoreAuthor": "🔄 مراقب الصوت 24/7",
+      "restoreTitle": "تمت استعادة جلسة التشغيل",
+      "restoreFooter": "استمرار الصوت 24/7 • يستأنف التشغيل تلقائياً"
     },
     "clear": {
       "cleared": "🗑️ تم مسح قائمة الانتظار.",
       "clearedTitle": "تم تفريغ قائمة الانتظار",
-      "clearedSummary": "تمت إزالة {{count}} {{plural}} من القائمة"
+      "clearedSummary": "تمت إزالة {{count}} {{plural}} من القائمة",
+      "footerHint": "استخدم {{prefix}}play <song> لبدء قائمة انتظار جديدة"
     },
     "debug": {
       "voiceTitle": "🔧 تصحيح الصوت",
@@ -295,7 +299,10 @@
       "channelNotFound": "❌ القناة غير موجودة.",
       "wrongServer": "❌ يجب تنفيذ هذا الأمر في نفس الخادم الذي توجد فيه القناة الصوتية.",
       "playerNotFound": "❌ المشغّل غير موجود.",
-      "playerNotInit": "❌ المشغّل غير مهيأ."
+      "playerNotInit": "❌ المشغّل غير مهيأ.",
+      "authorAdmin": "🚪 إدارة الصوت",
+      "titleEviction": "إخلاء القناة إجبارياً",
+      "footerTip": "القناة المستهدفة: {{channel}} • عملية إدارة القنوات"
     },
     "invite": {
       "title": "ادعُ Remix",
@@ -320,7 +327,10 @@
       "connectedAuthor": "🟢 متصل بالقناة الصوتية",
       "selectVCAuthor": "🔊 اختر قناة صوتية",
       "selectVCFooter": "تفاعل برقم 1-9 للاتصال • تنتهي الجلسة خلال 30 ثانية",
-      "playPromptFooter": "شغّل الموسيقى في أي وقت باستخدام {{prefix}}play <song>"
+      "playPromptFooter": "شغّل الموسيقى في أي وقت باستخدام {{prefix}}play <song>",
+      "promptAuthor": "🔊 الاتصال الصوتي",
+      "promptTitle": "الاتصال بالقناة الصوتية",
+      "promptFooter": "انضم إلى قناة أو استخدم {{prefix}}join <channel> • {{prefix}}help join"
     },
     "leave": {
       "noVoiceChannel": "⚠️ يرجى الانضمام إلى قناة صوتية أولاً، أو حدد واحدة: `{{prefix}}leave <#channel>`",
@@ -373,7 +383,8 @@
       "loopOffDesc": "التكرار معطّل",
       "songLoopBadge": "تكرار مقطع واحد",
       "queueLoopBadge": "تكرار القائمة",
-      "loopOffBadge": "التكرار معطّل"
+      "loopOffBadge": "التكرار معطّل",
+      "cycleFooter": "تبديل الأوضاع: {{prefix}}loop song • {{prefix}}loop queue"
     },
     "lyrics": {
       "nothingPlaying": "❌ لا يوجد شيء يعمل حالياً.",
@@ -384,7 +395,8 @@
       "nodeLinkFooter": "NodeLink • {{lines}} سطر",
       "sourceFooter": "{{source}} • {{lines}} سطر",
       "controlsExpired": "⌛ انتهت صلاحية عناصر التحكم • NodeLink • {{lines}} سطر",
-      "sessionClosed": "تم إغلاق الجلسة • NodeLink • {{lines}} سطر"
+      "sessionClosed": "تم إغلاق الجلسة • NodeLink • {{lines}} سطر",
+      "author": "كلمات الأغنية"
     },
     "np": {
       "loading": "⏳ جارٍ التحميل...",
@@ -529,7 +541,8 @@
       "lyricsDisplayed": "تم عرض الكلمات ({{lines}} سطر، {{pages}} صفحة)",
       "lyricsError": "⚠️ خطأ في الكلمات: {{error}}",
       "previousNotAvailable": "⏮️ المقطع السابق غير متاح بعد.",
-      "errorGeneric": "⚠️ خطأ: {{error}}"
+      "errorGeneric": "⚠️ خطأ: {{error}}",
+      "deckAuthor": "🎛️ وحدة تحكم الصوت عالي الدقة • 48kHz Direct"
     },
     "radio": {
       "noStations": "❌ لا توجد محطات إذاعية مُعدّة.",
@@ -588,7 +601,11 @@
       "noServers": "_لم يتم العثور على خوادم._",
       "title": "🌐 الخوادم ({{count}})",
       "pageTitle": "🌐 الخوادم ({{count}}) - صفحة {{page}}/{{total}}",
-      "listComplete": "اكتملت القائمة"
+      "listComplete": "اكتملت القائمة",
+      "serversAuthor": "🌐 هيكلية الشبكة",
+      "serversTitle": "دليل السيرفرات المتصلة",
+      "serversActiveBadge": "{{count}} سيرفر نشط",
+      "serversTelemetryFooter": "بيانات السيرفرات في الوقت الفعلي • صفحة {{page}}/{{total}}"
     },
     "settings": {
       "unknownSetting": "❌ إعداد غير معروف `{{setting}}`.",
@@ -712,14 +729,31 @@
       "inspectorTitle": "⚙️ فاحص الإعدادات",
       "settingValueField": "القيمة الحالية",
       "settingDescField": "الوصف",
-      "inspectorFooter": "استخدم {{prefix}}settings set {{setting}} <val> للتعديل"
+      "inspectorFooter": "استخدم {{prefix}}settings set {{setting}} <val> للتعديل",
+      "handbookTitle": "⚙️ دليل الإعدادات",
+      "handbookAuthor": "⚙️ دليل تكوين الخادم",
+      "handbookDesc": "تخصيص سلوك وميزات البوت لهذا الخادم.",
+      "handbookParamsField": "المعلمات القابلة للضبط",
+      "handbookOpsField": "عمليات الأوامر",
+      "handbookOpGet": "عرض لوحة تكوين الخادم",
+      "handbookOpSet": "تحديث إعداد الخادم",
+      "handbookOpReset": "إعادة تعيين الإعداد إلى الافتراضي",
+      "handbookOpHelp": "فحص تفاصيل المعلمة والقيم المسموح بها",
+      "handbookShortcutsField": "اختصارات مباشرة",
+      "settingDefaultField": "القيمة الافتراضية",
+      "settingRangeField": "القيم المسموح بها / النطاق",
+      "shortcutAuthor": "⚙️ تكوين الخادم",
+      "shortcutValueField": "القيمة الحالية",
+      "shortcutDefaultField": "الافتراضي",
+      "shortcutHintFooter": "للتحديث: {{prefix}}{{shortcut}} <val> • {{prefix}}settings get للوحة الكاملة"
     },
     "shuffle": {
       "emptyQueue": "لا يوجد شيء لخلطه في قائمة الانتظار.",
       "shuffled": "🔀 تم خلط قائمة الانتظار",
       "shuffledTitle": "تم خلط قائمة الانتظار",
       "shuffledSummary": "تمت إعادة ترتيب {{count}} {{plural}} عشوائيًا",
-      "newUpNext": "المقطع #1 الجديد التالي"
+      "newUpNext": "المقطع #1 الجديد التالي",
+      "viewOrderFooter": "استخدم {{prefix}}queue لعرض ترتيب قائمة الانتظار"
     },
     "skip": {
       "nothingPlaying": "❌ لا يوجد شيء يعمل حالياً!",
@@ -798,7 +832,8 @@
       "fieldDefault": "مستوى الصوت الافتراضي",
       "fieldActive": "مستوى صوت الجلسة الحالية",
       "authorSaved": "🔊 تم حفظ مستوى الصوت الافتراضي للخادم",
-      "fieldNewDefault": "المستوى الافتراضي الجديد"
+      "fieldNewDefault": "المستوى الافتراضي الجديد",
+      "footerHint": "سيتم تطبيق مستوى الصوت الافتراضي للسيرفر على جميع جلسات التشغيل المستقبلية"
     },
     "gateway": {
       "missingPermsFallback": "⚠️ تنقصني صلاحيات أحتاجها للعمل بشكل صحيح! المفقودة: **{{perms}}**. يرجى طلب مسؤول الخادم منح هذه الصلاحيات في إعدادات الخادم ← الأدوار."
@@ -926,7 +961,80 @@
       "artistFieldTags": "الأنواع والوسوم",
       "artistFooterPro": "لوحة المتصدرين بالسيرفر: {{prefix}}whoknows {{artist}} • {{prefix}}lastfm albums",
       "coverAuthor": "🖼️ معرض غلاف الألبوم",
-      "coverFooterPro": "عرض مصغرة الأغنية: {{prefix}}thumbnail • {{prefix}}lastfm albuminfo"
+      "coverFooterPro": "عرض مصغرة الأغنية: {{prefix}}thumbnail • {{prefix}}lastfm albuminfo",
+      "helpAuthor": "🎵 مركز أوامر Last.fm",
+      "helpTitle": "دليل الأوامر",
+      "helpCategoryAccount": "👤 الحساب والسكربلات",
+      "helpCategoryDiscovery": "🔍 الاكتشاف والأغلفة",
+      "helpCategorySocial": "👑 التيجان والمجتمع",
+      "helpCategoryPlayback": "🎧 التشغيل والبث",
+      "helpFooterPro": "شغّل من Last.fm: {{prefix}}fm play top • Last.fm v2",
+      "crownsAuthor": "👑 مجموعة تيجان السيرفر",
+      "crownsMonopolyField": "التاج الأبرز",
+      "crownsOtherField": "خزينة التيجان",
+      "crownsUncontested": "دون منازع",
+      "crownsLead": "فارق +{{lead}}",
+      "crownsRunnerUp": "الوصيف: {{user}} ({{plays}})",
+      "crownsFooterPro": "عرض مستمعي الفنان: {{prefix}}whoknows <artist> • {{prefix}}lastfm crowns stolen",
+      "compareAuthor": "🤝 مصفوفة التوافق الموسيقي",
+      "compareMeter": "مستوى التوافق: {{level}} ({{score}}%)",
+      "compareFieldShared": "أبرز الفنانين المشتركين",
+      "compareFooterPro": "فحص تقارب السيرفر: {{prefix}}lastfm affinity • {{prefix}}lastfm compare",
+      "trendingAuthor": "🔥 نبض الموسيقى العالمي",
+      "trendingTitleTracks": "أبرز المسارات الشائعة",
+      "trendingTitleArtists": "أبرز الفنانين الشائعين",
+      "trendingBadge": "رائج الآن",
+      "trendingPodium1": "المركز الأول عالمياً",
+      "trendingRunnersUp": "بقية الأعمال الرائجة",
+      "trendingListenersCount": "{{count}} مستمع اليوم",
+      "trendingFooterPro": "شغّل الرائج: {{prefix}}lastfm play top • {{prefix}}lastfm trending artists",
+      "tagAuthor": "🏷️ تسليط الضوء على النوع والوسم",
+      "tagFieldReach": "الوصول العالمي",
+      "tagFieldTaggings": "إجمالي مرات الوسم",
+      "tagFieldPillars": "أبرز روّاد النوع",
+      "tagFieldTopTracks": "المسارات المميزة",
+      "tagFooterPro": "استكشف ألبومات الوسم: {{prefix}}lastfm tagalbums {{tag}} • {{prefix}}lastfm tag",
+      "albumSpotlightAuthor": "💿 تسليط الضوء على الألبوم",
+      "albumFieldArtist": "الفنان",
+      "albumFieldYourPlays": "استماعاتك",
+      "albumFieldTracks": "عدد المسارات",
+      "albumFieldTracklist": "مقتطف من قائمة المسارات",
+      "albumFieldTags": "الأنواع والوسوم",
+      "albumFooterPro": "تشغيل الألبوم: {{prefix}}play {{artist}} - {{album}} • {{prefix}}fm cover للغلاف",
+      "trackSpotlightAuthor": "🎵 تسليط الضوء على المسار",
+      "trackFieldArtist": "الفنان",
+      "trackFieldAlbum": "الألبوم",
+      "trackFieldListeners": "المستمعون عالمياً",
+      "trackFieldPlays": "إجمالي الاستماعات",
+      "trackFieldUserPlays": "استماعاتك",
+      "trackFieldLoved": "حالة التفضيل",
+      "lovedStatusYes": "مُفضل ❤️",
+      "lovedStatusNo": "غير مُفضل 🖤",
+      "trackFieldTags": "الوسوم",
+      "trackFieldSimilar": "مسارات مشابهة",
+      "trackFooterPro": "تشغيل المسار: {{prefix}}play {{artist}} - {{track}} • Last.fm: {{user}}",
+      "leaderboardAuthorPro": "👑 قاعة مشاهير الموسيقى",
+      "leaderboardChampion": "البطل",
+      "leaderboardRunnersUp": "منافسو المنصة",
+      "trackListAuthorLoved": "❤️ المفضلة الشخصية",
+      "trackListAuthorTop": "🏆 أفضل المسارات",
+      "trackListAuthorRecent": "⏱️ النشاط الأخير",
+      "playDirectoryAuthor": "🎧 مركز بث Last.fm",
+      "playDirectoryTitle": "دليل التشغيل الذكي",
+      "playDirectoryCollections": "المجموعات الموسيقية المتاحة",
+      "playDirectoryProviders": "مزودو البحث المدعومون",
+      "playDirectoryFooter": "تشغيل الموسيقى: {{prefix}}fm play <category> • Last.fm v2",
+      "playCategoryLoved": "مجموعة الأغاني المفضلة",
+      "playCategoryTop": "أكثر المسارات استماعاً",
+      "playCategoryRecent": "سجل الاستماع الأخير",
+      "playCategoryAlbums": "مجموعات أفضل الألبومات",
+      "playCategoryArtists": "مجموعة أفضل الفنانين",
+      "playCategoryPlaylist": "قوائم التشغيل المخصصة",
+      "playLoadingTitle": "جاري تحميل المسارات",
+      "playLoadingDesc": "{{emoji}} جاري تحميل **{{count}}** مسار {{category}} لـ **{{username}}**{{provider}}...",
+      "playDoneTitle": "تم تحديث قائمة التشغيل",
+      "playDoneAdded": "تمت إضافة **{{count}}** مسار إلى قائمة الانتظار",
+      "playDoneNotFound": "تعذر العثور على {{count}} مسار"
     },
     "messages": {
       "missingCriticalPermsTitle": "صلاحيات مفقودة — البوت لا يستطيع العمل بشكل صحيح",
@@ -963,7 +1071,16 @@
       "unknownDate": "غير معروف",
       "checkYes": "✅ لديك **تصويت نشط** لهذا {{type}} — شكرًا لك!",
       "checkNo": "❌ لم تصوّت لهذا {{type}} بعد (أو انتهت صلاحية تصويتك).\n**[صوّت الآن!]({{url}})**",
-      "checkUnknown": "⚠️ تعذّر التحقق من حالة تصويتك الآن — حاول مجددًا بعد دقيقة."
+      "checkUnknown": "⚠️ تعذّر التحقق من حالة تصويتك الآن — حاول مجددًا بعد دقيقة.",
+      "voteCheckAuthor": "🗳️ مجتمع FluxerList",
+      "voteCheckTitle": "التحقق من تصويت الداعمين",
+      "voteCheckYesDesc": "✅ لقد **قمـت بالتصويت** لهذا {{type}} على FluxerList — شكراً لدعمك!",
+      "voteCheckNoDesc": "❌ لم تقم بالتصويت لهذا {{type}} على FluxerList حتى الآن.\n**[صوت الآن على FluxerList]({{url}})**",
+      "voteCheckFooter": "عرض قائمة المصوتين: {{prefix}}voters • FluxerList",
+      "voteVotersAuthor": "🏆 كبار الداعمين",
+      "voteAuthor": "🗳️ مجتمع FluxerList",
+      "voteFooterHint": "تحقق من حالة تصويتك: {{prefix}}vote check • {{prefix}}voters",
+      "defaultTitle": "دليل نظام التصويت"
     },
     "seek": {
       "nothingPlaying": "❌ لا يوجد شيء يعمل حالياً!",
@@ -984,7 +1101,11 @@
       "autoplayTitleDisabled": "تم تعطيل التشغيل التلقائي",
       "autoplayDescEnabled": "سيقوم Remix تلقائيًا بإضافة مقاطع مقترحة عند انتهاء القائمة.",
       "autoplayDescDisabled": "تم إيقاف التشغيل التلقائي. سيتوقف الصوت عند انتهاء القائمة.",
-      "autoplayEngine": "المحرك: YouTube Mix + Last.fm"
+      "autoplayEngine": "المحرك: YouTube Mix + Last.fm",
+      "statusActive": "🟢 مفعّل",
+      "statusDisabled": "🔴 معطّل",
+      "disableHint": "{{prefix}}autoplay للتعطيل",
+      "enableHint": "{{prefix}}autoplay للتفعيل"
     },
     "trackopt": {
       "notAvailable": "❌ ميزة خيارات المقطع غير متاحة.",
@@ -1021,7 +1142,14 @@
       "savedListAuthor": "✂️ اقتطاعات المسار المحفوظة",
       "trimProfilesFooter": "تم حفظ {{count}} ملف اقتطاع • طبّق باستخدام {{prefix}}trackopt play <alias>",
       "appliedAuthor": "✂️ تم تطبيق اقتطاع المسار",
-      "activeCutRangeField": "نطاق الاقتطاع النشط"
+      "activeCutRangeField": "نطاق الاقتطاع النشط",
+      "autoApplyFooter": "يتم تطبيقه تلقائيًا عند بدء تشغيل هذا المسار • {{prefix}}trackopt list",
+      "playFooterHint": "تم تطبيق ملف القص النشط على جلسة التشغيل الحالية",
+      "removeAuthor": "✂️ إدارة قص المسارات",
+      "removeFooter": "قم بتعيين أوقات قص مخصصة جديدة في أي وقت باستخدام {{prefix}}trackopt set",
+      "listAuthor": "✂️ دليل قص المسارات",
+      "listTitleClean": "أوقات القص المحفوظة ({{count}})",
+      "listFooterHint": "إدارة أوقات القص باستخدام {{prefix}}trackopt set / play / remove"
     },
     "normalize": {
       "statusEnabled": "🔊 تسوية الصوت الديناميكية (ReplayGain) **مفعلة** حالياً لهذا الخادم.",
@@ -1043,7 +1171,10 @@
       "subBass": "الباس الفرعي",
       "midBass": "الباس المتوسط",
       "high": "التردد العالي",
-      "resetHint": "إعادة التعيين في أي وقت بـ {{prefix}}bassboost off"
+      "resetHint": "إعادة التعيين في أي وقت بـ {{prefix}}bassboost off",
+      "offTitle": "⏹️ إيقاف تضخيم الباس",
+      "activeTitle": "🔊 تضخيم الباس: {{level}}",
+      "offFooter": "تطبيق باستخدام {{prefix}}bassboost <low|medium|hard>"
     },
     "speed": {
       "reset": "⏩ تمت إعادة ضبط سرعة التشغيل إلى الوضع الطبيعي **1.0×**.",

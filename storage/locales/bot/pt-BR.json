@@ -244,12 +244,16 @@
       "joinPermissionError": "❌ Não tenho permissão para entrar em <#{{channel}}>. Por favor, me dê a permissão de **Conectar** nesse canal.",
       "joinFailedPermissions": "❌ Falha ao entrar no canal de voz — permissões ausentes. Por favor, certifique-se de que tenho as permissões de **Conectar** e **Falar**.",
       "joinFailedGeneric": "❌ Falha ao entrar no canal de voz. Por favor, tente novamente.",
-      "joinFailedNotFound": "❌ Não foi possível encontrar esse canal de voz."
+      "joinFailedNotFound": "❌ Não foi possível encontrar esse canal de voz.",
+      "restoreAuthor": "🔄 Monitor de Voz 24/7",
+      "restoreTitle": "Sessão de Reprodução Restaurada",
+      "restoreFooter": "Persistência de Voz 24/7 • Retomando reprodução automaticamente"
     },
     "clear": {
       "cleared": "🗑️ Fila limpa.",
       "clearedTitle": "Fila Limpa",
-      "clearedSummary": "Removidas {{count}} {{plural}} da fila"
+      "clearedSummary": "Removidas {{count}} {{plural}} da fila",
+      "footerHint": "Use {{prefix}}play <música> para iniciar uma nova fila"
     },
     "debug": {
       "voiceTitle": "🔧 Debug de Voz",
@@ -295,7 +299,10 @@
       "channelNotFound": "❌ Canal não encontrado.",
       "wrongServer": "❌ Este comando deve ser executado no mesmo servidor que o canal de voz.",
       "playerNotFound": "❌ Player não encontrado.",
-      "playerNotInit": "❌ Player não inicializado."
+      "playerNotInit": "❌ Player não inicializado.",
+      "authorAdmin": "🚪 Administração de Voz",
+      "titleEviction": "Desconexão Forçada de Canal",
+      "footerTip": "Canal de destino: {{channel}} • Operação ManageChannels"
     },
     "invite": {
       "title": "Convide o Remix",
@@ -320,7 +327,10 @@
       "connectedAuthor": "🟢 Conectado à Voz",
       "selectVCAuthor": "🔊 Selecione um Canal de Voz",
       "selectVCFooter": "Reaja de 1 a 9 para conectar • A sessão expira em 30s",
-      "playPromptFooter": "Toque música a qualquer momento com {{prefix}}play <música>"
+      "playPromptFooter": "Toque música a qualquer momento com {{prefix}}play <música>",
+      "promptAuthor": "🔊 Conexão de Voz",
+      "promptTitle": "Conectar ao Canal de Voz",
+      "promptFooter": "Entre em um canal ou use {{prefix}}join <canal> • {{prefix}}help join"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Por favor, entre em um canal de voz primeiro ou especifique um: `{{prefix}}leave <#channel>`",
@@ -373,7 +383,8 @@
       "loopOffDesc": "Repetição desativada",
       "songLoopBadge": "Repetição de Faixa",
       "queueLoopBadge": "Repetição da Fila",
-      "loopOffBadge": "Desativada"
+      "loopOffBadge": "Desativada",
+      "cycleFooter": "Alternar modos: {{prefix}}loop song • {{prefix}}loop queue"
     },
     "lyrics": {
       "nothingPlaying": "❌ Não está tocando nada no momento.",
@@ -384,7 +395,8 @@
       "nodeLinkFooter": "NodeLink • {{lines}} linhas",
       "sourceFooter": "{{source}} • {{lines}} linhas",
       "controlsExpired": "⌛ Controles expirados • NodeLink • {{lines}} linhas",
-      "sessionClosed": "Sessão encerrada • NodeLink • {{lines}} linhas"
+      "sessionClosed": "Sessão encerrada • NodeLink • {{lines}} linhas",
+      "author": "Letra da Música"
     },
     "np": {
       "loading": "⏳ Carregando...",
@@ -529,7 +541,8 @@
       "lyricsDisplayed": "Letras exibidas ({{lines}} linhas, {{pages}} páginas)",
       "lyricsError": "⚠️ Erro nas letras: {{error}}",
       "previousNotAvailable": "⏮️ Faixa anterior ainda não está disponível.",
-      "errorGeneric": "⚠️ Erro: {{error}}"
+      "errorGeneric": "⚠️ Erro: {{error}}",
+      "deckAuthor": "🎛️ Controlador de Áudio Hi-Fi • 48kHz Direct"
     },
     "radio": {
       "noStations": "❌ Nenhuma estação de rádio configurada.",
@@ -588,7 +601,11 @@
       "noServers": "_Nenhum servidor encontrado._",
       "title": "🌐 Servidores ({{count}})",
       "pageTitle": "🌐 Servidores ({{count}}) - Página {{page}}/{{total}}",
-      "listComplete": "Lista completa"
+      "listComplete": "Lista completa",
+      "serversAuthor": "🌐 Topologia de Rede",
+      "serversTitle": "Diretório de Servidores Conectados",
+      "serversActiveBadge": "{{count}} Servidores Ativos",
+      "serversTelemetryFooter": "Telemetria em tempo real • Página {{page}}/{{total}}"
     },
     "settings": {
       "unknownSetting": "❌ Configuração desconhecida `{{setting}}`.",
@@ -712,14 +729,31 @@
       "inspectorTitle": "⚙️ Inspetor de Configurações",
       "settingValueField": "Valor Atual",
       "settingDescField": "Descrição",
-      "inspectorFooter": "Use {{prefix}}settings set {{setting}} <val> para atualizar"
+      "inspectorFooter": "Use {{prefix}}settings set {{setting}} <val> para atualizar",
+      "handbookTitle": "⚙️ Manual de Configurações",
+      "handbookAuthor": "⚙️ Guia de Configuração do Servidor",
+      "handbookDesc": "Configure o comportamento e os recursos do bot para este servidor.",
+      "handbookParamsField": "Parâmetros Configuráveis",
+      "handbookOpsField": "Operações de Comando",
+      "handbookOpGet": "Ver o painel de configuração do servidor",
+      "handbookOpSet": "Atualizar configuração do servidor",
+      "handbookOpReset": "Redefinir configuração para o padrão",
+      "handbookOpHelp": "Inspecionar detalhes do parâmetro e valores permitidos",
+      "handbookShortcutsField": "Atalhos Diretos",
+      "settingDefaultField": "Valor Padrão",
+      "settingRangeField": "Valores Permitidos / Intervalo",
+      "shortcutAuthor": "⚙️ Configuração do Servidor",
+      "shortcutValueField": "Valor Ativo",
+      "shortcutDefaultField": "Padrão",
+      "shortcutHintFooter": "Atualizar: {{prefix}}{{shortcut}} <valor> • Painel completo com {{prefix}}settings get"
     },
     "shuffle": {
       "emptyQueue": "Não há nada para embaralhar na fila.",
       "shuffled": "🔀 Fila embaralhada",
       "shuffledTitle": "Fila Embaralhada",
       "shuffledSummary": "{{count}} {{plural}} reordenadas aleatoriamente",
-      "newUpNext": "Nova #1 a Seguir"
+      "newUpNext": "Nova #1 a Seguir",
+      "viewOrderFooter": "Use {{prefix}}queue para ver a ordem completa"
     },
     "skip": {
       "nothingPlaying": "❌ Não está tocando nada no momento!",
@@ -798,7 +832,8 @@
       "fieldDefault": "Volume Padrão",
       "fieldActive": "Volume da Sessão Ativa",
       "authorSaved": "🔊 Volume Padrão do Servidor Salvo",
-      "fieldNewDefault": "Novo Nível Padrão"
+      "fieldNewDefault": "Novo Nível Padrão",
+      "footerHint": "O volume padrão do servidor será aplicado a todas as sessões futuras de reprodução"
     },
     "gateway": {
       "missingPermsFallback": "⚠️ Estou sem permissões que preciso para funcionar corretamente! Faltando: **{{perms}}**. Por favor, peça a um administrador do servidor para conceder essas permissões em Configurações do Servidor → Cargos."
@@ -926,7 +961,80 @@
       "artistFieldTags": "Gêneros e Tags",
       "artistFooterPro": "Classificação do servidor: {{prefix}}whoknows {{artist}} • {{prefix}}lastfm albums",
       "coverAuthor": "🖼️ Galeria de Capa do Álbum",
-      "coverFooterPro": "Ver miniatura da música: {{prefix}}thumbnail • {{prefix}}lastfm albuminfo"
+      "coverFooterPro": "Ver miniatura da música: {{prefix}}thumbnail • {{prefix}}lastfm albuminfo",
+      "helpAuthor": "🎵 Central de Comandos Last.fm",
+      "helpTitle": "Diretório de Comandos",
+      "helpCategoryAccount": "👤 Conta e Scrobbles",
+      "helpCategoryDiscovery": "🔍 Descoberta e Capas",
+      "helpCategorySocial": "👑 Social e Coroas do Servidor",
+      "helpCategoryPlayback": "🎧 Reprodução e Transmissão",
+      "helpFooterPro": "Tocar do Last.fm: {{prefix}}fm play top • Last.fm v2",
+      "crownsAuthor": "👑 Coleção de Coroas do Servidor",
+      "crownsMonopolyField": "Principal Monopólio de Coroa",
+      "crownsOtherField": "Cofre de Coroas",
+      "crownsUncontested": "incontestado",
+      "crownsLead": "liderança de +{{lead}}",
+      "crownsRunnerUp": "Segundo lugar: {{user}} ({{plays}})",
+      "crownsFooterPro": "Ver ouvintes do artista: {{prefix}}whoknows <artist> • {{prefix}}lastfm crowns stolen",
+      "compareAuthor": "🤝 Matriz de Compatibilidade Musical",
+      "compareMeter": "Nível de Compatibilidade: {{level}} ({{score}}%)",
+      "compareFieldShared": "Principais Artistas Compartilhados",
+      "compareFooterPro": "Verificar afinidade do servidor: {{prefix}}lastfm affinity • {{prefix}}lastfm compare",
+      "trendingAuthor": "🔥 Pulso Musical Global",
+      "trendingTitleTracks": "Músicas Mais Populares",
+      "trendingTitleArtists": "Artistas Mais Populares",
+      "trendingBadge": "VIRAL AGORA",
+      "trendingPodium1": "#1 Tendência Global",
+      "trendingRunnersUp": "Outras Tendências",
+      "trendingListenersCount": "{{count}} ouvintes hoje",
+      "trendingFooterPro": "Tocar tendências: {{prefix}}lastfm play top • {{prefix}}lastfm trending artists",
+      "tagAuthor": "🏷️ Destaque de Gênero e Tag",
+      "tagFieldReach": "Alcance Global",
+      "tagFieldTaggings": "Total de Marcações",
+      "tagFieldPillars": "Artistas Pilares",
+      "tagFieldTopTracks": "Músicas de Destaque",
+      "tagFooterPro": "Explorar álbuns da tag: {{prefix}}lastfm tagalbums {{tag}} • {{prefix}}lastfm tag",
+      "albumSpotlightAuthor": "💿 Destaque do Álbum",
+      "albumFieldArtist": "Artista",
+      "albumFieldYourPlays": "Seus Scrobbles",
+      "albumFieldTracks": "Qtd. de Faixas",
+      "albumFieldTracklist": "Lista de Faixas",
+      "albumFieldTags": "Gêneros e Tags",
+      "albumFooterPro": "Tocar álbum: {{prefix}}play {{artist}} - {{album}} • {{prefix}}fm cover para a capa",
+      "trackSpotlightAuthor": "🎵 Destaque da Faixa",
+      "trackFieldArtist": "Artista",
+      "trackFieldAlbum": "Álbum",
+      "trackFieldListeners": "Ouvintes Globais",
+      "trackFieldPlays": "Total de Scrobbles",
+      "trackFieldUserPlays": "Seus Scrobbles",
+      "trackFieldLoved": "Status de Favorito",
+      "lovedStatusYes": "Favoritado ❤️",
+      "lovedStatusNo": "Não favoritado 🖤",
+      "trackFieldTags": "Tags",
+      "trackFieldSimilar": "Faixas Semelhantes",
+      "trackFooterPro": "Tocar faixa: {{prefix}}play {{artist}} - {{track}} • Last.fm: {{user}}",
+      "leaderboardAuthorPro": "👑 Hall da Fama Musical",
+      "leaderboardChampion": "Campeão",
+      "leaderboardRunnersUp": "Concorrentes do Pódio",
+      "trackListAuthorLoved": "❤️ Favoritos Pessoais",
+      "trackListAuthorTop": "🏆 Principais Faixas",
+      "trackListAuthorRecent": "⏱️ Atividade Recente",
+      "playDirectoryAuthor": "🎧 Central de Streaming Last.fm",
+      "playDirectoryTitle": "Diretório de Reprodução Inteligente",
+      "playDirectoryCollections": "Coleções de Música Disponíveis",
+      "playDirectoryProviders": "Provedores de Busca Suportados",
+      "playDirectoryFooter": "Tocar música: {{prefix}}fm play <categoria> • Last.fm v2",
+      "playCategoryLoved": "Coleção de faixas favoritas",
+      "playCategoryTop": "Faixas mais ouvidas",
+      "playCategoryRecent": "Histórico de reprodução recente",
+      "playCategoryAlbums": "Coleções dos melhores álbuns",
+      "playCategoryArtists": "Coleção dos melhores artistas",
+      "playCategoryPlaylist": "Playlists personalizadas",
+      "playLoadingTitle": "Carregando Faixas",
+      "playLoadingDesc": "{{emoji}} Carregando **{{count}}** faixas de {{category}} para **{{username}}**{{provider}}...",
+      "playDoneTitle": "Fila de Reprodução Atualizada",
+      "playDoneAdded": "**{{count}}** faixas adicionadas à fila",
+      "playDoneNotFound": "{{count}} faixas não puderam ser encontradas"
     },
     "messages": {
       "missingCriticalPermsTitle": "Permissões Ausentes — Bot Não Pode Funcionar Corretamente",
@@ -963,7 +1071,16 @@
       "unknownDate": "Desconhecido",
       "checkYes": "✅ Você **tem um voto ativo** para este {{type}} — obrigado!",
       "checkNo": "❌ Você ainda não votou neste {{type}} (ou seu voto expirou).\n**[Vote agora!]({{url}})**",
-      "checkUnknown": "⚠️ Não foi possível verificar seu voto agora — tente novamente em um minuto."
+      "checkUnknown": "⚠️ Não foi possível verificar seu voto agora — tente novamente em um minuto.",
+      "voteCheckAuthor": "🗳️ Comunidade FluxerList",
+      "voteCheckTitle": "Verificação de Voto de Apoiador",
+      "voteCheckYesDesc": "✅ Você **já votou** neste {{type}} no FluxerList — obrigado pelo seu apoio!",
+      "voteCheckNoDesc": "❌ Você ainda não votou neste {{type}} no FluxerList.\n**[Votar agora no FluxerList!]({{url}})**",
+      "voteCheckFooter": "Ver lista de votantes: {{prefix}}voters • FluxerList",
+      "voteVotersAuthor": "🏆 Principais Apoiadores",
+      "voteAuthor": "🗳️ Comunidade FluxerList",
+      "voteFooterHint": "Verifique seu status de voto: {{prefix}}vote check • {{prefix}}voters",
+      "defaultTitle": "Manual do Sistema de Votação"
     },
     "seek": {
       "nothingPlaying": "❌ Não está tocando nada no momento!",
@@ -984,7 +1101,11 @@
       "autoplayTitleDisabled": "Autoplay Desativado",
       "autoplayDescEnabled": "O Remix adicionará músicas recomendadas automaticamente quando a fila acabar.",
       "autoplayDescDisabled": "O autoplay foi desativado. A reprodução vai parar ao final da fila.",
-      "autoplayEngine": "Motor: YouTube Mix + Last.fm"
+      "autoplayEngine": "Motor: YouTube Mix + Last.fm",
+      "statusActive": "🟢 Ativo",
+      "statusDisabled": "🔴 Desativado",
+      "disableHint": "{{prefix}}autoplay para desativar",
+      "enableHint": "{{prefix}}autoplay para ativar"
     },
     "trackopt": {
       "notAvailable": "❌ Recurso de opções de faixa não está disponível.",
@@ -1021,7 +1142,14 @@
       "savedListAuthor": "✂️ Cortes de Faixa Salvos",
       "trimProfilesFooter": "{{count}} perfil{{plural}} de corte salvo{{plural}} • Aplique com {{prefix}}trackopt play <alias>",
       "appliedAuthor": "✂️ Corte de Faixa Aplicado",
-      "activeCutRangeField": "Intervalo de Corte Ativo"
+      "activeCutRangeField": "Intervalo de Corte Ativo",
+      "autoApplyFooter": "Aplica-se automaticamente quando esta faixa começar a tocar • {{prefix}}trackopt list",
+      "playFooterHint": "Perfil de corte ativo aplicado à sessão de reprodução atual",
+      "removeAuthor": "✂️ Gerenciador de Corte de Faixa",
+      "removeFooter": "Defina novos cortes personalizados a qualquer momento com {{prefix}}trackopt set",
+      "listAuthor": "✂️ Diretório de Cortes de Faixa",
+      "listTitleClean": "Cortes de Faixa Salvos ({{count}})",
+      "listFooterHint": "Gerencie seus cortes com {{prefix}}trackopt set / play / remove"
     },
     "normalize": {
       "statusEnabled": "🔊 A normalização dinâmica de volume (ReplayGain) está atualmente **Ativada** para este servidor.",
@@ -1043,7 +1171,10 @@
       "subBass": "Sub-Grave",
       "midBass": "Grave-Médio",
       "high": "Agudo",
-      "resetHint": "Redefina a qualquer momento com {{prefix}}bassboost off"
+      "resetHint": "Redefina a qualquer momento com {{prefix}}bassboost off",
+      "offTitle": "⏹️ Graves Desativado",
+      "activeTitle": "🔊 Reforço de Graves: {{level}}",
+      "offFooter": "Aplicar com {{prefix}}bassboost <low|medium|hard>"
     },
     "speed": {
       "reset": "⏩ Velocidade de reprodução redefinida para **1.0×** normal.",

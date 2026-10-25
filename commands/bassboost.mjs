@@ -83,9 +83,9 @@ export async function run(message, data) {
   if (levelArg === "off" || levelArg === "none" || levelArg === "reset") {
     await p.applyFilter({}, null);
     embed.setAuthor({ name: `🔊 ${this.t(message, "responses.bassboost.eqTitle")}` })
-      .setTitle("⏹️ Bass Boost Off")
+      .setTitle(this.t(message, "responses.bassboost.offTitle"))
       .setDescription(this.t(message, "responses.bassboost.disabled"))
-      .setFooter({ text: `${prefix}bassboost <low|medium|hard>` });
+      .setFooter({ text: this.t(message, "responses.bassboost.offFooter", { prefix }) });
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
 
@@ -121,7 +121,7 @@ export async function run(message, data) {
 
   embed
     .setAuthor({ name: `🔊 ${this.t(message, "responses.bassboost.eqTitle")}` })
-    .setTitle(`Bass Boost: ${preset.label}`)
+    .setTitle(this.t(message, "responses.bassboost.activeTitle", { level: preset.label }))
     .setDescription(desc)
     .setFooter({ text: this.t(message, "responses.bassboost.resetHint", { prefix }) });
 

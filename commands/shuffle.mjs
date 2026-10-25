@@ -54,7 +54,7 @@ export async function run(message) {
     .setColor(0xe9196c)
     .setAuthor({ name: `🔀 ${this.t(message, "responses.shuffle.shuffledTitle")}` })
     .setDescription(desc)
-    .setFooter({ text: `${prefix}queue to view full order` });
+    .setFooter({ text: this.t(message, "responses.shuffle.viewOrderFooter", { prefix }) });
 
   if (nextTrack?.thumbnail) {
     embed.setThumbnail(nextTrack.thumbnail);

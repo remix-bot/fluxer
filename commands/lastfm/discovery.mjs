@@ -159,23 +159,52 @@ export async function runDiscoveryActions(msg, data, lastfm, prefix, userId, tar
         });
       }
 
-      const lines = trendingData.map((item, i) => {
-        const num = String(i + 1).padStart(2, " ");
-        const link = item.url ? `[${item.name}](${item.url})` : item.name;
-        const artistStr = item.artist ? ` by **${item.artist}**` : "";
-        const extra = item.listeners ? ` — ${Utils.formatNumber(item.listeners)} ${this.t(msg, "responses.lastfm.listeners")}` : item.playcount ? ` — ${Utils.formatNumber(item.playcount)} ${this.t(msg, "responses.lastfm.plays")}` : "";
-        return `\`${num}.\` ${link}${artistStr}${extra}`;
-      });
+      const isArtists = tokenTextTr === "artists";
+      trendingTitle = isArtists
+        ? this.t(msg, "responses.lastfm.trendingTitleArtists")
+        : this.t(msg, "responses.lastfm.trendingTitleTracks");
 
-      const desc = lines.join("\n").slice(0, 4096);
+      const top1 = trendingData[0];
+      const runners = trendingData.slice(1, 10);
 
-      return msg.reply({
-        embeds: [new EmbedBuilder()
-          .setColor(getGlobalColor())
-          .setTitle(trendingTitle)
-          .setDescription(desc)
-          .setFooter({ text: `💡 Use token option: tracks or artists` })]
-      });
+      const embed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setAuthor({ name: this.t(msg, "responses.lastfm.trendingAuthor") })
+        .setTitle(trendingTitle)
+        .setFooter({ text: this.t(msg, "responses.lastfm.trendingFooterPro", { prefix }) });
+
+      if (top1) {
+        const link = top1.url ? `[${top1.name}](${top1.url})` : top1.name;
+        const artistStr = top1.artist ? ` by **${top1.artist}**` : "";
+        const extra = top1.listeners
+          ? ` · **${Utils.formatNumber(top1.listeners)}** ${this.t(msg, "responses.lastfm.listeners")}`
+          : (top1.playcount ? ` · **${Utils.formatNumber(top1.playcount)}** ${this.t(msg, "responses.lastfm.plays")}` : "");
+        embed.addFields({
+          name: `🥇 ${this.t(msg, "responses.lastfm.trendingPodium1")}`,
+          value: `**${link}**${artistStr}${extra}`,
+          inline: false
+        });
+      }
+
+      if (runners.length > 0) {
+        const MEDALS = ["🥈", "🥉"];
+        const lines = runners.map((item, i) => {
+          const badge = i < 2 ? MEDALS[i] : `\`#${i + 2}\``;
+          const link = item.url ? `[${item.name}](${item.url})` : item.name;
+          const artistStr = item.artist ? ` · ${item.artist}` : "";
+          const extra = item.listeners
+            ? ` (${Utils.formatNumber(item.listeners)})`
+            : (item.playcount ? ` (${Utils.formatNumber(item.playcount)})` : "");
+          return `${badge} **${link}**${artistStr}${extra}`;
+        });
+        embed.addFields({
+          name: `🔥 ${this.t(msg, "responses.lastfm.trendingRunnersUp")}`,
+          value: lines.join("\n").slice(0, 1024),
+          inline: false
+        });
+      }
+
+      return msg.reply({ embeds: [embed] });
     }
 
     case "geo":

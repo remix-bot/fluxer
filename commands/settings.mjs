@@ -273,15 +273,31 @@ export async function run(message, data) {
 
   if (cmd === "helpSettings") {
     if (!settingKey) {
-      const keys    = this.settingsMgr.getPublicKeys();
-      const keyList = keys.map(k => "`" + k + "`").join(", ");
-      return message.reply(embed(
-          this.t(message, "responses.settings.helpTitle") + "\n\n" +
-          this.t(message, "responses.settings.helpAvailable", { settings: keyList }) + "\n\n" +
-          this.t(message, "responses.settings.helpSubcommands", { prefix }) + "\n\n" +
-          this.t(message, "responses.settings.helpShortcuts", { prefix }),
-          { title: "\u2699\ufe0f Settings Help" }
-      ));
+      const keys = this.settingsMgr.getPublicKeys();
+      const keyTags = keys.map(k => "`" + k + "`").join(" ");
+      const handbookEmbed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setAuthor({ name: this.t(message, "responses.settings.handbookAuthor") })
+        .setTitle(this.t(message, "responses.settings.handbookTitle"))
+        .setDescription(this.t(message, "responses.settings.handbookDesc"))
+        .addFields(
+          {
+            name: `📋 ${this.t(message, "responses.settings.handbookParamsField")}`,
+            value: keyTags,
+            inline: false,
+          },
+          {
+            name: `⚡ ${this.t(message, "responses.settings.handbookOpsField")}`,
+            value:
+              `• \`${prefix}settings get\` — ${this.t(message, "responses.settings.handbookOpGet")}\n` +
+              `• \`${prefix}settings set <key> <val>\` — ${this.t(message, "responses.settings.handbookOpSet")}\n` +
+              `• \`${prefix}settings reset <key>\` — ${this.t(message, "responses.settings.handbookOpReset")}\n` +
+              `• \`${prefix}settings help <key>\` — ${this.t(message, "responses.settings.handbookOpHelp")}`,
+            inline: false,
+          }
+        )
+        .setFooter({ text: `${this.t(message, "responses.settings.handbookShortcutsField")}: ${prefix}247 · ${prefix}volume · ${prefix}prefix` });
+      return message.reply({ embeds: [handbookEmbed] });
     }
 
     const rawDescription = this.settingsMgr.descriptions?.[settingKey] ?? this.t(message, "responses.settings.noDescription");
@@ -289,24 +305,47 @@ export async function run(message, data) {
     const currentVal  = set.get(settingKey);
     const defaultVal  = this.settingsMgr.defaults?.[settingKey];
 
-    let extra = "";
+    let rangeInfo = "";
     if (settingKey === "locale") {
-      extra = "\n**Valid values:** " + [...VALID_LOCALES].map(l => "`" + l + "`").join(", ");
+      rangeInfo = [...VALID_LOCALES].map(l => "`" + l + "`").join(", ");
     } else if (settingKey === "volume") {
-      extra = "\n**Valid range:** " + VOLUME_MIN + "\u2013" + VOLUME_MAX;
+      rangeInfo = `${VOLUME_MIN} – ${VOLUME_MAX}`;
     } else if (BOOL_SETTINGS.has(settingKey)) {
-      extra = "\n**Valid values:** `true`, `false`, `on`, `off`";
+      rangeInfo = "`true`, `false`, `on`, `off`";
     } else if (settingKey === "stay_247") {
-      extra = "\n**Usage:** Join a voice channel and use `247` to toggle.\n\nThe bot stays in that channel and auto-rejoins if disconnected.";
+      rangeInfo = `${prefix}247`;
     }
 
-    const label = prettifySettingLabel(settingKey, t247, guildId);
-    return message.reply(embed(
-        "**\u2699\ufe0f Setting: `" + settingKey + "`**\n\n" +
-        description + extra + "\n\n" +
-        "**Current value:** " + displayValue(settingKey, currentVal) + "\n" +
-        "**Default:** " + displayValue(settingKey, defaultVal),
-        { title: "\u2699\ufe0f " + settingKey }
-    ));
+    const inspectorEmbed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: this.t(message, "responses.settings.inspectorTitle") })
+      .setTitle(`⚙️ \`${settingKey}\``)
+      .setDescription(description)
+      .addFields(
+        {
+          name: `📌 ${this.t(message, "responses.settings.settingValueField")}`,
+          value: displayValue(settingKey, currentVal),
+          inline: true,
+        },
+        {
+          name: `🏷️ ${this.t(message, "responses.settings.settingDefaultField")}`,
+          value: displayValue(settingKey, defaultVal),
+          inline: true,
+        }
+      );
+
+    if (rangeInfo) {
+      inspectorEmbed.addFields({
+        name: `🎯 ${this.t(message, "responses.settings.settingRangeField")}`,
+        value: rangeInfo,
+        inline: false,
+      });
+    }
+
+    inspectorEmbed.setFooter({
+      text: this.t(message, "responses.settings.inspectorFooter", { prefix, setting: settingKey }),
+    });
+
+    return message.reply({ embeds: [inspectorEmbed] });
   }
 }

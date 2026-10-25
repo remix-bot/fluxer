@@ -36,25 +36,32 @@ export const LISTENING_ACTIONS = new Set([
  * @param {function(string, object=): string} tr - Translator bound to the invoking message.
  * @param {boolean} [showPlaycount=false] - Whether to show play counts.
  * @param {string} [prefix="%"] - The command prefix for the footer hint.
+ * @param {string|null} [authorName=null] - Optional author header text.
  * @returns {EmbedBuilder} The constructed embed.
  */
-function buildTrackList(username, title, tracks, tr, showPlaycount = false, prefix = "%") {
+function buildTrackList(username, title, tracks, tr, showPlaycount = false, prefix = "%", authorName = null) {
   const lines = tracks.map((t, i) => {
-    const num = String(i + 1).padStart(2, " ");
+    const num = String(i + 1).padStart(2, "0");
     let name = t.name;
     if (name.length > 40) name = name.slice(0, 37) + "...";
     const link = t.url ? `[${name}](${t.url})` : name;
-    const extra = showPlaycount && t.playcount ? ` (${t.playcount} ${tr("responses.lastfm.plays")})` : "";
+    const extra = showPlaycount && t.playcount ? ` \`(${t.playcount} ${tr("responses.lastfm.plays")})\`` : "";
     return `\`${num}.\` ${link} — **${t.artist}**${extra}`;
   });
 
   const desc = lines.join("\n").slice(0, 4096);
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
     .setTitle(title) /* locale titles (lovedTitle/topTitle/recentTitle) already embed {{username}} */
     .setDescription(desc)
     .setFooter({ text: tr("responses.lastfm.trackListFooter", { prefix }) });
+
+  if (authorName) {
+    embed.setAuthor({ name: authorName });
+  }
+
+  return embed;
 }
 
 /**
@@ -70,29 +77,43 @@ function buildTrackList(username, title, tracks, tr, showPlaycount = false, pref
  * @returns {EmbedBuilder} The constructed embed.
  */
 function buildLeaderboardEmbed(lb, pageIdx, prefix, tr, opts = {}) {
-  const MEDALS = ["🥇", "🥈", "🥉"];
   const startRank = pageIdx * lb.perPage;
   const requesterId = opts.requesterId ? String(opts.requesterId) : null;
 
   const lines = lb.entries.map((entry, i) => {
     const rank = startRank + i + 1;
-    const head = rank <= 3 ? `${MEDALS[rank - 1]} ` : "";
     const who = entry.userId ? `<@${entry.userId}>` : (entry.username || "?");
-    const lfName = entry.username ? ` — *${entry.username}*` : "";
+    const lfName = entry.username ? ` (*${entry.username}*)` : "";
     const marker = requesterId && String(entry.userId) === requesterId ? ` **${tr("responses.lastfm.leaderboardYou")}**` : "";
     const count = Utils.formatNumber(entry.scrobbleCount);
-    return `${head}**${rank}.** ${who}${lfName} — **${count}** ${tr("responses.lastfm.leaderboardScrobbles")}${marker}`;
+
+    if (rank === 1) {
+      return `🥇 **#1 ${tr("responses.lastfm.leaderboardChampion")}**\n> ${who}${lfName} — **${count}** ${tr("responses.lastfm.leaderboardScrobbles")}${marker}`;
+    }
+    if (rank === 2) {
+      return `🥈 **#2** ${who}${lfName} — **${count}** ${tr("responses.lastfm.leaderboardScrobbles")}${marker}`;
+    }
+    if (rank === 3) {
+      return `🥉 **#3** ${who}${lfName} — **${count}** ${tr("responses.lastfm.leaderboardScrobbles")}${marker}`;
+    }
+    const num = String(rank).padStart(2, "0");
+    return `\`${num}.\` ${who}${lfName} — **${count}** ${tr("responses.lastfm.leaderboardScrobbles")}${marker}`;
   });
 
-  const desc = (lines.join("\n") + (opts.extraLine ? `\n\n${opts.extraLine}` : "")).slice(0, 4096);
+  let desc = lines.join("\n\n");
+  if (opts.extraLine) {
+    desc += `\n\n────────────────────\n${opts.extraLine}`;
+  }
+
   const title = lb.scope === "server"
     ? tr("responses.lastfm.leaderboardTitleServer")
     : tr("responses.lastfm.leaderboardTitleGlobal");
 
   return new EmbedBuilder()
     .setColor(getGlobalColor())
+    .setAuthor({ name: tr("responses.lastfm.leaderboardAuthorPro") })
     .setTitle(title)
-    .setDescription(desc)
+    .setDescription(desc.slice(0, 4096))
     .setFooter({ text: tr("responses.lastfm.leaderboardFooterSync", { prefix }) });
 }
 
@@ -130,7 +151,7 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
         });
       }
 
-      return msg.reply({ embeds: [buildTrackList(user.username, tr("responses.lastfm.lovedTitle", { username: user.username }), tracks, tr, false, prefix)] });
+      return msg.reply({ embeds: [buildTrackList(user.username, tr("responses.lastfm.lovedTitle", { username: user.username }), tracks, tr, false, prefix, tr("responses.lastfm.trackListAuthorLoved"))] });
     }
 
     case "top": {
@@ -155,7 +176,7 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
       }
 
       const periodLabel = period !== "overall" ? ` (${period})` : "";
-      return msg.reply({ embeds: [buildTrackList(user.username, tr("responses.lastfm.topTitle", { username: user.username }) + periodLabel, tracks, tr, true, prefix)] });
+      return msg.reply({ embeds: [buildTrackList(user.username, tr("responses.lastfm.topTitle", { username: user.username }) + periodLabel, tracks, tr, true, prefix, tr("responses.lastfm.trackListAuthorTop"))] });
     }
 
     case "leaderboard":
@@ -273,7 +294,7 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
         });
       }
 
-      return msg.reply({ embeds: [buildTrackList(user.username, tr("responses.lastfm.recentTitle", { username: user.username }), tracks, tr, false, prefix)] });
+      return msg.reply({ embeds: [buildTrackList(user.username, tr("responses.lastfm.recentTitle", { username: user.username }), tracks, tr, false, prefix, tr("responses.lastfm.trackListAuthorRecent"))] });
     }
 
     case "artists": {
@@ -299,7 +320,7 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
 
       const periodLabel = period !== "overall" ? ` (${period})` : "";
       const lines = artists.map((a, i) => {
-        const num = String(i + 1).padStart(2, " ");
+        const num = String(i + 1).padStart(2, "0");
         let name = a.name;
         if (name.length > 40) name = name.slice(0, 37) + "...";
         const link = a.url ? `[${name}](${a.url})` : name;
@@ -311,7 +332,8 @@ export async function runListeningActions(msg, data, lastfm, prefix, userId, tar
       return msg.reply({
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
-          .setTitle(tr("responses.lastfm.artistsTitle", { username: user.username }) + periodLabel)
+          .setAuthor({ name: tr("responses.lastfm.artistsTitle", { username: user.username }) })
+          .setTitle(`🎤 ${tr("responses.lastfm.artistsTitle", { username: user.username })}${periodLabel}`)
           .setDescription(desc)
           .setFooter({ text: tr("responses.lastfm.artistsFooter", { prefix }) })]
       });

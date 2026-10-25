@@ -44,7 +44,9 @@ export async function run(message, data) {
   if (!current && totalTracks === 0) {
     const embed = new EmbedBuilder()
       .setColor(0xe9196c)
-      .setDescription(this.t(message, "responses.list.empty", { prefix }));
+      .setAuthor({ name: this.t(message, "responses.list.queueTitle") })
+      .setDescription(this.t(message, "responses.list.empty", { prefix }))
+      .setFooter({ text: this.t(message, "responses.play.controlsHint", { prefix }) });
     return message.reply({ embeds: [embed] });
   }
 

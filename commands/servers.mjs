@@ -46,7 +46,8 @@ export async function run(msg) {
     const g = guilds[i];
     let name = g.name || "unknown";
     if (name.length > 40) name = name.slice(0, 37) + "...";
-    const line = `${i + 1}. **${name}** (\`${g.id}\`)`;
+    const num = String(i + 1).padStart(2, "0");
+    const line = `\`${num}.\` **${name}** \`(${g.id})\``;
     const addedLen = line.length + (currentLines.length ? 1 : 0);
 
     if (currentLen + addedLen > MAX_DESC - 20 && currentLines.length > 0) {
@@ -73,16 +74,16 @@ export async function run(msg) {
   const buildPageContent = (pageIdx, expired = false) => {
     const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(this.t(msg, "responses.servers.pageTitle", { count: guilds.length, page: pageIdx + 1, total: totalPages }))
+        .setAuthor({ name: this.t(msg, "responses.servers.serversAuthor") })
+        .setTitle(this.t(msg, "responses.servers.serversTitle"))
         .setDescription(pages[pageIdx])
         .setFooter({
           text: expired
               ? this.t(msg, "responses._common.controlsExpired")
               : totalPages > 1
-                  ? this.t(msg, "responses._common.navigateHint")
+                  ? this.t(msg, "responses.servers.serversTelemetryFooter", { page: pageIdx + 1, total: totalPages })
                   : this.t(msg, "responses.servers.listComplete")
-        })
-        ;
+        });
 
     return { embeds: [embed] };
   };

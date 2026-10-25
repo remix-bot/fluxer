@@ -67,8 +67,13 @@ export async function run(message, data) {
   if (rawArg) {
     const resolvedId = resolveChannelId(rawArg, this, message);
     if (!resolvedId) {
-      const embed = new EmbedBuilder().setColor(getGlobalColor())
-          .setDescription(this.t(message, "responses.join.voiceChannelNotFound"));
+      const prefix = this.handler.getPrefix(getMessageGuildId(message));
+      const embed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setAuthor({ name: this.t(message, "responses.join.promptAuthor") })
+        .setTitle(this.t(message, "responses.join.promptTitle"))
+        .setDescription(this.t(message, "responses.join.voiceChannelNotFound"))
+        .setFooter({ text: this.t(message, "responses.join.promptFooter", { prefix }) });
       return message.reply({ embeds: [embed] });
     }
     return this.players.initPlayer(message, resolvedId);
@@ -77,8 +82,12 @@ export async function run(message, data) {
   const { channelId: cid } = await this.players.checkVoiceChannels(message);
   if (!cid) {
     const prefix = this.handler.getPrefix(getMessageGuildId(message));
-    const embed = new EmbedBuilder().setColor(getGlobalColor())
-        .setDescription(this.t(message, "responses.join.noVoiceChannel", { prefix }));
+    const embed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: this.t(message, "responses.join.promptAuthor") })
+      .setTitle(this.t(message, "responses.join.promptTitle"))
+      .setDescription(this.t(message, "responses.join.noVoiceChannel", { prefix }))
+      .setFooter({ text: this.t(message, "responses.join.promptFooter", { prefix }) });
     return message.reply({ embeds: [embed] });
   }
 

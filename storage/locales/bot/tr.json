@@ -244,12 +244,16 @@
       "joinPermissionError": "❌ <#{{channel}}> kanalına katılma iznim yok. Lütfen o kanalda bana **Bağlan** izni verin.",
       "joinFailedPermissions": "❌ Ses kanalına katılma başarısız — izinler eksik. Lütfen **Bağlan** ve **Konuş** izinlerime sahip olduğumdan emin olun.",
       "joinFailedGeneric": "❌ Ses kanalına katılma başarısız. Lütfen tekrar deneyin.",
-      "joinFailedNotFound": "❌ Ses kanalı bulunamadı."
+      "joinFailedNotFound": "❌ Ses kanalı bulunamadı.",
+      "restoreAuthor": "🔄 7/24 Ses Denetçisi",
+      "restoreTitle": "Çalma Oturumu Geri Yüklendi",
+      "restoreFooter": "7/24 Ses Kalıcılığı • Çalma otomatik olarak devam ediyor"
     },
     "clear": {
       "cleared": "🗑️ Kuyruk temizlendi.",
       "clearedTitle": "Sıra Temizlendi",
-      "clearedSummary": "Sıradan {{count}} {{plural}} kaldırıldı"
+      "clearedSummary": "Sıradan {{count}} {{plural}} kaldırıldı",
+      "footerHint": "Yeni bir sıra başlatmak için {{prefix}}play <şarkı> kullanın"
     },
     "debug": {
       "voiceTitle": "🔧 Ses Hata Ayıklama",
@@ -295,7 +299,10 @@
       "channelNotFound": "❌ Kanal bulunamadı.",
       "wrongServer": "❌ Bu komutun ses kanalıyla aynı sunucuda çalıştırılması gerekiyor.",
       "playerNotFound": "❌ Oynatıcı bulunamadı.",
-      "playerNotInit": "❌ Oynatıcı başlatılmadı."
+      "playerNotInit": "❌ Oynatıcı başlatılmadı.",
+      "authorAdmin": "🚪 Ses Yönetimi",
+      "titleEviction": "Kanalı Zorla Tahliye Etme",
+      "footerTip": "Hedef kanal: {{channel}} • ManageChannels İşlemi"
     },
     "invite": {
       "title": "Remix'i Davet Et",
@@ -320,7 +327,10 @@
       "connectedAuthor": "🟢 Sese Bağlandı",
       "selectVCAuthor": "🔊 Bir Ses Kanalı Seçin",
       "selectVCFooter": "Bağlanmak için 1-9 tepki verin • Oturum 30sn içinde sona erer",
-      "playPromptFooter": "{{prefix}}play <şarkı> ile istediğiniz zaman müzik çalın"
+      "playPromptFooter": "{{prefix}}play <şarkı> ile istediğiniz zaman müzik çalın",
+      "promptAuthor": "🔊 Ses Bağlantısı",
+      "promptTitle": "Ses Kanalına Bağlan",
+      "promptFooter": "Bir kanala katılın veya {{prefix}}join <kanal> kullanın • {{prefix}}help join"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Lütfen önce bir ses kanalına katılın veya bir tane belirtin: `{{prefix}}leave <#kanal>`",
@@ -463,7 +473,80 @@
       "artistFieldTags": "Türler ve Etiketler",
       "artistFooterPro": "Sunucu liderliği: {{prefix}}whoknows {{artist}} • {{prefix}}lastfm albums",
       "coverAuthor": "🖼️ Albüm Kapağı Galerisi",
-      "coverFooterPro": "Şarkı küçük resmini gör: {{prefix}}thumbnail • {{prefix}}lastfm albuminfo"
+      "coverFooterPro": "Şarkı küçük resmini gör: {{prefix}}thumbnail • {{prefix}}lastfm albuminfo",
+      "helpAuthor": "🎵 Last.fm Komut Merkezi",
+      "helpTitle": "Komut Rehberi",
+      "helpCategoryAccount": "👤 Hesap ve Scrobble",
+      "helpCategoryDiscovery": "🔍 Keşif ve Albüm Kapağı",
+      "helpCategorySocial": "👑 Sosyal ve Sunucu Taçları",
+      "helpCategoryPlayback": "🎧 Çalma ve Akış",
+      "helpFooterPro": "Last.fm'den çal: {{prefix}}fm play top • Last.fm v2",
+      "crownsAuthor": "👑 Sunucu Taç Koleksiyonu",
+      "crownsMonopolyField": "En Büyük Taç Hakimiyeti",
+      "crownsOtherField": "Taç Kasası",
+      "crownsUncontested": "rakipsiz",
+      "crownsLead": "+{{lead}} fark",
+      "crownsRunnerUp": "İkinci: {{user}} ({{plays}})",
+      "crownsFooterPro": "Sanatçı dinleyicilerini gör: {{prefix}}whoknows <artist> • {{prefix}}lastfm crowns stolen",
+      "compareAuthor": "🤝 Müzik Uyumluluk Matrisi",
+      "compareMeter": "Uyumluluk Seviyesi: {{level}} ({{score}}%)",
+      "compareFieldShared": "En Çok Paylaşılan Sanatçılar",
+      "compareFooterPro": "Sunucu yakınlığını kontrol et: {{prefix}}lastfm affinity • {{prefix}}lastfm compare",
+      "trendingAuthor": "🔥 Küresel Müzik Nabzı",
+      "trendingTitleTracks": "En Çok Trend Olan Şarkılar",
+      "trendingTitleArtists": "En Çok Trend Olan Sanatçılar",
+      "trendingBadge": "ŞİMDİ VİRAL",
+      "trendingPodium1": "1. Küresel Trend",
+      "trendingRunnersUp": "Diğer Trendler",
+      "trendingListenersCount": "bugün {{count}} dinleyici",
+      "trendingFooterPro": "Trendleri çal: {{prefix}}lastfm play top • {{prefix}}lastfm trending artists",
+      "tagAuthor": "🏷️ Tür ve Etiket Odağı",
+      "tagFieldReach": "Küresel Erişim",
+      "tagFieldTaggings": "Toplam Etiketleme",
+      "tagFieldPillars": "Öncü Sanatçılar",
+      "tagFieldTopTracks": "İmza Şarkılar",
+      "tagFooterPro": "Etiketin albümlerini keşfet: {{prefix}}lastfm tagalbums {{tag}} • {{prefix}}lastfm tag",
+      "albumSpotlightAuthor": "💿 Albüm Vitrini",
+      "albumFieldArtist": "Sanatçı",
+      "albumFieldYourPlays": "Scrobble'ların",
+      "albumFieldTracks": "Parça Sayısı",
+      "albumFieldTracklist": "Parça Listesi Önizlemesi",
+      "albumFieldTags": "Türler ve Etiketler",
+      "albumFooterPro": "Albümü çal: {{prefix}}play {{artist}} - {{album}} • Kapak resmi için {{prefix}}fm cover",
+      "trackSpotlightAuthor": "🎵 Parça Vitrini",
+      "trackFieldArtist": "Sanatçı",
+      "trackFieldAlbum": "Albüm",
+      "trackFieldListeners": "Küresel Dinleyici",
+      "trackFieldPlays": "Toplam Scrobble",
+      "trackFieldUserPlays": "Scrobble'ların",
+      "trackFieldLoved": "Favori Durumu",
+      "lovedStatusYes": "Sevildi ❤️",
+      "lovedStatusNo": "Sevilmedi 🖤",
+      "trackFieldTags": "Etiketler",
+      "trackFieldSimilar": "Benzer Parçalar",
+      "trackFooterPro": "Parçayı çal: {{prefix}}play {{artist}} - {{track}} • Last.fm: {{user}}",
+      "leaderboardAuthorPro": "👑 Müzik Şöhretler Kulübü",
+      "leaderboardChampion": "Şampiyon",
+      "leaderboardRunnersUp": "Podyum Yarışmacıları",
+      "trackListAuthorLoved": "❤️ Kişisel Favoriler",
+      "trackListAuthorTop": "🏆 En İyi Parçalar",
+      "trackListAuthorRecent": "⏱️ Son Etkinlik",
+      "playDirectoryAuthor": "🎧 Last.fm Akış Merkezi",
+      "playDirectoryTitle": "Akıllı Çalma Kılavuzu",
+      "playDirectoryCollections": "Kullanılabilir Müzik Koleksiyonları",
+      "playDirectoryProviders": "Desteklenen Arama Sağlayıcıları",
+      "playDirectoryFooter": "Müzik çal: {{prefix}}fm play <kategori> • Last.fm v2",
+      "playCategoryLoved": "Sevilen parçalar koleksiyonu",
+      "playCategoryTop": "En çok dinlenen parçalar",
+      "playCategoryRecent": "Son dinleme geçmişi",
+      "playCategoryAlbums": "En popüler albümler",
+      "playCategoryArtists": "En sevilen sanatçılar",
+      "playCategoryPlaylist": "Özel çalma listeleri",
+      "playLoadingTitle": "Parçalar Yükleniyor",
+      "playLoadingDesc": "{{emoji}} **{{username}}** için **{{count}}** {{category}} parçası yükleniyor{{provider}}...",
+      "playDoneTitle": "Çalma Sırası Güncellendi",
+      "playDoneAdded": "Kuyruğa **{{count}}** parça eklendi",
+      "playDoneNotFound": "{{count}} parça bulunamadı"
     },
     "list": {
       "empty": "📭 Kuyruk boş. Şarkı eklemek için `{{prefix}}play` kullanın!",
@@ -489,7 +572,8 @@
       "loopOffDesc": "Tekrar kapalı",
       "songLoopBadge": "Tek Parça Döngüsü",
       "queueLoopBadge": "Sıra Döngüsü",
-      "loopOffBadge": "Kapalı"
+      "loopOffBadge": "Kapalı",
+      "cycleFooter": "Modları değiştir: {{prefix}}loop song • {{prefix}}loop queue"
     },
     "queue": {
       "empty": "Kuyruk boş.",
@@ -509,7 +593,8 @@
       "nodeLinkFooter": "NodeLink • {{lines}} satır",
       "sourceFooter": "{{source}} • {{lines}} satır",
       "controlsExpired": "⌛ Kontrollerin süresi doldu • NodeLink • {{lines}} satır",
-      "sessionClosed": "Oturum kapatıldı • NodeLink • {{lines}} satır"
+      "sessionClosed": "Oturum kapatıldı • NodeLink • {{lines}} satır",
+      "author": "Şarkı Sözleri"
     },
     "np": {
       "loading": "⏳ Yükleniyor...",
@@ -654,7 +739,8 @@
       "lyricsDisplayed": "Şarkı sözleri görüntülendi ({{lines}} satır, {{pages}} sayfa)",
       "lyricsError": "⚠️ Şarkı sözleri hatası: {{error}}",
       "previousNotAvailable": "⏮️ Önceki parça henüz mevcut değil.",
-      "errorGeneric": "⚠️ Hata: {{error}}"
+      "errorGeneric": "⚠️ Hata: {{error}}",
+      "deckAuthor": "🎛️ Hi-Fi Ses Denetleyicisi • 48kHz Direct"
     },
     "radio": {
       "noStations": "❌ Yapılandırılmış radyo istasyonu yok.",
@@ -713,7 +799,11 @@
       "noServers": "_Sunucu bulunamadı._",
       "title": "🌐 Sunucular ({{count}})",
       "pageTitle": "🌐 Sunucular ({{count}}) - Sayfa {{page}}/{{total}}",
-      "listComplete": "Liste tamamlandı"
+      "listComplete": "Liste tamamlandı",
+      "serversAuthor": "🌐 Ağ Topolojisi",
+      "serversTitle": "Bağlı Sunucu Rehberi",
+      "serversActiveBadge": "{{count}} Aktif Sunucu",
+      "serversTelemetryFooter": "Gerçek zamanlı sunucu telemetrisi • Sayfa {{page}}/{{total}}"
     },
     "settings": {
       "unknownSetting": "❌ Bilinmeyen ayar `{{setting}}`.",
@@ -837,14 +927,31 @@
       "inspectorTitle": "⚙️ Ayar İnceleyici",
       "settingValueField": "Geçerli Değer",
       "settingDescField": "Açıklama",
-      "inspectorFooter": "Güncellemek için {{prefix}}settings set {{setting}} <val> kullanın"
+      "inspectorFooter": "Güncellemek için {{prefix}}settings set {{setting}} <val> kullanın",
+      "handbookTitle": "⚙️ Ayarlar Kılavuzu",
+      "handbookAuthor": "⚙️ Sunucu Yapılandırma Rehberi",
+      "handbookDesc": "Bu sunucu için bot davranışını ve özelliklerini yapılandırın.",
+      "handbookParamsField": "Yapılandırılabilir Parametreler",
+      "handbookOpsField": "Komut İşlemleri",
+      "handbookOpGet": "Sunucu yapılandırma panelini görüntüle",
+      "handbookOpSet": "Sunucu ayarını güncelle",
+      "handbookOpReset": "Ayarı varsayılana sıfırla",
+      "handbookOpHelp": "Parametre ayrıntılarını ve geçerli değerleri incele",
+      "handbookShortcutsField": "Doğrudan Kısayollar",
+      "settingDefaultField": "Varsayılan Değer",
+      "settingRangeField": "İzin Verilen Değerler / Aralık",
+      "shortcutAuthor": "⚙️ Sunucu Yapılandırması",
+      "shortcutValueField": "Aktif Değer",
+      "shortcutDefaultField": "Varsayılan",
+      "shortcutHintFooter": "Güncelle: {{prefix}}{{shortcut}} <değer> • Tam panel için {{prefix}}settings get"
     },
     "shuffle": {
       "emptyQueue": "Kuyrukta karıştırılacak bir şey yok.",
       "shuffled": "🔀 Kuyruk karıştırıldı",
       "shuffledTitle": "Sıra Karıştırıldı",
       "shuffledSummary": "{{count}} {{plural}} rastgele karıştırıldı",
-      "newUpNext": "Yeni Sıradaki #1"
+      "newUpNext": "Yeni Sıradaki #1",
+      "viewOrderFooter": "Tam sırayı görmek için {{prefix}}queue kullanın"
     },
     "skip": {
       "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
@@ -923,7 +1030,8 @@
       "fieldDefault": "Varsayılan Ses",
       "fieldActive": "Aktif Oturum Sesi",
       "authorSaved": "🔊 Sunucu Varsayılan Ses Düzeyi Kaydedildi",
-      "fieldNewDefault": "Yeni Varsayılan Düzey"
+      "fieldNewDefault": "Yeni Varsayılan Düzey",
+      "footerHint": "Sunucu varsayılan ses düzeyi gelecekteki tüm oynatma oturumlarına uygulanacaktır"
     },
     "seek": {
       "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
@@ -944,7 +1052,11 @@
       "autoplayTitleDisabled": "Otomatik Çalma Devre Dışı",
       "autoplayDescEnabled": "Sıra bittiğinde Remix otomatik olarak önerilen parçaları ekler.",
       "autoplayDescDisabled": "Otomatik çalma kapatıldı. Sıra bittiğinde müzik duracak.",
-      "autoplayEngine": "Motor: YouTube Mix + Last.fm"
+      "autoplayEngine": "Motor: YouTube Mix + Last.fm",
+      "statusActive": "🟢 Aktif",
+      "statusDisabled": "🔴 Devre Dışı",
+      "disableHint": "Devre dışı bırakmak için {{prefix}}autoplay",
+      "enableHint": "Etkinleştirmek için {{prefix}}autoplay"
     },
     "trackopt": {
       "notAvailable": "❌ Parça seçenekleri özelliği mevcut değil.",
@@ -981,7 +1093,14 @@
       "savedListAuthor": "✂️ Kaydedilen Parça Kırpmaları",
       "trimProfilesFooter": "{{count}} kırpma profili kaydedildi • {{prefix}}trackopt play <alias> ile uygulayın",
       "appliedAuthor": "✂️ Parça Kırpması Uygulandı",
-      "activeCutRangeField": "Aktif Kırpma Aralığı"
+      "activeCutRangeField": "Aktif Kırpma Aralığı",
+      "autoApplyFooter": "Bu parça çalmaya başladığında otomatik uygulanır • {{prefix}}trackopt list",
+      "playFooterHint": "Aktif kırpma profili mevcut oynatma oturumuna uygulandı",
+      "removeAuthor": "✂️ Parça Kırpma Yöneticisi",
+      "removeFooter": "İstediğiniz zaman {{prefix}}trackopt set ile yeni kırpmalar ayarlayın",
+      "listAuthor": "✂️ Parça Kırpma Dizini",
+      "listTitleClean": "Kaydedilen Parça Kırpmaları ({{count}})",
+      "listFooterHint": "Kırpmalarınızı {{prefix}}trackopt set / play / remove ile yönetin"
     },
     "normalize": {
       "statusEnabled": "🔊 Dinamik ses normalleştirmesi (ReplayGain) bu sunucu için şu anda **Etkin**.",
@@ -1003,7 +1122,10 @@
       "subBass": "Alt Bas",
       "midBass": "Orta Bas",
       "high": "Tiz",
-      "resetHint": "Sıfırlamak için: {{prefix}}bassboost off"
+      "resetHint": "Sıfırlamak için: {{prefix}}bassboost off",
+      "offTitle": "⏹️ Bas Güçlendirme Kapalı",
+      "activeTitle": "🔊 Bas Güçlendirme: {{level}}",
+      "offFooter": "Uygulamak için {{prefix}}bassboost <low|medium|hard>"
     },
     "speed": {
       "reset": "⏩ Oynatma hızı normal **1.0×** seviyesine sıfırlandı.",
@@ -1061,7 +1183,16 @@
       "unknownDate": "Bilinmiyor",
       "checkYes": "✅ Bu {{type}} için **aktif oyunun var** — teşekkürler!",
       "checkNo": "❌ Bu {{type}} için henüz oy vermedin (ya da oyunun süresi doldu).\n**[Hemen oy ver!]({{url}})**",
-      "checkUnknown": "⚠️ Oy durumu şu anda kontrol edilemedi — bir dakika sonra tekrar dene."
+      "checkUnknown": "⚠️ Oy durumu şu anda kontrol edilemedi — bir dakika sonra tekrar dene.",
+      "voteCheckAuthor": "🗳️ FluxerList Topluluğu",
+      "voteCheckTitle": "Destekçi Oy Doğrulaması",
+      "voteCheckYesDesc": "✅ FluxerList üzerinde bu {{type}} için **oy kullandınız** — desteğiniz için teşekkürler!",
+      "voteCheckNoDesc": "❌ FluxerList üzerinde bu {{type}} için henüz oy kullanmadınız.\n**[FluxerList'te Şimdi Oy Verin!]({{url}})**",
+      "voteCheckFooter": "Oy verenler sıralaması: {{prefix}}voters • FluxerList",
+      "voteVotersAuthor": "🏆 En İyi Destekçiler",
+      "voteAuthor": "🗳️ FluxerList Topluluğu",
+      "voteFooterHint": "Oy durumunuzu kontrol edin: {{prefix}}vote check • {{prefix}}voters",
+      "defaultTitle": "Oy Sistemi Rehberi"
     },
     "move": {
       "reorderedAuthor": "🔀 Parça Yeniden Sıralandı",

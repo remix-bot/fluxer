@@ -33,8 +33,14 @@ export async function run(message) {
     return message.reply({ embeds: [embed] });
   }
 
+  const prefix = this.handler.getPrefix(message.message?.guildId ?? message.channel?.guildId) || "%";
+
   if (!p._paused) {
-    const embed = new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(message, "responses.resume.alreadyPlaying") || "Already playing!");
+    const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setAuthor({ name: `▶️ ${this.t(message, "responses.resume.resumedTitle")}` })
+      .setDescription(this.t(message, "responses.resume.notPaused"))
+      .setFooter({ text: this.t(message, "responses.resume.pauseHint", { prefix }) });
     return message.reply({ embeds: [embed] });
   }
 
@@ -42,7 +48,6 @@ export async function run(message) {
   const elapsed = p.getCurrentElapsedDuration();
   const trackUrl = current.spotifyUrl || current.url || null;
   const rawAuthor = current.artist || (typeof current.author === "object" ? current.author?.name : current.author);
-  const prefix = this.handler.getPrefix(message.message?.guildId ?? message.channel?.guildId) || "%";
 
   let desc = trackUrl
     ? `**[${Utils.truncate(current.title || this.t(message, "responses.play.unknownTrack"), 50)}](${trackUrl})**`

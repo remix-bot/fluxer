@@ -456,10 +456,18 @@ const BotVoiceMixin = {
     if (!count) return { count: 0, pos };
 
     if (announce) {
+      const restoreEmbed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setAuthor({ name: player._t?.("responses._common.restoreAuthor") ?? "🔄 24/7 Voice Watchdog" })
+        .setTitle(player._t?.("responses._common.restoreTitle") ?? "Playback Session Restored")
+        .setDescription(
+          player._t?.("responses._common.queueRestored", { count })
+          ?? `Bot restarted — restored **${count}** song(s) to the queue and reconnected to voice.`
+        )
+        .setFooter({ text: player._t?.("responses._common.restoreFooter") ?? "24/7 Voice Persistence • Playback resuming automatically" });
+
       player.emit("message", {
-        embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
-            player._t?.("responses._common.queueRestored", { count })
-            ?? `Bot restarted — restored **${count}** song(s) to the queue.`)],
+        embeds: [restoreEmbed],
         system: true,
       });
     }

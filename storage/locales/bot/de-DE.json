@@ -244,12 +244,16 @@
       "joinPermissionError": "❌ Ich habe keine Berechtigung, <#{{channel}}> beizutreten. Bitte gib mir die **Verbinden**-Berechtigung in diesem Kanal.",
       "joinFailedPermissions": "❌ Beitritt zum Sprachkanal fehlgeschlagen — fehlende Berechtigungen. Bitte stelle sicher, dass ich die **Verbinden**- und **Sprechen**-Berechtigungen habe.",
       "joinFailedGeneric": "❌ Beitritt zum Sprachkanal fehlgeschlagen. Bitte versuche es erneut.",
-      "joinFailedNotFound": "❌ Dieser Sprachkanal wurde nicht gefunden."
+      "joinFailedNotFound": "❌ Dieser Sprachkanal wurde nicht gefunden.",
+      "restoreAuthor": "🔄 24/7 Voice-Watchdog",
+      "restoreTitle": "Wiedergabesitzung wiederhergestellt",
+      "restoreFooter": "24/7 Voice-Persistenz • Wiedergabe wird automatisch fortgesetzt"
     },
     "clear": {
       "cleared": "🗑️ Warteschlange geleert.",
       "clearedTitle": "Warteschlange Geleert",
-      "clearedSummary": "{{count}} {{plural}} aus der Warteschlange entfernt"
+      "clearedSummary": "{{count}} {{plural}} aus der Warteschlange entfernt",
+      "footerHint": "Nutze {{prefix}}play <song>, um eine neue Warteschlange zu starten"
     },
     "debug": {
       "voiceTitle": "🔧 Sprach-Debug",
@@ -295,7 +299,10 @@
       "channelNotFound": "❌ Kanal nicht gefunden.",
       "wrongServer": "❌ Dieser Befehl muss im selben Server ausgeführt werden wie der Sprachkanal.",
       "playerNotFound": "❌ Player nicht gefunden.",
-      "playerNotInit": "❌ Player nicht initialisiert."
+      "playerNotInit": "❌ Player nicht initialisiert.",
+      "authorAdmin": "🚪 Voice-Administration",
+      "titleEviction": "Kanal-Zwangstrennung",
+      "footerTip": "Zielkanal: {{channel}} • ManageChannels-Operation"
     },
     "invite": {
       "title": "Remix einladen",
@@ -320,7 +327,10 @@
       "connectedAuthor": "🟢 Mit Sprachkanal verbunden",
       "selectVCAuthor": "🔊 Sprachkanal auswählen",
       "selectVCFooter": "Reagiere mit 1-9 zum Verbinden • Sitzung läuft in 30s ab",
-      "playPromptFooter": "Spiele Musik jederzeit ab mit {{prefix}}play <titel>"
+      "playPromptFooter": "Spiele Musik jederzeit ab mit {{prefix}}play <titel>",
+      "promptAuthor": "🔊 Sprachverbindung",
+      "promptTitle": "Mit Sprachkanal verbinden",
+      "promptFooter": "Kanal beitreten oder {{prefix}}join <kanal> nutzen • {{prefix}}help join"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Bitte trete zuerst einem Sprachkanal bei oder gib einen an: `{{prefix}}leave <#channel>`",
@@ -373,7 +383,8 @@
       "loopOffDesc": "Wiederholung deaktiviert",
       "songLoopBadge": "Einzeltitel-Schleife",
       "queueLoopBadge": "Warteschlangen-Schleife",
-      "loopOffBadge": "Aus"
+      "loopOffBadge": "Aus",
+      "cycleFooter": "Modi wechseln: {{prefix}}loop song • {{prefix}}loop queue"
     },
     "lyrics": {
       "nothingPlaying": "❌ Es wird gerade nichts abgespielt.",
@@ -384,7 +395,8 @@
       "nodeLinkFooter": "NodeLink • {{lines}} Zeilen",
       "sourceFooter": "{{source}} • {{lines}} Zeilen",
       "controlsExpired": "⌛ Steuerung abgelaufen • NodeLink • {{lines}} Zeilen",
-      "sessionClosed": "Sitzung geschlossen • NodeLink • {{lines}} Zeilen"
+      "sessionClosed": "Sitzung geschlossen • NodeLink • {{lines}} Zeilen",
+      "author": "Songtext"
     },
     "np": {
       "loading": "⏳ Laden...",
@@ -529,7 +541,8 @@
       "lyricsDisplayed": "Songtext angezeigt ({{lines}} Zeilen, {{pages}} Seiten)",
       "lyricsError": "⚠️ Songtext-Fehler: {{error}}",
       "previousNotAvailable": "⏮️ Vorheriger Track ist noch nicht verfügbar.",
-      "errorGeneric": "⚠️ Fehler: {{error}}"
+      "errorGeneric": "⚠️ Fehler: {{error}}",
+      "deckAuthor": "🎛️ Hi-Fi Audio-Controller • 48kHz Direct"
     },
     "radio": {
       "noStations": "❌ Keine Radiosender konfiguriert.",
@@ -588,7 +601,11 @@
       "noServers": "_Keine Server gefunden._",
       "title": "🌐 Server ({{count}})",
       "pageTitle": "🌐 Server ({{count}}) - Seite {{page}}/{{total}}",
-      "listComplete": "Liste vollständig"
+      "listComplete": "Liste vollständig",
+      "serversAuthor": "🌐 Netzwerktopologie",
+      "serversTitle": "Verzeichnis verbundener Server",
+      "serversActiveBadge": "{{count}} Server aktiv",
+      "serversTelemetryFooter": "Echtzeit-Servertelemetrie • Seite {{page}}/{{total}}"
     },
     "settings": {
       "unknownSetting": "❌ Unbekannte Einstellung `{{setting}}`.",
@@ -712,14 +729,31 @@
       "inspectorTitle": "⚙️ Einstellungs-Inspektor",
       "settingValueField": "Aktueller Wert",
       "settingDescField": "Beschreibung",
-      "inspectorFooter": "Mit {{prefix}}settings set {{setting}} <val> aktualisieren"
+      "inspectorFooter": "Mit {{prefix}}settings set {{setting}} <val> aktualisieren",
+      "handbookTitle": "⚙️ Einstellungs-Handbuch",
+      "handbookAuthor": "⚙️ Server-Konfigurationsleitfaden",
+      "handbookDesc": "Bot-Verhalten und Funktionen für diesen Server konfigurieren.",
+      "handbookParamsField": "Konfigurierbare Parameter",
+      "handbookOpsField": "Befehlsoperationen",
+      "handbookOpGet": "Server-Konfigurations-Dashboard anzeigen",
+      "handbookOpSet": "Server-Einstellung aktualisieren",
+      "handbookOpReset": "Einstellung auf Standard zurücksetzen",
+      "handbookOpHelp": "Parameterdetails & zulässige Werte prüfen",
+      "handbookShortcutsField": "Direkte Tastenkombinationen",
+      "settingDefaultField": "Standardwert",
+      "settingRangeField": "Erlaubte Werte / Bereich",
+      "shortcutAuthor": "⚙️ Server-Konfiguration",
+      "shortcutValueField": "Aktiver Wert",
+      "shortcutDefaultField": "Standard",
+      "shortcutHintFooter": "Aktualisieren: {{prefix}}{{shortcut}} <wert> • Vollständiges Panel mit {{prefix}}settings get"
     },
     "shuffle": {
       "emptyQueue": "Es gibt nichts zum Mischen in der Warteschlange.",
       "shuffled": "🔀 Warteschlange gemischt",
       "shuffledTitle": "Warteschlange Gemischt",
       "shuffledSummary": "{{count}} {{plural}} zufällig neu geordnet",
-      "newUpNext": "Neuer Titel #1"
+      "newUpNext": "Neuer Titel #1",
+      "viewOrderFooter": "Nutze {{prefix}}queue, um die gesamte Reihenfolge anzuzeigen"
     },
     "skip": {
       "nothingPlaying": "❌ Es wird gerade nichts abgespielt!",
@@ -798,7 +832,8 @@
       "fieldDefault": "Standard-Lautstärke",
       "fieldActive": "Aktuelle Sitzungslautstärke",
       "authorSaved": "🔊 Standard-Serverlautstärke gespeichert",
-      "fieldNewDefault": "Neuer Standard-Pegel"
+      "fieldNewDefault": "Neuer Standard-Pegel",
+      "footerHint": "Die Standardlautstärke des Servers wird für alle zukünftigen Wiedergabesitzungen angewendet"
     },
     "gateway": {
       "missingPermsFallback": "⚠️ Mir fehlen Berechtigungen, die ich zum ordnungsgemäßen Arbeiten brauche! Fehlend: **{{perms}}**. Bitte einen Server-Administrator, diese Berechtigungen in Servereinstellungen → Rollen zu gewähren."
@@ -926,7 +961,80 @@
       "artistFieldTags": "Genres & Tags",
       "artistFooterPro": "Server-Bestenliste: {{prefix}}whoknows {{artist}} • {{prefix}}lastfm albums",
       "coverAuthor": "🖼️ Album-Cover-Galerie",
-      "coverFooterPro": "Song-Thumbnail ansehen: {{prefix}}thumbnail • {{prefix}}lastfm albuminfo"
+      "coverFooterPro": "Song-Thumbnail ansehen: {{prefix}}thumbnail • {{prefix}}lastfm albuminfo",
+      "helpAuthor": "🎵 Last.fm-Befehlszentrale",
+      "helpTitle": "Befehlsverzeichnis",
+      "helpCategoryAccount": "👤 Konto & Scrobbles",
+      "helpCategoryDiscovery": "🔍 Entdeckung & Cover",
+      "helpCategorySocial": "👑 Social & Server-Kronen",
+      "helpCategoryPlayback": "🎧 Wiedergabe & Streaming",
+      "helpFooterPro": "Von Last.fm abspielen: {{prefix}}fm play top • Last.fm v2",
+      "crownsAuthor": "👑 Server-Kronen-Sammlung",
+      "crownsMonopolyField": "Top-Kronen-Monopol",
+      "crownsOtherField": "Kronen-Tresor",
+      "crownsUncontested": "unangefochten",
+      "crownsLead": "+{{lead}} Vorsprung",
+      "crownsRunnerUp": "Zweitplatzierter: {{user}} ({{plays}})",
+      "crownsFooterPro": "Künstler-Hörer ansehen: {{prefix}}whoknows <artist> • {{prefix}}lastfm crowns stolen",
+      "compareAuthor": "🤝 Musik-Kompatibilitätsmatrix",
+      "compareMeter": "Kompatibilität: {{level}} ({{score}}%)",
+      "compareFieldShared": "Meistgeteilte Künstler",
+      "compareFooterPro": "Server-Affinität prüfen: {{prefix}}lastfm affinity • {{prefix}}lastfm compare",
+      "trendingAuthor": "🔥 Globaler Musik-Puls",
+      "trendingTitleTracks": "Top-Trending-Tracks",
+      "trendingTitleArtists": "Top-Trending-Künstler",
+      "trendingBadge": "JETZT VIRAL",
+      "trendingPodium1": "#1 Weltweiter Trend",
+      "trendingRunnersUp": "Weitere Trends",
+      "trendingListenersCount": "{{count}} Hörer heute",
+      "trendingFooterPro": "Trends abspielen: {{prefix}}lastfm play top • {{prefix}}lastfm trending artists",
+      "tagAuthor": "🏷️ Genre- & Tag-Spotlight",
+      "tagFieldReach": "Globale Reichweite",
+      "tagFieldTaggings": "Gesamte Markierungen",
+      "tagFieldPillars": "Pionier-Künstler",
+      "tagFieldTopTracks": "Signatur-Tracks",
+      "tagFooterPro": "Tag-Alben entdecken: {{prefix}}lastfm tagalbums {{tag}} • {{prefix}}lastfm tag",
+      "albumSpotlightAuthor": "💿 Album-Spotlight",
+      "albumFieldArtist": "Künstler",
+      "albumFieldYourPlays": "Deine Scrobbles",
+      "albumFieldTracks": "Titelanzahl",
+      "albumFieldTracklist": "Titellisten-Auszug",
+      "albumFieldTags": "Genres & Tags",
+      "albumFooterPro": "Album abspielen: {{prefix}}play {{artist}} - {{album}} • {{prefix}}fm cover für Cover-Art",
+      "trackSpotlightAuthor": "🎵 Titel-Spotlight",
+      "trackFieldArtist": "Künstler",
+      "trackFieldAlbum": "Album",
+      "trackFieldListeners": "Globale Hörer",
+      "trackFieldPlays": "Gesamt-Scrobbles",
+      "trackFieldUserPlays": "Deine Scrobbles",
+      "trackFieldLoved": "Favoritenstatus",
+      "lovedStatusYes": "Geliebt ❤️",
+      "lovedStatusNo": "Nicht geliebt 🖤",
+      "trackFieldTags": "Tags",
+      "trackFieldSimilar": "Ähnliche Titel",
+      "trackFooterPro": "Titel abspielen: {{prefix}}play {{artist}} - {{track}} • Last.fm: {{user}}",
+      "leaderboardAuthorPro": "👑 Musik-Ruhmeshalle",
+      "leaderboardChampion": "Champion",
+      "leaderboardRunnersUp": "Podiumsanwärter",
+      "trackListAuthorLoved": "❤️ Persönliche Favoriten",
+      "trackListAuthorTop": "🏆 Top-Titel",
+      "trackListAuthorRecent": "⏱️ Letzte Aktivität",
+      "playDirectoryAuthor": "🎧 Last.fm Streaming-Zentrale",
+      "playDirectoryTitle": "Smart-Playback-Verzeichnis",
+      "playDirectoryCollections": "Verfügbare Musiksammlungen",
+      "playDirectoryProviders": "Unterstützte Suchanbieter",
+      "playDirectoryFooter": "Musik abspielen: {{prefix}}fm play <kategorie> • Last.fm v2",
+      "playCategoryLoved": "Lieblings-Titel-Sammlung",
+      "playCategoryTop": "Meistgehörte Titel",
+      "playCategoryRecent": "Kürzlicher Hörverlauf",
+      "playCategoryAlbums": "Top-Album-Sammlungen",
+      "playCategoryArtists": "Top-Künstler-Sammlung",
+      "playCategoryPlaylist": "Eigene Wiedergabelisten",
+      "playLoadingTitle": "Titel werden geladen",
+      "playLoadingDesc": "{{emoji}} Lade **{{count}}** {{category}}-Titel für **{{username}}**{{provider}}...",
+      "playDoneTitle": "Warteschlange aktualisiert",
+      "playDoneAdded": "**{{count}}** Titel zur Warteschlange hinzugefügt",
+      "playDoneNotFound": "{{count}} Titel konnten nicht gefunden werden"
     },
     "messages": {
       "missingCriticalPermsTitle": "Fehlende Berechtigungen — Bot kann nicht ordnungsgemäß arbeiten",
@@ -963,7 +1071,16 @@
       "unknownDate": "Unbekannt",
       "checkYes": "✅ Du hast ein **aktives Votum** für diesen {{type}} — danke!",
       "checkNo": "❌ Du hast für diesen {{type}} noch nicht abgestimmt (oder dein Votum ist abgelaufen).\n**[Jetzt voten!]({{url}})**",
-      "checkUnknown": "⚠️ Dein Votum konnte gerade nicht geprüft werden — versuche es in einer Minute erneut."
+      "checkUnknown": "⚠️ Dein Votum konnte gerade nicht geprüft werden — versuche es in einer Minute erneut.",
+      "voteCheckAuthor": "🗳️ FluxerList-Community",
+      "voteCheckTitle": "Unterstützer-Abstimmungsprüfung",
+      "voteCheckYesDesc": "✅ Du **hast bereits** für diesen {{type}} auf FluxerList abgestimmt — vielen Dank für deinen Support!",
+      "voteCheckNoDesc": "❌ Du hast für diesen {{type}} auf FluxerList noch nicht abgestimmt.\n**[Jetzt auf FluxerList abstimmen!]({{url}})**",
+      "voteCheckFooter": "Wählerliste anzeigen: {{prefix}}voters • FluxerList",
+      "voteVotersAuthor": "🏆 Top-Unterstützer",
+      "voteAuthor": "🗳️ FluxerList-Community",
+      "voteFooterHint": "Vote-Status prüfen: {{prefix}}vote check • {{prefix}}voters",
+      "defaultTitle": "Abstimmungssystem-Handbuch"
     },
     "seek": {
       "nothingPlaying": "❌ Es wird gerade nichts abgespielt!",
@@ -984,7 +1101,11 @@
       "autoplayTitleDisabled": "Autoplay Deaktiviert",
       "autoplayDescEnabled": "Remix fügt automatisch empfohlene Titel hinzu, wenn die Warteschlange endet.",
       "autoplayDescDisabled": "Autoplay wurde deaktiviert. Die Wiedergabe stoppt am Ende der Warteschlange.",
-      "autoplayEngine": "Engine: YouTube Mix + Last.fm"
+      "autoplayEngine": "Engine: YouTube Mix + Last.fm",
+      "statusActive": "🟢 Aktiv",
+      "statusDisabled": "🔴 Deaktiviert",
+      "disableHint": "{{prefix}}autoplay zum Deaktivieren",
+      "enableHint": "{{prefix}}autoplay zum Aktivieren"
     },
     "trackopt": {
       "notAvailable": "❌ Track-Optionen-Funktion ist nicht verfügbar.",
@@ -1021,7 +1142,14 @@
       "savedListAuthor": "✂️ Gespeicherte Titel-Trims",
       "trimProfilesFooter": "{{count}} Trim-Profil{{plural}} gespeichert • Anwenden mit {{prefix}}trackopt play <alias>",
       "appliedAuthor": "✂️ Titel-Trim angewendet",
-      "activeCutRangeField": "Aktiver Schnittbereich"
+      "activeCutRangeField": "Aktiver Schnittbereich",
+      "autoApplyFooter": "Wird automatisch angewendet, wenn dieser Track abgespielt wird • {{prefix}}trackopt list",
+      "playFooterHint": "Aktives Schnittprofil auf die aktuelle Wiedergabesitzung angewendet",
+      "removeAuthor": "✂️ Track-Schnitt-Manager",
+      "removeFooter": "Setze jederzeit neue Schnitte mit {{prefix}}trackopt set",
+      "listAuthor": "✂️ Track-Schnitt-Verzeichnis",
+      "listTitleClean": "Gespeicherte Track-Schnitte ({{count}})",
+      "listFooterHint": "Verwalte deine Schnitte mit {{prefix}}trackopt set / play / remove"
     },
     "normalize": {
       "statusEnabled": "🔊 Dynamische Lautstärkenormalisierung (ReplayGain) ist für diesen Server derzeit **Aktiviert**.",
@@ -1043,7 +1171,10 @@
       "subBass": "Sub-Bass",
       "midBass": "Mittel-Bass",
       "high": "Höhen",
-      "resetHint": "Jederzeit zurücksetzen mit {{prefix}}bassboost off"
+      "resetHint": "Jederzeit zurücksetzen mit {{prefix}}bassboost off",
+      "offTitle": "⏹️ Bass-Boost Aus",
+      "activeTitle": "🔊 Bass-Boost: {{level}}",
+      "offFooter": "Anwenden mit {{prefix}}bassboost <low|medium|hard>"
     },
     "speed": {
       "reset": "⏩ Wiedergabegeschwindigkeit auf normale **1.0×** zurückgesetzt.",

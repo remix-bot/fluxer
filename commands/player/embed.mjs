@@ -84,6 +84,7 @@ export function buildPlayerEmbed(bot, msg, player, timeout, state = {}) {
 
   const builder = new EmbedBuilder()
       .setColor(0xe9196c)
+      .setAuthor({ name: bot.t(msg, "responses.player.deckAuthor") })
       .setTitle(bot.t(msg, "responses.player.title"))
       .setDescription(description)
       .setFooter({

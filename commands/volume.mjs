@@ -5,7 +5,7 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { MAX_VOLUME } from "../src/utils/UI.mjs";
+import { MAX_VOLUME, ERROR_COLOR } from "../src/utils/UI.mjs";
 
 /**
  * @type {CommandBuilder}
@@ -60,8 +60,10 @@ export async function run(message, data) {
   const pct = Number(raw);
   if (pct < 0 || pct > MAX_VOLUME) {
     const embed = new EmbedBuilder()
-      .setColor(0xe9196c)
-      .setDescription(this.t(message, "responses.volume.outOfRange", { max: MAX_VOLUME }));
+      .setColor(ERROR_COLOR)
+      .setAuthor({ name: `🔊 ${this.t(message, "responses.volume.volumeAdjusted")}` })
+      .setDescription(this.t(message, "responses.volume.outOfRange", { max: MAX_VOLUME }))
+      .setFooter({ text: this.t(message, "responses.volume.volumeHint", { prefix }) });
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
 

@@ -200,6 +200,8 @@ export async function run(msg, data) {
     if (current.thumbnail) setEmbed.setThumbnail(current.thumbnail);
     if (result.alias !== DEFAULT_ALIAS) {
       setEmbed.setFooter({ text: this.t(msg, "responses.trackopt.playHintFooter", { prefix, alias: result.alias }) });
+    } else {
+      setEmbed.setFooter({ text: this.t(msg, "responses.trackopt.autoApplyFooter", { prefix }) });
     }
 
     return msg.reply({ embeds: [setEmbed] });
@@ -275,7 +277,8 @@ export async function run(msg, data) {
         .setAuthor({ name: this.t(msg, "responses.trackopt.appliedAuthor") })
         .setTitle(current.title?.slice(0, 256) || "Track Trim")
         .setDescription(this.t(msg, "responses.trackopt.applied", { alias: aliasLabel, start: Utils.prettifyMS(result.startMs), end: endStr }))
-        .addFields({ name: this.t(msg, "responses.trackopt.activeCutRangeField"), value: timeline, inline: false });
+        .addFields({ name: this.t(msg, "responses.trackopt.activeCutRangeField"), value: timeline, inline: false })
+        .setFooter({ text: this.t(msg, "responses.trackopt.playFooterHint", { prefix }) });
 
       if (current.thumbnail) playEmbed.setThumbnail(current.thumbnail);
 
@@ -302,19 +305,35 @@ export async function run(msg, data) {
         p._clearTrackEndTimer();
       }
     }
-    if (aliasRaw) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.trackopt.removedAlias", { alias: aliasRaw, title: current.title }))] });
-    }
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.trackopt.removedAll", { title: current.title }))] });
+    const removeDesc = aliasRaw
+      ? this.t(msg, "responses.trackopt.removedAlias", { alias: aliasRaw, title: current.title })
+      : this.t(msg, "responses.trackopt.removedAll", { title: current.title });
+
+    const removeEmbed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: this.t(msg, "responses.trackopt.removeAuthor") })
+      .setTitle(current.title?.slice(0, 256) || "Track Trim")
+      .setDescription(removeDesc)
+      .setFooter({ text: this.t(msg, "responses.trackopt.removeFooter", { prefix }) });
+
+    if (current.thumbnail) removeEmbed.setThumbnail(current.thumbnail);
+
+    return msg.reply({ embeds: [removeEmbed] });
   }
 
   if (subCommand === "list") {
     const rows = await trackOpts.list(userId);
     if (!rows || rows.length === 0) {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.trackopt.listEmpty", { prefix }))] });
+      const emptyEmbed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setAuthor({ name: this.t(msg, "responses.trackopt.listAuthor") })
+        .setTitle(this.t(msg, "responses.trackopt.listTitleClean", { count: 0 }))
+        .setDescription(this.t(msg, "responses.trackopt.listEmpty", { prefix }))
+        .setFooter({ text: this.t(msg, "responses.trackopt.listFooterHint", { prefix }) });
+      return msg.reply({ embeds: [emptyEmbed] });
     }
 
-    let desc = this.t(msg, "responses.trackopt.listTitle", { count: rows.length }) + "\n\n";
+    let desc = "";
     let lastTrack = "";
     for (const row of rows) {
       const title = row.track_title || row.track_identifier;
@@ -330,6 +349,13 @@ export async function run(msg, data) {
     }
     desc += "\n" + this.t(msg, "responses.trackopt.listHint", { prefix });
 
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] });
+    const listEmbed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: this.t(msg, "responses.trackopt.listAuthor") })
+      .setTitle(this.t(msg, "responses.trackopt.listTitleClean", { count: rows.length }))
+      .setDescription(desc.trim())
+      .setFooter({ text: this.t(msg, "responses.trackopt.listFooterHint", { prefix }) });
+
+    return msg.reply({ embeds: [listEmbed] });
   }
 }

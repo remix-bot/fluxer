@@ -109,9 +109,12 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   let statusMsg;
   try {
     statusMsg = await msg.reply({
-      embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
-        `${categoryEmoji} Fetching your ${categoryLabel} tracks from Last.fm${resolveLabel}...`
-      )]
+      embeds: [new EmbedBuilder().setColor(getGlobalColor())
+        .setAuthor({ name: ctx.t(msg, "responses.lastfm.playDirectoryAuthor") })
+        .setTitle(ctx.t(msg, "responses.lastfm.playLoadingTitle"))
+        .setDescription(
+          `${categoryEmoji} Fetching your ${categoryLabel} tracks from Last.fm${resolveLabel}...`
+        )]
     });
   } catch (e) { logger.warn("[LastfmCmd] Error:", e?.message); statusMsg = null; }
 
@@ -128,9 +131,11 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   }
 
   if (!result.tracks.length) {
-    const noTracks = { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
-      `${categoryEmoji} No ${categoryLabel.toLowerCase()} tracks found for **${result.username}**.`
-    )] };
+    const noTracks = { embeds: [new EmbedBuilder().setColor(getGlobalColor())
+      .setAuthor({ name: ctx.t(msg, "responses.lastfm.playDirectoryAuthor") })
+      .setDescription(
+        `${categoryEmoji} No ${categoryLabel.toLowerCase()} tracks found for **${result.username}**.`
+      )] };
     if (statusMsg) statusMsg.edit(noTracks).catch(() => msg.reply(noTracks));
     else msg.reply(noTracks);
     return;
@@ -141,9 +146,18 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
 
   if (statusMsg) {
     statusMsg.edit({
-      embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
-        `${categoryEmoji} Loading **${result.tracks.length}** ${categoryLabel.toLowerCase()} tracks from **${result.username}**${resolveLabel}...`
-      )]
+      embeds: [new EmbedBuilder().setColor(getGlobalColor())
+        .setAuthor({ name: ctx.t(msg, "responses.lastfm.playDirectoryAuthor") })
+        .setTitle(ctx.t(msg, "responses.lastfm.playLoadingTitle"))
+        .setDescription(
+          ctx.t(msg, "responses.lastfm.playLoadingDesc", {
+            emoji: categoryEmoji,
+            count: result.tracks.length,
+            category: categoryLabel.toLowerCase(),
+            username: result.username,
+            provider: resolveLabel,
+          })
+        )]
     }).catch(() => {});
   }
 
@@ -168,12 +182,17 @@ export async function playLastFmCategory(ctx, msg, userId, category, options = {
   }
 
   const summary = [];
-  if (added > 0) summary.push(`✅ Added **${added}** track${added !== 1 ? "s" : ""} to the queue`);
-  if (failed > 0) summary.push(`⚠️ ${failed} track${failed !== 1 ? "s" : ""} couldn't be found`);
+  if (added > 0) summary.push(`✅ ${ctx.t(msg, "responses.lastfm.playDoneAdded", { count: added })}`);
+  if (failed > 0) summary.push(`⚠️ ${ctx.t(msg, "responses.lastfm.playDoneNotFound", { count: failed })}`);
 
-  const doneEmbed = { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(
-    `${categoryEmoji} **${categoryLabel} Tracks — ${result.username}**\n${summary.join(" · ")}`
-  )] };
+  const doneEmbed = { embeds: [new EmbedBuilder().setColor(getGlobalColor())
+    .setAuthor({ name: ctx.t(msg, "responses.lastfm.playDirectoryAuthor") })
+    .setTitle(ctx.t(msg, "responses.lastfm.playDoneTitle"))
+    .setDescription(
+      `${categoryEmoji} **${categoryLabel} Tracks — ${result.username}**\n\n` +
+      summary.join("\n")
+    )
+    .setFooter({ text: ctx.t(msg, "responses.lastfm.playDirectoryFooter", { prefix }) })] };
 
   if (statusMsg) statusMsg.edit(doneEmbed).catch(() => msg.reply(doneEmbed));
   else msg.reply(doneEmbed);
@@ -278,42 +297,33 @@ export async function runPlaybackActions(msg, data, lastfm, prefix, userId, targ
 
       if (!parsed.category) {
         const lfProviderNote = parsed.showAllCategories && parsed.resolveProvider
-          ? `\n\n💡 \`${prefix}lastfm play ${parsed.resolveProvider}:<category>\` — Specify a category after the provider:`
+          ? `\n💡 \`${prefix}lastfm play ${parsed.resolveProvider}:<category>\``
           : "";
-        return msg.reply({
-          embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription([
-            `❌ Usage: \`${prefix}lastfm play <category>\``,
-            ``,
-            `**Categories:**`,
-            `\`loved\` — Play your loved tracks`,
-            `\`top\` — Play your top tracks`,
-            `\`recent\` — Play your recent tracks`,
-            `\`albums\` — Play your top albums`,
-            `\`artists\` — Play your top artists' tracks`,
-            `\`playlist <number>\` — Play a playlist (use \`${prefix}lastfm playlists\` to list)`,
-            ``,
-            `**With a search provider (defaults to \`top\`):**`,
-            `\`${prefix}lastfm play td\` or \`${prefix}lastfm play td:top\` — Play top tracks, search on Tidal`,
-            `\`${prefix}lastfm play sp\` or \`${prefix}lastfm play sp:top\` — Play top tracks, search on Spotify`,
-            `\`${prefix}lastfm play dz\` or \`${prefix}lastfm play dz:top\` — Play top tracks, search on Deezer`,
-            `\`${prefix}lastfm play yt\` or \`${prefix}lastfm play yt:top\` — Play top tracks, search on YouTube`,
-            ``,
-            `**Last.fm as resolve provider (all categories):**`,
-            `\`${prefix}lastfm play lf:loved\` — Play loved tracks, search on Last.fm`,
-            `\`${prefix}lastfm play lf:top\` — Play top tracks, search on Last.fm`,
-            `\`${prefix}lastfm play lf:recent\` — Play recent tracks, search on Last.fm`,
-            `\`${prefix}lastfm play lf:albums\` — Play top albums, search on Last.fm`,
-            `\`${prefix}lastfm play lf:artists\` — Play top artists, search on Last.fm`,
-            ``,
-            `**Examples:**`,
-            `\`${prefix}lastfm play loved\``,
-            `\`${prefix}lastfm play td\``,
-            `\`${prefix}lastfm play sp:top\``,
-            `\`${prefix}lastfm play lf:loved\``,
-            `\`${prefix}lastfm play playlist 1\``,
-            lfProviderNote,
-          ].join("\n"))]
-        });
+
+        const directoryEmbed = new EmbedBuilder()
+          .setColor(getGlobalColor())
+          .setAuthor({ name: this.t(msg, "responses.lastfm.playDirectoryAuthor") })
+          .setTitle(this.t(msg, "responses.lastfm.playDirectoryTitle"))
+          .setDescription(
+            `\`${prefix}lastfm play <category> [provider]\`\n\n` +
+            `**${this.t(msg, "responses.lastfm.playDirectoryCollections")}:**\n` +
+            `• \`loved\` — ${this.t(msg, "responses.lastfm.playCategoryLoved")}\n` +
+            `• \`top\` — ${this.t(msg, "responses.lastfm.playCategoryTop")}\n` +
+            `• \`recent\` — ${this.t(msg, "responses.lastfm.playCategoryRecent")}\n` +
+            `• \`albums\` — ${this.t(msg, "responses.lastfm.playCategoryAlbums")}\n` +
+            `• \`artists\` — ${this.t(msg, "responses.lastfm.playCategoryArtists")}\n` +
+            `• \`playlist <num>\` — ${this.t(msg, "responses.lastfm.playCategoryPlaylist")}`
+          )
+          .addFields({
+            name: `🌐 ${this.t(msg, "responses.lastfm.playDirectoryProviders")}`,
+            value:
+              "`sp` (Spotify) · `td` (Tidal) · `dz` (Deezer) · `yt` (YouTube) · `lf` (Last.fm)\n" +
+              `*Examples:* \`${prefix}fm play loved\` · \`${prefix}fm play td:top\` · \`${prefix}fm play lf:loved\`${lfProviderNote}`,
+            inline: false,
+          })
+          .setFooter({ text: this.t(msg, "responses.lastfm.playDirectoryFooter", { prefix }) });
+
+        return msg.reply({ embeds: [directoryEmbed] });
       }
 
       return playLastFmCategory(this, msg, userId, parsed.category, {

@@ -6,7 +6,8 @@
  */
 
 
-import { cleanId, getMessageGuildId } from "../../src/ui/index.mjs";
+import { cleanId, getMessageGuildId, getGlobalColor } from "../../src/ui/index.mjs";
+import { EmbedBuilder } from "@fluxerjs/core";
 import runnables from "../../settings/runnables.mjs";
 import {
   parseBool, displayValue, getGuildName, embed, tWrap, prettifySettingLabel,
@@ -109,7 +110,30 @@ export async function handleShortcut(ctx, message, settingKey, valueTokens) {
     }
     const val   = set.get(settingKey);
     const label = prettifySettingLabel(settingKey, t247, guildId);
-    return message.reply(embed("**" + label + "**\nValue: " + displayValue(settingKey, val)));
+    const defaultVal = ctx.settingsMgr?.defaults?.[settingKey];
+    const shortcutEmbed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: ctx.t(message, "responses.settings.shortcutAuthor") })
+      .setTitle(`⚙️ \`${settingKey}\` — ${label}`)
+      .addFields(
+        {
+          name: `📌 ${ctx.t(message, "responses.settings.shortcutValueField")}`,
+          value: displayValue(settingKey, val),
+          inline: true,
+        },
+        {
+          name: `🏷️ ${ctx.t(message, "responses.settings.shortcutDefaultField")}`,
+          value: displayValue(settingKey, defaultVal),
+          inline: true,
+        }
+      )
+      .setFooter({
+        text: ctx.t(message, "responses.settings.shortcutHintFooter", {
+          prefix: ctx.handler?.getPrefix(guildId) ?? "%",
+          shortcut: settingKey,
+        }),
+      });
+    return message.reply({ embeds: [shortcutEmbed] });
   }
 
   const rawValue = valueTokens.join(" ");

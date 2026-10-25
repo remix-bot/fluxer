@@ -75,37 +75,54 @@ export async function runTagActions(msg, data, lastfm, prefix, userId, targetUse
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(`🏷️ ${tagInfo.name}`)
-        .setURL(tagInfo.url || undefined);
-
-      const fields = [];
-      fields.push({ name: "Reach", value: Utils.formatNumber(tagInfo.reach), inline: true });
-      fields.push({ name: "Total Taggings", value: Utils.formatNumber(tagInfo.count), inline: true });
-
-      if (topArtists.length) {
-        const artistStr = topArtists.map((a, i) => {
-          const link = a.url ? `[${a.name}](${a.url})` : a.name;
-          return `${i + 1}. ${link} (**${Utils.formatNumber(a.playcount)}** ${this.t(msg, "responses.lastfm.plays")})`;
-        }).join("\n");
-        fields.push({ name: "Top Artists", value: artistStr.slice(0, 1024), inline: false });
-      }
-
-      if (topTracks.length) {
-        const trackStr = topTracks.map((t, i) => {
-          const link = t.url ? `[${t.name}](${t.url})` : t.name;
-          return `${i + 1}. ${link} by **${t.artist}**`;
-        }).join("\n");
-        fields.push({ name: "Top Tracks", value: trackStr.slice(0, 1024), inline: false });
-      }
-
-      embed.addFields(...fields);
+        .setAuthor({ name: this.t(msg, "responses.lastfm.tagAuthor") })
+        .setTitle(tagInfo.name)
+        .setURL(tagInfo.url || undefined)
+        .setFooter({ text: this.t(msg, "responses.lastfm.tagFooterPro", { tag: tagInfo.name }) });
 
       if (tagInfo.summary) {
         const cleanSummary = tagInfo.summary.replace(/<[^>]*>/g, "").trim();
         if (cleanSummary.length > 0) {
-          const truncated = cleanSummary.length > 300 ? cleanSummary.slice(0, 297) + "..." : cleanSummary;
-          embed.setDescription(truncated);
+          const truncated = cleanSummary.length > 280 ? cleanSummary.slice(0, 277) + "..." : cleanSummary;
+          embed.setDescription(`> *${truncated}*`);
         }
+      }
+
+      embed.addFields(
+        {
+          name: this.t(msg, "responses.lastfm.tagFieldReach"),
+          value: `👥 **${Utils.formatNumber(tagInfo.reach)}**`,
+          inline: true
+        },
+        {
+          name: this.t(msg, "responses.lastfm.tagFieldTaggings"),
+          value: `🏷️ **${Utils.formatNumber(tagInfo.count)}**`,
+          inline: true
+        }
+      );
+
+      if (topArtists.length) {
+        const artistStr = topArtists.slice(0, 5).map((a, i) => {
+          const link = a.url ? `[${a.name}](${a.url})` : a.name;
+          return `\`${i + 1}.\` ${link} (${Utils.formatNumber(a.playcount)} ${this.t(msg, "responses.lastfm.plays")})`;
+        }).join(" · ");
+        embed.addFields({
+          name: this.t(msg, "responses.lastfm.tagFieldPillars"),
+          value: artistStr.slice(0, 1024),
+          inline: false
+        });
+      }
+
+      if (topTracks.length) {
+        const trackStr = topTracks.slice(0, 5).map((t, i) => {
+          const link = t.url ? `[${t.name}](${t.url})` : t.name;
+          return `\`${i + 1}.\` ${link} — **${t.artist}**`;
+        }).join("\n");
+        embed.addFields({
+          name: this.t(msg, "responses.lastfm.tagFieldTopTracks"),
+          value: trackStr.slice(0, 1024),
+          inline: false
+        });
       }
 
       return msg.reply({ embeds: [embed] });
