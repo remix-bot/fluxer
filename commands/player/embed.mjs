@@ -53,9 +53,9 @@ export function buildPlayerEmbed(bot, msg, player, timeout, state = {}) {
   let filterStatus = bot.t(msg, "responses.player.filterOff");
   if (player.activeFilter) {
     if (player.activeFilter.label.includes("+")) {
-      filterStatus = `🔥 **${player.activeFilter.label}**`;
+      filterStatus = bot.t(msg, "responses.player.filterStacked", { label: player.activeFilter.label });
     } else {
-      filterStatus = `${player.activeFilter.emoji ?? "🎛️"} **${player.activeFilter.label}**`;
+      filterStatus = bot.t(msg, "responses.player.filterActive", { emoji: player.activeFilter.emoji ?? "🎛️", label: player.activeFilter.label });
     }
   }
 
@@ -71,7 +71,7 @@ export function buildPlayerEmbed(bot, msg, player, timeout, state = {}) {
     `${timeDisplay}`,
     ``,
     bot.t(msg, "responses.player.volumeLabel", { volume: volPercent }) + " " + volumeBar,
-    `${bot.t(msg, "responses.player.queueLabel", { count: queueSize })} | Loop: ${loopStatus} | Filter: ${filterStatus}`,
+    `${bot.t(msg, "responses.player.queueLabel", { count: queueSize })} • ${loopStatus} • ${filterStatus}`,
     ``,
     state.message ? `💬 *${state.message}*` : `💡 *${bot.t(msg, "responses.player.reactHint")}*`,
     ``,
@@ -83,7 +83,7 @@ export function buildPlayerEmbed(bot, msg, player, timeout, state = {}) {
       : msg.author?.avatarURL ?? null;
 
   const builder = new EmbedBuilder()
-      .setColor(getGlobalColor())
+      .setColor(0xe9196c)
       .setTitle(bot.t(msg, "responses.player.title"))
       .setDescription(description)
       .setFooter({

@@ -327,7 +327,11 @@
       "nowPlaying": "🎵 **Spielt gerade**",
       "header": "📋 **{{count}} Tracks in der Warteschlange** • ⏱️ `{{time}}`",
       "upNext": " ▶",
-      "queueTitle": "🎧 Warteschlange"
+      "queueTitle": "🎧 Warteschlange",
+      "tracksCount": "{{count}} {{plural}} in der Warteschlange",
+      "nowPlayingHeader": "Aktuelle Wiedergabe",
+      "upNextHeader": "Als Nächstes",
+      "pageFooter": "Seite {{page}}/{{totalPages}} • Schleife: {{loopState}}"
     },
     "queue": {
       "empty": "Die Warteschlange ist leer.",
@@ -500,7 +504,8 @@
       "unknownStation": "❌ Unbekannter Sender `{{station}}`. Verfügbar: {{stations}}\n\nNutze `$prefixradio list` zum Durchsuchen.",
       "nowPlaying": "📻 Streamt jetzt _{{title}}_ von [{{author}}]({{url}}) in <#{{channel}}>",
       "skipHint": "_Nutze `$prefixskip`, um das Radio zu stoppen, oder `$prefixradio list`, um Sender zu wechseln._",
-      "prevNext": "⬅️ Zurück   ➡️ Weiter   ❌ Abbrechen"
+      "prevNext": "⬅️ Zurück   ➡️ Weiter   ❌ Abbrechen",
+      "stationsAuthor": "24/7 Radiosender-Verzeichnis"
     },
     "reload": {
       "indexNoReload": "❌ `index.mjs` kann nicht neu geladen werden — führe einen vollständigen Neustart durch.",
@@ -533,7 +538,8 @@
       "cancelled": "❌ Abgebrochen.",
       "added": "✅ [{{title}}]({{url}}) zur Warteschlange hinzugefügt!",
       "timedOut": "⏰ Suche abgelaufen.",
-      "sessionClosed": "Sitzung geschlossen"
+      "sessionClosed": "Sitzung geschlossen",
+      "cancelOption": "Abbrechen"
     },
     "servers": {
       "noServers": "_Keine Server gefunden._",

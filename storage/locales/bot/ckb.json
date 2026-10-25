@@ -327,7 +327,11 @@
       "nowPlaying": "🎵 **ئێستا پەخش دەکرێت**",
       "header": "📋 **{{count}} تراک لە ڕیزبەندییەکەدا** • ⏱️ `{{time}}`",
       "upNext": " ▶",
-      "queueTitle": "🎧 ڕیزبەندی"
+      "queueTitle": "🎧 ڕیزبەندی",
+      "tracksCount": "{{count}} {{plural}} لە ڕیزبەندی",
+      "nowPlayingHeader": "ئێستا لێدەدرێت",
+      "upNextHeader": "دواتر",
+      "pageFooter": "پەڕە {{page}}/{{totalPages}} • دووبارەکردنەوە: {{loopState}}"
     },
     "queue": {
       "empty": "ڕیزبەندییەکە بەتاڵە.",
@@ -500,7 +504,8 @@
       "unknownStation": "❌ ستەیشنی نەناسراو `{{station}}`. بەردەستەکان: {{stations}}\n\n`$prefixradio list` بەکاربهێنە بۆ بینین.",
       "nowPlaying": "📻 پەخشی ڕاستەوخۆ _{{title}}_ لەلایەن [{{author}}]({{url}}) لە <#{{channel}}>",
       "skipHint": "_`$prefixskip` بەکاربهێنە بۆ وەستاندنی ڕادیۆ، یان `$prefixradio list` بۆ گۆڕینی ستەیشنەکان._",
-      "prevNext": "⬅️ پێشوو   ➡️ دواتر   ❌ پاشگەزبوونەوە"
+      "prevNext": "⬅️ پێشوو   ➡️ دواتر   ❌ پاشگەزبوونەوە",
+      "stationsAuthor": "ڕێبەری وێستگەکانی ڕادیۆ ٢٤/٧"
     },
     "reload": {
       "indexNoReload": "❌ `index.mjs` ناتوانرێت بارکردنەوەی خێرا بکات — سەرەتا دەستپێکردنەوەی تەواو بکە.",
@@ -533,7 +538,8 @@
       "cancelled": "❌ هەڵوەشایەوە.",
       "added": "✅ [{{title}}]({{url}}) **زیادکرا بۆ ڕیزبەندییەکە!**",
       "timedOut": "⏰ کاتی گەڕان تەواو بوو.",
-      "sessionClosed": "دانیشتن داخرا"
+      "sessionClosed": "دانیشتن داخرا",
+      "cancelOption": "هەڵوەشاندنەوە"
     },
     "servers": {
       "noServers": "_هیچ سێرڤەرێک نەدۆزرایەوە._",

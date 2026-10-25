@@ -327,7 +327,11 @@
       "nowPlaying": "🎵 **Tocando Agora**",
       "header": "📋 **{{count}} faixas na fila** • ⏱️ `{{time}}`",
       "upNext": " ▶",
-      "queueTitle": "🎧 Fila"
+      "queueTitle": "🎧 Fila",
+      "tracksCount": "{{count}} {{plural}} na fila",
+      "nowPlayingHeader": "Tocando Agora",
+      "upNextHeader": "A Seguir",
+      "pageFooter": "Página {{page}}/{{totalPages}} • Repetição: {{loopState}}"
     },
     "queue": {
       "empty": "A fila está vazia.",
@@ -500,7 +504,8 @@
       "unknownStation": "❌ Estação desconhecida `{{station}}`. Disponíveis: {{stations}}\n\nUse `$prefixradio list` para navegar.",
       "nowPlaying": "📻 Transmitindo agora _{{title}}_ por [{{author}}]({{url}}) em <#{{channel}}>",
       "skipHint": "_Use `$prefixskip` para parar o rádio ou `$prefixradio list` para trocar de estação._",
-      "prevNext": "⬅️ Anterior   ➡️ Próximo   ❌ Cancelar"
+      "prevNext": "⬅️ Anterior   ➡️ Próximo   ❌ Cancelar",
+      "stationsAuthor": "Diretório de Rádios 24/7"
     },
     "reload": {
       "indexNoReload": "❌ `index.mjs` não pode ser recarregado — faça uma reinicialização completa.",
@@ -533,7 +538,8 @@
       "cancelled": "❌ Cancelado.",
       "added": "✅ [{{title}}]({{url}}) adicionado à fila!",
       "timedOut": "⏰ Tempo de busca esgotado.",
-      "sessionClosed": "Sessão encerrada"
+      "sessionClosed": "Sessão encerrada",
+      "cancelOption": "Cancelar"
     },
     "servers": {
       "noServers": "_Nenhum servidor encontrado._",

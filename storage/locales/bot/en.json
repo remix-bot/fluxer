@@ -436,7 +436,11 @@
       "nowPlaying": "🎵 **Now Playing**",
       "header": "📋 **{{count}} tracks in queue** • ⏱️ `{{time}}`",
       "upNext": " ▶",
-      "queueTitle": "🎧 Queue"
+      "queueTitle": "🎧 Queue",
+      "tracksCount": "{{count}} {{plural}} in queue",
+      "nowPlayingHeader": "Now Playing",
+      "upNextHeader": "Up Next",
+      "pageFooter": "Page {{page}}/{{totalPages}} • Loop: {{loopState}}"
     },
     "loop": {
       "invalidChoice": "'{{choice}}' is not valid. Use `song` or `queue`",
@@ -617,7 +621,8 @@
       "unknownStation": "❌ Unknown station `{{station}}`. Available: {{stations}}\n\nUse `$prefixradio list` to browse.",
       "nowPlaying": "📻 Now streaming _{{title}}_ by [{{author}}]({{url}}) in <#{{channel}}>",
       "skipHint": "_Use `$prefixskip` to stop the radio, or `$prefixradio list` to switch stations._",
-      "prevNext": "⬅️ Previous   ➡️ Next   ❌ Cancel"
+      "prevNext": "⬅️ Previous   ➡️ Next   ❌ Cancel",
+      "stationsAuthor": "24/7 Radio Station Directory"
     },
     "reload": {
       "indexNoReload": "❌ `index.mjs` cannot be hot-reloaded — do a full restart.",
@@ -650,7 +655,8 @@
       "cancelled": "❌ Cancelled.",
       "added": "✅ Added [{{title}}]({{url}}) to the queue!",
       "timedOut": "⏰ Search timed out.",
-      "sessionClosed": "Session closed"
+      "sessionClosed": "Session closed",
+      "cancelOption": "Cancel"
     },
     "servers": {
       "noServers": "_No servers found._",

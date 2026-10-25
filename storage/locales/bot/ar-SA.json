@@ -327,7 +327,11 @@
       "nowPlaying": "🎵 **يعمل حالياً**",
       "header": "📋 **{{count}} مقطع في قائمة الانتظار** • ⏱️ `{{time}}`",
       "upNext": " ▶",
-      "queueTitle": "🎧 قائمة الانتظار"
+      "queueTitle": "🎧 قائمة الانتظار",
+      "tracksCount": "{{count}} {{plural}} في قائمة الانتظار",
+      "nowPlayingHeader": "يتم تشغيله الآن",
+      "upNextHeader": "التالي",
+      "pageFooter": "صفحة {{page}}/{{totalPages}} • التكرار: {{loopState}}"
     },
     "queue": {
       "empty": "قائمة الانتظار فارغة.",
@@ -500,7 +504,8 @@
       "unknownStation": "❌ محطة غير معروفة `{{station}}`. المتاحة: {{stations}}\n\nاستخدم `$prefixradio list` للتصفح.",
       "nowPlaying": "📻 بث مباشر _{{title}}_ لـ [{{author}}]({{url}}) في <#{{channel}}>",
       "skipHint": "_استخدم `$prefixskip` لإيقاف الإذاعة، أو `$prefixradio list` لتبديل المحطات._",
-      "prevNext": "⬅️ السابق   ➡️ التالي   ❌ إلغاء"
+      "prevNext": "⬅️ السابق   ➡️ التالي   ❌ إلغاء",
+      "stationsAuthor": "دليل محطات الراديو 24/7"
     },
     "reload": {
       "indexNoReload": "❌ لا يمكن إعادة تحميل `index.mjs` — قم بإعادة تشغيل كاملة.",
@@ -533,7 +538,8 @@
       "cancelled": "❌ تم الإلغاء.",
       "added": "✅ تمت إضافة [{{title}}]({{url}}) إلى قائمة الانتظار!",
       "timedOut": "⏰ انتهت مهلة البحث.",
-      "sessionClosed": "تم إغلاق الجلسة"
+      "sessionClosed": "تم إغلاق الجلسة",
+      "cancelOption": "إلغاء"
     },
     "servers": {
       "noServers": "_لم يتم العثور على خوادم._",

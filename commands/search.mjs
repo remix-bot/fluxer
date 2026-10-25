@@ -8,6 +8,7 @@ import { Message, getGlobalColor } from "../src/ui/index.mjs";
 import { EmbedBuilder }   from "@fluxerjs/core";
 import { PROVIDER_CHOICES, PROVIDER_NAMES, parseInlineProvider } from "../src/music/providers.mjs";
 import { NUMBER_EMOJIS, CANCEL_EMOJI } from "../src/utils/UI.mjs";
+import { Utils } from "../src/utils/Utils.mjs";
 import { logger } from "../src/core/Logger.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the search command. */
@@ -61,26 +62,35 @@ export async function run(msg, data) {
   const channel = msg.channel?.channel ?? msg.message?.channel;
   if (!channel?.send) return;
 
+  let providerIcon = "🔍";
+  if (provider === "sp" || provider === "spotify") providerIcon = "🟢";
+  else if (provider === "sc" || provider === "soundcloud") providerIcon = "🟠";
+  else if (provider === "yt" || provider === "ytm" || provider === "youtube") providerIcon = "▶️";
+
+  const authorTitle = `${providerIcon} ${this.t(msg, "responses.search.resultsTitle", { provider: name })}`;
+
   /**
    * @private
    * Build a search result embed.
    * @param {string} description - The embed description text.
    * @param {string|null} footerText - Optional footer text.
-   * @param {string} [authorLabel=name] - The author field label (provider name).
+   * @param {string} [authorLabel=authorTitle] - The author field label.
+   * @param {string|null} [thumbnail=null] - Optional thumbnail URL.
    * @returns {EmbedBuilder} The constructed embed.
    */
-  const makeEmbed = (description, footerText, authorLabel = name) => {
+  const makeEmbed = (description, footerText, authorLabel = authorTitle, thumbnail = null) => {
     const b = new EmbedBuilder()
-        .setColor(getGlobalColor())
+        .setColor(0xe9196c)
         .setAuthor({ name: authorLabel })
         .setDescription(description);
+    if (thumbnail) b.setThumbnail(thumbnail);
     if (footerText) b.setFooter({ text: footerText });
     return b;
   };
 
   const nativeMsg = msg.message ?? msg;
   const rawMsg = await nativeMsg.reply(
-      { embeds: [makeEmbed(this.t(msg, "responses.search.loadingResults"), this.t(msg, "responses.play.searchingProvider", { provider: name }), this.t(msg, "responses.search.resultsTitle", { provider: name }))]},
+      { embeds: [makeEmbed(this.t(msg, "responses.search.loadingResults"), this.t(msg, "responses.play.searchingProvider", { provider: name }), authorTitle)]},
       { ping: false }
   ).catch(() => null);
   if (!rawMsg) return;
@@ -94,20 +104,25 @@ export async function run(msg, data) {
   const results   = p.searches.get(msg.authorId) ?? [];
   const reactions = NUMBER_EMOJIS.slice(0, res.count);
 
+  const cancelText = this.t(msg, "responses.search.cancelOption") || "Cancel";
   let desc = "";
   results.forEach((v, i) => {
-    const dur   = v.duration ? p.getDuration(v.duration) : "?:??";
-    const title = v.title || "Unknown";
-    const url   = v.url || "";
-    desc += `${NUMBER_EMOJIS[i]} [${title}](${url}) — \`${dur}\`\n`;
+    const dur       = v.duration ? p.getDuration(v.duration) : "?:??";
+    const rawAuthor = v.artist || (typeof v.author === "object" ? v.author?.name : v.author);
+    const authorStr = rawAuthor ? ` • ${Utils.truncate(rawAuthor, 30)}` : "";
+    const title     = Utils.truncate(v.title || this.t(msg, "responses.play.unknownTrack"), 50);
+    const url       = v.url || "";
+    const titleFmt  = url ? `[${title}](${url})` : title;
+    desc += `${NUMBER_EMOJIS[i]} **${titleFmt}**${authorStr} • \`${dur}\`\n\n`;
   });
-  desc += `\n${CANCEL_EMOJI} Cancel`;
+  desc += `${CANCEL_EMOJI} ${cancelText}`;
 
   await rawMsg.edit({
     embeds: [makeEmbed(
-        desc,
+        desc.trim(),
         this.t(msg, "responses.search.reactHint"),
-        this.t(msg, "responses.search.resultsTitle", { provider: name })
+        authorTitle,
+        results[0]?.thumbnail || null
     )]
   }).catch(() => {});
 
@@ -145,7 +160,7 @@ export async function run(msg, data) {
     if (e.emoji_id === CANCEL_EMOJI) {
       p.searches.delete(msg.authorId);
       rawMsg.edit({
-        embeds: [makeEmbed(this.t(msg, "responses.search.cancelled"), null, this.t(msg, "responses.search.resultsTitle", { provider: name }))]
+        embeds: [makeEmbed(this.t(msg, "responses.search.cancelled"), null, authorTitle)]
       }).catch(() => {});
       return;
     }
@@ -160,7 +175,8 @@ export async function run(msg, data) {
       embeds: [makeEmbed(
           this.t(msg, "responses.search.added", { title: v.title, url: v.url }),
           null,
-          this.t(msg, "responses.search.resultsTitle", { provider: name })
+          authorTitle,
+          v.thumbnail || null
       )]
     }).catch(() => {});
   });
@@ -171,7 +187,7 @@ export async function run(msg, data) {
     p.searches.delete(msg.authorId);
     clearReactions().catch(() => {});
     rawMsg.edit({
-      embeds: [makeEmbed(this.t(msg, "responses.search.timedOut"), this.t(msg, "responses.search.sessionClosed"), this.t(msg, "responses.search.resultsTitle", { provider: name }))]
+      embeds: [makeEmbed(this.t(msg, "responses.search.timedOut"), this.t(msg, "responses.search.sessionClosed"), authorTitle)]
     }).catch(() => {});
   }, SESSION_MS);
 }

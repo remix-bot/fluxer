@@ -50,17 +50,29 @@ export async function run(msg, data) {
     const buildPage = () => {
       const start    = page * perPage;
       const pickable = radios.slice(start, start + perPage);
+      const prefix   = this.handler.getPrefix(msg.message?.guildId ?? msg.channel?.guildId) || "%";
 
-      let desc = `📻 **Radio Stations (Page ${page + 1}/${totalPages})**\n\n`;
+      let desc = "";
       pickable.forEach((r, i) => {
         const displayName = r.detailedName ?? r.name ?? "Station";
         const stationDesc = String(r.description ?? "").replaceAll("\n", "\n   ");
-        desc += `${NUMBER_EMOJIS[i]} **${displayName}** (\`${r.name ?? "station"}\`)\n`;
-        desc += `   ${stationDesc}\n\n`;
+        desc += `${NUMBER_EMOJIS[i]} **${displayName}** (\`${prefix}radio ${r.name ?? "station"}\`)\n`;
+        if (stationDesc) desc += `   ${stationDesc}\n\n`;
+        else desc += "\n";
       });
-      desc += `⬅️ Previous   ➡️ Next   ❌ Cancel`;
 
-      return { payload: { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] }, pickable };
+      const authorName = this.t(msg, "responses.radio.stationsAuthor") || "24/7 Radio Station Directory";
+      const titleName  = this.t(msg, "responses.radio.stationsTitle", { page: page + 1, total: totalPages });
+      const footerText = this.t(msg, "responses.radio.prevNext");
+
+      const embed = new EmbedBuilder()
+        .setColor(0xe9196c)
+        .setAuthor({ name: authorName })
+        .setTitle(titleName)
+        .setDescription(desc.trim())
+        .setFooter({ text: footerText });
+
+      return { payload: { embeds: [embed] }, pickable };
     };
 
     let { payload, pickable } = buildPage();
@@ -165,13 +177,14 @@ async function playStation(ctx, msg, radio, editTarget = null) {
   const stationLine = stationUrl
       ? `**[${stationName}](${stationUrl})**\n\n`
       : `**${stationName}**\n\n`;
+  const skipHint = ctx.t(msg, "responses.radio.skipHint", { prefix }) || `_Use \`${prefix}skip\` to stop the radio, or \`${prefix}radio list\` to switch stations._`;
   const embed = new EmbedBuilder()
-    .setColor(getGlobalColor())
+    .setColor(0xe9196c)
     .setTitle(`📻 ${stationName}`)
     .setDescription(
       stationLine +
       `${stationDesc}\n\n` +
-      `_Use \`${prefix}skip\` to stop the radio, or \`${prefix}radio list\` to switch stations._`
+      skipHint
     )
     ;
 

@@ -433,7 +433,11 @@
       "nowPlaying": "🎵 **Şu An Çalıyor**",
       "header": "📋 **Kuyrukta {{count}} parça** • ⏱️ `{{time}}`",
       "upNext": " ▶",
-      "queueTitle": "🎧 Kuyruk"
+      "queueTitle": "🎧 Kuyruk",
+      "tracksCount": "Sırada {{count}} {{plural}}",
+      "nowPlayingHeader": "Şu An Çalıyor",
+      "upNextHeader": "Sıradaki",
+      "pageFooter": "Sayfa {{page}}/{{totalPages}} • Döngü: {{loopState}}"
     },
     "loop": {
       "invalidChoice": "'{{choice}}' geçerli değil. `song` veya `queue` kullanın",
@@ -606,7 +610,8 @@
       "unknownStation": "❌ Bilinmeyen istasyon `{{station}}`. Kullanılabilir: {{stations}}\n\nGörüntülemek için `$prefixradio list` kullanın.",
       "nowPlaying": "📻 <#{{channel}}> kanalında [{{author}}]({{url}}) tarafından _{{title}}_ yayınlanıyor",
       "skipHint": "_Radyoyu durdurmak için `$prefixskip` veya istasyon değiştirmek için `$prefixradio list` kullanın._",
-      "prevNext": "⬅️ Önceki   ➡️ Sonraki   ❌ İptal"
+      "prevNext": "⬅️ Önceki   ➡️ Sonraki   ❌ İptal",
+      "stationsAuthor": "7/24 Radyo İstasyonu Dizini"
     },
     "reload": {
       "indexNoReload": "❌ `index.mjs` sıcak yeniden yüklenemez — tam yeniden başlatma yapın.",
@@ -639,7 +644,8 @@
       "cancelled": "❌ İptal edildi.",
       "added": "✅ [{{title}}]({{url}}) kuyruğa eklendi!",
       "timedOut": "⏰ Arama zaman aşımına uğradı.",
-      "sessionClosed": "Oturum kapatıldı"
+      "sessionClosed": "Oturum kapatıldı",
+      "cancelOption": "İptal"
     },
     "servers": {
       "noServers": "_Sunucu bulunamadı._",

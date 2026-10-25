@@ -143,7 +143,7 @@ export async function run(message, data) {
   } else {
     current = p?.queue?.getCurrent() ?? null;
     if (!current) {
-      const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.lyrics.nothingPlaying"));
+      const embed = new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(message, "responses.lyrics.nothingPlaying"));
       return message.reply({ embeds: [embed] });
     }
     searchTitle = current.title;
@@ -152,14 +152,14 @@ export async function run(message, data) {
 
   let frame = 0;
   const loadingMsg = await message.reply({ embeds: [
-    new EmbedBuilder().setColor(getGlobalColor())
+    new EmbedBuilder().setColor(0xe9196c)
       .setDescription(`${LOADING_FRAMES[0]} ` + this.t(message, "responses.lyrics.searching", { title: Utils.truncate(searchTitle, 40) }))
   ] });
 
   const loadingInterval = setInterval(() => {
     frame = (frame + 1) % LOADING_FRAMES.length;
     loadingMsg.edit({ embeds: [
-      new EmbedBuilder().setColor(getGlobalColor())
+      new EmbedBuilder().setColor(0xe9196c)
       .setDescription(`${LOADING_FRAMES[frame]} ` + this.t(message, "responses.lyrics.searching", { title: Utils.truncate(searchTitle, 40) }))
     ] }).catch(() => {});
   }, 800);
@@ -176,7 +176,7 @@ export async function run(message, data) {
 
     if (!result || !result.text) {
       return loadingMsg.edit({ embeds: [
-        new EmbedBuilder().setColor(getGlobalColor())
+        new EmbedBuilder().setColor(0xe9196c)
           .setDescription(
             this.t(message, "responses.lyrics.noLyrics", { title: Utils.truncate(searchTitle, 40) })
           )
@@ -229,16 +229,17 @@ export async function run(message, data) {
     }
 
     if (totalPages === 1) {
-      const headerLine = `by *${artist}*${syncIndicator}`;
+      const headerLine = `by **${artist}**${syncIndicator ? " • " + syncIndicator : ""}`;
       const descBody   = pages[0];
       const singleDesc = [headerLine, "", "```", descBody, "```"].join("\n");
 
       const singleEmbed = new EmbedBuilder()
-        .setColor(getGlobalColor())
-        .setTitle(`🎵 ${Utils.truncate(displayTitle, 50)}`)
+        .setColor(0xe9196c)
+        .setAuthor({ name: "🎤 Lyrics" })
+        .setTitle(Utils.truncate(displayTitle, 50))
         .setDescription(singleDesc.slice(0, MAX_DESC))
         .setFooter({ text: this.t(message, "responses.lyrics.sourceFooter", { source: result.source, lines: totalLines }) });
-      if (current.thumbnail) singleEmbed.setThumbnail(current.thumbnail);
+      if (current?.thumbnail) singleEmbed.setThumbnail(current.thumbnail);
       return message.reply({ embeds: [singleEmbed] });
     }
 
@@ -253,18 +254,19 @@ export async function run(message, data) {
      * @returns {object} Embed payload for message reply/edit.
      */
     const buildContent = (pageIdx, expired = false) => {
-      const headerLine = `by *${artist}*${syncIndicator} • Page ${pageIdx + 1}/${totalPages}`;
+      const headerLine = `by **${artist}**${syncIndicator ? " • " + syncIndicator : ""} • Page ${pageIdx + 1}/${totalPages}`;
       const descBody   = pages[pageIdx];
       const desc       = [headerLine, "", "```", descBody, "```"].join("\n");
 
       const b = new EmbedBuilder()
-        .setColor(getGlobalColor())
-        .setTitle(`🎵 ${Utils.truncate(displayTitle, 50)}`)
+        .setColor(0xe9196c)
+        .setAuthor({ name: "🎤 Lyrics" })
+        .setTitle(Utils.truncate(displayTitle, 50))
         .setDescription(desc.slice(0, MAX_DESC))
         .setFooter({ text: expired
           ? this.t(message, "responses.lyrics.controlsExpired", { lines: totalLines })
           : this.t(message, "responses.lyrics.sourceFooter", { source: result.source, lines: totalLines }) });
-      if (current.thumbnail) b.setThumbnail(current.thumbnail);
+      if (current?.thumbnail) b.setThumbnail(current.thumbnail);
       return { embeds: [b] };
     };
 
@@ -322,7 +324,7 @@ export async function run(message, data) {
       const closedHeader = `by *${artist}*${syncIndicator} • Page ${currentPage + 1}/${totalPages}`;
       const closedDesc   = [closedHeader, "", "```", pages[currentPage], "```"].join("\n");
       const closedEmbed = new EmbedBuilder()
-        .setColor(getGlobalColor())
+        .setColor(0xe9196c)
         .setTitle(`🎵 ${Utils.truncate(displayTitle, 50)}`)
         .setDescription(closedDesc.slice(0, MAX_DESC))
         .setFooter({ text: this.t(message, "responses.lyrics.sessionClosed", { lines: totalLines }) });
@@ -332,6 +334,6 @@ export async function run(message, data) {
   } catch (err) {
     clearInterval(loadingInterval);
     logger.error("[Lyrics Command] Error:", err);
-    loadingMsg.edit({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses.lyrics.error", { error: Utils.truncate(err.message, 100) }))] }).catch(() => {});
+    loadingMsg.edit({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(message, "responses.lyrics.error", { error: Utils.truncate(err.message, 100) }))] }).catch(() => {});
   }
 }
