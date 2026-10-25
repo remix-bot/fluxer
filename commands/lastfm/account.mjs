@@ -190,17 +190,43 @@ export async function runAccountActions(msg, data, lastfm, prefix, userId, targe
 
       lastfm.syncUserScrobbleCount(profileUserId).catch(() => {});
 
+      const avatarUrl = info.image?.[3]?.["#text"] || info.image?.[2]?.["#text"] || null;
+      const regDate = info.registered?.unixtime ? new Date(+info.registered.unixtime * 1000).toLocaleDateString() : "unknown";
+      const scrobbleStatus = user.scrobbleEnabled
+        ? this.t(msg, "responses.lastfm.profileScrobbleEnabled")
+        : this.t(msg, "responses.lastfm.profileScrobbleDisabled");
+
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setAuthor({ name: this.t(msg, "responses.lastfm.profileTitle", { username: info.name }), iconURL: info.image?.[2]?.["#text"] || undefined, url: info.url })
-        .setDescription([
-          this.t(msg, "responses.lastfm.profileScrobbles", { playcount: Utils.formatNumber(info.playcount ?? 0) }),
-          this.t(msg, "responses.lastfm.profileRegistered", { date: info.registered?.unixtime ? new Date(+info.registered.unixtime * 1000).toLocaleDateString() : "unknown" }),
-          this.t(msg, "responses.lastfm.profileScrobbleStatus", { status: user.scrobbleEnabled ? this.t(msg, "responses.lastfm.profileScrobbleEnabled") : this.t(msg, "responses.lastfm.profileScrobbleDisabled") }),
-          ``,
-          this.t(msg, "responses.lastfm.profileLink", { url: info.url }),
-        ].join("\n"))
-        .setFooter({ text: this.t(msg, "responses.lastfm.profileScrobbleFooter", { prefix }) });
+        .setAuthor({ name: this.t(msg, "responses.lastfm.profileAuthor"), iconURL: avatarUrl || undefined, url: info.url })
+        .setTitle(info.name)
+        .setURL(info.url || undefined)
+        .setDescription(
+          `📅 **${this.t(msg, "responses.lastfm.profileFieldRegistered")}:** ${regDate}\n` +
+          `🔗 **[${this.t(msg, "responses.lastfm.profileLink", { url: info.url })}](${info.url})**`
+        )
+        .addFields(
+          {
+            name: this.t(msg, "responses.lastfm.profileFieldTotalScrobbles"),
+            value: `🎵 **${Utils.formatNumber(info.playcount ?? 0)}**`,
+            inline: true
+          },
+          {
+            name: this.t(msg, "responses.lastfm.profileFieldArtists"),
+            value: `🎤 **${Utils.formatNumber(info.artist_count ?? 0)}**`,
+            inline: true
+          },
+          {
+            name: this.t(msg, "responses.lastfm.profileFieldScrobbling"),
+            value: scrobbleStatus,
+            inline: true
+          }
+        )
+        .setFooter({ text: this.t(msg, "responses.lastfm.profileFooterPro", { prefix }) });
+
+      if (avatarUrl) {
+        embed.setThumbnail(avatarUrl);
+      }
 
       return msg.reply({ embeds: [embed] });
     }

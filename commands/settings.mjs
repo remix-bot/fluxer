@@ -7,7 +7,8 @@
 
 
 import { CommandBuilder } from "../src/commands/index.mjs";
-import { getMessageGuildId } from "../src/ui/index.mjs";
+import { EmbedBuilder } from "@fluxerjs/core";
+import { getMessageGuildId, getGlobalColor } from "../src/ui/index.mjs";
 import { logger } from "../src/core/Logger.mjs";
 import {
   SHORTCUTS, BOOL_SETTINGS, VALID_LOCALES, setValidLocales,
@@ -182,9 +183,19 @@ export async function run(message, data) {
       const desc  = this.settingsMgr.descriptions?.[settingKey];
       const resolvedDesc = desc ? desc.replace(/\$prefix/gi, prefix) : null;
       const label = prettifySettingLabel(settingKey, t247, guildId);
-      let reply = "**" + label + "**\nValue: " + displayValue(settingKey, val);
-      if (resolvedDesc) reply += "\n\n*" + resolvedDesc + "*";
-      return message.reply(embed(reply));
+
+      const inspEmbed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setAuthor({ name: this.t(message, "responses.settings.inspectorTitle") })
+        .setTitle(label)
+        .addFields(
+          { name: this.t(message, "responses.settings.settingValueField"), value: displayValue(settingKey, val), inline: true }
+        );
+      if (resolvedDesc) {
+        inspEmbed.addFields({ name: this.t(message, "responses.settings.settingDescField"), value: `*${resolvedDesc}*`, inline: false });
+      }
+      inspEmbed.setFooter({ text: this.t(message, "responses.settings.inspectorFooter", { prefix, setting: settingKey }) });
+      return message.reply({ embeds: [inspEmbed] });
     }
 
     const d         = set.getAll();
@@ -195,22 +206,53 @@ export async function run(message, data) {
         : null;
 
     const channels = get247Channels(set);
-    const lines = this.settingsMgr.getPublicKeys()
-        .map(k => {
-          if (k === "stay_247") {
-            return "\u2022 **24/7 mode** " + String.fromCharCode(8212) + " " + (channels.size > 0
-                ? channels.size + " channel(s)"
-                : "\u274c disabled");
-          }
-          const label = prettifySettingLabel(k, t247, guildId);
-          return "\u2022 **" + label + "** " + String.fromCharCode(8212) + " " + displayValue(k, d[k]);
-        });
 
-    return message.reply(embed(
-        this.t(message, "responses.settings.serverHeader", { name: guildName }) + "\n\n" + lines.join("\n") + "\n\n" +
-        this.t(message, "responses.settings.shortcutsHint", { prefix }),
-        { title: this.t(message, "responses.settings.serverTitle"), iconURL: iconUrl }
-    ));
+    /* Category 1: General & Localization */
+    const prefixVal = d.prefix ?? "%";
+    const localeVal = d.locale ?? "en";
+    const pfpVal    = d.pfp ?? "default";
+    const generalLines = [
+      `• **${prettifySettingLabel("prefix", t247, guildId)}**: \`${prefixVal}\``,
+      `• **${prettifySettingLabel("locale", t247, guildId)}**: \`${localeVal}\``,
+      `• **${prettifySettingLabel("pfp", t247, guildId)}**: \`${pfpVal}\``
+    ].join("\n");
+
+    /* Category 2: Audio & Playback */
+    const volVal       = d.volume ?? 100;
+    const songAnnounce = d.songAnnouncements ?? true;
+    const normVal      = d.normalize ?? true;
+    const voteSkipVal  = d.voteSkip ?? true;
+    const voteLimit    = d.voteSkipThreshold ?? 3;
+    const audioLines = [
+      `• **${prettifySettingLabel("volume", t247, guildId)}**: \`${volVal}%\``,
+      `• **${prettifySettingLabel("normalize", t247, guildId)}**: ${normVal ? "✅ enabled (EBU R128)" : "❌ disabled"}`,
+      `• **${prettifySettingLabel("songAnnouncements", t247, guildId)}**: ${songAnnounce ? "✅ enabled" : "❌ disabled"}`,
+      `• **${prettifySettingLabel("voteSkip", t247, guildId)}**: ${voteSkipVal ? `✅ enabled (≥${voteLimit})` : "❌ disabled"}`
+    ].join("\n");
+
+    /* Category 3: 24/7 Voice Connection */
+    let voice247Text = "❌ disabled";
+    if (channels.size > 0) {
+      const chList = [...channels].map(id => `<#${id}>`).join(", ");
+      voice247Text = `🔊 ${chList} — **${this.t(message, "responses.settings.statusActive247")}**`;
+    }
+
+    const dashEmbed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: this.t(message, "responses.settings.dashboardTitle") })
+      .setTitle(guildName)
+      .addFields(
+        { name: this.t(message, "responses.settings.categoryGeneral"), value: generalLines, inline: false },
+        { name: this.t(message, "responses.settings.categoryAudio"), value: audioLines, inline: false },
+        { name: this.t(message, "responses.settings.categoryVoice247"), value: voice247Text, inline: false }
+      )
+      .setFooter({ text: this.t(message, "responses.settings.dashboardFooter", { prefix }) });
+
+    if (iconUrl) {
+      dashEmbed.setThumbnail(iconUrl);
+    }
+
+    return message.reply({ embeds: [dashEmbed] });
   }
 
   if (cmd === "resetSettings") {

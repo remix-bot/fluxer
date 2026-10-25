@@ -102,44 +102,46 @@ export async function runInfoActions(msg, data, lastfm, prefix, userId, targetUs
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(`🎤 ${info.name}`)
+        .setAuthor({ name: this.t(msg, "responses.lastfm.artistSpotlightAuthor"), iconURL: info.image || undefined })
+        .setTitle(info.name)
         .setURL(info.url || undefined)
         .setThumbnail(info.image || undefined);
 
+      let desc = "";
+      if (info.tags?.length) {
+        const tagStr = info.tags.slice(0, 6).map(t => {
+          const tagLower = String(t).toLowerCase().replace(/\s+/g, "+");
+          return `[\`${t}\`](https://www.last.fm/tag/${encodeURIComponent(tagLower)})`;
+        }).join(" ");
+        desc += tagStr + "\n\n";
+      }
+      if (info.bio) {
+        const cleanBio = info.bio.replace(/<[^>]*>/g, "").trim();
+        if (cleanBio.length > 0) {
+          const truncated = cleanBio.length > 280 ? cleanBio.slice(0, 277) + "..." : cleanBio;
+          desc += `> ${truncated}`;
+        }
+      }
+      if (desc) embed.setDescription(desc.trim());
+
       const fields = [];
-      fields.push({ name: "Listeners", value: Utils.formatNumber(info.stats?.listeners ?? 0), inline: true });
-      fields.push({ name: "Global Plays", value: Utils.formatNumber(info.stats?.playcount ?? 0), inline: true });
+      fields.push({ name: this.t(msg, "responses.lastfm.artistFieldListeners"), value: `👥 **${Utils.formatNumber(info.stats?.listeners ?? 0)}**`, inline: true });
+      fields.push({ name: this.t(msg, "responses.lastfm.artistFieldPlays"), value: `▶️ **${Utils.formatNumber(info.stats?.playcount ?? 0)}**`, inline: true });
 
       if (info.userplaycount != null && user) {
-        fields.push({ name: "Your Plays", value: Utils.formatNumber(info.userplaycount), inline: true });
-      }
-
-      if (info.tags?.length) {
-        const tagStr = info.tags.slice(0, 8).map(t => {
-          const tagLower = String(t).toLowerCase().replace(/\s+/g, "+");
-          return `[${t}](https://www.last.fm/tag/${encodeURIComponent(tagLower)})`;
-        }).join(" · ");
-        fields.push({ name: "Tags", value: tagStr, inline: false });
+        fields.push({ name: this.t(msg, "responses.lastfm.artistFieldUserPlays"), value: `🎧 **${Utils.formatNumber(info.userplaycount)}**`, inline: true });
       }
 
       if (info.similar?.length) {
         const simStr = info.similar.slice(0, 5).map(s => {
           return s.url ? `[${s.name}](${s.url})` : s.name;
         }).join(" · ");
-        fields.push({ name: "Similar Artists", value: simStr, inline: false });
+        fields.push({ name: this.t(msg, "responses.lastfm.artistFieldSimilar"), value: simStr, inline: false });
       }
 
       embed.addFields(...fields);
 
-      if (info.bio) {
-        const cleanBio = info.bio.replace(/<[^>]*>/g, "").trim();
-        if (cleanBio.length > 0) {
-          const truncated = cleanBio.length > 300 ? cleanBio.slice(0, 297) + "..." : cleanBio;
-          embed.setDescription(truncated);
-        }
-      }
-
-      embed.setFooter({ text: user ? `Last.fm: ${user.username}` : "Last.fm" });
+      embed.setFooter({ text: this.t(msg, "responses.lastfm.artistFooterPro", { artist: info.name }) });
 
       return msg.reply({ embeds: [embed] });
     }
@@ -494,9 +496,11 @@ export async function runInfoActions(msg, data, lastfm, prefix, userId, targetUs
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(this.t(msg, "responses.lastfm.coverTitle", { album: albumTitle }))
+        .setAuthor({ name: this.t(msg, "responses.lastfm.coverAuthor") })
+        .setTitle(albumTitle)
+        .setDescription(`🎵 **${trackName}** ${String.fromCharCode(8212)} **${artistName}**`)
         .setImage(coverUrl)
-        .setFooter({ text: this.t(msg, "responses.lastfm.coverFooter", { track: trackName, artist: artistName }) });
+        .setFooter({ text: this.t(msg, "responses.lastfm.coverFooterPro", { prefix }) });
 
       return msg.reply({ embeds: [embed] });
     }

@@ -27,7 +27,7 @@ const BOOL_TRUE  = new Set(["true",  "1", "yes", "on",  "enable", "enabled"]);
 /** @private @type {Set<string>} Strings that evaluate to boolean false. */
 const BOOL_FALSE = new Set(["false", "0", "no",  "off", "disable", "disabled"]);
 /** @private @type {Set<string>} Setting keys that use boolean display formatting. */
-export const BOOL_SETTINGS = new Set(["songAnnouncements", "voteSkip"]);
+export const BOOL_SETTINGS = new Set(["songAnnouncements", "voteSkip", "normalize"]);
 
 /** @private @type {Set<string>} Available locale codes, populated at load time. */
 export let VALID_LOCALES = new Set(["en"]);
@@ -138,6 +138,7 @@ export function prettifySettingLabel(key, t, guildId) {
     locale: "responses.settings.labelLocale",
     stay_247: "responses.settings.label247",
     volume: "responses.settings.labelVolume",
+    normalize: "responses.settings.labelNormalize",
     voteSkip: "responses.settings.labelVoteSkip",
     voteSkipThreshold: "responses.settings.labelVoteSkipThreshold",
   };
@@ -149,6 +150,7 @@ export function prettifySettingLabel(key, t, guildId) {
     locale: "Locale",
     stay_247: "24/7 mode",
     volume: "Default volume",
+    normalize: "Volume normalization",
     voteSkip: "Vote to skip",
     voteSkipThreshold: "Vote to skip threshold",
   };

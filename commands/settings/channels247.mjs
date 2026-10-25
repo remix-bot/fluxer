@@ -12,7 +12,8 @@
  */
 
 
-import { cleanId } from "../../src/ui/index.mjs";
+import { EmbedBuilder } from "@fluxerjs/core";
+import { cleanId, getGlobalColor } from "../../src/ui/index.mjs";
 import { isPlayerConnectionDead } from "../../src/utils/Helpers247.mjs";
 import { isValidFluxerId, MAX_247_CHANNELS, embed, tWrap } from "./utils.mjs";
 
@@ -161,11 +162,56 @@ function build247PanelDescription(set, ctx, guildId, justToggledId = null) {
 export function build247Panel(set, ctx, guildId, justToggledId = null) {
   const t = tWrap(ctx, guildId);
   const prefix = ctx.handler.getPrefix(guildId);
+  const channels = [...get247Channels(set)];
   const panelKey = (k, vars = {}) => t("responses.settings.247Panel." + k, vars);
-  return embed(
-      build247PanelDescription(set, ctx, guildId, justToggledId),
-      { title: panelKey("title"), footer: panelKey("footerLine", { prefix }) }
-  );
+
+  const watchdog = ctx.gatewayHandler;
+  const watchdogOn = watchdog?.isWatchdog247Running?.() === true;
+  const sweepSeconds = Math.round((watchdog?._247WatchdogInterval ?? 60_000) / 1000);
+
+  const panelEmbed = new EmbedBuilder()
+    .setColor(getGlobalColor())
+    .setAuthor({ name: panelKey("watchdogAuthor") })
+    .setTitle(panelKey("watchdogTitle"))
+    .setFooter({ text: panelKey("watchdogFooter", { prefix }) });
+
+  if (channels.length === 0) {
+    panelEmbed.setDescription(
+      panelKey("disabledLine") + "\n\n" +
+      panelKey("allChannelsDisabled") + "\n\n" +
+      panelKey("disabledHint", { prefix })
+    );
+  } else {
+    const statuses = channels
+      .map(id => channelStatus(ctx, guildId, id, t))
+      .sort((a, b) => a.order - b.order);
+
+    const lines = statuses.map(s =>
+      s.line + (justToggledId && s.line.includes("<#" + cleanId(justToggledId) + ">") ? " \u2190" : "")
+    );
+
+    const allConnected = statuses.every(s => s.state === "connected");
+    const statusHeader = (channels.length === 1 && allConnected
+      ? panelKey("enabledLine")
+      : panelKey(channels.length === 1 ? "activeChannels_one" : "activeChannels_other", { count: channels.length }));
+
+    panelEmbed.setDescription(statusHeader + "\n\n" + lines.join("\n"));
+
+    panelEmbed.addFields(
+      {
+        name: panelKey("watchdogFieldRecovery"),
+        value: watchdogOn ? panelKey("watchdogRecoveryArmed", { seconds: sweepSeconds }) : panelKey("autoRecoveryDisabledLine"),
+        inline: true
+      },
+      {
+        name: panelKey("watchdogFieldInactivity"),
+        value: panelKey("watchdogInactivitySuppressed"),
+        inline: true
+      }
+    );
+  }
+
+  return { embeds: [panelEmbed] };
 }
 /**
  * Disable 24/7 mode for a specific channel.
@@ -269,17 +315,19 @@ export async function handle247Toggle(ctx, message, set, guildId) {
 
   if (channels.has(id)) {
     await disable247(ctx, set, guildId, userChannelId);
-    return message.reply(embed(
-        panelKey("confirmDisabled", { channel: "<#" + id + ">" }) + "\n\n" +
-        build247PanelDescription(set, ctx, guildId, null),
-        { title: panelKey("title") }
-    ));
+    const panel = build247Panel(set, ctx, guildId, null);
+    panel.embeds[0].setDescription(
+      panelKey("confirmDisabled", { channel: "<#" + id + ">" }) + "\n\n" +
+      panel.embeds[0].description
+    );
+    return message.reply(panel);
   }
 
   await enable247(ctx, set, guildId, userChannelId);
-  return message.reply(embed(
-      panelKey("confirmEnabled", { channel: "<#" + id + ">" }) + "\n\n" +
-      build247PanelDescription(set, ctx, guildId, id),
-      { title: panelKey("title") }
-  ));
+  const panel = build247Panel(set, ctx, guildId, id);
+  panel.embeds[0].setDescription(
+    panelKey("confirmEnabled", { channel: "<#" + id + ">" }) + "\n\n" +
+    panel.embeds[0].description
+  );
+  return message.reply(panel);
 }
