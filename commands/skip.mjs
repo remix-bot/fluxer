@@ -9,6 +9,7 @@ import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor, cleanId } from "../src/ui/index.mjs";
 import { countHumansInChannel } from "../src/voice/VoiceStateResolver.mjs";
+import { Utils } from "../src/utils/Utils.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the skip command. */
 export const command = new CommandBuilder()
@@ -22,18 +23,47 @@ async function doSkip(ctx, message, p) {
   const current      = p.queue.getCurrent();
   const skippedTitle = current?.title ?? null;
   const skippedLink  = current ? (current.spotifyUrl || current.url || "") : "";
+  const rawAuthor    = current ? (current.artist || (typeof current.author === "object" ? current.author?.name : current.author)) : null;
+  const skippedThumb = current?.thumbnail || null;
+  const elapsed      = p.getCurrentElapsedDuration();
 
   const err = p.skip();
   if (!p.connection || !current) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(err);
+    const embed = new EmbedBuilder().setColor(0xe9196c).setDescription(err);
     return message.reply({ embeds: [embed] });
   }
 
-  const desc = skippedTitle
-    ? ctx.t(message, "responses.skip.skippedTrack", { title: skippedTitle, url: skippedLink })
-    : ctx.t(message, "responses.skip.skipped");
+  const nextTrack  = p.queue.data?.[0];
+  const nextTitle  = nextTrack?.title ? Utils.truncate(nextTrack.title, 40) : null;
+  const queueCount = p.queue.size();
+  const pluralStr  = queueCount === 1 ? ctx.t(message, "responses.play.trackSingle") : ctx.t(message, "responses.play.trackPlural");
 
-  message.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] }).catch(() => {});
+  const authorLabel  = `⏭️ ${ctx.t(message, "responses.skip.skippedTitle")}`;
+  const titleDisplay = skippedTitle ? Utils.truncate(skippedTitle, 50) : ctx.t(message, "responses.play.unknownTrack");
+
+  let desc = skippedLink ? `**[${titleDisplay}](${skippedLink})**` : `**${titleDisplay}**`;
+  if (rawAuthor) {
+    desc += `\n${ctx.t(message, "responses.play.byAuthor", { author: rawAuthor })}`;
+  }
+
+  const footerParts = [];
+  if (nextTitle) {
+    footerParts.push(`▶️ ${ctx.t(message, "responses.skip.upNext")}: ${nextTitle}`);
+  }
+  footerParts.push(ctx.t(message, "responses.skip.queueRemaining", { count: queueCount, plural: pluralStr }));
+
+  const embed = new EmbedBuilder()
+    .setColor(0xe9196c)
+    .setAuthor({ name: authorLabel })
+    .setTitle(ctx.t(message, "responses.skip.skippedAt", { time: elapsed }))
+    .setDescription(desc)
+    .setFooter({ text: footerParts.join(" • ") });
+
+  if (skippedThumb) {
+    embed.setThumbnail(skippedThumb);
+  }
+
+  message.reply({ embeds: [embed] }).catch(() => {});
 }
 
 /**
@@ -51,7 +81,7 @@ export async function run(message) {
 
   const current = p.queue.getCurrent();
   if (!p.connection || !current) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(message, "responses._common.nothingPlaying"));
+    const embed = new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(message, "responses._common.nothingPlaying"));
     return message.reply({ embeds: [embed] });
   }
 
@@ -81,7 +111,8 @@ export async function run(message) {
   const needed = Math.floor(humanCount / 2) + 1;
 
   if (p._skipVotes.has(userId)) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor())
+    const embed = new EmbedBuilder().setColor(0xe9196c)
+        .setAuthor({ name: `🗳️ ${this.t(message, "responses.skip.skippedTitle")}` })
         .setDescription(this.t(message, "responses.skip.alreadyVoted", { votes: p._skipVotes.size, needed }));
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
@@ -93,7 +124,8 @@ export async function run(message) {
     return doSkip(this, message, p);
   }
 
-  const embed = new EmbedBuilder().setColor(getGlobalColor())
+  const embed = new EmbedBuilder().setColor(0xe9196c)
+      .setAuthor({ name: `🗳️ ${this.t(message, "responses.skip.skippedTitle")}` })
       .setDescription(this.t(message, "responses.skip.voteAdded", { votes: p._skipVotes.size, needed }));
   message.reply({ embeds: [embed] }).catch(() => {});
 }

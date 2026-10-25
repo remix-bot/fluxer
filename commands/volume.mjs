@@ -5,9 +5,7 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/ui/index.mjs";
 import { MAX_VOLUME } from "../src/utils/UI.mjs";
-
 
 /**
  * @type {CommandBuilder}
@@ -38,21 +36,44 @@ export async function run(message, data) {
 
   const volOption = data.get("volume");
   const raw       = volOption?.value;
+  const prefix    = this.handler.getPrefix(message.message?.guildId ?? message.channel?.guildId) || "%";
 
-  const embed = new EmbedBuilder().setColor(getGlobalColor());
+  const makeVolumeBar = (pct) => {
+    const bars = Math.min(15, Math.max(0, Math.round(pct / 10)));
+    return "█".repeat(bars) + "░".repeat(15 - bars);
+  };
 
   if (!volOption || raw === null || raw === undefined || isNaN(Number(raw))) {
     const current = Math.round((p.preferredVolume ?? 1) * 100);
-    embed.setDescription(this.t(message, "responses.volume.current", { volume: current }));
-  } else {
-    const pct = Number(raw);
-    if (pct < 0 || pct > MAX_VOLUME) {
-      embed.setDescription(this.t(message, "responses.volume.outOfRange", { max: MAX_VOLUME }));
-    } else {
-      p.setVolume(pct / 100);
-      embed.setDescription(this.t(message, "responses.volume.changed", { volume: pct }));
-    }
+    const bar = makeVolumeBar(current);
+
+    const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setAuthor({ name: `🔊 ${this.t(message, "responses.volume.currentVolume")}` })
+      .setTitle(`\`${current}%\``)
+      .setDescription(`\`0%\` ${bar} \`${MAX_VOLUME}%\`\n\n${this.t(message, "responses.volume.current", { volume: current })}`)
+      .setFooter({ text: this.t(message, "responses.volume.volumeHint", { prefix }) });
+
+    return message.reply({ embeds: [embed] }).catch(() => {});
   }
+
+  const pct = Number(raw);
+  if (pct < 0 || pct > MAX_VOLUME) {
+    const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setDescription(this.t(message, "responses.volume.outOfRange", { max: MAX_VOLUME }));
+    return message.reply({ embeds: [embed] }).catch(() => {});
+  }
+
+  p.setVolume(pct / 100);
+  const bar = makeVolumeBar(pct);
+
+  const embed = new EmbedBuilder()
+    .setColor(0xe9196c)
+    .setAuthor({ name: `🔊 ${this.t(message, "responses.volume.volumeAdjusted")}` })
+    .setTitle(`\`${pct}%\``)
+    .setDescription(`\`0%\` ${bar} \`${MAX_VOLUME}%\`\n\n${this.t(message, "responses.volume.changed", { volume: pct })}`)
+    .setFooter({ text: this.t(message, "responses.volume.volumeHint", { prefix }) });
 
   message.reply({ embeds: [embed] }).catch(() => {});
 }

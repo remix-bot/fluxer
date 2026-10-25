@@ -245,7 +245,9 @@
       "joinFailedNotFound": "❌ Dieser Sprachkanal wurde nicht gefunden."
     },
     "clear": {
-      "cleared": "🗑️ Warteschlange geleert."
+      "cleared": "🗑️ Warteschlange geleert.",
+      "clearedTitle": "Warteschlange Geleert",
+      "clearedSummary": "{{count}} {{plural}} aus der Warteschlange entfernt"
     },
     "debug": {
       "voiceTitle": "🔧 Sprach-Debug",
@@ -347,7 +349,14 @@
       "songActivated": "🔂 Song-Schleife aktiviert",
       "songDisabled": "➡️ Song-Schleife deaktiviert",
       "queueActivated": "🔁 Warteschlangen-Schleife aktiviert",
-      "queueDisabled": "➡️ Warteschlangen-Schleife deaktiviert"
+      "queueDisabled": "➡️ Warteschlangen-Schleife deaktiviert",
+      "loopTitle": "Wiederholungsmodus Aktualisiert",
+      "songLoopDesc": "Aktueller Titel wird wiederholt",
+      "queueLoopDesc": "Gesamte Warteschlange wird wiederholt",
+      "loopOffDesc": "Wiederholung deaktiviert",
+      "songLoopBadge": "Einzeltitel-Schleife",
+      "queueLoopBadge": "Warteschlangen-Schleife",
+      "loopOffBadge": "Aus"
     },
     "lyrics": {
       "nothingPlaying": "❌ Es wird gerade nichts abgespielt.",
@@ -374,7 +383,10 @@
     "pause": {
       "nothingPlaying": "❌ Es wird gerade nichts abgespielt!",
       "alreadyPaused": "❌ Bereits pausiert!",
-      "paused": "⏸️ Pausiert"
+      "paused": "⏸️ Pausiert",
+      "pausedTitle": "Wiedergabe Pausiert",
+      "pausedAt": "Pausiert bei {{time}}",
+      "resumeHint": "Tippe {{prefix}}resume zum Fortsetzen"
     },
     "ping": {
       "title": "🏓  Pong!",
@@ -527,7 +539,10 @@
     "resume": {
       "nothingPlaying": "❌ Es wird gerade nichts abgespielt!",
       "notPaused": "❌ Nicht pausiert!",
-      "resumed": "▶️ Fortgesetzt"
+      "resumed": "▶️ Fortgesetzt",
+      "resumedTitle": "Wiedergabe Fortgesetzt",
+      "resumedAt": "Fortgesetzt bei {{time}}",
+      "pauseHint": "Tippe {{prefix}}pause zum Pausieren"
     },
     "search": {
       "loadingResults": "⏳ Lade Ergebnisse...",
@@ -652,7 +667,10 @@
     },
     "shuffle": {
       "emptyQueue": "Es gibt nichts zum Mischen in der Warteschlange.",
-      "shuffled": "🔀 Warteschlange gemischt"
+      "shuffled": "🔀 Warteschlange gemischt",
+      "shuffledTitle": "Warteschlange Gemischt",
+      "shuffledSummary": "{{count}} {{plural}} zufällig neu geordnet",
+      "newUpNext": "Neuer Titel #1"
     },
     "skip": {
       "nothingPlaying": "❌ Es wird gerade nichts abgespielt!",
@@ -660,7 +678,11 @@
       "skippedTrack": "⏭️ [{{title}}]({{url}}) übersprungen",
       "skippedToPosition": "⏭️ Zur Position {{position}} gesprungen",
       "voteAdded": "🗳️ Abstimmung zum Überspringen: **{{votes}}/{{needed}}**. Führe den Befehl erneut aus, um deine Stimme hinzuzufügen!",
-      "alreadyVoted": "🗳️ Du hast bereits fürs Überspringen gestimmt! **{{votes}}/{{needed}}** Stimmen bisher."
+      "alreadyVoted": "🗳️ Du hast bereits fürs Überspringen gestimmt! **{{votes}}/{{needed}}** Stimmen bisher.",
+      "skippedTitle": "Titel Übersprungen",
+      "skippedAt": "Übersprungen bei {{time}}",
+      "upNext": "Als Nächstes",
+      "queueRemaining": "{{count}} {{plural}} in der Warteschlange"
     },
     "stats": {
       "title": "Remix Musik-Bot",
@@ -705,7 +727,10 @@
       "current": "🔊 Aktuelle Lautstärke: `{{volume}}%`",
       "outOfRange": "❌ Lautstärke muss zwischen `0` und `{{max}}%` liegen.",
       "changed": "🔊 Lautstärke auf `{{volume}}%` für diese Sitzung geändert.",
-      "setPending": "Lautstärke auf `{{volume}}%` gesetzt — wird beim Verbinden angewendet."
+      "setPending": "Lautstärke auf `{{volume}}%` gesetzt — wird beim Verbinden angewendet.",
+      "volumeAdjusted": "Lautstärke Angepasst",
+      "currentVolume": "Aktuelle Lautstärke",
+      "volumeHint": "Verwende {{prefix}}volume <0-150>"
     },
     "volumedefault": {
       "title": "🔊 Lautstärke-Einstellungen",
@@ -875,7 +900,12 @@
     },
     "autoplay": {
       "enabled": "🔁 Autoplay **aktiviert** — ähnliche Tracks werden automatisch hinzugefügt, wenn die Warteschlange endet.",
-      "disabled": "➡️ Autoplay **deaktiviert** — der Bot stoppt, wenn die Warteschlange endet."
+      "disabled": "➡️ Autoplay **deaktiviert** — der Bot stoppt, wenn die Warteschlange endet.",
+      "autoplayTitleEnabled": "Endloses Autoplay Aktiviert",
+      "autoplayTitleDisabled": "Autoplay Deaktiviert",
+      "autoplayDescEnabled": "Remix fügt automatisch empfohlene Titel hinzu, wenn die Warteschlange endet.",
+      "autoplayDescDisabled": "Autoplay wurde deaktiviert. Die Wiedergabe stoppt am Ende der Warteschlange.",
+      "autoplayEngine": "Engine: YouTube Mix + Last.fm"
     },
     "trackopt": {
       "notAvailable": "❌ Track-Optionen-Funktion ist nicht verfügbar.",

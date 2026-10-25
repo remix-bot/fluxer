@@ -5,7 +5,7 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/ui/index.mjs";
+import { Utils } from "../src/utils/Utils.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the loop command. */
 export const command = new CommandBuilder()
@@ -29,10 +29,45 @@ export const command = new CommandBuilder()
 export async function run(message, data) {
   const p = await this.getPlayer(message);
   if (!p) return;
-  const res = p.loop(data.get("type").value);
+
+  const type = data.get("type").value;
+  const current = p.queue.getCurrent();
+  const prefix = this.handler.getPrefix(message.message?.guildId ?? message.channel?.guildId) || "%";
+
+  const state = p.queue.toggleLoop(type);
+
+  let badge = this.t(message, "responses.loop.loopOffBadge");
+  let desc = this.t(message, "responses.loop.loopOffDesc");
+  let icon = "⏹️";
+
+  if (state) {
+    if (type === "song") {
+      badge = this.t(message, "responses.loop.songLoopBadge");
+      desc = this.t(message, "responses.loop.songLoopDesc");
+      icon = "🔂";
+    } else {
+      badge = this.t(message, "responses.loop.queueLoopBadge");
+      desc = this.t(message, "responses.loop.queueLoopDesc");
+      icon = "🔄";
+    }
+  }
+
+  if (current?.title) {
+    const rawAuthor = current.artist || (typeof current.author === "object" ? current.author?.name : current.author);
+    const authorStr = rawAuthor ? ` • ${rawAuthor}` : "";
+    desc += `\n**${Utils.truncate(current.title, 45)}**${authorStr}`;
+  }
+
   const embed = new EmbedBuilder()
-    .setColor(getGlobalColor())
-    .setDescription(res)
-    ;
+    .setColor(0xe9196c)
+    .setAuthor({ name: `${icon} ${this.t(message, "responses.loop.loopTitle")}` })
+    .setTitle(badge)
+    .setDescription(desc)
+    .setFooter({ text: `Cycle: ${prefix}loop song • ${prefix}loop queue` });
+
+  if (current?.thumbnail) {
+    embed.setThumbnail(current.thumbnail);
+  }
+
   message.reply({ embeds: [embed] }).catch(() => {});
 }

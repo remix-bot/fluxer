@@ -5,7 +5,7 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/ui/index.mjs";
+import { Utils } from "../src/utils/Utils.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the pause command. */
 export const command = new CommandBuilder()
@@ -23,10 +23,42 @@ export const command = new CommandBuilder()
 export async function run(message) {
   const p = await this.getPlayer(message);
   if (!p) return;
-  const res = p.pause();
+
+  const current = p.queue.getCurrent();
+  if (!p.connection || !current) {
+    const embed = new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(message, "responses._common.nothingPlaying"));
+    return message.reply({ embeds: [embed] });
+  }
+
+  if (p._paused) {
+    const embed = new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(message, "responses.pause.alreadyPaused") || "Already paused!");
+    return message.reply({ embeds: [embed] });
+  }
+
+  p.pause();
+  const elapsed = p.getCurrentElapsedDuration();
+  const trackUrl = current.spotifyUrl || current.url || null;
+  const rawAuthor = current.artist || (typeof current.author === "object" ? current.author?.name : current.author);
+  const prefix = this.handler.getPrefix(message.message?.guildId ?? message.channel?.guildId) || "%";
+
+  let desc = trackUrl
+    ? `**[${Utils.truncate(current.title || this.t(message, "responses.play.unknownTrack"), 50)}](${trackUrl})**`
+    : `**${Utils.truncate(current.title || this.t(message, "responses.play.unknownTrack"), 50)}**`;
+
+  if (rawAuthor) {
+    desc += `\n${this.t(message, "responses.play.byAuthor", { author: rawAuthor })}`;
+  }
+
   const embed = new EmbedBuilder()
-    .setColor(getGlobalColor())
-    .setDescription(res)
-    ;
+    .setColor(0xe9196c)
+    .setAuthor({ name: `⏸️ ${this.t(message, "responses.pause.pausedTitle")}` })
+    .setTitle(this.t(message, "responses.pause.pausedAt", { time: elapsed }))
+    .setDescription(desc)
+    .setFooter({ text: this.t(message, "responses.pause.resumeHint", { prefix }) });
+
+  if (current.thumbnail) {
+    embed.setThumbnail(current.thumbnail);
+  }
+
   message.reply({ embeds: [embed] }).catch(() => {});
 }

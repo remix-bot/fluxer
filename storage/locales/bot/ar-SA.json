@@ -245,7 +245,9 @@
       "joinFailedNotFound": "❌ لم يتم العثور على تلك القناة الصوتية."
     },
     "clear": {
-      "cleared": "🗑️ تم مسح قائمة الانتظار."
+      "cleared": "🗑️ تم مسح قائمة الانتظار.",
+      "clearedTitle": "تم تفريغ قائمة الانتظار",
+      "clearedSummary": "تمت إزالة {{count}} {{plural}} من القائمة"
     },
     "debug": {
       "voiceTitle": "🔧 تصحيح الصوت",
@@ -347,7 +349,14 @@
       "songActivated": "🔂 تم تفعيل تكرار الأغنية",
       "songDisabled": "➡️ تم تعطيل تكرار الأغنية",
       "queueActivated": "🔁 تم تفعيل تكرار القائمة",
-      "queueDisabled": "➡️ تم تعطيل تكرار القائمة"
+      "queueDisabled": "➡️ تم تعطيل تكرار القائمة",
+      "loopTitle": "تم تحديث وضع التكرار",
+      "songLoopDesc": "يتم تكرار المقطع الحالي",
+      "queueLoopDesc": "يتم تكرار قائمة الانتظار بأكملها",
+      "loopOffDesc": "التكرار معطّل",
+      "songLoopBadge": "تكرار مقطع واحد",
+      "queueLoopBadge": "تكرار القائمة",
+      "loopOffBadge": "التكرار معطّل"
     },
     "lyrics": {
       "nothingPlaying": "❌ لا يوجد شيء يعمل حالياً.",
@@ -374,7 +383,10 @@
     "pause": {
       "nothingPlaying": "❌ لا يوجد شيء يعمل حالياً!",
       "alreadyPaused": "❌ متوقف بالفعل!",
-      "paused": "⏸️ تم الإيقاف المؤقت"
+      "paused": "⏸️ تم الإيقاف المؤقت",
+      "pausedTitle": "تم إيقاف التشغيل مؤقتًا",
+      "pausedAt": "توقف مؤقتًا عند {{time}}",
+      "resumeHint": "اكتب {{prefix}}resume للمتابعة"
     },
     "ping": {
       "title": "🏓  Pong!",
@@ -527,7 +539,10 @@
     "resume": {
       "nothingPlaying": "❌ لا يوجد شيء يعمل حالياً!",
       "notPaused": "❌ غير متوقف!",
-      "resumed": "▶️ تم الاستئناف"
+      "resumed": "▶️ تم الاستئناف",
+      "resumedTitle": "تم استئناف التشغيل",
+      "resumedAt": "تم الاستئناف عند {{time}}",
+      "pauseHint": "اكتب {{prefix}}pause للإيقاف المؤقت"
     },
     "search": {
       "loadingResults": "⏳ جارٍ تحميل النتائج...",
@@ -652,7 +667,10 @@
     },
     "shuffle": {
       "emptyQueue": "لا يوجد شيء لخلطه في قائمة الانتظار.",
-      "shuffled": "🔀 تم خلط قائمة الانتظار"
+      "shuffled": "🔀 تم خلط قائمة الانتظار",
+      "shuffledTitle": "تم خلط قائمة الانتظار",
+      "shuffledSummary": "تمت إعادة ترتيب {{count}} {{plural}} عشوائيًا",
+      "newUpNext": "المقطع #1 الجديد التالي"
     },
     "skip": {
       "nothingPlaying": "❌ لا يوجد شيء يعمل حالياً!",
@@ -660,7 +678,11 @@
       "skippedTrack": "⏭️ تم تخطي [{{title}}]({{url}})",
       "skippedToPosition": "⏭️ تم التخطي إلى الموضع {{position}}",
       "voteAdded": "🗳️ التصويت للتخطي: **{{votes}}/{{needed}}**. نفّذ الأمر مرة أخرى لإضافة صوتك!",
-      "alreadyVoted": "🗳️ لقد صوّت بالفعل للتخطي! **{{votes}}/{{needed}}** صوت حتى الآن."
+      "alreadyVoted": "🗳️ لقد صوّت بالفعل للتخطي! **{{votes}}/{{needed}}** صوت حتى الآن.",
+      "skippedTitle": "تم تخطي المقطع",
+      "skippedAt": "تم التخطي عند {{time}}",
+      "upNext": "التالي",
+      "queueRemaining": "{{count}} {{plural}} في قائمة الانتظار"
     },
     "stats": {
       "title": "بوت Remix الموسيقي",
@@ -705,7 +727,10 @@
       "current": "🔊 مستوى الصوت الحالي: `{{volume}}%`",
       "outOfRange": "❌ يجب أن يكون مستوى الصوت بين `0` و `{{max}}%`.",
       "changed": "🔊 تم تغيير مستوى الصوت إلى `{{volume}}%` لهذه الجلسة.",
-      "setPending": "تم تعيين مستوى الصوت إلى `{{volume}}%` — سيتم تطبيقه عند الاتصال."
+      "setPending": "تم تعيين مستوى الصوت إلى `{{volume}}%` — سيتم تطبيقه عند الاتصال.",
+      "volumeAdjusted": "تم تعديل مستوى الصوت",
+      "currentVolume": "مستوى الصوت الحالي",
+      "volumeHint": "استخدم {{prefix}}volume <0-150>"
     },
     "volumedefault": {
       "title": "🔊 إعدادات الصوت",
@@ -875,7 +900,12 @@
     },
     "autoplay": {
       "enabled": "🔁 التشغيل التلقائي **مفعّل** — سيتم إضافة مقاطع مشابهة تلقائياً عند انتهاء القائمة.",
-      "disabled": "➡️ التشغيل التلقائي **معطّل** — سيتوقف البوت عند انتهاء القائمة."
+      "disabled": "➡️ التشغيل التلقائي **معطّل** — سيتوقف البوت عند انتهاء القائمة.",
+      "autoplayTitleEnabled": "تم تفعيل التشغيل التلقائي اللانهائي",
+      "autoplayTitleDisabled": "تم تعطيل التشغيل التلقائي",
+      "autoplayDescEnabled": "سيقوم Remix تلقائيًا بإضافة مقاطع مقترحة عند انتهاء القائمة.",
+      "autoplayDescDisabled": "تم إيقاف التشغيل التلقائي. سيتوقف الصوت عند انتهاء القائمة.",
+      "autoplayEngine": "المحرك: YouTube Mix + Last.fm"
     },
     "trackopt": {
       "notAvailable": "❌ ميزة خيارات المقطع غير متاحة.",

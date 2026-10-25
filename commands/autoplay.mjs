@@ -579,6 +579,8 @@ export async function run(msg, data) {
   const p = await this.getPlayer(msg, true, true, false);
   if (!p) return;
 
+  const prefix = this.handler.getPrefix(msg.message?.guildId ?? msg.channel?.guildId) || "%";
+
   p._autoplay = !p._autoplay;
 
   if (p._autoplay) {
@@ -589,11 +591,14 @@ export async function run(msg, data) {
       p._autoplayHandler().catch(() => {});
     }
 
-    return msg.reply({
-      embeds: [new EmbedBuilder()
-        .setColor(getGlobalColor())
-        .setDescription(this.t(msg, "responses.autoplay.enabled"))]
-    });
+    const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setAuthor({ name: `🔁 ${this.t(msg, "responses.autoplay.autoplayTitleEnabled")}` })
+      .setTitle("🟢 Active")
+      .setDescription(this.t(msg, "responses.autoplay.autoplayDescEnabled"))
+      .setFooter({ text: `${this.t(msg, "responses.autoplay.autoplayEngine")} • ${prefix}autoplay to disable` });
+
+    return msg.reply({ embeds: [embed] });
   } else {
     detachAutoplay(p);
     p._autoplayHistory = [];
@@ -606,10 +611,13 @@ export async function run(msg, data) {
     p._autoplaySeedTags = null;
     p._autoplayPickedVids = null;
 
-    return msg.reply({
-      embeds: [new EmbedBuilder()
-        .setColor(getGlobalColor())
-        .setDescription(this.t(msg, "responses.autoplay.disabled"))]
-    });
+    const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setAuthor({ name: `⏹️ ${this.t(msg, "responses.autoplay.autoplayTitleDisabled")}` })
+      .setTitle("🔴 Disabled")
+      .setDescription(this.t(msg, "responses.autoplay.autoplayDescDisabled"))
+      .setFooter({ text: `${prefix}autoplay to enable` });
+
+    return msg.reply({ embeds: [embed] });
   }
 }

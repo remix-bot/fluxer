@@ -5,7 +5,6 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/ui/index.mjs";
 
 /**
  * @type {CommandBuilder}
@@ -52,10 +51,17 @@ export async function run(msg, data) {
     return msg.replyEmbed(res).catch(() => {});
   }
 
+  const count     = p.queue.size();
   p.clear();
+  const pluralStr = count === 1 ? this.t(msg, "responses.play.trackSingle") : this.t(msg, "responses.play.trackPlural");
+  const prefix    = this.handler.getPrefix(msg.message?.guildId ?? msg.channel?.guildId) || "%";
+
   const embed = new EmbedBuilder()
-    .setColor(getGlobalColor())
-    .setDescription(this.t(msg, "responses.clear.cleared"))
-    ;
+    .setColor(0xe9196c)
+    .setAuthor({ name: `🗑️ ${this.t(msg, "responses.clear.clearedTitle")}` })
+    .setTitle(this.t(msg, "responses.clear.cleared"))
+    .setDescription(this.t(msg, "responses.clear.clearedSummary", { count, plural: pluralStr }))
+    .setFooter({ text: `${prefix}play <song> to start a new queue` });
+
   msg.reply({ embeds: [embed] }).catch(() => {});
 }

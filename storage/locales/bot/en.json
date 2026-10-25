@@ -245,7 +245,9 @@
       "joinFailedNotFound": "❌ Could not find that voice channel."
     },
     "clear": {
-      "cleared": "🗑️ Queue cleared."
+      "cleared": "🗑️ Queue cleared.",
+      "clearedTitle": "Queue Cleared",
+      "clearedSummary": "Removed {{count}} {{plural}} from the queue"
     },
     "debug": {
       "voiceTitle": "🔧 Voice Debug",
@@ -447,7 +449,14 @@
       "songActivated": "🔂 Song loop activated",
       "songDisabled": "➡️ Song loop disabled",
       "queueActivated": "🔁 Queue loop activated",
-      "queueDisabled": "➡️ Queue loop disabled"
+      "queueDisabled": "➡️ Queue loop disabled",
+      "loopTitle": "Repeat Mode Updated",
+      "songLoopDesc": "Currently repeating current track",
+      "queueLoopDesc": "Currently repeating entire queue",
+      "loopOffDesc": "Looping disabled",
+      "songLoopBadge": "Single Track Loop",
+      "queueLoopBadge": "Queue Loop",
+      "loopOffBadge": "Loop Off"
     },
     "queue": {
       "empty": "The queue is empty.",
@@ -491,7 +500,10 @@
     "pause": {
       "nothingPlaying": "❌ There's nothing playing at the moment!",
       "alreadyPaused": "❌ Already paused!",
-      "paused": "⏸️ Paused"
+      "paused": "⏸️ Paused",
+      "pausedTitle": "Playback Paused",
+      "pausedAt": "Paused at {{time}}",
+      "resumeHint": "Type {{prefix}}resume to continue"
     },
     "ping": {
       "title": "🏓  Pong!",
@@ -644,7 +656,10 @@
     "resume": {
       "nothingPlaying": "❌ There's nothing playing at the moment!",
       "notPaused": "❌ Not paused!",
-      "resumed": "▶️ Resumed"
+      "resumed": "▶️ Resumed",
+      "resumedTitle": "Playback Resumed",
+      "resumedAt": "Resumed at {{time}}",
+      "pauseHint": "Type {{prefix}}pause to pause"
     },
     "search": {
       "loadingResults": "⏳ Loading results...",
@@ -769,7 +784,10 @@
     },
     "shuffle": {
       "emptyQueue": "There is nothing to shuffle in the queue.",
-      "shuffled": "🔀 Shuffled queue"
+      "shuffled": "🔀 Shuffled queue",
+      "shuffledTitle": "Queue Shuffled",
+      "shuffledSummary": "{{count}} {{plural}} randomly reordered",
+      "newUpNext": "New #1 Up Next"
     },
     "skip": {
       "nothingPlaying": "❌ There's nothing playing at the moment!",
@@ -777,7 +795,11 @@
       "skippedTrack": "⏭️ Skipped [{{title}}]({{url}})",
       "skippedToPosition": "⏭️ Skipped to position {{position}}",
       "voteAdded": "🗳️ Vote to skip: **{{votes}}/{{needed}}**. Run this command again to add your vote!",
-      "alreadyVoted": "🗳️ You've already voted to skip! **{{votes}}/{{needed}}** votes so far."
+      "alreadyVoted": "🗳️ You've already voted to skip! **{{votes}}/{{needed}}** votes so far.",
+      "skippedTitle": "Track Skipped",
+      "skippedAt": "Skipped at {{time}}",
+      "upNext": "Up Next",
+      "queueRemaining": "{{count}} {{plural}} in queue"
     },
     "stats": {
       "title": "Remix Music Bot",
@@ -822,7 +844,10 @@
       "current": "🔊 Current volume: `{{volume}}%`",
       "outOfRange": "❌ Volume must be between `0` and `{{max}}%`.",
       "changed": "🔊 Volume changed to `{{volume}}%` for this session.",
-      "setPending": "Volume set to `{{volume}}%` — will apply when connected."
+      "setPending": "Volume set to `{{volume}}%` — will apply when connected.",
+      "volumeAdjusted": "Volume Adjusted",
+      "currentVolume": "Current Volume",
+      "volumeHint": "Use {{prefix}}volume <0-150>"
     },
     "vote": {
       "notConfigured": "❌ FluxerList integration is not configured on this bot. Ask the bot owner to add a FluxerList API key to the config.",
@@ -875,7 +900,12 @@
     },
     "autoplay": {
       "enabled": "🔁 Autoplay **enabled** — similar tracks will be added automatically when the queue ends.",
-      "disabled": "➡️ Autoplay **disabled** — the bot will stop when the queue ends."
+      "disabled": "➡️ Autoplay **disabled** — the bot will stop when the queue ends.",
+      "autoplayTitleEnabled": "Endless Autoplay Enabled",
+      "autoplayTitleDisabled": "Endless Autoplay Disabled",
+      "autoplayDescEnabled": "Remix will automatically queue recommended tracks when the queue runs out.",
+      "autoplayDescDisabled": "Autoplay has been turned off. Playback will stop when the queue ends.",
+      "autoplayEngine": "Engine: YouTube Mix + Last.fm"
     },
     "trackopt": {
       "notAvailable": "❌ Track options feature is not available.",

@@ -245,7 +245,9 @@
       "joinFailedNotFound": "❌ Não foi possível encontrar esse canal de voz."
     },
     "clear": {
-      "cleared": "🗑️ Fila limpa."
+      "cleared": "🗑️ Fila limpa.",
+      "clearedTitle": "Fila Limpa",
+      "clearedSummary": "Removidas {{count}} {{plural}} da fila"
     },
     "debug": {
       "voiceTitle": "🔧 Debug de Voz",
@@ -347,7 +349,14 @@
       "songActivated": "🔂 Loop de música ativado",
       "songDisabled": "➡️ Loop de música desativado",
       "queueActivated": "🔁 Loop da fila ativado",
-      "queueDisabled": "➡️ Loop da fila desativado"
+      "queueDisabled": "➡️ Loop da fila desativado",
+      "loopTitle": "Modo de Repetição Atualizado",
+      "songLoopDesc": "Repetindo a faixa atual",
+      "queueLoopDesc": "Repetindo toda a fila",
+      "loopOffDesc": "Repetição desativada",
+      "songLoopBadge": "Repetição de Faixa",
+      "queueLoopBadge": "Repetição da Fila",
+      "loopOffBadge": "Desativada"
     },
     "lyrics": {
       "nothingPlaying": "❌ Não está tocando nada no momento.",
@@ -374,7 +383,10 @@
     "pause": {
       "nothingPlaying": "❌ Não está tocando nada no momento!",
       "alreadyPaused": "❌ Já está pausado!",
-      "paused": "⏸️ Pausado"
+      "paused": "⏸️ Pausado",
+      "pausedTitle": "Reprodução Pausada",
+      "pausedAt": "Pausada em {{time}}",
+      "resumeHint": "Digite {{prefix}}resume para continuar"
     },
     "ping": {
       "title": "🏓  Pong!",
@@ -527,7 +539,10 @@
     "resume": {
       "nothingPlaying": "❌ Não está tocando nada no momento!",
       "notPaused": "❌ Não está pausado!",
-      "resumed": "▶️ Retomado"
+      "resumed": "▶️ Retomado",
+      "resumedTitle": "Reprodução Retomada",
+      "resumedAt": "Retomada em {{time}}",
+      "pauseHint": "Digite {{prefix}}pause para pausar"
     },
     "search": {
       "loadingResults": "⏳ Carregando resultados...",
@@ -652,7 +667,10 @@
     },
     "shuffle": {
       "emptyQueue": "Não há nada para embaralhar na fila.",
-      "shuffled": "🔀 Fila embaralhada"
+      "shuffled": "🔀 Fila embaralhada",
+      "shuffledTitle": "Fila Embaralhada",
+      "shuffledSummary": "{{count}} {{plural}} reordenadas aleatoriamente",
+      "newUpNext": "Nova #1 a Seguir"
     },
     "skip": {
       "nothingPlaying": "❌ Não está tocando nada no momento!",
@@ -660,7 +678,11 @@
       "skippedTrack": "⏭️ Pulado [{{title}}]({{url}})",
       "skippedToPosition": "⏭️ Pulou para a posição {{position}}",
       "voteAdded": "🗳️ Votação para pular: **{{votes}}/{{needed}}**. Use o comando novamente para adicionar seu voto!",
-      "alreadyVoted": "🗳️ Você já votou para pular! **{{votes}}/{{needed}}** votos até agora."
+      "alreadyVoted": "🗳️ Você já votou para pular! **{{votes}}/{{needed}}** votos até agora.",
+      "skippedTitle": "Faixa Pulada",
+      "skippedAt": "Pulada em {{time}}",
+      "upNext": "A Seguir",
+      "queueRemaining": "{{count}} {{plural}} na fila"
     },
     "stats": {
       "title": "Bot de Música Remix",
@@ -705,7 +727,10 @@
       "current": "🔊 Volume atual: `{{volume}}%`",
       "outOfRange": "❌ O volume deve estar entre `0` e `{{max}}%`.",
       "changed": "🔊 Volume alterado para `{{volume}}%` nesta sessão.",
-      "setPending": "Volume definido para `{{volume}}%` — será aplicado quando conectado."
+      "setPending": "Volume definido para `{{volume}}%` — será aplicado quando conectado.",
+      "volumeAdjusted": "Volume Ajustado",
+      "currentVolume": "Volume Atual",
+      "volumeHint": "Use {{prefix}}volume <0-150>"
     },
     "volumedefault": {
       "title": "🔊 Configurações de Volume",
@@ -875,7 +900,12 @@
     },
     "autoplay": {
       "enabled": "🔁 Autoplay **ativado** — faixas similares serão adicionadas automaticamente quando a fila terminar.",
-      "disabled": "➡️ Autoplay **desativado** — o bot parará quando a fila terminar."
+      "disabled": "➡️ Autoplay **desativado** — o bot parará quando a fila terminar.",
+      "autoplayTitleEnabled": "Autoplay Infinito Ativado",
+      "autoplayTitleDisabled": "Autoplay Desativado",
+      "autoplayDescEnabled": "O Remix adicionará músicas recomendadas automaticamente quando a fila acabar.",
+      "autoplayDescDisabled": "O autoplay foi desativado. A reprodução vai parar ao final da fila.",
+      "autoplayEngine": "Motor: YouTube Mix + Last.fm"
     },
     "trackopt": {
       "notAvailable": "❌ Recurso de opções de faixa não está disponível.",

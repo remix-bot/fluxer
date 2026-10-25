@@ -245,7 +245,9 @@
       "joinFailedNotFound": "❌ Ses kanalı bulunamadı."
     },
     "clear": {
-      "cleared": "🗑️ Kuyruk temizlendi."
+      "cleared": "🗑️ Kuyruk temizlendi.",
+      "clearedTitle": "Sıra Temizlendi",
+      "clearedSummary": "Sıradan {{count}} {{plural}} kaldırıldı"
     },
     "debug": {
       "voiceTitle": "🔧 Ses Hata Ayıklama",
@@ -444,7 +446,14 @@
       "songActivated": "🔂 Şarkı döngüsü etkinleştirildi",
       "songDisabled": "➡️ Şarkı döngüsü devre dışı bırakıldı",
       "queueActivated": "🔁 Kuyruk döngüsü etkinleştirildi",
-      "queueDisabled": "➡️ Kuyruk döngüsü devre dışı bırakıldı"
+      "queueDisabled": "➡️ Kuyruk döngüsü devre dışı bırakıldı",
+      "loopTitle": "Tekrar Modu Güncellendi",
+      "songLoopDesc": "Şu anki parça tekrarlanıyor",
+      "queueLoopDesc": "Tüm sıra tekrarlanıyor",
+      "loopOffDesc": "Tekrar kapalı",
+      "songLoopBadge": "Tek Parça Döngüsü",
+      "queueLoopBadge": "Sıra Döngüsü",
+      "loopOffBadge": "Kapalı"
     },
     "queue": {
       "empty": "Kuyruk boş.",
@@ -480,7 +489,10 @@
     "pause": {
       "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
       "alreadyPaused": "❌ Zaten duraklatılmış!",
-      "paused": "⏸️ Duraklatıldı"
+      "paused": "⏸️ Duraklatıldı",
+      "pausedTitle": "Oynatma Duraklatıldı",
+      "pausedAt": "{{time}} konumunda duraklatıldı",
+      "resumeHint": "Devam etmek için {{prefix}}resume yazın"
     },
     "ping": {
       "title": "🏓  Pong!",
@@ -633,7 +645,10 @@
     "resume": {
       "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
       "notPaused": "❌ Duraklatılmış değil!",
-      "resumed": "▶️ Devam ettirildi"
+      "resumed": "▶️ Devam ettirildi",
+      "resumedTitle": "Oynatma Devam Ediyor",
+      "resumedAt": "{{time}} konumunda devam ettirildi",
+      "pauseHint": "Duraklatmak için {{prefix}}pause yazın"
     },
     "search": {
       "loadingResults": "⏳ Sonuçlar yükleniyor...",
@@ -758,7 +773,10 @@
     },
     "shuffle": {
       "emptyQueue": "Kuyrukta karıştırılacak bir şey yok.",
-      "shuffled": "🔀 Kuyruk karıştırıldı"
+      "shuffled": "🔀 Kuyruk karıştırıldı",
+      "shuffledTitle": "Sıra Karıştırıldı",
+      "shuffledSummary": "{{count}} {{plural}} rastgele karıştırıldı",
+      "newUpNext": "Yeni Sıradaki #1"
     },
     "skip": {
       "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
@@ -766,7 +784,11 @@
       "skippedTrack": "⏭️ [{{title}}]({{url}}) atlandı",
       "skippedToPosition": "⏭️ {{position}} konumuna atlandı",
       "voteAdded": "🗳️ Atlama oylaması: **{{votes}}/{{needed}}**. Oyunu eklemek için komutu tekrar çalıştır!",
-      "alreadyVoted": "🗳️ Zaten atlamak için oy verdin! Şu ana kadar **{{votes}}/{{needed}}** oy."
+      "alreadyVoted": "🗳️ Zaten atlamak için oy verdin! Şu ana kadar **{{votes}}/{{needed}}** oy.",
+      "skippedTitle": "Parça Atlandı",
+      "skippedAt": "{{time}} konumunda atlandı",
+      "upNext": "Sıradaki",
+      "queueRemaining": "Sırada {{count}} {{plural}}"
     },
     "stats": {
       "title": "Remix Müzik Botu",
@@ -811,7 +833,10 @@
       "current": "🔊 Mevcut ses seviyesi: `{{volume}}%`",
       "outOfRange": "❌ Ses seviyesi `0` ile `{{max}}%` arasında olmalıdır.",
       "changed": "🔊 Bu oturum için ses seviyesi `{{volume}}%` olarak değiştirildi.",
-      "setPending": "Ses seviyesi `{{volume}}%` olarak ayarlandı — bağlanıldığında uygulanacak."
+      "setPending": "Ses seviyesi `{{volume}}%` olarak ayarlandı — bağlanıldığında uygulanacak.",
+      "volumeAdjusted": "Ses Düzeyi Ayarlandı",
+      "currentVolume": "Mevcut Ses",
+      "volumeHint": "Kullanım: {{prefix}}volume <0-150>"
     },
     "volumedefault": {
       "title": "🔊 Ses Seviyesi Ayarları",
@@ -835,7 +860,12 @@
     },
     "autoplay": {
       "enabled": "🔁 Otomatik çalma **etkin** — kuyruk bittiğinde benzer parçalar otomatik olarak eklenecek.",
-      "disabled": "➡️ Otomatik çalma **devre dışı** — kuyruk bittiğinde bot duracak."
+      "disabled": "➡️ Otomatik çalma **devre dışı** — kuyruk bittiğinde bot duracak.",
+      "autoplayTitleEnabled": "Sonsuz Otomatik Çalma Etkin",
+      "autoplayTitleDisabled": "Otomatik Çalma Devre Dışı",
+      "autoplayDescEnabled": "Sıra bittiğinde Remix otomatik olarak önerilen parçaları ekler.",
+      "autoplayDescDisabled": "Otomatik çalma kapatıldı. Sıra bittiğinde müzik duracak.",
+      "autoplayEngine": "Motor: YouTube Mix + Last.fm"
     },
     "trackopt": {
       "notAvailable": "❌ Parça seçenekleri özelliği mevcut değil.",
