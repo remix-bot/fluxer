@@ -4,6 +4,8 @@
  */
 
 import { CommandBuilder } from "../src/commands/index.mjs";
+import { EmbedBuilder } from "@fluxerjs/core";
+import { getGlobalColor } from "../src/ui/index.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the move command. */
 export const command = new CommandBuilder()
@@ -37,6 +39,21 @@ export async function run(message, data) {
   const to = data.get("to")?.value;
   if (from === null || from === undefined || from < 1) return message.replyEmbed("Source position must be 1 or greater.").catch(() => {});
   if (to === null || to === undefined || to < 1) return message.replyEmbed("Target position must be 1 or greater.").catch(() => {});
+
+  const queueData = p.queue?.data ?? [];
+  const track = queueData[from - 1];
   const res = p.move(from, to);
-  message.replyEmbed(res).catch(() => {});
+  if (typeof res === "string" && !res.startsWith("Moved")) {
+    return message.replyEmbed(res).catch(() => {});
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(getGlobalColor())
+    .setAuthor({ name: "🔀 Track Reordered" })
+    .setTitle(track?.title?.slice(0, 256) || "Reordered Track")
+    .setDescription(`Moved from position **#${from}** ➔ **#${to}** in the queue.`)
+    .setFooter({ text: to === 1 ? "Now playing next after the current song • %np" : "%list to view updated queue" });
+
+  if (track?.thumbnail) embed.setThumbnail(track.thumbnail);
+  message.reply({ embeds: [embed] }).catch(() => {});
 }

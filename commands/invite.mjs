@@ -25,8 +25,6 @@ export const command = new CommandBuilder()
  * @returns {Promise<void>}
  */
 export async function run(message) {
-    const description = this.t(message, "responses.invite.description");
-
     const botUser = this.client?.user;
     const botIcon = botUser?.displayAvatarURL?.() || null;
 
@@ -36,8 +34,17 @@ export async function run(message) {
             name: this.t(message, "responses.invite.title"),
             iconURL: botIcon
         })
-        .setDescription(description)
-        ;
+        .setTitle("Add Remix to Your Server")
+        .setDescription(
+            "High-fidelity 24/7 Music Bot supporting YouTube, Spotify, SoundCloud, Apple Music & Deezer.\n\n" +
+            "💎 **48kHz Hi-Fi Audio** • 🎛️ **30+ Filters** • ⚡ **Dynamic Normalizer** • 📻 **Live Web Radio**\n\n" +
+            "**Quick Links:**\n" +
+            "• [➕ **Add Remix to Server**](https://fluxerlist.com/bots/remix)\n" +
+            "• [💬 **Join Support Community**](https://fluxer.gg/remix)"
+        )
+        .setFooter({ text: "Remix • Free & Open-Source Music" });
+
+    if (botIcon) embed.setThumbnail(botIcon);
 
     await message.reply({
         embeds: [embed]

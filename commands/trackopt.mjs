@@ -62,6 +62,30 @@ export const command = new CommandBuilder()
 
 /**
  * @private
+ * Build a text-based ASCII timeline representation of the cut window.
+ * @param {number} startMs - Start time in milliseconds.
+ * @param {number} endMs - End time in milliseconds.
+ * @param {number} totalMs - Total track duration in milliseconds.
+ * @returns {string} Formatted timeline string.
+ */
+function buildTimelineBar(startMs, endMs, totalMs) {
+  if (!totalMs || totalMs <= 0) return `\`${Utils.prettifyMS(startMs)}\` ➔ \`${endMs > 0 ? Utils.prettifyMS(endMs) : "end"}\``;
+  const totalSlots = 18;
+  const startSlot = Math.min(totalSlots - 1, Math.floor((startMs / totalMs) * totalSlots));
+  const effectiveEnd = endMs > 0 ? endMs : totalMs;
+  const endSlot = Math.min(totalSlots, Math.max(startSlot + 1, Math.ceil((effectiveEnd / totalMs) * totalSlots)));
+
+  let bar = "";
+  for (let i = 0; i < totalSlots; i++) {
+    if (i < startSlot) bar += "─";
+    else if (i >= startSlot && i < endSlot) bar += "■";
+    else bar += "─";
+  }
+  return `\`${Utils.prettifyMS(startMs)}\` \`[${bar}]\` \`${Utils.prettifyMS(effectiveEnd)}\``;
+}
+
+/**
+ * @private
  * Extract an alias:name token from a parts array, mutating the array in place.
  * @param {string[]} parts - Mutable array of token strings.
  * @returns {string} The extracted alias value, or DEFAULT_ALIAS if not found.
@@ -157,14 +181,28 @@ export async function run(msg, data) {
     }
 
     const endLabel = endMs > 0 ? Utils.prettifyMS(endMs) : "full track";
-    let desc;
-    if (result.alias === DEFAULT_ALIAS) {
-      desc = this.t(msg, "responses.trackopt.saved", { title: current.title, aliasLabel: "", start: Utils.prettifyMS(startMs), end: endLabel });
-    } else {
-      desc = this.t(msg, "responses.trackopt.savedAlias", { title: current.title, alias: result.alias, start: Utils.prettifyMS(startMs), end: endLabel, prefix });
+    const timeline = buildTimelineBar(startMs, endMs, trackDuration);
+    const setEmbed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: "✂️ Custom Track Trim Saved" })
+      .setTitle(current.title?.slice(0, 256) || "Track Trim")
+      .setDescription(
+        result.alias === DEFAULT_ALIAS
+          ? this.t(msg, "responses.trackopt.saved", { title: current.title, aliasLabel: "", start: Utils.prettifyMS(startMs), end: endLabel })
+          : this.t(msg, "responses.trackopt.savedAlias", { title: current.title, alias: result.alias, start: Utils.prettifyMS(startMs), end: endLabel, prefix })
+      )
+      .addFields(
+        { name: "Playback Window", value: timeline, inline: false },
+        { name: "Alias", value: `\`${result.alias}\``, inline: true },
+        { name: "Active Trim", value: `${Utils.prettifyMS(startMs)} ➔ ${endLabel}`, inline: true }
+      );
+
+    if (current.thumbnail) setEmbed.setThumbnail(current.thumbnail);
+    if (result.alias !== DEFAULT_ALIAS) {
+      setEmbed.setFooter({ text: `Play this cut anytime with: ${prefix}trackopt play ${result.alias}` });
     }
 
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] });
+    return msg.reply({ embeds: [setEmbed] });
   }
 
   if (subCommand === "get") {
@@ -173,15 +211,27 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.notSet", { title: current.title }))] });
     }
 
-    let desc = this.t(msg, "responses.trackopt.current", { title: current.title, count: rows.length }) + "\n\n";
-    for (const row of rows) {
-      const aliasLabel = row.alias === DEFAULT_ALIAS ? "default" : row.alias;
+    const trackDuration = p._getTrackDurationMs(current);
+    const getEmbed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: "✂️ Saved Track Trims" })
+      .setTitle(current.title?.slice(0, 256) || "Track Trims")
+      .setFooter({ text: `${rows.length} trim profile${rows.length === 1 ? "" : "s"} saved • Apply with ${prefix}trackopt play <alias>` });
+
+    if (current.thumbnail) getEmbed.setThumbnail(current.thumbnail);
+
+    for (const row of rows.slice(0, 10)) {
+      const aliasLabel = row.alias === DEFAULT_ALIAS ? "default (auto-apply)" : row.alias;
       const endStr = row.end_ms > 0 ? Utils.prettifyMS(row.end_ms) : "end";
-      const autoTag = row.alias === DEFAULT_ALIAS ? " ← auto" : "";
-      desc += this.t(msg, "responses.trackopt.currentEntry", { alias: aliasLabel, start: Utils.prettifyMS(row.start_ms), end: endStr, autoTag }) + "\n";
+      const timeline = buildTimelineBar(row.start_ms, row.end_ms, trackDuration);
+      getEmbed.addFields({
+        name: `🏷️ ${aliasLabel}`,
+        value: `${timeline}\n${Utils.prettifyMS(row.start_ms)} ➔ ${endStr}`,
+        inline: false
+      });
     }
 
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)] });
+    return msg.reply({ embeds: [getEmbed] });
   }
 
   if (subCommand === "play") {
@@ -217,7 +267,19 @@ export async function run(msg, data) {
 
       const aliasLabel = safeAlias === DEFAULT_ALIAS ? "default" : safeAlias;
       const endStr = result.endMs > 0 ? Utils.prettifyMS(result.endMs) : "end";
-      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.trackopt.applied", { alias: aliasLabel, start: Utils.prettifyMS(result.startMs), end: endStr }))] });
+      const trackDuration = p._getTrackDurationMs(current);
+      const timeline = buildTimelineBar(result.startMs, result.endMs, trackDuration);
+
+      const playEmbed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setAuthor({ name: "✂️ Track Trim Applied" })
+        .setTitle(current.title?.slice(0, 256) || "Track Trim")
+        .setDescription(this.t(msg, "responses.trackopt.applied", { alias: aliasLabel, start: Utils.prettifyMS(result.startMs), end: endStr }))
+        .addFields({ name: "Active Cut Range", value: timeline, inline: false });
+
+      if (current.thumbnail) playEmbed.setThumbnail(current.thumbnail);
+
+      return msg.reply({ embeds: [playEmbed] });
     } catch (e) {
       return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.trackopt.applyFailed", { error: e.message }))] });
     }

@@ -47,15 +47,18 @@ const HELP_TABS = [
  */
 function _helpHomeContent(prefix) {
   return (
-      "**Welcome to the Remix help page.**\n\n" +
-      "Remix is an open-source music bot. It supports a variety of " +
-      "streaming services and has many features.\n\n" +
-      "We hope you enjoy using Remix!\n\n" +
-      "To get started, just click on the reactions below to find out " +
-      "more about the commands. In the case that reactions don't work " +
-      "for you, there's also the possibility to look through them by " +
-      `using \`${prefix}help <page number>\` :)\n\n` +
-      `**Tip:** Click the tab emojis to switch sections.`
+    "**Remix** is a high-fidelity 24/7 music bot supporting YouTube, Spotify, SoundCloud, Deezer, and more.\n\n" +
+    "**✨ Core Highlights**\n" +
+    "• **48kHz Hi-Fi Audio** — Crystal-clear audio stream pipeline\n" +
+    "• **30+ Audio Filters** — Bassboost, 8D, Nightcore, Vaporwave, Equalizer\n" +
+    "• **Dynamic Normalizer** — EBU R128 loudness leveling across music sources\n" +
+    "• **24/7 Web Radio** — Over 30,000 global live radio stations\n\n" +
+    "**📂 Command Categories**\n" +
+    "🏠 • **Home** — Quick bot overview & status\n" +
+    "🎵 • **Music** — Playback, queue, search, filters (`" + prefix + "play`, `" + prefix + "skip`, `" + prefix + "queue`)\n" +
+    "🔧 • **Utility** — Settings, 24/7 voice, ping, vote (`" + prefix + "settings`, `" + prefix + "ping`)\n" +
+    "ℹ️ • **Support** — Community server & assistance\n\n" +
+    "💡 **Tip:** Click the tab emojis below to switch sections, or use `" + prefix + "help <command>` for detailed info."
   );
 }
 
@@ -65,12 +68,13 @@ function _helpHomeContent(prefix) {
  */
 function _helpSupportContent() {
   return (
-      "If you need help with anything or encounter any issues, hop over to " +
-      "our support server **[Remix HQ](https://fluxer.gg/remix)**!\n" +
-      "Alternatively, you can write a dm to any of the following people:\n\n" +
-      "- **Fantic**  (Community Manager)\n" +
-      "- **Shadow**  (Lead Developer)\n" +
-      "- **NoLogicAlan**  (Lead Developer)"
+    "Need help, want to report a bug, or suggest new features?\n\n" +
+    "💬 **[Join Remix Support Server](https://fluxer.gg/remix)**\n\n" +
+    "**Team & Maintainers:**\n" +
+    "• **Fantic** — Community Manager\n" +
+    "• **Shadow** — Lead Developer\n" +
+    "• **NoLogicAlan** — Lead Developer\n\n" +
+    "You can also use `%invite` to add Remix to your server."
   );
 }
 
@@ -97,7 +101,7 @@ function _helpBuildCategoryPages(tab, allCmds, prefix) {
     let   page  = "";
     slice.forEach((cmd, j) => {
       const d = (cmd.description || "No description.").split("\n")[0];
-      page += `${i + j + 1}. **${cmd.name}**: ${d}\n`;
+      page += `\`${prefix}${cmd.name}\` — ${d}\n`;
     });
     page += `\nTo learn more about a command, run \`${prefix}help <command name>\`!`;
     if (cmds.length > HELP_CMDS_PER_PAGE)

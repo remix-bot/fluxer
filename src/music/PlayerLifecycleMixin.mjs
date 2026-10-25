@@ -360,7 +360,7 @@ const PlayerLifecycleMixin = {
         } catch(e) {
           logger.warn("[PlayerManager] Failed to save announcement channel ID:", e?.message);
         }
-        message.reply(this._t(message, "responses.join.alreadyJoined", { channel: cid }));
+        message.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t(message, "responses.join.alreadyJoined", { channel: cid }))] });
         return existing;
       }
     }
@@ -557,7 +557,8 @@ const PlayerLifecycleMixin = {
       });
     });
 
-    const statusMsg = await message.reply(this._t(message, "responses.join.joining")).catch(() => null);
+    const joiningEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t(message, "responses.join.joining"));
+    const statusMsg = await message.reply({ embeds: [joiningEmbed] }).catch(() => null);
     try {
       await player.join(cid);
 
@@ -565,7 +566,13 @@ const PlayerLifecycleMixin = {
       this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
       this._pendingJoins.delete(cleanChannelId);
 
-      await statusMsg?.edit?.(this._t(message, "responses.join.joined", { channel: cid })).catch(() => {});
+      const joinedEmbed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setAuthor({ name: "🟢 Connected to Voice" })
+        .setDescription(this._t(message, "responses.join.joined", { channel: cid }))
+        .setFooter({ text: "Play music anytime with %play <song>" });
+
+      await statusMsg?.edit?.({ content: null, embeds: [joinedEmbed] }).catch(() => {});
 
       const guildId = cleanId(channel.guildId ?? getMessageGuildId(message));
       this._restorePlayerVolume(player, guildId);
@@ -584,7 +591,12 @@ const PlayerLifecycleMixin = {
 
           this.playerMap.set(cleanChannelId, player);
           this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
-          await statusMsg?.edit?.(this._t(message, "responses.join.joined", { channel: cid })).catch(() => {});
+          const joinedEmbed = new EmbedBuilder()
+            .setColor(getGlobalColor())
+            .setAuthor({ name: "🟢 Connected to Voice" })
+            .setDescription(this._t(message, "responses.join.joined", { channel: cid }))
+            .setFooter({ text: "Play music anytime with %play <song>" });
+          await statusMsg?.edit?.({ content: null, embeds: [joinedEmbed] }).catch(() => {});
 
           const retryGuildId = cleanId(channel.guildId ?? getMessageGuildId(message));
           this._restorePlayerVolume(player, retryGuildId);
@@ -602,7 +614,8 @@ const PlayerLifecycleMixin = {
       } else {
         errorMsg = this._t(message, "responses.join.joinFailed", { error: err.message });
       }
-      await statusMsg?.edit?.(errorMsg).catch(() => {});
+      const errorEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(errorMsg);
+      await statusMsg?.edit?.({ content: null, embeds: [errorEmbed] }).catch(() => {});
       this.playerMap.delete(cleanChannelId);
       this._unindexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
       player.destroy();

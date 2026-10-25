@@ -65,13 +65,18 @@ export async function run(message, data) {
     }
   }
 
-  const embed = new EmbedBuilder().setColor(getGlobalColor());
+  const embed = new EmbedBuilder()
+    .setColor(getGlobalColor())
+    .setAuthor({ name: "🎚️ Dynamic Loudness Normalization" })
+    .setTitle("EBU R128 Audio Leveling")
+    .setFooter({ text: "Balances volume differences across YouTube, Spotify & SoundCloud" });
+
   const statusMsg = newState
       ? this.t(message, "responses.normalize.statusEnabled")
       : this.t(message, "responses.normalize.statusDisabled");
   const infoMsg = this.t(message, "responses.normalize.info");
 
-  let desc = `${statusMsg}\n\n*${infoMsg}*`;
+  embed.setDescription(`${statusMsg}\n\n*${infoMsg}*`);
 
   if (p) {
     const current = p.queue?.getCurrent?.();
@@ -80,14 +85,14 @@ export async function run(message, data) {
       const gain = calculateNormalizationGain(current);
       const gainDb = (20 * Math.log10(gain)).toFixed(1);
       const gainSign = gain >= 1 ? "+" : "";
-      desc += "\n\n" + this.t(message, "responses.normalize.trackInfo", {
-        source,
-        gainDb: `${gainSign}${gainDb}`,
-        gainPct: (gain * 100).toFixed(0),
-        effective: Math.round(p.getEffectiveVolume()),
-      });
+
+      embed.addFields(
+        { name: "Track Source", value: source || "Default", inline: true },
+        { name: "Gain Offset", value: `${gainSign}${gainDb} dB (${(gain * 100).toFixed(0)}%)`, inline: true },
+        { name: "Effective Volume", value: `${Math.round(p.getEffectiveVolume())}%`, inline: true }
+      );
     }
   }
 
-  message.reply({ embeds: [embed.setDescription(desc)] }).catch(() => {});
+  message.reply({ embeds: [embed] }).catch(() => {});
 }

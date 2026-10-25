@@ -70,7 +70,21 @@ export async function run(message, data) {
   const requester = message.author?.id ?? message.authorId ?? null;
   const messages = p.playFirst(query, provider, { requester });
   messages.on("message", d => {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(d);
+    let embed;
+    if (d instanceof EmbedBuilder) {
+      embed = d;
+    } else if (d?.embeds?.[0]) {
+      embed = d.embeds[0];
+    } else {
+      embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(String(d));
+    }
+
+    /* Set Playing Next author tag on the added track embed */
+    const authorName = embed.data?.author?.name || "";
+    if (authorName.includes("Added to Queue") || !authorName) {
+      embed.setAuthor({ name: "⚡ Playing Next • Top of Queue (#1)" });
+    }
+
     if (statusMsg) statusMsg.edit({ embeds: [embed] }).catch(() => {});
   });
 }

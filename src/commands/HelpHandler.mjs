@@ -7,6 +7,8 @@
 
 import { PageBuilder } from "../ui/Paginators.mjs";
 import { Option, Flag } from "./Option.mjs";
+import { EmbedBuilder } from "@fluxerjs/core";
+import { getGlobalColor } from "../ui/index.mjs";
 
 /**
  * @class HelpHandler
@@ -152,52 +154,86 @@ export class HelpHandler {
   }
 
   /**
-   * Generate detailed help text for a single command.
+   * Generate detailed help embed for a single command.
    * @param {import('./CommandBuilder.mjs').CommandBuilder} command
    * @param {object} msg
-   * @returns {string}
+   * @returns {object} Object with embeds array containing the EmbedBuilder.
    */
   getCommandHelp(command, msg) {
-    const guildId = msg.message.guildId;
-    let content = `${HelpHandler.capitalise(command.name)}\n`;
-    content += this.commandDescription(command, msg) + "\n\n";
-    content += this.commands.t(guildId, "cmdHandler.help.usage") + "\n💻 `" + this.commandUsage(command, msg) + "`\n\n";
-    if (command.examples.length > 0)
-      content += this.commands.t(guildId, "cmdHandler.help.examples") + "\n- `" + command.examples.map(e => this.commands.format(e, guildId)).join("`\n- `") + "`\n\n";
-    if (command.aliases.length > 1) {
-      content += this.commands.t(guildId, "cmdHandler.help.aliases") + "\n";
-      command.aliases.forEach(alias => { content += "- " + alias + "\n"; });
-      content += "\n";
-    }
-    if (command.subcommands.length > 0) {
-      content += this.commands.t(guildId, "cmdHandler.help.subcommands") + "\n";
-      command.subcommands.forEach(s => {
-        const optCount = s.options.length > 0 ? "; (`" + this.commands.t(guildId, "cmdHandler.help.optionCount", { $count: s.options.length }) + "`)" : "";
-        content += "- " + s.name + ": " + (this.commandDescription(s, msg) || "").split("\n")[0] + optCount + "\n";
+    const guildId = msg.message?.guildId ?? msg.channel?.guildId;
+    const prefix = this.commands.getPrefix(guildId);
+    const category = command.category ? command.category.toLowerCase() : "general";
+
+    const embed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: `Command Help • ${prefix}${command.name}` })
+      .setTitle(HelpHandler.capitalise(command.name))
+      .setDescription(this.commandDescription(command, msg) || "No description provided.")
+      .addFields({
+        name: `💻 ${this.commands.t(guildId, "cmdHandler.help.usage")}`,
+        value: `\`${this.commandUsage(command, msg)}\``,
+        inline: false
       });
-      content += "\n";
+
+    if (command.examples.length > 0) {
+      embed.addFields({
+        name: `💡 ${this.commands.t(guildId, "cmdHandler.help.examples")}`,
+        value: command.examples.map(e => `\`${this.commands.format(e, guildId)}\``).join("\n"),
+        inline: false
+      });
+    }
+
+    if (command.aliases.length > 1) {
+      embed.addFields({
+        name: `🏷️ ${this.commands.t(guildId, "cmdHandler.help.aliases")}`,
+        value: command.aliases.map(a => `\`${a}\``).join(", "),
+        inline: true
+      });
+    }
+
+    if (command.subcommands.length > 0) {
+      const subs = command.subcommands.map(s => {
+        const optCount = s.options.length > 0 ? ` (\`${s.options.length} options\`)` : "";
+        return `• **${s.name}**: ${(this.commandDescription(s, msg) || "").split("\n")[0]}${optCount}`;
+      }).join("\n");
+      embed.addFields({
+        name: `📂 ${this.commands.t(guildId, "cmdHandler.help.subcommands")}`,
+        value: subs.slice(0, 1024),
+        inline: false
+      });
     } else if (command.options.length > 0) {
-      content += this.commands.t(guildId, "cmdHandler.help.arguments") + "\n";
-      command.options.forEach(o => {
-        const optional = ((o.required) ? "" : "?");
+      const optLines = command.options.map(o => {
+        const optional = o.required ? "" : " *(optional)*";
         const flag = (o instanceof Flag) ? "-" : "";
+        const desc = (o.description || "").split("\n")[0];
         if (o.type === "choice") {
           const choiceDisplay = Option.formatChoicesInline(o.choices);
-          const aliasDisplay = o.aliases.filter(a => a !== null).join('`, `');
-          content += "- **" + flag + o.name + "**" + optional + ": " + (o.description || "").split("\n")[0] + ";\n  - " + this.commands.t(guildId, "cmdHandler.help.allowedValues") + choiceDisplay + "\n  - " + this.commands.t(guildId, "cmdHandler.help.aliasesLabel") + "`" + aliasDisplay + "`\n";
-        } else {
-          content += "- **" + flag + o.name + "**" + optional + ": " + (o.description || "").split("\n")[0] + "\n  - " + this.commands.t(guildId, "cmdHandler.help.aliasesLabel") + "`" + o.aliases.join("`, `") + "`\n";
+          return `• **${flag}${o.name}**${optional}: ${desc}\n  └ Values: \`${choiceDisplay}\``;
         }
-        content += "\n";
+        return `• **${flag}${o.name}**${optional}: ${desc}`;
+      }).join("\n");
+      embed.addFields({
+        name: `⚙️ ${this.commands.t(guildId, "cmdHandler.help.arguments")}`,
+        value: optLines.slice(0, 1024),
+        inline: false
       });
-      content += "\n";
     }
+
     if (command.requirements.length > 0) {
-      content += this.commands.t(guildId, "cmdHandler.help.requirements") + "\n";
-      command.requirements.forEach(r => {
-        content += "- " + r.getPermissions().map(e => this.commands.t(guildId, "cmdHandler.help.permission", { $permission: e })).join("\n- ");
-      });
+      const perms = command.requirements.map(r =>
+        r.getPermissions().map(e => this.commands.t(guildId, "cmdHandler.help.permission", { $permission: e })).join(", ")
+      ).filter(Boolean).join(", ");
+      if (perms) {
+        embed.addFields({
+          name: `🔒 ${this.commands.t(guildId, "cmdHandler.help.requirements")}`,
+          value: perms.slice(0, 1024),
+          inline: false
+        });
+      }
     }
-    return content.trim();
+
+    embed.setFooter({ text: `Type ${prefix}help for full command list • Category: ${category}` });
+
+    return { embeds: [embed] };
   }
 }

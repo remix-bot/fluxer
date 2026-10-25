@@ -124,18 +124,30 @@ export async function runWhoknowsActions(msg, data, lastfm, prefix, userId, targ
       const MEDALS = ["🥇", "🥈", "🥉"];
       const totalPlays = listeners.reduce((sum, l) => sum + l.playcount, 0);
 
-      const lines = listeners.map((l, i) => {
-        const medal = i < 3 ? MEDALS[i] : `  `;
-        return `${medal} ${i + 1}. **${l.username}** — **${Utils.formatNumber(l.playcount)}** ${this.t(msg, "responses.lastfm.plays")}`;
-      });
-
-      const desc = lines.join("\n").slice(0, 4096);
-
+      const top1 = listeners[0];
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setTitle(this.t(msg, "responses.lastfm.whoknowsTitle", { artist: artistName }))
-        .setDescription(desc)
-        .setFooter({ text: this.t(msg, "responses.lastfm.whoknowsFooter", { count: listeners.length, plural: listeners.length !== 1 ? "s" : "", totalPlays: Utils.formatNumber(totalPlays) }) });
+        .setAuthor({ name: "👑 Server Music Leaderboard" })
+        .setTitle(artistName)
+        .setFooter({ text: `${listeners.length} listener${listeners.length !== 1 ? "s" : ""} • ${Utils.formatNumber(totalPlays)} total plays • %fm` });
+
+      if (top1) {
+        embed.addFields({
+          name: "👑 Crown Holder (#1)",
+          value: `**${top1.username}** — **${Utils.formatNumber(top1.playcount)}** ${this.t(msg, "responses.lastfm.plays")}`,
+          inline: false
+        });
+      }
+
+      const rest = listeners.slice(1);
+      if (rest.length > 0) {
+        const lines = rest.map((l, i) => {
+          const rank = i + 2;
+          const medal = rank === 2 ? "🥈" : rank === 3 ? "🥉" : `\`#${rank}\``;
+          return `${medal} **${l.username}** — **${Utils.formatNumber(l.playcount)}** ${this.t(msg, "responses.lastfm.plays")}`;
+        });
+        embed.setDescription(lines.join("\n").slice(0, 4096));
+      }
 
       const replyPayload = { embeds: [embed] };
       if (statusMsg) statusMsg.edit(replyPayload).catch(() => msg.reply(replyPayload));

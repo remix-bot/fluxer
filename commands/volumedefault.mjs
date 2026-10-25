@@ -9,6 +9,23 @@ import { getGlobalColor } from "../src/ui/index.mjs";
 import { PermissionFlags } from "@fluxerjs/core";
 import { MAX_VOLUME } from "../src/utils/UI.mjs";
 
+/**
+ * @private
+ * Build an ASCII slider bar for volume display.
+ * @param {number} volume
+ * @param {number} max
+ * @returns {string}
+ */
+function buildVolumeSlider(volume, max = MAX_VOLUME) {
+  const totalSlots = 14;
+  const filled = Math.min(totalSlots, Math.max(0, Math.round((volume / max) * totalSlots)));
+  let bar = "";
+  for (let i = 0; i < totalSlots; i++) {
+    bar += i < filled ? "■" : "─";
+  }
+  return `\`0%\` \`[${bar}]\` \`${max}%\` • **${volume}%**`;
+}
+
 /** @type {CommandBuilder} @description Command definition for the volumedefault command. */
 export const command = new CommandBuilder()
     .setName("volumedefault")
@@ -53,13 +70,16 @@ export async function run(message, data) {
         const currentPlayerVol = Math.round((p.preferredVolume ?? 1) * 100);
         const pfx = this.handler.getPrefix(message.channel?.guildId ?? message.message?.guildId);
         embed
+            .setAuthor({ name: "🔊 Server Default Volume" })
             .setTitle(this.t(message, "responses.volumedefault.title"))
             .setDescription(
-                this.t(message, "responses.volumedefault.serverDefault", { volume: currentDefault }) + "\n" +
-                this.t(message, "responses.volumedefault.currentVolume", { volume: currentPlayerVol }) + "\n\n" +
-                (hasManage
+                hasManage
                     ? this.t(message, "responses.volumedefault.changeHint", { prefix: pfx, max: MAX_VOLUME })
-                    : this.t(message, "responses.volumedefault.noPermission"))
+                    : this.t(message, "responses.volumedefault.noPermission")
+            )
+            .addFields(
+                { name: "Default Volume", value: buildVolumeSlider(currentDefault), inline: false },
+                { name: "Active Session Volume", value: `${currentPlayerVol}%`, inline: true }
             );
     } else if (!hasManage) {
         embed.setDescription(this.t(message, "responses.volumedefault.noPermissionSet"));
@@ -70,7 +90,10 @@ export async function run(message, data) {
         } else {
             p.setVolume(pct / 100);
             if (set) set.set("volume", pct);
-            embed.setDescription(this.t(message, "responses.volumedefault.saved", { volume: pct }));
+            embed
+                .setAuthor({ name: "🔊 Server Default Volume Saved" })
+                .setDescription(this.t(message, "responses.volumedefault.saved", { volume: pct }))
+                .addFields({ name: "New Default Level", value: buildVolumeSlider(pct), inline: false });
         }
     }
 

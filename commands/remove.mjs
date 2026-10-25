@@ -4,6 +4,8 @@
  */
 
 import { CommandBuilder } from "../src/commands/index.mjs";
+import { EmbedBuilder } from "@fluxerjs/core";
+import { getGlobalColor } from "../src/ui/index.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the remove command. */
 export const command = new CommandBuilder()
@@ -35,11 +37,35 @@ export async function run(message, data) {
     const to = parseInt(rangeMatch[2], 10);
     if (from < 1 || to < 1) return message.replyEmbed("Queue positions must be 1 or greater.").catch(() => {});
     const res = p.removeRange(from - 1, to - 1);
-    return message.replyEmbed(res).catch(() => {});
+    if (typeof res === "string" && !res.includes("Successfully")) {
+      return message.replyEmbed(res).catch(() => {});
+    }
+    const remaining = p.queue?.size() ?? 0;
+    const count = Math.abs(to - from) + 1;
+    const embed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: "🗑️ Removed from Queue" })
+      .setTitle(`Removed ${count} Tracks`)
+      .setDescription(`Successfully removed positions **#${Math.min(from, to)}** to **#${Math.max(from, to)}** from the queue.`)
+      .setFooter({ text: `${remaining} track${remaining === 1 ? "" : "s"} remaining in queue • %list` });
+    return message.reply({ embeds: [embed] }).catch(() => {});
   }
 
   const single = parseInt(raw, 10);
   if (isNaN(single) || single < 1) return message.replyEmbed("Queue position must be 1 or greater.").catch(() => {});
+  const queueData = p.queue?.data ?? [];
+  const track = queueData[single - 1];
   const res = p.remove(single - 1);
-  message.replyEmbed(res).catch(() => {});
+  if (typeof res === "string" && res.toLowerCase().includes("out of bounds")) {
+    return message.replyEmbed(res).catch(() => {});
+  }
+  const remaining = p.queue?.size() ?? 0;
+  const embed = new EmbedBuilder()
+    .setColor(getGlobalColor())
+    .setAuthor({ name: "🗑️ Removed from Queue" })
+    .setTitle(track?.title?.slice(0, 256) || "Removed Track")
+    .setDescription(`Removed track at position **#${single}** from the queue.`)
+    .setFooter({ text: `${remaining} track${remaining === 1 ? "" : "s"} remaining in queue • %list` });
+  if (track?.thumbnail) embed.setThumbnail(track.thumbnail);
+  return message.reply({ embeds: [embed] }).catch(() => {});
 }

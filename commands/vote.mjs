@@ -169,8 +169,10 @@ export async function run(msg, data) {
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
+        .setAuthor({ name: "🗳️ Vote for Remix" })
         .setTitle(this.t(msg, "responses.vote.voteTitle"))
-        .setDescription(descLines.join("\n"));
+        .setDescription(descLines.join("\n"))
+        .setFooter({ text: `Check your vote status: ${prefix}vote check • %voters` });
 
       return msg.reply({ embeds: [embed] });
     }
