@@ -179,29 +179,35 @@ const DisplayMixin = {
 
     const vcLine = this._channelId ? `🔊 <#${this._channelId}>\n` : "";
 
-    let sourceName = "Music";
+    let sourceName = this._t("responses.play.sourceMusic");
     let sourceIcon = "🎵";
     const sourceColor = 0xe9196c;
 
     if (current.type === "radio") {
-      sourceName = "24/7 Radio";
+      sourceName = this._t("responses.play.sourceRadio");
       sourceIcon = "📻";
     } else if (current.spotifyUrl || current.type === "spotify") {
-      sourceName = "Spotify";
+      sourceName = this._t("responses.play.sourceSpotify");
       sourceIcon = "🟢";
     } else if (current.type === "soundcloud" || current.url?.includes("soundcloud.com")) {
-      sourceName = "SoundCloud";
+      sourceName = this._t("responses.play.sourceSoundcloud");
       sourceIcon = "🟠";
     } else if (current.type === "youtube" || current.url?.includes("youtube.com") || current.url?.includes("youtu.be")) {
-      sourceName = "YouTube";
+      sourceName = this._t("responses.play.sourceYoutube");
       sourceIcon = "▶️";
     }
 
     const trackUrl = current.spotifyUrl || current.url || null;
     const rawAuthor = current.artist || (typeof current.author === "object" ? current.author?.name : current.author);
-    const artistName = rawAuthor || "Unknown";
-    const loopState = this.queue.songLoop ? "🔂 Song" : this.queue.loop ? "🔄 Queue" : "Off";
-    const nextTrack = this.queue.data?.[0]?.title ? Utils.truncate(this.queue.data[0].title, 35) : "End of queue";
+    const artistName = rawAuthor || this._t("responses.play.unknownAuthor");
+    const loopState = this.queue.songLoop
+      ? `🔂 ${this._t("responses.play.loopSongLabel")}`
+      : this.queue.loop
+        ? `🔄 ${this._t("responses.play.loopQueueLabel")}`
+        : this._t("responses.play.loopOffLabel");
+    const nextTrack = this.queue.data?.[0]?.title
+      ? Utils.truncate(this.queue.data[0].title, 35)
+      : this._t("responses.play.endOfQueue");
     const queueCount = this.queue.size();
     const queueRemaining = this.getQueueRemainingTime();
 
@@ -235,10 +241,10 @@ const DisplayMixin = {
     const embed = new EmbedBuilder()
       .setColor(sourceColor)
       .setAuthor({
-        name: `${sourceIcon} Now Playing • ${sourceName}`,
+        name: `${sourceIcon} ${this._t("responses.play.autoNowPlaying")} • ${sourceName}`,
         url: trackUrl || undefined,
       })
-      .setTitle(Utils.truncate(current.title || "Unknown Track", 250))
+      .setTitle(Utils.truncate(current.title || this._t("responses.play.unknownTrack"), 250))
       .setURL(trackUrl || undefined);
 
     if (current.thumbnail) {
@@ -247,31 +253,32 @@ const DisplayMixin = {
 
     if (current.type === "radio") {
       let desc = current.description ? `${current.description}\n\n` : "";
-      desc += `🎵 **Live Broadcast:** ${radioLiveTitle || "Live Stream"}`;
+      desc += `🎵 **${this._t("responses.play.liveBroadcast")}:** ${radioLiveTitle || this._t("responses.play.sourceRadio")}`;
       embed.setDescription(desc);
       embed.addFields(
-        { name: "📻 Station", value: Utils.truncate(current.title, 40), inline: true },
-        { name: "🎧 Channel", value: this._channelId ? `<#${this._channelId}>` : "None", inline: true },
-        { name: "🔊 Volume", value: vol, inline: true }
+        { name: `📻 ${this._t("responses.play.station")}`, value: Utils.truncate(current.title || this._t("responses.play.sourceRadio"), 40), inline: true },
+        { name: `🎧 ${this._t("responses.play.channel")}`, value: this._channelId ? `<#${this._channelId}>` : this._t("responses.play.none"), inline: true },
+        { name: `🔊 ${this._t("responses.play.volume")}`, value: vol, inline: true }
       );
     } else {
       let desc = `${this._createProgressBar(20)}`;
       if (this._activeTrackOpt) {
         const optStart = Utils.prettifyMS(this._activeTrackOpt.startMs);
         const optEnd = this._activeTrackOpt.endMs > 0 ? Utils.prettifyMS(this._activeTrackOpt.endMs) : "end";
-        desc += `\n✂️ Custom Cut: \`${optStart} → ${optEnd}\``;
+        desc += `\n✂️ ${this._t("responses.play.customCut")}: \`${optStart} → ${optEnd}\``;
       }
       embed.setDescription(desc);
       embed.addFields(
-        { name: "👤 Artist", value: Utils.truncate(artistName, 40), inline: true },
-        { name: "🎧 Channel", value: this._channelId ? `<#${this._channelId}>` : "None", inline: true },
-        { name: "⚙️ Mode / Vol", value: `${loopState} • ${vol}`, inline: true }
+        { name: `👤 ${this._t("responses.play.artist")}`, value: Utils.truncate(artistName, 40), inline: true },
+        { name: `🎧 ${this._t("responses.play.channel")}`, value: this._channelId ? `<#${this._channelId}>` : this._t("responses.play.none"), inline: true },
+        { name: `⚙️ ${this._t("responses.play.modeVol")}`, value: `${loopState} • ${vol}`, inline: true }
       );
     }
 
+    const pluralStr = queueCount === 1 ? this._t("responses.play.trackSingle") : this._t("responses.play.trackPlural");
     const footerText = queueCount > 0
-      ? `Queue: ${queueCount} ${queueCount === 1 ? "track" : "tracks"} (${queueRemaining}) • Next: ${nextTrack}`
-      : `Queue: Empty • Autoplay: ${this._autoplay ? "On" : "Off"}`;
+      ? this._t("responses.play.nowPlayingFooter", { count: queueCount, plural: pluralStr, remaining: queueRemaining, next: nextTrack })
+      : this._t("responses.play.nowPlayingFooterEmpty", { autoplay: this._autoplay ? this._t("responses.play.on") : this._t("responses.play.off") });
 
     embed.setFooter({ text: footerText });
     if (typeof embed.setTimestamp === "function") embed.setTimestamp();
@@ -328,7 +335,7 @@ const DisplayMixin = {
    */
   buildAddedToQueueEmbed(video, top = false, requester = null) {
     const rawAuthor = video.artist || (typeof video.author === "object" ? video.author?.name : video.author);
-    const author = rawAuthor || "Unknown";
+    const author = rawAuthor || this._t("responses.play.unknownAuthor");
     const trackUrl = video.spotifyUrl || video.url || null;
     const durationStr = this.getDuration(video.duration);
 
@@ -365,7 +372,7 @@ const DisplayMixin = {
         name: `➕ ${this._t("responses.play.addedToQueue")}`,
         url: trackUrl || undefined
       })
-      .setTitle(Utils.truncate(video.title || "Unknown Track", 250))
+      .setTitle(Utils.truncate(video.title || this._t("responses.play.unknownTrack"), 250))
       .setURL(trackUrl || undefined);
 
     if (video.thumbnail) {
@@ -406,9 +413,9 @@ const DisplayMixin = {
       const embed = new EmbedBuilder()
         .setColor(0xe9196c)
         .setAuthor({ name: `📻 ${this._t("responses.play.autoNowPlaying")}` })
-        .setTitle(Utils.truncate(s.title || "24/7 Radio", 250))
+        .setTitle(Utils.truncate(s.title || this._t("responses.play.sourceRadio"), 250))
         .setURL(s.author?.url || s.url || undefined)
-        .setDescription(`🎵 **${s.description || "Live Broadcast"}**\n\n🔊 <#${this._channelId}>`)
+        .setDescription(`🎵 **${s.description || this._t("responses.play.liveBroadcast")}**\n\n🔊 <#${this._channelId}>`)
         .setFooter({ text: this._t("responses.play.controlsHint", { prefix }) });
       if (s.thumbnail) embed.setThumbnail(s.thumbnail);
       this.emit("message", { embeds: [embed] });
@@ -416,18 +423,27 @@ const DisplayMixin = {
     }
 
     const rawAuthor = s.artist || (typeof s.author === "object" ? s.author?.name : s.author);
-    const author = rawAuthor || "Unknown";
+    const author = rawAuthor || this._t("responses.play.unknownAuthor");
     const trackUrl = s.spotifyUrl || s.url || null;
     const durationStr = this.getDuration(s.duration);
     const nextTrack = this.queue.data?.[0]?.title ? Utils.truncate(this.queue.data[0].title, 35) : null;
 
+    let sourceIcon = "🎵";
+    if (s.spotifyUrl || s.type === "spotify") {
+      sourceIcon = "🟢";
+    } else if (s.type === "soundcloud" || s.url?.includes("soundcloud.com")) {
+      sourceIcon = "🟠";
+    } else if (s.type === "youtube" || s.url?.includes("youtube.com") || s.url?.includes("youtu.be")) {
+      sourceIcon = "▶️";
+    }
+
     const embed = new EmbedBuilder()
       .setColor(0xe9196c)
       .setAuthor({
-        name: `🟢 ${this._t("responses.play.autoNowPlaying")}`,
+        name: `${sourceIcon} ${this._t("responses.play.autoNowPlaying")}`,
         url: trackUrl || undefined
       })
-      .setTitle(Utils.truncate(s.title || "Unknown Track", 250))
+      .setTitle(Utils.truncate(s.title || this._t("responses.play.unknownTrack"), 250))
       .setURL(trackUrl || undefined);
 
     if (s.thumbnail) {
