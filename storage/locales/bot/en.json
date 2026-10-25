@@ -179,7 +179,11 @@
       "rate": "Playback speed multiplier between 0.5 and 2.0 (e.g. 1.25). Omit to reset to 1.0×."
     },
     "pitch": {
-      "pitch": "Audio pitch multiplier between 0.5 and 2.0 (e.g. 1.25). Omit to reset to 1.0×."
+      "pitch": "Audio pitch multiplier between 0.5 and 2.0 (e.g. 1.25). Omit to reset to 1.0×.",
+      "multiplier": "Pitch multiplier between 0.5 and 2.0 (e.g. 1.25). Omit to reset to 1.0×."
+    },
+    "lyrics": {
+      "query": "The song title and artist to search lyrics for (optional)."
     }
   },
   "pagination": {
@@ -1205,7 +1209,8 @@
       "failed": "❌ Failed to adjust speed: {{reason}}",
       "speedTitle": "Playback Speed Adjusted",
       "speedMultiplier": "{{speed}}× Multiplier",
-      "resetHint": "Reset anytime with {{prefix}}speed"
+      "resetHint": "Reset anytime with {{prefix}}speed",
+      "applied": "{{emoji}} Playback speed set to **{{speed}}×**."
     },
     "pitch": {
       "reset": "🎵 Audio pitch reset to normal **1.0×**.",

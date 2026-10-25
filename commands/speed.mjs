@@ -85,7 +85,7 @@ export async function run(message, data) {
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
 
-  let desc = this.t(message, "responses.speed.applied", { speed });
+  let desc = this.t(message, "responses.speed.applied", { emoji: filterMeta.emoji, speed });
   if (current?.title) {
     const rawAuthor = current.artist || (typeof current.author === "object" ? current.author?.name : current.author);
     const authorStr = rawAuthor ? ` • ${rawAuthor}` : "";

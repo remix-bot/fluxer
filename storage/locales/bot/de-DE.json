@@ -179,7 +179,11 @@
       "rate": "Geschwindigkeitsmultiplikator zwischen 0.5 und 2.0 (z. B. 1.25). Leer lassen für 1.0×."
     },
     "pitch": {
-      "pitch": "Tonhöhenmultiplikator zwischen 0.5 und 2.0 (z. B. 1.25). Leer lassen für 1.0×."
+      "pitch": "Tonhöhenmultiplikator zwischen 0.5 und 2.0 (z. B. 1.25). Leer lassen für 1.0×.",
+      "multiplier": "Tonhöhenmultiplikator zwischen 0,5 und 2,0 (z. B. 1,25). Weglassen, um auf 1,0× zurückzusetzen."
+    },
+    "lyrics": {
+      "query": "Der Songtitel und Künstler, nach dessen Songtext gesucht werden soll (optional)."
     }
   },
   "pagination": {
@@ -905,7 +909,7 @@
       "whoknowsTrackNobody": "👤 Niemand auf diesem Server hat **{{track}}** von **{{artist}}** auf Last.fm gehört.",
       "whoknowsTrackTitle": "👤 Wer kennt {{track}}?",
       "whoknowsTrackFooter": "{{count}} Hörer · insgesamt {{totalPlays}} Wiedergaben · von {{artist}}",
-      "whoknowsAlbumChecking": "🔍 Prüfe, wer **{{album}}** kennt...",
+      "whoknowsAlbumChecking": "🔍 Prüfe, wer **{{album}}**{{artistClause}} auf diesem Server kennt...",
       "whoknowsAlbumNobody": "👤 Niemand auf diesem Server hat **{{album}}** auf Last.fm gehört.",
       "whoknowsAlbumTitle": "👤 Wer kennt {{album}}?",
       "leaderboardEmpty": "🎵 Noch keine Scrobbles aufgezeichnet. Verknüpfe dein Last.fm-Konto mit `{{prefix}}lastfm link` und leg los!",
@@ -1205,7 +1209,8 @@
       "failed": "❌ Geschwindigkeit konnte nicht geändert werden: {{reason}}",
       "speedTitle": "Wiedergabegeschwindigkeit Angepasst",
       "speedMultiplier": "{{speed}}× Multiplikator",
-      "resetHint": "Jederzeit zurücksetzen mit {{prefix}}speed"
+      "resetHint": "Jederzeit zurücksetzen mit {{prefix}}speed",
+      "applied": "{{emoji}} Wiedergabegeschwindigkeit auf **{{speed}}×** eingestellt."
     },
     "pitch": {
       "reset": "🎵 Tonhöhe auf normale **1.0×** zurückgesetzt.",

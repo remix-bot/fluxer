@@ -179,7 +179,11 @@
       "rate": "مضاعف سرعة التشغيل بين 0.5 و 2.0 (مثل 1.25). اتركه فارغاً للعودة إلى 1.0×."
     },
     "pitch": {
-      "pitch": "مضاعف طبقة الصوت بين 0.5 و 2.0 (مثل 1.25). اتركه فارغاً للعودة إلى 1.0×."
+      "pitch": "مضاعف طبقة الصوت بين 0.5 و 2.0 (مثل 1.25). اتركه فارغاً للعودة إلى 1.0×.",
+      "multiplier": "مضاعف طبقة الصوت بين 0.5 و 2.0 (مثال: 1.25). اتركه فارغاً لإعادة الضبط إلى 1.0×."
+    },
+    "lyrics": {
+      "query": "عنوان الأغنية والفنان للبحث عن الكلمات (اختياري)."
     }
   },
   "pagination": {
@@ -905,7 +909,7 @@
       "whoknowsTrackNobody": "👤 لا أحد في هذا الخادم استمع إلى **{{track}}** لـ **{{artist}}** على Last.fm.",
       "whoknowsTrackTitle": "👤 من يعرف {{track}}؟",
       "whoknowsTrackFooter": "{{count}} مستمع · إجمالي {{totalPlays}} تشغيل · بواسطة {{artist}}",
-      "whoknowsAlbumChecking": "🔍 جارٍ التحقق ممن يعرف **{{album}}**...",
+      "whoknowsAlbumChecking": "🔍 جارٍ التحقق ممن يعرف **{{album}}**{{artistClause}} في هذا السيرفر...",
       "whoknowsAlbumNobody": "👤 لا أحد في هذا الخادم استمع إلى **{{album}}** على Last.fm.",
       "whoknowsAlbumTitle": "👤 من يعرف {{album}}؟",
       "leaderboardEmpty": "🎵 لا توجد سكرابلات مسجلة بعد. اربط حساب Last.fm الخاص بك باستخدام `{{prefix}}lastfm link` وابدأ الاستماع!",
@@ -1205,7 +1209,8 @@
       "failed": "❌ فشل تعديل السرعة: {{reason}}",
       "speedTitle": "تم تعديل سرعة التشغيل",
       "speedMultiplier": "مضاعف {{speed}}×",
-      "resetHint": "إعادة التعيين في أي وقت بـ {{prefix}}speed"
+      "resetHint": "إعادة التعيين في أي وقت بـ {{prefix}}speed",
+      "applied": "{{emoji}} تم تعيين سرعة التشغيل إلى **{{speed}}×**."
     },
     "pitch": {
       "reset": "🎵 تمت إعادة ضبط طبقة الصوت إلى الوضع الطبيعي **1.0×**.",

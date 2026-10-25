@@ -175,11 +175,15 @@
       "rate": "0.5 ile 2.0 arasında oynatma hızı çarpanı (ör. 1.25). 1.0× yapmak için boş bırakın."
     },
     "pitch": {
-      "pitch": "0.5 ile 2.0 arasında ses perdesi çarpanı (ör. 1.25). 1.0× yapmak için boş bırakın."
+      "pitch": "0.5 ile 2.0 arasında ses perdesi çarpanı (ör. 1.25). 1.0× yapmak için boş bırakın.",
+      "multiplier": "0.5 ile 2.0 arasında perde çarpanı (örn. 1.25). 1.0× değerine sıfırlamak için boş bırakın."
     },
     "vote": {
       "action": "Yapılacak işlem: info, check, voters",
       "type": "Kaynak türü: sunucu veya bot"
+    },
+    "lyrics": {
+      "query": "Şarkı sözlerini aramak için şarkı adı ve sanatçı (isteğe bağlı)."
     }
   },
   "pagination": {
@@ -410,7 +414,7 @@
       "whoknowsTrackNobody": "👤 Bu sunucuda kimse Last.fm üzerinde **{{track}}** — **{{artist}}** dinlememiş.",
       "whoknowsTrackTitle": "👤 Kim bilir {{track}}?",
       "whoknowsTrackFooter": "{{count}} dinleyici · toplam {{totalPlays}} çalma · {{artist}} tarafından",
-      "whoknowsAlbumChecking": "🔍 Kimin **{{album}}** dinlediği kontrol ediliyor...",
+      "whoknowsAlbumChecking": "🔍 Bu sunucuda kimin **{{album}}**{{artistClause}} dinlediği kontrol ediliyor...",
       "whoknowsAlbumNobody": "👤 Bu sunucuda kimse Last.fm üzerinde **{{album}}** dinlememiş.",
       "whoknowsAlbumTitle": "👤 Kim bilir {{album}}?",
       "leaderboardEmpty": "🎵 Henüz scrobble kaydedilmedi. Last.fm hesabınızı `{{prefix}}lastfm link` ile bağlayın ve dinlemeye başlayın!",
@@ -1153,7 +1157,8 @@
       "failed": "❌ Hız ayarlanamadı: {{reason}}",
       "speedTitle": "Oynatma Hızı Ayarlandı",
       "speedMultiplier": "{{speed}}× Çarpanı",
-      "resetHint": "Sıfırlamak için: {{prefix}}speed"
+      "resetHint": "Sıfırlamak için: {{prefix}}speed",
+      "applied": "{{emoji}} Oynatma hızı **{{speed}}×** olarak ayarlandı."
     },
     "pitch": {
       "reset": "🎵 Ses perdesi normal **1.0×** seviyesine sıfırlandı.",

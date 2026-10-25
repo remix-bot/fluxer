@@ -179,7 +179,11 @@
       "rate": "Multiplicador de velocidade entre 0.5 e 2.0 (ex: 1.25). Omita para redefinir para 1.0×."
     },
     "pitch": {
-      "pitch": "Multiplicador de tom entre 0.5 e 2.0 (ex: 1.25). Omita para redefinir para 1.0×."
+      "pitch": "Multiplicador de tom entre 0.5 e 2.0 (ex: 1.25). Omita para redefinir para 1.0×.",
+      "multiplier": "Multiplicador de tom entre 0.5 e 2.0 (ex: 1.25). Omita para redefinir para 1.0×."
+    },
+    "lyrics": {
+      "query": "O título da música e o artista para pesquisar a letra (opcional)."
     }
   },
   "pagination": {
@@ -574,7 +578,7 @@
       "noFileTracked": "❌ Nenhum arquivo rastreado para `{{name}}`",
       "noBuilder": "❌ Nenhum builder retornado de `{{name}}`",
       "reloaded": "✅ `{{name}}`",
-      "moduleError": "❌ `{{label}}`: {{error}",
+      "moduleError": "❌ {{label}}: {{error}}",
       "unknownTarget": "❌ Alvo desconhecido `{{target}}`.\nExecute `$prefixreload` sem argumentos para ver todos os alvos recarregáveis.",
       "availableTargetsTitle": "🔄 Recarregar — Alvos Disponíveis",
       "runHint": "Execute `$prefixreload <alvo>` ou use uma palavra-chave em lote:",
@@ -905,7 +909,7 @@
       "whoknowsTrackNobody": "👤 Ninguém neste servidor ouviu **{{track}}** de **{{artist}}** no Last.fm.",
       "whoknowsTrackTitle": "👤 Quem conhece {{track}}?",
       "whoknowsTrackFooter": "{{count}} ouvinte{{plural}} · {{totalPlays}} reproduções no total · de {{artist}}",
-      "whoknowsAlbumChecking": "🔍 Verificando quem conhece **{{album}}**...",
+      "whoknowsAlbumChecking": "🔍 Verificando quem conhece **{{album}}**{{artistClause}} neste servidor...",
       "whoknowsAlbumNobody": "👤 Ninguém neste servidor ouviu **{{album}}** no Last.fm.",
       "whoknowsAlbumTitle": "👤 Quem conhece {{album}}?",
       "leaderboardEmpty": "🎵 Nenhum scrobble registrado ainda. Vincule sua conta do Last.fm com `{{prefix}}lastfm link` e comece a ouvir!",
@@ -1205,7 +1209,8 @@
       "failed": "❌ Falha ao ajustar velocidade: {{reason}}",
       "speedTitle": "Velocidade de Reprodução Ajustada",
       "speedMultiplier": "Multiplicador de {{speed}}×",
-      "resetHint": "Redefina a qualquer momento com {{prefix}}speed"
+      "resetHint": "Redefina a qualquer momento com {{prefix}}speed",
+      "applied": "{{emoji}} Velocidade de reprodução definida para **{{speed}}×**."
     },
     "pitch": {
       "reset": "🎵 Tom de áudio redefinido para **1.0×** normal.",
