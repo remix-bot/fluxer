@@ -70,7 +70,7 @@ export async function run(message, data) {
         const currentPlayerVol = Math.round((p.preferredVolume ?? 1) * 100);
         const pfx = this.handler.getPrefix(message.channel?.guildId ?? message.message?.guildId);
         embed
-            .setAuthor({ name: "🔊 Server Default Volume" })
+            .setAuthor({ name: this.t(message, "responses.volumedefault.author") })
             .setTitle(this.t(message, "responses.volumedefault.title"))
             .setDescription(
                 hasManage
@@ -78,8 +78,8 @@ export async function run(message, data) {
                     : this.t(message, "responses.volumedefault.noPermission")
             )
             .addFields(
-                { name: "Default Volume", value: buildVolumeSlider(currentDefault), inline: false },
-                { name: "Active Session Volume", value: `${currentPlayerVol}%`, inline: true }
+                { name: this.t(message, "responses.volumedefault.fieldDefault"), value: buildVolumeSlider(currentDefault), inline: false },
+                { name: this.t(message, "responses.volumedefault.fieldActive"), value: `${currentPlayerVol}%`, inline: true }
             );
     } else if (!hasManage) {
         embed.setDescription(this.t(message, "responses.volumedefault.noPermissionSet"));
@@ -91,9 +91,9 @@ export async function run(message, data) {
             p.setVolume(pct / 100);
             if (set) set.set("volume", pct);
             embed
-                .setAuthor({ name: "🔊 Server Default Volume Saved" })
+                .setAuthor({ name: this.t(message, "responses.volumedefault.authorSaved") })
                 .setDescription(this.t(message, "responses.volumedefault.saved", { volume: pct }))
-                .addFields({ name: "New Default Level", value: buildVolumeSlider(pct), inline: false });
+                .addFields({ name: this.t(message, "responses.volumedefault.fieldNewDefault"), value: buildVolumeSlider(pct), inline: false });
         }
     }
 

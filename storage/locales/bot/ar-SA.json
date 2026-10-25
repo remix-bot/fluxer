@@ -33,7 +33,9 @@
       "aliasesLabel": "الأسماء البديلة: ",
       "requirements": "المتطلبات: ",
       "permission": "الصلاحية `{{$permission}}`",
-      "optionCount": "{{$count}} خيار/خيارات"
+      "optionCount": "{{$count}} خيار/خيارات",
+      "commandInspectorAuthor": "مساعدة الأمر • {{prefix}}{{name}}",
+      "commandInspectorFooter": "اكتب {{prefix}}help لعرض القائمة الكاملة • الفئة: {{category}}"
     },
     "invalidFlag": "علامة غير صالحة `$invalidFlag`. لا تتطابق مع أي خيار لهذا الأمر.\n`$previousCmd $invalidFlag`",
     "page": {
@@ -314,7 +316,11 @@
       "voiceChannelUnknown": "قناة صوتية غير معروفة",
       "sessionStartedTitle": "تم الاتصال بالجلسة الصوتية",
       "joinedChannel": "متصل بـ {{channel}}",
-      "connectedBadge": "متصل"
+      "connectedBadge": "متصل",
+      "connectedAuthor": "🟢 متصل بالقناة الصوتية",
+      "selectVCAuthor": "🔊 اختر قناة صوتية",
+      "selectVCFooter": "تفاعل برقم 1-9 للاتصال • تنتهي الجلسة خلال 30 ثانية",
+      "playPromptFooter": "شغّل الموسيقى في أي وقت باستخدام {{prefix}}play <song>"
     },
     "leave": {
       "noVoiceChannel": "⚠️ يرجى الانضمام إلى قناة صوتية أولاً، أو حدد واحدة: `{{prefix}}leave <#channel>`",
@@ -478,7 +484,8 @@
       "sourceYoutube": "يوتيوب"
     },
     "playnext": {
-      "searching": "🔍 جارٍ البحث..."
+      "searching": "🔍 جارٍ البحث...",
+      "playingNext": "⚡ التشغيل التالي • أول قائمة الانتظار (#1)"
     },
     "player": {
       "title": "🎧 عناصر التحكم بالمشغّل",
@@ -550,7 +557,12 @@
     },
     "remove": {
       "indexOutOfBounds": "الفهرس خارج النطاق",
-      "removed": "تمت إزالة **{{title}}** من قائمة الانتظار بنجاح."
+      "removed": "تمت إزالة **{{title}}** من قائمة الانتظار بنجاح.",
+      "removedAuthor": "🗑️ تمت الإزالة من قائمة الانتظار",
+      "removedSingleDesc": "تمت إزالة المسار في المركز **#{{position}}** من قائمة الانتظار.",
+      "removedRangeTitle": "تمت إزالة {{count}} مسارات",
+      "removedRangeDesc": "تمت إزالة المراكز من **#{{from}}** إلى **#{{to}}** بنجاح من قائمة الانتظار.",
+      "remainingFooter": "متبقي {{count}} مسار في قائمة الانتظار • {{prefix}}list"
     },
     "resume": {
       "nothingPlaying": "❌ لا يوجد شيء يعمل حالياً!",
@@ -760,7 +772,12 @@
       "noPermission": "⚠️ تحتاج إذن **إدارة الخادم** لتغيير الافتراضي.",
       "noPermissionSet": "❌ تحتاج إذن **إدارة الخادم** لتعيين مستوى الصوت الافتراضي للخادم.",
       "outOfRange": "❌ يجب أن يكون مستوى الصوت بين `0` و `{{max}}%`.",
-      "saved": "🔊 تم حفظ مستوى الصوت الافتراضي للخادم كـ `{{volume}}%`."
+      "saved": "🔊 تم حفظ مستوى الصوت الافتراضي للخادم كـ `{{volume}}%`.",
+      "author": "🔊 مستوى الصوت الافتراضي للخادم",
+      "fieldDefault": "مستوى الصوت الافتراضي",
+      "fieldActive": "مستوى صوت الجلسة الحالية",
+      "authorSaved": "🔊 تم حفظ مستوى الصوت الافتراضي للخادم",
+      "fieldNewDefault": "المستوى الافتراضي الجديد"
     },
     "gateway": {
       "missingPermsFallback": "⚠️ تنقصني صلاحيات أحتاجها للعمل بشكل صحيح! المفقودة: **{{perms}}**. يرجى طلب مسؤول الخادم منح هذه الصلاحيات في إعدادات الخادم ← الأدوار."
@@ -869,7 +886,11 @@
       "noArtistTags": "🏷️ لا توجد وسوم للفنان **{{artist}}**.",
       "artistTagsTitle": "🏷️ وسوم أعلى لـ {{artist}}",
       "listeners": "مستمع",
-      "leaderboardYourRank": "📍 ترتيبك: **#{{rank}}** ({{count}} سكرابل)"
+      "leaderboardYourRank": "📍 ترتيبك: **#{{rank}}** ({{count}} سكرابل)",
+      "crownHolder": "👑 حامل التاج (#1)",
+      "serverLeaderboardAuthor": "👑 لوحة متصدري الموسيقى في الخادم",
+      "trackLeaderboardAuthor": "👑 لوحة متصدري المسار في الخادم",
+      "albumLeaderboardAuthor": "👑 لوحة متصدري الألبوم في الخادم"
     },
     "messages": {
       "missingCriticalPermsTitle": "صلاحيات مفقودة — البوت لا يستطيع العمل بشكل صحيح",
@@ -955,13 +976,28 @@
       "listEmpty": "📭 ليس لديك خيارات مسار محفوظة. استخدم `{{prefix}}trackopt set <start> [end]` لإضافة واحدة!",
       "listTitle": "📋 **خيارات المسار الخاصة بك** ({{count}})",
       "listEntry": "• **{{title}}** — {{start}} → {{end}}",
-      "listHint": "استخدم `{{prefix}}trackopt play <alias>` لتطبيق تقصير مسمى، أو `{{prefix}}trackopt remove [alias]` لحذف واحد."
+      "listHint": "استخدم `{{prefix}}trackopt play <alias>` لتطبيق تقصير مسمى، أو `{{prefix}}trackopt remove [alias]` لحذف واحد.",
+      "savedAuthor": "✂️ تم حفظ اقتطاع المسار المخصص",
+      "playbackWindowField": "نافذة التشغيل",
+      "aliasField": "الاسم المستعار",
+      "activeTrimField": "الاقتطاع النشط",
+      "playHintFooter": "شغّل هذا المقطع في أي وقت باستخدام: {{prefix}}trackopt play {{alias}}",
+      "savedListAuthor": "✂️ اقتطاعات المسار المحفوظة",
+      "trimProfilesFooter": "تم حفظ {{count}} ملف اقتطاع • طبّق باستخدام {{prefix}}trackopt play <alias>",
+      "appliedAuthor": "✂️ تم تطبيق اقتطاع المسار",
+      "activeCutRangeField": "نطاق الاقتطاع النشط"
     },
     "normalize": {
       "statusEnabled": "🔊 تسوية الصوت الديناميكية (ReplayGain) **مفعلة** حالياً لهذا الخادم.",
       "statusDisabled": "🔇 تسوية الصوت الديناميكية (ReplayGain) **معطلة** حالياً لهذا الخادم.",
       "info": "عند التفعيل، تتم تسوية مستوى الصوت ديناميكياً وفق المعيار الدولي -14 LUFS لتشغيل الأغاني الهادئة ومقاطع الساوند كلاود الصاخبة بمستوى استماع متوازن.",
-      "trackInfo": "معلومات المقطع الحالي:\n• المصدر: `{{source}}`\n• تعديل الكسب: `{{gainDb}} dB` ({{gainPct}}%)\n• مستوى الصوت الفعلي: `{{effective}}%`"
+      "trackInfo": "معلومات المقطع الحالي:\n• المصدر: `{{source}}`\n• تعديل الكسب: `{{gainDb}} dB` ({{gainPct}}%)\n• مستوى الصوت الفعلي: `{{effective}}%`",
+      "headerAuthor": "🎚️ ضبط مستوى الصوت التلقائي",
+      "headerTitle": "موازنة الصوت بمعيار EBU R128",
+      "footer": "يوازن فروق مستوى الصوت عبر YouTube و Spotify و SoundCloud",
+      "fieldSource": "مصدر المسار",
+      "fieldGainOffset": "إزاحة الكسب",
+      "fieldEffectiveVolume": "مستوى الصوت الفعلي"
     },
     "bassboost": {
       "disabled": "🔇 تم تعطيل تضخيم الباس — استعادة توازن الصوت الأصلي.",
@@ -990,6 +1026,12 @@
       "pitchTitle": "تم تعديل نبرة الصوت",
       "pitchMultiplier": "تغيير النبرة {{pitch}}×",
       "resetHint": "إعادة التعيين في أي وقت بـ {{prefix}}pitch"
+    },
+    "move": {
+      "reorderedAuthor": "🔀 تمت إعادة ترتيب المسار",
+      "reorderedDesc": "تم النقل من المركز **#{{from}}** ➔ **#{{to}}** في قائمة الانتظار.",
+      "nowPlayingNext": "سيعمل الآن كالمسار التالي بعد الأغنية الحالية • {{prefix}}np",
+      "viewUpdatedQueue": "{{prefix}}list لعرض قائمة الانتظار المحدثة"
     }
   }
 }

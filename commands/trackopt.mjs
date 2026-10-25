@@ -184,7 +184,7 @@ export async function run(msg, data) {
     const timeline = buildTimelineBar(startMs, endMs, trackDuration);
     const setEmbed = new EmbedBuilder()
       .setColor(getGlobalColor())
-      .setAuthor({ name: "✂️ Custom Track Trim Saved" })
+      .setAuthor({ name: this.t(msg, "responses.trackopt.savedAuthor") })
       .setTitle(current.title?.slice(0, 256) || "Track Trim")
       .setDescription(
         result.alias === DEFAULT_ALIAS
@@ -192,14 +192,14 @@ export async function run(msg, data) {
           : this.t(msg, "responses.trackopt.savedAlias", { title: current.title, alias: result.alias, start: Utils.prettifyMS(startMs), end: endLabel, prefix })
       )
       .addFields(
-        { name: "Playback Window", value: timeline, inline: false },
-        { name: "Alias", value: `\`${result.alias}\``, inline: true },
-        { name: "Active Trim", value: `${Utils.prettifyMS(startMs)} ➔ ${endLabel}`, inline: true }
+        { name: this.t(msg, "responses.trackopt.playbackWindowField"), value: timeline, inline: false },
+        { name: this.t(msg, "responses.trackopt.aliasField"), value: `\`${result.alias}\``, inline: true },
+        { name: this.t(msg, "responses.trackopt.activeTrimField"), value: `${Utils.prettifyMS(startMs)} ➔ ${endLabel}`, inline: true }
       );
 
     if (current.thumbnail) setEmbed.setThumbnail(current.thumbnail);
     if (result.alias !== DEFAULT_ALIAS) {
-      setEmbed.setFooter({ text: `Play this cut anytime with: ${prefix}trackopt play ${result.alias}` });
+      setEmbed.setFooter({ text: this.t(msg, "responses.trackopt.playHintFooter", { prefix, alias: result.alias }) });
     }
 
     return msg.reply({ embeds: [setEmbed] });
@@ -214,9 +214,9 @@ export async function run(msg, data) {
     const trackDuration = p._getTrackDurationMs(current);
     const getEmbed = new EmbedBuilder()
       .setColor(getGlobalColor())
-      .setAuthor({ name: "✂️ Saved Track Trims" })
+      .setAuthor({ name: this.t(msg, "responses.trackopt.savedListAuthor") })
       .setTitle(current.title?.slice(0, 256) || "Track Trims")
-      .setFooter({ text: `${rows.length} trim profile${rows.length === 1 ? "" : "s"} saved • Apply with ${prefix}trackopt play <alias>` });
+      .setFooter({ text: this.t(msg, "responses.trackopt.trimProfilesFooter", { count: rows.length, plural: rows.length === 1 ? "" : "s", prefix }) });
 
     if (current.thumbnail) getEmbed.setThumbnail(current.thumbnail);
 
@@ -272,10 +272,10 @@ export async function run(msg, data) {
 
       const playEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setAuthor({ name: "✂️ Track Trim Applied" })
+        .setAuthor({ name: this.t(msg, "responses.trackopt.appliedAuthor") })
         .setTitle(current.title?.slice(0, 256) || "Track Trim")
         .setDescription(this.t(msg, "responses.trackopt.applied", { alias: aliasLabel, start: Utils.prettifyMS(result.startMs), end: endStr }))
-        .addFields({ name: "Active Cut Range", value: timeline, inline: false });
+        .addFields({ name: this.t(msg, "responses.trackopt.activeCutRangeField"), value: timeline, inline: false });
 
       if (current.thumbnail) playEmbed.setThumbnail(current.thumbnail);
 

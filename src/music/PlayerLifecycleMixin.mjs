@@ -148,7 +148,10 @@ const PlayerLifecycleMixin = {
     const cleanGuildId = cleanId(guildId);
 
     if (!cleanGuildId) {
-      await msg.reply(this._t(msg, "responses._common.serverOnlyForMusic")).catch(() => {});
+      const serverOnlyEmbed = new EmbedBuilder()
+        .setColor(getGlobalColor())
+        .setDescription(this._t(msg, "responses._common.serverOnlyForMusic"));
+      await msg.reply({ embeds: [serverOnlyEmbed] }).catch(() => {});
       return false;
     }
 
@@ -171,9 +174,13 @@ const PlayerLifecycleMixin = {
     }
 
     const hint = this._t(msg, "responses._common.voiceSelectionHint");
-    const selectionMsg = await msg.reply(
-        (channelSelection ? channelSelection + "\n**..or** " + hint : "Please " + hint)
-    );
+    const promptEmbed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: this._t(msg, "responses.join.selectVCAuthor") })
+      .setDescription(channelSelection ? channelSelection + "\n**..or** " + hint : "Please " + hint)
+      .setFooter({ text: this._t(msg, "responses.join.selectVCFooter") });
+
+    const selectionMsg = await msg.reply({ embeds: [promptEmbed] });
 
     return new Promise(resolve => {
       let unsubscribeReactions;
@@ -187,7 +194,10 @@ const PlayerLifecycleMixin = {
 
       const timeout = setTimeout(() => {
         cleanup();
-        msg.reply(this._t(msg, "responses._common.voiceSelectionTimedOut"));
+        const timeoutEmbed = new EmbedBuilder()
+          .setColor(getGlobalColor())
+          .setDescription(this._t(msg, "responses._common.voiceSelectionTimedOut"));
+        msg.reply({ embeds: [timeoutEmbed] }).catch(() => {});
         resolve(false);
       }, 30_000);
 
@@ -566,15 +576,16 @@ const PlayerLifecycleMixin = {
       this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
       this._pendingJoins.delete(cleanChannelId);
 
+      const guildId = cleanId(channel.guildId ?? getMessageGuildId(message));
+      const prefix = this.commands?.getPrefix?.(guildId) ?? "%";
       const joinedEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setAuthor({ name: "🟢 Connected to Voice" })
+        .setAuthor({ name: this._t(message, "responses.join.connectedAuthor") })
         .setDescription(this._t(message, "responses.join.joined", { channel: cid }))
-        .setFooter({ text: "Play music anytime with %play <song>" });
+        .setFooter({ text: this._t(message, "responses.join.playPromptFooter", { prefix }) });
 
       await statusMsg?.edit?.({ content: null, embeds: [joinedEmbed] }).catch(() => {});
 
-      const guildId = cleanId(channel.guildId ?? getMessageGuildId(message));
       this._restorePlayerVolume(player, guildId);
 
       return player;
@@ -591,14 +602,15 @@ const PlayerLifecycleMixin = {
 
           this.playerMap.set(cleanChannelId, player);
           this._indexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);
+          const retryGuildId = cleanId(channel.guildId ?? getMessageGuildId(message));
+          const retryPrefix = this.commands?.getPrefix?.(retryGuildId) ?? "%";
           const joinedEmbed = new EmbedBuilder()
             .setColor(getGlobalColor())
-            .setAuthor({ name: "🟢 Connected to Voice" })
+            .setAuthor({ name: this._t(message, "responses.join.connectedAuthor") })
             .setDescription(this._t(message, "responses.join.joined", { channel: cid }))
-            .setFooter({ text: "Play music anytime with %play <song>" });
+            .setFooter({ text: this._t(message, "responses.join.playPromptFooter", { prefix: retryPrefix }) });
           await statusMsg?.edit?.({ content: null, embeds: [joinedEmbed] }).catch(() => {});
 
-          const retryGuildId = cleanId(channel.guildId ?? getMessageGuildId(message));
           this._restorePlayerVolume(player, retryGuildId);
           return player;
         } catch (retryErr) {

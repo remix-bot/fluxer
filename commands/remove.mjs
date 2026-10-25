@@ -29,6 +29,7 @@ export async function run(message, data) {
   const p = await this.getPlayer(message, false, false, false);
   if (!p) return;
   const raw = String(data.get("position")?.value ?? "").trim();
+  const prefix = this.handler?.getPrefix?.(message.message?.guildId ?? message.channel?.guildId) ?? "%";
   if (!raw) return message.replyEmbed("Please provide a queue position or range (e.g. `3` or `3-6`).").catch(() => {});
 
   const rangeMatch = raw.match(/^(\d+)\s*[-–—to:]+\s*(\d+)$/i) || raw.match(/^(\d+)\s+(\d+)$/);
@@ -44,10 +45,10 @@ export async function run(message, data) {
     const count = Math.abs(to - from) + 1;
     const embed = new EmbedBuilder()
       .setColor(getGlobalColor())
-      .setAuthor({ name: "🗑️ Removed from Queue" })
-      .setTitle(`Removed ${count} Tracks`)
-      .setDescription(`Successfully removed positions **#${Math.min(from, to)}** to **#${Math.max(from, to)}** from the queue.`)
-      .setFooter({ text: `${remaining} track${remaining === 1 ? "" : "s"} remaining in queue • %list` });
+      .setAuthor({ name: this.t(message, "responses.remove.removedAuthor") })
+      .setTitle(this.t(message, "responses.remove.removedRangeTitle", { count }))
+      .setDescription(this.t(message, "responses.remove.removedRangeDesc", { from: Math.min(from, to), to: Math.max(from, to) }))
+      .setFooter({ text: this.t(message, "responses.remove.remainingFooter", { count: remaining, plural: remaining === 1 ? "" : "s", prefix }) });
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
 
@@ -62,10 +63,10 @@ export async function run(message, data) {
   const remaining = p.queue?.size() ?? 0;
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setAuthor({ name: "🗑️ Removed from Queue" })
+    .setAuthor({ name: this.t(message, "responses.remove.removedAuthor") })
     .setTitle(track?.title?.slice(0, 256) || "Removed Track")
-    .setDescription(`Removed track at position **#${single}** from the queue.`)
-    .setFooter({ text: `${remaining} track${remaining === 1 ? "" : "s"} remaining in queue • %list` });
+    .setDescription(this.t(message, "responses.remove.removedSingleDesc", { position: single }))
+    .setFooter({ text: this.t(message, "responses.remove.remainingFooter", { count: remaining, plural: remaining === 1 ? "" : "s", prefix }) });
   if (track?.thumbnail) embed.setThumbnail(track.thumbnail);
   return message.reply({ embeds: [embed] }).catch(() => {});
 }

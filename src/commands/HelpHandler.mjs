@@ -166,7 +166,7 @@ export class HelpHandler {
 
     const embed = new EmbedBuilder()
       .setColor(getGlobalColor())
-      .setAuthor({ name: `Command Help • ${prefix}${command.name}` })
+      .setAuthor({ name: this.commands.t(guildId, "cmdHandler.help.commandInspectorAuthor", { prefix, name: command.name }) })
       .setTitle(HelpHandler.capitalise(command.name))
       .setDescription(this.commandDescription(command, msg) || "No description provided.")
       .addFields({
@@ -232,7 +232,7 @@ export class HelpHandler {
       }
     }
 
-    embed.setFooter({ text: `Type ${prefix}help for full command list • Category: ${category}` });
+    embed.setFooter({ text: this.commands.t(guildId, "cmdHandler.help.commandInspectorFooter", { prefix, category }) });
 
     return { embeds: [embed] };
   }

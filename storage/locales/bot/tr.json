@@ -33,7 +33,9 @@
       "aliasesLabel": "Kısayollar: ",
       "requirements": "Gereksinimler: ",
       "permission": "İzin `{{$permission}}`",
-      "optionCount": "{{$count}} seçenek"
+      "optionCount": "{{$count}} seçenek",
+      "commandInspectorAuthor": "Komut Yardımı • {{prefix}}{{name}}",
+      "commandInspectorFooter": "Tüm komutlar için {{prefix}}help yazın • Kategori: {{category}}"
     },
     "invalidFlag": "Geçersiz bayrak `$invalidFlag`. Bu komuttaki hiçbir seçenekle eşleşmiyor.\n`$previousCmd $invalidFlag`",
     "textWrapError": "Hatalı biçimlendirilmiş dize `{{$value}}`: İstenen dizeden sonra kapatma tırnak işareti (`{{$quote}}`) eksik.",
@@ -314,7 +316,11 @@
       "voiceChannelUnknown": "bilinmeyen ses kanalı",
       "sessionStartedTitle": "Ses Oturumu Bağlandı",
       "joinedChannel": "{{channel}} kanalına bağlandı",
-      "connectedBadge": "Bağlandı"
+      "connectedBadge": "Bağlandı",
+      "connectedAuthor": "🟢 Sese Bağlandı",
+      "selectVCAuthor": "🔊 Bir Ses Kanalı Seçin",
+      "selectVCFooter": "Bağlanmak için 1-9 tepki verin • Oturum 30sn içinde sona erer",
+      "playPromptFooter": "{{prefix}}play <şarkı> ile istediğiniz zaman müzik çalın"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Lütfen önce bir ses kanalına katılın veya bir tane belirtin: `{{prefix}}leave <#kanal>`",
@@ -438,7 +444,11 @@
       "noArtistTags": "🏷️ Sanatçı **{{artist}}** için etiket bulunamadı.",
       "artistTagsTitle": "🏷️ {{artist}} için En Çok Dinlenen Etiketler",
       "listeners": "dinleyici",
-      "leaderboardYourRank": "📍 Sıralan: **#{{rank}}** ({{count}} scrobble)"
+      "leaderboardYourRank": "📍 Sıralan: **#{{rank}}** ({{count}} scrobble)",
+      "crownHolder": "👑 Taç Sahibi (#1)",
+      "serverLeaderboardAuthor": "👑 Sunucu Müzik Sıralaması",
+      "trackLeaderboardAuthor": "👑 Parça Sıralaması",
+      "albumLeaderboardAuthor": "👑 Albüm Sıralaması"
     },
     "list": {
       "empty": "📭 Kuyruk boş. Şarkı eklemek için `{{prefix}}play` kullanın!",
@@ -584,7 +594,8 @@
       "sourceYoutube": "YouTube"
     },
     "playnext": {
-      "searching": "🔍 Aranıyor..."
+      "searching": "🔍 Aranıyor...",
+      "playingNext": "⚡ Sıradaki Parça • Sıranın Başı (#1)"
     },
     "player": {
       "title": "🎧 Müzik Oynatıcı Kontrolleri",
@@ -656,7 +667,12 @@
     },
     "remove": {
       "indexOutOfBounds": "Geçersiz sıra numarası",
-      "removed": "**{{title}}** kuyruktan başarıyla kaldırıldı."
+      "removed": "**{{title}}** kuyruktan başarıyla kaldırıldı.",
+      "removedAuthor": "🗑️ Kuyruktan Kaldırıldı",
+      "removedSingleDesc": "Kuyruktaki **#{{position}}** numaralı parça kaldırıldı.",
+      "removedRangeTitle": "{{count}} Parça Kaldırıldı",
+      "removedRangeDesc": "Kuyruktaki **#{{from}}** ile **#{{to}}** arasındaki parçalar başarıyla kaldırıldı.",
+      "remainingFooter": "Kuyrukta {{count}} parça kaldı • {{prefix}}list"
     },
     "resume": {
       "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
@@ -866,7 +882,12 @@
       "noPermission": "⚠️ Varsayılanı değiştirmek için **Sunucuyu Yönet** izni gerekli.",
       "noPermissionSet": "❌ Sunucu varsayılan ses seviyesini ayarlamak için **Sunucuyu Yönet** izni gerekli.",
       "outOfRange": "❌ Ses seviyesi `0` ile `{{max}}%` arasında olmalıdır.",
-      "saved": "🔊 Sunucu varsayılan ses seviyesi `{{volume}}%` olarak kaydedildi."
+      "saved": "🔊 Sunucu varsayılan ses seviyesi `{{volume}}%` olarak kaydedildi.",
+      "author": "🔊 Sunucu Varsayılan Ses Düzeyi",
+      "fieldDefault": "Varsayılan Ses",
+      "fieldActive": "Aktif Oturum Sesi",
+      "authorSaved": "🔊 Sunucu Varsayılan Ses Düzeyi Kaydedildi",
+      "fieldNewDefault": "Yeni Varsayılan Düzey"
     },
     "seek": {
       "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
@@ -915,13 +936,28 @@
       "listEmpty": "📭 Kayıtlı parça seçeneğiniz yok. Eklemek için `{{prefix}}trackopt set <başlangıç> [bitiş]` kullanın!",
       "listTitle": "📋 **Parça Seçenekleriniz** ({{count}})",
       "listEntry": "• **{{title}}** — {{start}} → {{end}}",
-      "listHint": "Adlandırılmış bir kırpma uygulamak için `{{prefix}}trackopt play <kısayol>` veya birini silmek için `{{prefix}}trackopt remove [kısayol]` kullanın."
+      "listHint": "Adlandırılmış bir kırpma uygulamak için `{{prefix}}trackopt play <kısayol>` veya birini silmek için `{{prefix}}trackopt remove [kısayol]` kullanın.",
+      "savedAuthor": "✂️ Özel Parça Kırpması Kaydedildi",
+      "playbackWindowField": "Oynatma Penceresi",
+      "aliasField": "Takma Ad",
+      "activeTrimField": "Aktif Kırpma",
+      "playHintFooter": "Bu kırpmayı istediğiniz zaman oynatın: {{prefix}}trackopt play {{alias}}",
+      "savedListAuthor": "✂️ Kaydedilen Parça Kırpmaları",
+      "trimProfilesFooter": "{{count}} kırpma profili kaydedildi • {{prefix}}trackopt play <alias> ile uygulayın",
+      "appliedAuthor": "✂️ Parça Kırpması Uygulandı",
+      "activeCutRangeField": "Aktif Kırpma Aralığı"
     },
     "normalize": {
       "statusEnabled": "🔊 Dinamik ses normalleştirmesi (ReplayGain) bu sunucu için şu anda **Etkin**.",
       "statusDisabled": "🔇 Dinamik ses normalleştirmesi (ReplayGain) bu sunucu için şu anda **Devre Dışı**.",
       "info": "Etkinleştirildiğinde, çalma ses yüksekliği uluslararası -14 LUFS standardına göre dinamik olarak dengelenir, böylece sessiz akustik parçalar ve yüksek sesli parçalar dengeli bir dinleme seviyesinde çalar.",
-      "trackInfo": "Mevcut Parça Bilgisi:\n• Kaynak: `{{source}}`\n• Kazanç ayarı: `{{gainDb}} dB` ({{gainPct}}%)\n• Etkili ses seviyesi: `{{effective}}%`"
+      "trackInfo": "Mevcut Parça Bilgisi:\n• Kaynak: `{{source}}`\n• Kazanç ayarı: `{{gainDb}} dB` ({{gainPct}}%)\n• Etkili ses seviyesi: `{{effective}}%`",
+      "headerAuthor": "🎚️ Dinamik Ses Seviyesi Normalizasyonu",
+      "headerTitle": "EBU R128 Ses Dengeleme",
+      "footer": "YouTube, Spotify ve SoundCloud arasındaki ses farklarını dengeler",
+      "fieldSource": "Parça Kaynağı",
+      "fieldGainOffset": "Kazanç Dengelemesi",
+      "fieldEffectiveVolume": "Etkin Ses Düzeyi"
     },
     "bassboost": {
       "disabled": "🔇 Bas güçlendirme devre dışı bırakıldı — orijinal ses dengesi geri yüklendi.",
@@ -990,6 +1026,12 @@
       "checkYes": "✅ Bu {{type}} için **aktif oyunun var** — teşekkürler!",
       "checkNo": "❌ Bu {{type}} için henüz oy vermedin (ya da oyunun süresi doldu).\n**[Hemen oy ver!]({{url}})**",
       "checkUnknown": "⚠️ Oy durumu şu anda kontrol edilemedi — bir dakika sonra tekrar dene."
+    },
+    "move": {
+      "reorderedAuthor": "🔀 Parça Yeniden Sıralandı",
+      "reorderedDesc": "Kuyrukta **#{{from}}** ➔ **#{{to}}** konumuna taşındı.",
+      "nowPlayingNext": "Şimdi geçerli şarkıdan sonra çalacak • {{prefix}}np",
+      "viewUpdatedQueue": "Güncellenmiş kuyruğu görmek için {{prefix}}list"
     }
   }
 }

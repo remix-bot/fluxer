@@ -37,6 +37,7 @@ export async function run(message, data) {
   if (!p) return;
   const from = data.get("from")?.value;
   const to = data.get("to")?.value;
+  const prefix = this.handler?.getPrefix?.(message.message?.guildId ?? message.channel?.guildId) ?? "%";
   if (from === null || from === undefined || from < 1) return message.replyEmbed("Source position must be 1 or greater.").catch(() => {});
   if (to === null || to === undefined || to < 1) return message.replyEmbed("Target position must be 1 or greater.").catch(() => {});
 
@@ -49,10 +50,10 @@ export async function run(message, data) {
 
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setAuthor({ name: "🔀 Track Reordered" })
+    .setAuthor({ name: this.t(message, "responses.move.reorderedAuthor") })
     .setTitle(track?.title?.slice(0, 256) || "Reordered Track")
-    .setDescription(`Moved from position **#${from}** ➔ **#${to}** in the queue.`)
-    .setFooter({ text: to === 1 ? "Now playing next after the current song • %np" : "%list to view updated queue" });
+    .setDescription(this.t(message, "responses.move.reorderedDesc", { from, to }))
+    .setFooter({ text: to === 1 ? this.t(message, "responses.move.nowPlayingNext", { prefix }) : this.t(message, "responses.move.viewUpdatedQueue", { prefix }) });
 
   if (track?.thumbnail) embed.setThumbnail(track.thumbnail);
   message.reply({ embeds: [embed] }).catch(() => {});

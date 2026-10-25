@@ -33,7 +33,9 @@
       "aliasesLabel": "Aliases: ",
       "requirements": "Requirements: ",
       "permission": "Permission `{{$permission}}`",
-      "optionCount": "{{$count}} option(s)"
+      "optionCount": "{{$count}} option(s)",
+      "commandInspectorAuthor": "Command Help • {{prefix}}{{name}}",
+      "commandInspectorFooter": "Type {{prefix}}help for full command list • Category: {{category}}"
     },
     "invalidFlag": "Invalid flag `$invalidFlag`. It doesn't match any options on this command.\n`$previousCmd $invalidFlag`",
     "textWrapError": "Malformed string `{{$value}}`: Missing a closing quote character (`{{$quote}}`) after the desired string.",
@@ -317,7 +319,11 @@
       "voiceChannelUnknown": "unknown voice channel",
       "sessionStartedTitle": "Voice Session Connected",
       "joinedChannel": "Connected to {{channel}}",
-      "connectedBadge": "Connected"
+      "connectedBadge": "Connected",
+      "connectedAuthor": "🟢 Connected to Voice",
+      "selectVCAuthor": "🔊 Select a Voice Channel",
+      "selectVCFooter": "React 1-9 to connect • Session expires in 30s",
+      "playPromptFooter": "Play music anytime with {{prefix}}play <song>"
     },
     "leave": {
       "noVoiceChannel": "⚠️ I can't find you in a voice channel. Please join one, or if you're already in one, make sure I have **View Channel** and **Connect** permissions. You can also specify a channel: `{{prefix}}leave <#channel>`",
@@ -441,7 +447,11 @@
       "noArtistTags": "🏷️ No tags found for artist **{{artist}}**.",
       "artistTagsTitle": "🏷️ Top Tags for {{artist}}",
       "listeners": "listeners",
-      "leaderboardYourRank": "📍 Your rank: **#{{rank}}** ({{count}} scrobbles)"
+      "leaderboardYourRank": "📍 Your rank: **#{{rank}}** ({{count}} scrobbles)",
+      "crownHolder": "👑 Crown Holder (#1)",
+      "serverLeaderboardAuthor": "👑 Server Music Leaderboard",
+      "trackLeaderboardAuthor": "👑 Track Music Leaderboard",
+      "albumLeaderboardAuthor": "👑 Album Music Leaderboard"
     },
     "list": {
       "empty": "📭 The queue is empty. Use `{{prefix}}play` to add songs!",
@@ -595,7 +605,8 @@
       "sourceYoutube": "YouTube"
     },
     "playnext": {
-      "searching": "🔍 Searching..."
+      "searching": "🔍 Searching...",
+      "playingNext": "⚡ Playing Next • Top of Queue (#1)"
     },
     "player": {
       "title": "🎧 Music Player Controls",
@@ -667,7 +678,12 @@
     },
     "remove": {
       "indexOutOfBounds": "Index out of bounds",
-      "removed": "Successfully removed **{{title}}** from the queue."
+      "removed": "Successfully removed **{{title}}** from the queue.",
+      "removedAuthor": "🗑️ Removed from Queue",
+      "removedSingleDesc": "Removed track at position **#{{position}}** from the queue.",
+      "removedRangeTitle": "Removed {{count}} Tracks",
+      "removedRangeDesc": "Successfully removed positions **#{{from}}** to **#{{to}}** from the queue.",
+      "remainingFooter": "{{count}} track{{plural}} remaining in queue • {{prefix}}list"
     },
     "resume": {
       "nothingPlaying": "❌ There's nothing playing at the moment!",
@@ -906,7 +922,12 @@
       "noPermission": "⚠️ You need **Manage Server** permission to change the default.",
       "noPermissionSet": "❌ You need **Manage Server** permission to set the server default volume.",
       "outOfRange": "❌ Volume must be between `0` and `{{max}}%`.",
-      "saved": "🔊 Server default volume saved as `{{volume}}%`."
+      "saved": "🔊 Server default volume saved as `{{volume}}%`.",
+      "author": "🔊 Server Default Volume",
+      "fieldDefault": "Default Volume",
+      "fieldActive": "Active Session Volume",
+      "authorSaved": "🔊 Server Default Volume Saved",
+      "fieldNewDefault": "New Default Level"
     },
     "seek": {
       "nothingPlaying": "❌ There's nothing playing at the moment!",
@@ -955,13 +976,28 @@
       "listEmpty": "📭 You have no saved track options. Use `{{prefix}}trackopt set <start> [end]` to add one!",
       "listTitle": "📋 **Your Track Options** ({{count}})",
       "listEntry": "• **{{title}}** — {{start}} → {{end}}",
-      "listHint": "Use `{{prefix}}trackopt play <alias>` to apply a named trim, or `{{prefix}}trackopt remove [alias]` to delete one."
+      "listHint": "Use `{{prefix}}trackopt play <alias>` to apply a named trim, or `{{prefix}}trackopt remove [alias]` to delete one.",
+      "savedAuthor": "✂️ Custom Track Trim Saved",
+      "playbackWindowField": "Playback Window",
+      "aliasField": "Alias",
+      "activeTrimField": "Active Trim",
+      "playHintFooter": "Play this cut anytime with: {{prefix}}trackopt play {{alias}}",
+      "savedListAuthor": "✂️ Saved Track Trims",
+      "trimProfilesFooter": "{{count}} trim profile{{plural}} saved • Apply with {{prefix}}trackopt play <alias>",
+      "appliedAuthor": "✂️ Track Trim Applied",
+      "activeCutRangeField": "Active Cut Range"
     },
     "normalize": {
       "statusEnabled": "🔊 Volume normalization (ReplayGain) is currently **Enabled** for this server.",
       "statusDisabled": "🔇 Volume normalization (ReplayGain) is currently **Disabled** for this server.",
       "info": "When enabled, playback loudness is dynamically leveled to the international -14 LUFS standard so quiet acoustic songs and loud EDM/SoundCloud tracks play at a balanced listening volume.",
-      "trackInfo": "Current Track Info:\n• Source: `{{source}}`\n• Gain adjustment: `{{gainDb}} dB` ({{gainPct}}%)\n• Effective volume: `{{effective}}%`"
+      "trackInfo": "Current Track Info:\n• Source: `{{source}}`\n• Gain adjustment: `{{gainDb}} dB` ({{gainPct}}%)\n• Effective volume: `{{effective}}%`",
+      "headerAuthor": "🎚️ Dynamic Loudness Normalization",
+      "headerTitle": "EBU R128 Audio Leveling",
+      "footer": "Balances volume differences across YouTube, Spotify & SoundCloud",
+      "fieldSource": "Track Source",
+      "fieldGainOffset": "Gain Offset",
+      "fieldEffectiveVolume": "Effective Volume"
     },
     "bassboost": {
       "disabled": "🔇 Bass boost disabled — restored original audio balance.",
@@ -990,6 +1026,12 @@
       "pitchTitle": "Audio Pitch Adjusted",
       "pitchMultiplier": "{{pitch}}× Pitch Shift",
       "resetHint": "Reset anytime with {{prefix}}pitch"
+    },
+    "move": {
+      "reorderedAuthor": "🔀 Track Reordered",
+      "reorderedDesc": "Moved from position **#{{from}}** ➔ **#{{to}}** in the queue.",
+      "nowPlayingNext": "Now playing next after the current song • {{prefix}}np",
+      "viewUpdatedQueue": "{{prefix}}list to view updated queue"
     }
   }
 }

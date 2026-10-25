@@ -82,7 +82,7 @@ export async function run(message, data) {
     /* Set Playing Next author tag on the added track embed */
     const authorName = embed.data?.author?.name || "";
     if (authorName.includes("Added to Queue") || !authorName) {
-      embed.setAuthor({ name: "⚡ Playing Next • Top of Queue (#1)" });
+      embed.setAuthor({ name: this.t(message, "responses.playnext.playingNext") });
     }
 
     if (statusMsg) statusMsg.edit({ embeds: [embed] }).catch(() => {});

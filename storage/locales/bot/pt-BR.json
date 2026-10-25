@@ -33,7 +33,9 @@
       "aliasesLabel": "Apelidos: ",
       "requirements": "Requisitos: ",
       "permission": "Permissão `{{$permission}}`",
-      "optionCount": "{{$count}} opção(ões)"
+      "optionCount": "{{$count}} opção(ões)",
+      "commandInspectorAuthor": "Ajuda do Comando • {{prefix}}{{name}}",
+      "commandInspectorFooter": "Digite {{prefix}}help para ver todos os comandos • Categoria: {{category}}"
     },
     "invalidFlag": "Flag inválida `$invalidFlag`. Não corresponde a nenhuma opção deste comando.\n`$previousCmd $invalidFlag`",
     "page": {
@@ -314,7 +316,11 @@
       "voiceChannelUnknown": "canal de voz desconhecido",
       "sessionStartedTitle": "Sessão de Voz Conectada",
       "joinedChannel": "Conectado a {{channel}}",
-      "connectedBadge": "Conectado"
+      "connectedBadge": "Conectado",
+      "connectedAuthor": "🟢 Conectado à Voz",
+      "selectVCAuthor": "🔊 Selecione um Canal de Voz",
+      "selectVCFooter": "Reaja de 1 a 9 para conectar • A sessão expira em 30s",
+      "playPromptFooter": "Toque música a qualquer momento com {{prefix}}play <música>"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Por favor, entre em um canal de voz primeiro ou especifique um: `{{prefix}}leave <#channel>`",
@@ -478,7 +484,8 @@
       "sourceYoutube": "YouTube"
     },
     "playnext": {
-      "searching": "🔍 Buscando..."
+      "searching": "🔍 Buscando...",
+      "playingNext": "⚡ Tocando a Seguir • Topo da Fila (#1)"
     },
     "player": {
       "title": "🎧 Controles do Player de Música",
@@ -550,7 +557,12 @@
     },
     "remove": {
       "indexOutOfBounds": "Índice fora do intervalo",
-      "removed": "**{{title}}** removido da fila com sucesso."
+      "removed": "**{{title}}** removido da fila com sucesso.",
+      "removedAuthor": "🗑️ Removido da Fila",
+      "removedSingleDesc": "Faixa na posição **#{{position}}** removida da fila.",
+      "removedRangeTitle": "{{count}} Faixas Removidas",
+      "removedRangeDesc": "Posições de **#{{from}}** a **#{{to}}** removidas com sucesso da fila.",
+      "remainingFooter": "{{count}} faixa{{plural}} restante{{plural}} na fila • {{prefix}}list"
     },
     "resume": {
       "nothingPlaying": "❌ Não está tocando nada no momento!",
@@ -760,7 +772,12 @@
       "noPermission": "⚠️ Você precisa da permissão **Gerenciar Servidor** para alterar o padrão.",
       "noPermissionSet": "❌ Você precisa da permissão **Gerenciar Servidor** para definir o volume padrão do servidor.",
       "outOfRange": "❌ O volume deve estar entre `0` e `{{max}}%`.",
-      "saved": "🔊 Volume padrão do servidor salvo como `{{volume}}%`."
+      "saved": "🔊 Volume padrão do servidor salvo como `{{volume}}%`.",
+      "author": "🔊 Volume Padrão do Servidor",
+      "fieldDefault": "Volume Padrão",
+      "fieldActive": "Volume da Sessão Ativa",
+      "authorSaved": "🔊 Volume Padrão do Servidor Salvo",
+      "fieldNewDefault": "Novo Nível Padrão"
     },
     "gateway": {
       "missingPermsFallback": "⚠️ Estou sem permissões que preciso para funcionar corretamente! Faltando: **{{perms}}**. Por favor, peça a um administrador do servidor para conceder essas permissões em Configurações do Servidor → Cargos."
@@ -869,7 +886,11 @@
       "noArtistTags": "🏷️ Nenhuma tag encontrada para o artista **{{artist}}**.",
       "artistTagsTitle": "🏷️ Tags Populares para {{artist}}",
       "listeners": "ouvintes",
-      "leaderboardYourRank": "📍 Sua posição: **#{{rank}}** ({{count}} scrobbles)"
+      "leaderboardYourRank": "📍 Sua posição: **#{{rank}}** ({{count}} scrobbles)",
+      "crownHolder": "👑 Dono da Coroa (#1)",
+      "serverLeaderboardAuthor": "👑 Placar de Música do Servidor",
+      "trackLeaderboardAuthor": "👑 Placar de Música da Faixa",
+      "albumLeaderboardAuthor": "👑 Placar de Música do Álbum"
     },
     "messages": {
       "missingCriticalPermsTitle": "Permissões Ausentes — Bot Não Pode Funcionar Corretamente",
@@ -955,13 +976,28 @@
       "listEmpty": "📭 Você não tem opções de faixa salvas. Use `{{prefix}}trackopt set <start> [end]` para adicionar uma!",
       "listTitle": "📋 **Suas Opções de Faixa** ({{count}})",
       "listEntry": "• **{{title}}** — {{start}} → {{end}}",
-      "listHint": "Use `{{prefix}}trackopt play <alias>` para aplicar um recorte nomeado, ou `{{prefix}}trackopt remove [alias]` para excluir um."
+      "listHint": "Use `{{prefix}}trackopt play <alias>` para aplicar um recorte nomeado, ou `{{prefix}}trackopt remove [alias]` para excluir um.",
+      "savedAuthor": "✂️ Corte Personalizado Salvo",
+      "playbackWindowField": "Janela de Reprodução",
+      "aliasField": "Alias",
+      "activeTrimField": "Corte Ativo",
+      "playHintFooter": "Toque este corte a qualquer momento com: {{prefix}}trackopt play {{alias}}",
+      "savedListAuthor": "✂️ Cortes de Faixa Salvos",
+      "trimProfilesFooter": "{{count}} perfil{{plural}} de corte salvo{{plural}} • Aplique com {{prefix}}trackopt play <alias>",
+      "appliedAuthor": "✂️ Corte de Faixa Aplicado",
+      "activeCutRangeField": "Intervalo de Corte Ativo"
     },
     "normalize": {
       "statusEnabled": "🔊 A normalização dinâmica de volume (ReplayGain) está atualmente **Ativada** para este servidor.",
       "statusDisabled": "🔇 A normalização dinâmica de volume (ReplayGain) está atualmente **Desativada** para este servidor.",
       "info": "Quando ativado, o volume de reprodução é nivelado dinamicamente para o padrão internacional de -14 LUFS, equilibrando faixas acústicas suaves e faixas com masterização pesada.",
-      "trackInfo": "Informações da faixa atual:\n• Fonte: `{{source}}`\n• Ajuste de ganho: `{{gainDb}} dB` ({{gainPct}}%)\n• Volume efetivo: `{{effective}}%`"
+      "trackInfo": "Informações da faixa atual:\n• Fonte: `{{source}}`\n• Ajuste de ganho: `{{gainDb}} dB` ({{gainPct}}%)\n• Volume efetivo: `{{effective}}%`",
+      "headerAuthor": "🎚️ Normalização Dinâmica de Volume",
+      "headerTitle": "Nivelamento de Áudio EBU R128",
+      "footer": "Equilibra diferenças de volume entre YouTube, Spotify e SoundCloud",
+      "fieldSource": "Origem da Faixa",
+      "fieldGainOffset": "Ajuste de Ganho",
+      "fieldEffectiveVolume": "Volume Efetivo"
     },
     "bassboost": {
       "disabled": "🔇 Reforço de graves desativado — equilíbrio de áudio original restaurado.",
@@ -990,6 +1026,12 @@
       "pitchTitle": "Tom de Áudio Ajustado",
       "pitchMultiplier": "Mudança de Tom de {{pitch}}×",
       "resetHint": "Redefina a qualquer momento com {{prefix}}pitch"
+    },
+    "move": {
+      "reorderedAuthor": "🔀 Faixa Reordenada",
+      "reorderedDesc": "Movido da posição **#{{from}}** ➔ **#{{to}}** na fila.",
+      "nowPlayingNext": "Tocará a seguir após a música atual • {{prefix}}np",
+      "viewUpdatedQueue": "{{prefix}}list para ver a fila atualizada"
     }
   }
 }

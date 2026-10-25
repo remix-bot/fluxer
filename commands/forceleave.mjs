@@ -4,7 +4,8 @@
  */
 
 import { CommandBuilder } from "../src/commands/index.mjs";
-import { cleanId } from "../src/ui/index.mjs";
+import { EmbedBuilder } from "@fluxerjs/core";
+import { cleanId, getGlobalColor } from "../src/ui/index.mjs";
 import { resolveChannelCached } from "../src/utils/Helpers247.mjs";
 
 /**
@@ -35,12 +36,23 @@ export const command = new CommandBuilder()
 export async function run(msg, data) {
   const cid = cleanId(data.get("channelId").value);
   const targetChannel = await resolveChannelCached(this.client, cid);
-  if (!targetChannel) return msg.reply(this.t(msg, "responses.forceleave.channelNotFound"));
-  if (cleanId(msg.message?.guildId) !== cleanId(targetChannel.guildId))
-    return msg.reply(this.t(msg, "responses.forceleave.wrongServer"));
+  if (!targetChannel) {
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.forceleave.channelNotFound"));
+    return msg.reply({ embeds: [embed] });
+  }
+  if (cleanId(msg.message?.guildId) !== cleanId(targetChannel.guildId)) {
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.forceleave.wrongServer"));
+    return msg.reply({ embeds: [embed] });
+  }
   const p = this.players.playerMap.get(cid)
     ?? [...this.players.playerMap.values()].find((player) => cleanId(player?._channelId) === cid);
-  if (!p) return msg.reply(this.t(msg, "responses.forceleave.playerNotFound"));
-  if (!p.connection) return msg.reply(this.t(msg, "responses.forceleave.playerNotInit"));
+  if (!p) {
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.forceleave.playerNotFound"));
+    return msg.reply({ embeds: [embed] });
+  }
+  if (!p.connection) {
+    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.forceleave.playerNotInit"));
+    return msg.reply({ embeds: [embed] });
+  }
   await this.players.leave(msg, cid);
 }

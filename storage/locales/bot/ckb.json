@@ -33,7 +33,9 @@
       "aliasesLabel": "ناوە بدیلەکان: ",
       "requirements": "پێویستییەکان: ",
       "permission": "مۆڵەت `{{$permission}}`",
-      "optionCount": "{{$count}} هەڵبژاردن(ەکان)"
+      "optionCount": "{{$count}} هەڵبژاردن(ەکان)",
+      "commandInspectorAuthor": "یارمەتیی فەرمان • {{prefix}}{{name}}",
+      "commandInspectorFooter": "بنوسە {{prefix}}help بۆ هەموو فەرمانەکان • پۆل: {{category}}"
     },
     "invalidFlag": "ئاڵای نادروست `$invalidFlag`. لەگەڵ هیچ هەڵبژاردنێکی ئەم فەرمانە نایگونجێت.\n`$previousCmd $invalidFlag`",
     "page": {
@@ -314,7 +316,11 @@
       "voiceChannelUnknown": "کەناڵی دەنگی نەناسراو",
       "sessionStartedTitle": "پەیوەندی بە دەنگەوە کرا",
       "joinedChannel": "پەیوەستکراوە بە {{channel}}",
-      "connectedBadge": "پەیوەستە"
+      "connectedBadge": "پەیوەستە",
+      "connectedAuthor": "🟢 پەیوەست بوو بە دەنگ",
+      "selectVCAuthor": "🔊 کەناڵێکی دەنگی هەڵبژێرە",
+      "selectVCFooter": "کاردانەوە بکە بە ١-٩ بۆ پەیوەستبوون • بەسەردەچێت لە ٣٠ چرکەدا",
+      "playPromptFooter": "هەر کاتێک مۆسیقا پەخش بکە بە {{prefix}}play <song>"
     },
     "leave": {
       "noVoiceChannel": "⚠️ تکایە سەرەتا بەشداری کەناڵێکی دەنگی بکە، یان یەکێک دیاریبکە: `{{prefix}}leave <#channel>`",
@@ -478,7 +484,8 @@
       "sourceYoutube": "یوتیوب"
     },
     "playnext": {
-      "searching": "🔍 گەڕان..."
+      "searching": "🔍 گەڕان...",
+      "playingNext": "⚡ پەخشی دواتر • پێشەنگی ڕیزبەندی (#1)"
     },
     "player": {
       "title": "🎧 کۆنتڕۆڵەکانی پەخشکەری موزیک",
@@ -550,7 +557,12 @@
     },
     "remove": {
       "indexOutOfBounds": "ئیندێکس لە دەرەوەی سنوورە",
-      "removed": "**{{title}}** بە سەرکەوتوویی لە ڕیزبەندییەکە لابرا."
+      "removed": "**{{title}}** بە سەرکەوتوویی لە ڕیزبەندییەکە لابرا.",
+      "removedAuthor": "🗑️ لە ڕیزبەندی لابرا",
+      "removedSingleDesc": "گۆرانی لە پێگەی **#{{position}}** لە ڕیزبەندی لابرا.",
+      "removedRangeTitle": "{{count}} گۆرانی لابرا",
+      "removedRangeDesc": "پێگەکانی **#{{from}}** تا **#{{to}}** بە سەرکەوتوویی لە ڕیزبەندی لابرا.",
+      "remainingFooter": "{{count}} گۆرانی لە ڕیزبەندی ماوەتەوە • {{prefix}}list"
     },
     "resume": {
       "nothingPlaying": "❌ هیچ شتێک پەخش ناکرێت لە ئێستادا!",
@@ -760,7 +772,12 @@
       "noPermission": "⚠️ پێویستە مۆڵەتی **بەڕێوەبردنی سێرڤەر** هەبێت بۆ گۆڕینی بنەڕەتی.",
       "noPermissionSet": "❌ پێویستە مۆڵەتی **بەڕێوەبردنی سێرڤەر** هەبێت بۆ دانانی ئاستی دەنگی بنەڕەتی سێرڤەر.",
       "outOfRange": "❌ ئاستی دەنگ دەبێت لەنێوان `0` و `{{max}}%` بێت.",
-      "saved": "🔊 ئاستی دەنگی بنەڕەتی سێرڤەر وەک `{{volume}}%` پاشەکەوت کرا."
+      "saved": "🔊 ئاستی دەنگی بنەڕەتی سێرڤەر وەک `{{volume}}%` پاشەکەوت کرا.",
+      "author": "🔊 دەنگی بنەڕەتیی سێرڤەر",
+      "fieldDefault": "دەنگی بنەڕەتی",
+      "fieldActive": "دەنگی کاتی ئێستا",
+      "authorSaved": "🔊 دەنگی بنەڕەتیی سێرڤەر پاشەکەوت کرا",
+      "fieldNewDefault": "ئاستی بنەڕەتی نوێ"
     },
     "gateway": {
       "missingPermsFallback": "⚠️ مۆڵەتەکانم کەمە کە پێویستیم بەوانەیە بۆ کارکردنی دروست! کەمەکان: **{{perms}}**. تکایە لە بەڕێوەبەری سێرڤەر بخۆشتن ئەم مۆڵەتانە لە ڕێکخستنەکانی سێرڤەر ← ڕۆڵەکان."
@@ -869,7 +886,11 @@
       "noArtistTags": "🏷️ هیچ تاگێک بۆ هونەرمەندی **{{artist}}** نەدۆزرایەوە.",
       "artistTagsTitle": "🏷️ تاگە سەرەکییەکان بۆ {{artist}}",
       "listeners": "گوێگر",
-      "leaderboardYourRank": "📍 پلەی تۆ: **#{{rank}}** ({{count}} scrobble)"
+      "leaderboardYourRank": "📍 پلەی تۆ: **#{{rank}}** ({{count}} scrobble)",
+      "crownHolder": "👑 هەڵگری تاج (#1)",
+      "serverLeaderboardAuthor": "👑 ڕیزبەندی پێشەنگەکانی مۆسیقای سێرڤەر",
+      "trackLeaderboardAuthor": "👑 ڕیزبەندی پێشەنگەکانی ئەم گۆرانییە",
+      "albumLeaderboardAuthor": "👑 ڕیزبەندی پێشەنگەکانی ئەم ئەلبومە"
     },
     "messages": {
       "missingCriticalPermsTitle": "مۆڵەتە کەمەکان — بۆت ناتوانێت بە دروستی کار بکات",
@@ -955,13 +976,28 @@
       "listEmpty": "📭 هیچ هەڵبژاردەیەکی تراک هەڵنەگیراوەتەوە. `{{prefix}}trackopt set <start> [end]` بەکاربێنە بە زیادکردنی یەک!",
       "listTitle": "📋 **هەڵبژاردەکانی تراکت** ({{count}})",
       "listEntry": "• **{{title}}** — {{start}} → {{end}}",
-      "listHint": "`{{prefix}}trackopt play <alias>` بەکاربێنە بە جێبەجێکردنی دەرکردەیەکی ناوەند، یان `{{prefix}}trackopt remove [alias]` بۆ سڕینەوەی یەک."
+      "listHint": "`{{prefix}}trackopt play <alias>` بەکاربێنە بە جێبەجێکردنی دەرکردەیەکی ناوەند، یان `{{prefix}}trackopt remove [alias]` بۆ سڕینەوەی یەک.",
+      "savedAuthor": "✂️ بڕینی تایبەتی گۆرانی پاشەکەوت کرا",
+      "playbackWindowField": "ماوەی پەخشکردن",
+      "aliasField": "ناوی خوازراو",
+      "activeTrimField": "بڕینی چالاک",
+      "playHintFooter": "ئەم بڕینە هەر کاتێک بوێت پەخش بکە بە: {{prefix}}trackopt play {{alias}}",
+      "savedListAuthor": "✂️ بڕینە پاشەکەوتکراوەکانی گۆرانی",
+      "trimProfilesFooter": "{{count}} شێوازی بڕین پاشەکەوت کرا • بەکاربهێنە بە {{prefix}}trackopt play <alias>",
+      "appliedAuthor": "✂️ بڕینی گۆرانی جێبەجێ کرا",
+      "activeCutRangeField": "مەودای بڕینی چالاک"
     },
     "normalize": {
       "statusEnabled": "🔊 یەکسانسازیی دەنگی داینامیکی (ReplayGain) لەم سێرڤەرەدا **چالاکە**.",
       "statusDisabled": "🔇 یەکسانسازیی دەنگی داینامیکی (ReplayGain) لەم سێرڤەرەدا **ناچالاکە**.",
       "info": "کاتێک چالاک دەبێت، بەرزیی دەنگ بە شێوەیەکی داینامیکی بەپێی ستانداردی نێودەوڵەتی -14 LUFS ڕێکدەخرێت بۆ ئەوەی تراکە هێمن و بەرزەکان بە ئاستێکی هاوسەنگ لێبدرێن.",
-      "trackInfo": "زانیاری تراکی ئێستا:\n• سەرچاوە: `{{source}}`\n• دەستکاریکردنی ئاست: `{{gainDb}} dB` ({{gainPct}}%)\n• ئاستی دەنگی کارا: `{{effective}}%`"
+      "trackInfo": "زانیاری تراکی ئێستا:\n• سەرچاوە: `{{source}}`\n• دەستکاریکردنی ئاست: `{{gainDb}} dB` ({{gainPct}}%)\n• ئاستی دەنگی کارا: `{{effective}}%`",
+      "headerAuthor": "🎚️ ڕێکخستنی دەنگی داینامیکی",
+      "headerTitle": "هاوسەنگکردنی دەنگ بە پێوەری EBU R128",
+      "footer": "جیاوازی دەنگ هاوسەنگ دەکات لەنێوان YouTube، Spotify و SoundCloud",
+      "fieldSource": "سەرچاوەی گۆرانی",
+      "fieldGainOffset": "دەستکاریکردنی دەنگ",
+      "fieldEffectiveVolume": "دەنگی کاریگەر"
     },
     "bassboost": {
       "disabled": "🔇 بەرزکردنەوەی باس ناچالاک کرا — هاوسەنگی دەنگی سەرەتایی گەڕایەوە.",
@@ -990,6 +1026,12 @@
       "pitchTitle": "تۆنی دەنگ ڕێکخرا",
       "pitchMultiplier": "گۆڕینی تۆن {{pitch}}×",
       "resetHint": "ڕێکخستنەوە لە هەر کاتێکدا بە {{prefix}}pitch"
+    },
+    "move": {
+      "reorderedAuthor": "🔀 گۆرانی دووبارە ڕیزکرایەوە",
+      "reorderedDesc": "لە پێگەی **#{{from}}** ➔ **#{{to}}** لە ڕیزبەندی گوازرایەوە.",
+      "nowPlayingNext": "ئێستا دوای گۆرانی ئێستا پەخش دەکرێت • {{prefix}}np",
+      "viewUpdatedQueue": "{{prefix}}list بۆ بینینی ڕیزبەندی نوێکراوە"
     }
   }
 }

@@ -33,7 +33,9 @@
       "aliasesLabel": "Aliase: ",
       "requirements": "Voraussetzungen: ",
       "permission": "Berechtigung `{{$permission}}`",
-      "optionCount": "{{$count}} Option(en)"
+      "optionCount": "{{$count}} Option(en)",
+      "commandInspectorAuthor": "Befehlshilfe • {{prefix}}{{name}}",
+      "commandInspectorFooter": "Tippe {{prefix}}help für die komplette Befehlsliste • Kategorie: {{category}}"
     },
     "invalidFlag": "Ungültige Flag `$invalidFlag`. Sie stimmt mit keiner Option dieses Befehls überein.\n`$previousCmd $invalidFlag`",
     "page": {
@@ -314,7 +316,11 @@
       "voiceChannelUnknown": "unbekannter Sprachkanal",
       "sessionStartedTitle": "Sprach-Sitzung Verbunden",
       "joinedChannel": "Verbunden mit {{channel}}",
-      "connectedBadge": "Verbunden"
+      "connectedBadge": "Verbunden",
+      "connectedAuthor": "🟢 Mit Sprachkanal verbunden",
+      "selectVCAuthor": "🔊 Sprachkanal auswählen",
+      "selectVCFooter": "Reagiere mit 1-9 zum Verbinden • Sitzung läuft in 30s ab",
+      "playPromptFooter": "Spiele Musik jederzeit ab mit {{prefix}}play <titel>"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Bitte trete zuerst einem Sprachkanal bei oder gib einen an: `{{prefix}}leave <#channel>`",
@@ -478,7 +484,8 @@
       "sourceYoutube": "YouTube"
     },
     "playnext": {
-      "searching": "🔍 Suche..."
+      "searching": "🔍 Suche...",
+      "playingNext": "⚡ Als Nächstes • An der Spitze der Warteschlange (#1)"
     },
     "player": {
       "title": "🎧 Musik-Player-Steuerung",
@@ -550,7 +557,12 @@
     },
     "remove": {
       "indexOutOfBounds": "Index außerhalb des Bereichs",
-      "removed": "**{{title}}** erfolgreich aus der Warteschlange entfernt."
+      "removed": "**{{title}}** erfolgreich aus der Warteschlange entfernt.",
+      "removedAuthor": "🗑️ Aus der Warteschlange entfernt",
+      "removedSingleDesc": "Titel an Position **#{{position}}** aus der Warteschlange entfernt.",
+      "removedRangeTitle": "{{count}} Titel entfernt",
+      "removedRangeDesc": "Positionen **#{{from}}** bis **#{{to}}** erfolgreich aus der Warteschlange entfernt.",
+      "remainingFooter": "{{count}} Titel in der Warteschlange verbleibend • {{prefix}}list"
     },
     "resume": {
       "nothingPlaying": "❌ Es wird gerade nichts abgespielt!",
@@ -760,7 +772,12 @@
       "noPermission": "⚠️ Du benötigst die **Server verwalten**-Berechtigung zum Ändern des Standards.",
       "noPermissionSet": "❌ Du benötigst die **Server verwalten**-Berechtigung zum Setzen der Standardlautstärke.",
       "outOfRange": "❌ Lautstärke muss zwischen `0` und `{{max}}%` liegen.",
-      "saved": "🔊 Server-Standardlautstärke als `{{volume}}%` gespeichert."
+      "saved": "🔊 Server-Standardlautstärke als `{{volume}}%` gespeichert.",
+      "author": "🔊 Standard-Serverlautstärke",
+      "fieldDefault": "Standard-Lautstärke",
+      "fieldActive": "Aktuelle Sitzungslautstärke",
+      "authorSaved": "🔊 Standard-Serverlautstärke gespeichert",
+      "fieldNewDefault": "Neuer Standard-Pegel"
     },
     "gateway": {
       "missingPermsFallback": "⚠️ Mir fehlen Berechtigungen, die ich zum ordnungsgemäßen Arbeiten brauche! Fehlend: **{{perms}}**. Bitte einen Server-Administrator, diese Berechtigungen in Servereinstellungen → Rollen zu gewähren."
@@ -869,7 +886,11 @@
       "noArtistTags": "🏷️ Keine Tags für Künstler **{{artist}}** gefunden.",
       "artistTagsTitle": "🏷️ Top-Tags für {{artist}}",
       "listeners": "Hörer",
-      "leaderboardYourRank": "📍 Dein Rang: **#{{rank}}** ({{count}} Scrobbles)"
+      "leaderboardYourRank": "📍 Dein Rang: **#{{rank}}** ({{count}} Scrobbles)",
+      "crownHolder": "👑 Kronen-Inhaber (#1)",
+      "serverLeaderboardAuthor": "👑 Server-Musik-Bestenliste",
+      "trackLeaderboardAuthor": "👑 Titel-Musik-Bestenliste",
+      "albumLeaderboardAuthor": "👑 Album-Musik-Bestenliste"
     },
     "messages": {
       "missingCriticalPermsTitle": "Fehlende Berechtigungen — Bot kann nicht ordnungsgemäß arbeiten",
@@ -955,13 +976,28 @@
       "listEmpty": "📭 Du hast keine gespeicherten Track-Optionen. Verwende `{{prefix}}trackopt set <start> [end]`, um eine hinzuzufügen!",
       "listTitle": "📋 **Deine Track-Optionen** ({{count}})",
       "listEntry": "• **{{title}}** — {{start}} → {{end}}",
-      "listHint": "Verwende `{{prefix}}trackopt play <alias>`, um einen benannten Trim anzuwenden, oder `{{prefix}}trackopt remove [alias]`, um einen zu löschen."
+      "listHint": "Verwende `{{prefix}}trackopt play <alias>`, um einen benannten Trim anzuwenden, oder `{{prefix}}trackopt remove [alias]`, um einen zu löschen.",
+      "savedAuthor": "✂️ Benutzerdefinierter Titel-Trim gespeichert",
+      "playbackWindowField": "Wiedergabefenster",
+      "aliasField": "Alias",
+      "activeTrimField": "Aktiver Trim",
+      "playHintFooter": "Spiele diesen Trim jederzeit ab mit: {{prefix}}trackopt play {{alias}}",
+      "savedListAuthor": "✂️ Gespeicherte Titel-Trims",
+      "trimProfilesFooter": "{{count}} Trim-Profil{{plural}} gespeichert • Anwenden mit {{prefix}}trackopt play <alias>",
+      "appliedAuthor": "✂️ Titel-Trim angewendet",
+      "activeCutRangeField": "Aktiver Schnittbereich"
     },
     "normalize": {
       "statusEnabled": "🔊 Dynamische Lautstärkenormalisierung (ReplayGain) ist für diesen Server derzeit **Aktiviert**.",
       "statusDisabled": "🔇 Dynamische Lautstärkenormalisierung (ReplayGain) ist für diesen Server derzeit **Deaktiviert**.",
       "info": "Wenn aktiviert, wird die Lautstärke dynamisch an den internationalen Standard von -14 LUFS angepasst, sodass leise akustische Lieder und laute Tracks mit ausgeglichener Lautstärke spielen.",
-      "trackInfo": "Aktuelle Track-Info:\n• Quelle: `{{source}}`\n• Verstärkungsanpassung: `{{gainDb}} dB` ({{gainPct}}%)\n• Effektive Lautstärke: `{{effective}}%`"
+      "trackInfo": "Aktuelle Track-Info:\n• Quelle: `{{source}}`\n• Verstärkungsanpassung: `{{gainDb}} dB` ({{gainPct}}%)\n• Effektive Lautstärke: `{{effective}}%`",
+      "headerAuthor": "🎚️ Dynamische Lautstärke-Normalisierung",
+      "headerTitle": "EBU R128 Audio-Pegelung",
+      "footer": "Gleicht Lautstärkeunterschiede zwischen YouTube, Spotify & SoundCloud aus",
+      "fieldSource": "Titelquelle",
+      "fieldGainOffset": "Verstärkungs-Offset",
+      "fieldEffectiveVolume": "Effektive Lautstärke"
     },
     "bassboost": {
       "disabled": "🔇 Bass-Boost deaktiviert — ursprüngliche Audiobalance wiederhergestellt.",
@@ -990,6 +1026,12 @@
       "pitchTitle": "Tonhöhe Angepasst",
       "pitchMultiplier": "{{pitch}}× Tonhöhenverschiebung",
       "resetHint": "Jederzeit zurücksetzen mit {{prefix}}pitch"
+    },
+    "move": {
+      "reorderedAuthor": "🔀 Titel neu angeordnet",
+      "reorderedDesc": "Von Position **#{{from}}** ➔ **#{{to}}** in der Warteschlange verschoben.",
+      "nowPlayingNext": "Wird als Nächstes nach dem aktuellen Titel abgespielt • {{prefix}}np",
+      "viewUpdatedQueue": "{{prefix}}list um die aktualisierte Warteschlange anzuzeigen"
     }
   }
 }

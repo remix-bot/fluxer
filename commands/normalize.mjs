@@ -67,9 +67,9 @@ export async function run(message, data) {
 
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setAuthor({ name: "🎚️ Dynamic Loudness Normalization" })
-    .setTitle("EBU R128 Audio Leveling")
-    .setFooter({ text: "Balances volume differences across YouTube, Spotify & SoundCloud" });
+    .setAuthor({ name: this.t(message, "responses.normalize.headerAuthor") })
+    .setTitle(this.t(message, "responses.normalize.headerTitle"))
+    .setFooter({ text: this.t(message, "responses.normalize.footer") });
 
   const statusMsg = newState
       ? this.t(message, "responses.normalize.statusEnabled")
@@ -87,9 +87,9 @@ export async function run(message, data) {
       const gainSign = gain >= 1 ? "+" : "";
 
       embed.addFields(
-        { name: "Track Source", value: source || "Default", inline: true },
-        { name: "Gain Offset", value: `${gainSign}${gainDb} dB (${(gain * 100).toFixed(0)}%)`, inline: true },
-        { name: "Effective Volume", value: `${Math.round(p.getEffectiveVolume())}%`, inline: true }
+        { name: this.t(message, "responses.normalize.fieldSource"), value: source || "Default", inline: true },
+        { name: this.t(message, "responses.normalize.fieldGainOffset"), value: `${gainSign}${gainDb} dB (${(gain * 100).toFixed(0)}%)`, inline: true },
+        { name: this.t(message, "responses.normalize.fieldEffectiveVolume"), value: `${Math.round(p.getEffectiveVolume())}%`, inline: true }
       );
     }
   }
