@@ -143,7 +143,12 @@ export async function run(message, data) {
   } else {
     current = p?.queue?.getCurrent() ?? null;
     if (!current) {
-      const embed = new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(message, "responses.lyrics.nothingPlaying"));
+      const prefix = this.handler.getPrefix(message.message?.guildId ?? message.channel?.guildId) || "%";
+      const embed = new EmbedBuilder()
+        .setColor(0xe9196c)
+        .setAuthor({ name: this.t(message, "responses.lyrics.lyricsAuthor") })
+        .setDescription(this.t(message, "responses.lyrics.nothingPlaying"))
+        .setFooter({ text: this.t(message, "responses.lyrics.manualSearchFooter", { prefix }) });
       return message.reply({ embeds: [embed] });
     }
     searchTitle = current.title;
@@ -175,11 +180,14 @@ export async function run(message, data) {
     clearInterval(loadingInterval);
 
     if (!result || !result.text) {
+      const prefix = this.handler.getPrefix(message.message?.guildId ?? message.channel?.guildId) || "%";
       return loadingMsg.edit({ embeds: [
         new EmbedBuilder().setColor(0xe9196c)
+          .setAuthor({ name: this.t(message, "responses.lyrics.lyricsAuthor") })
           .setDescription(
             this.t(message, "responses.lyrics.noLyrics", { title: Utils.truncate(searchTitle, 40) })
           )
+          .setFooter({ text: this.t(message, "responses.lyrics.artistSearchFooter", { prefix }) })
       ] });
     }
 

@@ -330,7 +330,13 @@
       "playPromptFooter": "Toque música a qualquer momento com {{prefix}}play <música>",
       "promptAuthor": "🔊 Conexão de Voz",
       "promptTitle": "Conectar ao Canal de Voz",
-      "promptFooter": "Entre em um canal ou use {{prefix}}join <canal> • {{prefix}}help join"
+      "promptFooter": "Entre em um canal ou use {{prefix}}join <canal> • {{prefix}}help join",
+      "autoLeaveAuthor": "⏱️ Monitor de Voz • Sessão Inativa",
+      "autoLeaveTitle": "Desconectado por Inatividade",
+      "autoLeaveFooter": "Mantenha o bot no canal de voz 24/7 com {{prefix}}247",
+      "joinFailedAuthor": "🔊 Erro de Conexão de Voz",
+      "joinFailedTitle": "Falha ao Conectar",
+      "joinFailedFooter": "Verifique as permissões do canal de voz e tente novamente com {{prefix}}join"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Por favor, entre em um canal de voz primeiro ou especifique um: `{{prefix}}leave <#channel>`",
@@ -396,7 +402,10 @@
       "sourceFooter": "{{source}} • {{lines}} linhas",
       "controlsExpired": "⌛ Controles expirados • NodeLink • {{lines}} linhas",
       "sessionClosed": "Sessão encerrada • NodeLink • {{lines}} linhas",
-      "author": "Letra da Música"
+      "author": "Letra da Música",
+      "lyricsAuthor": "🎤 Letra",
+      "manualSearchFooter": "Use {{prefix}}lyrics <música> para pesquisar manualmente",
+      "artistSearchFooter": "Tente {{prefix}}lyrics <artista - música> para melhores correspondências"
     },
     "np": {
       "loading": "⏳ Carregando...",
@@ -493,7 +502,11 @@
       "loopOffLabel": "Desligado",
       "sourceSpotify": "Spotify",
       "sourceSoundcloud": "SoundCloud",
-      "sourceYoutube": "YouTube"
+      "sourceYoutube": "YouTube",
+      "playbackErrorAuthor": "🎵 Monitor de Fluxo de Reprodução",
+      "streamUnavailableTitle": "Transmissão Indisponível",
+      "streamErrorTitle": "Fluxo de Reprodução Interrompido",
+      "streamErrorFooter": "Pulando para a próxima faixa • {{prefix}}play para adicionar mais músicas"
     },
     "playnext": {
       "searching": "🔍 Buscando...",
@@ -1034,7 +1047,13 @@
       "playLoadingDesc": "{{emoji}} Carregando **{{count}}** faixas de {{category}} para **{{username}}**{{provider}}...",
       "playDoneTitle": "Fila de Reprodução Atualizada",
       "playDoneAdded": "**{{count}}** faixas adicionadas à fila",
-      "playDoneNotFound": "{{count}} faixas não puderam ser encontradas"
+      "playDoneNotFound": "{{count}} faixas não puderam ser encontradas",
+      "accountAuthor": "Conta Last.fm",
+      "accountFooter": "Last.fm • Scrobbling e Sincronização de Perfil • {{prefix}}fm",
+      "accountLinkedTitle": "Conta Vinculada com Sucesso",
+      "accountUnlinkedTitle": "Conta Desvinculada",
+      "scrobbleTitle": "Status de Scrobble Atualizado",
+      "playlistsAuthor": "Playlists do Last.fm"
     },
     "messages": {
       "missingCriticalPermsTitle": "Permissões Ausentes — Bot Não Pode Funcionar Corretamente",
@@ -1080,7 +1099,10 @@
       "voteVotersAuthor": "🏆 Principais Apoiadores",
       "voteAuthor": "🗳️ Comunidade FluxerList",
       "voteFooterHint": "Verifique seu status de voto: {{prefix}}vote check • {{prefix}}voters",
-      "defaultTitle": "Manual do Sistema de Votação"
+      "defaultTitle": "Manual do Sistema de Votação",
+      "notConfiguredTitle": "Integração Desativada",
+      "noResourceIdTitle": "Identificador de Recurso Ausente",
+      "noVotersTitle": "Nenhum Apoiador Ainda"
     },
     "seek": {
       "nothingPlaying": "❌ Não está tocando nada no momento!",

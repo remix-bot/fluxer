@@ -333,7 +333,13 @@
       "playPromptFooter": "Play music anytime with {{prefix}}play <song>",
       "promptAuthor": "🔊 Voice Connection",
       "promptTitle": "Connect to Voice Channel",
-      "promptFooter": "Join a channel or use {{prefix}}join <channel> • {{prefix}}help join"
+      "promptFooter": "Join a channel or use {{prefix}}join <channel> • {{prefix}}help join",
+      "autoLeaveAuthor": "⏱️ Voice Watchdog • Session Inactive",
+      "autoLeaveTitle": "Disconnected Due to Inactivity",
+      "autoLeaveFooter": "Keep bot in voice 24/7 with {{prefix}}247",
+      "joinFailedAuthor": "🔊 Voice Connection Error",
+      "joinFailedTitle": "Failed to Connect",
+      "joinFailedFooter": "Check voice channel permissions and retry with {{prefix}}join"
     },
     "leave": {
       "noVoiceChannel": "⚠️ I can't find you in a voice channel. Please join one, or if you're already in one, make sure I have **View Channel** and **Connect** permissions. You can also specify a channel: `{{prefix}}leave <#channel>`",
@@ -549,7 +555,13 @@
       "playLoadingDesc": "{{emoji}} Loading **{{count}}** {{category}} tracks for **{{username}}**{{provider}}...",
       "playDoneTitle": "Streaming Queue Updated",
       "playDoneAdded": "Added **{{count}}** tracks to the queue",
-      "playDoneNotFound": "{{count}} tracks couldn't be resolved"
+      "playDoneNotFound": "{{count}} tracks couldn't be resolved",
+      "accountAuthor": "Last.fm Account",
+      "accountFooter": "Last.fm • Scrobbling & Profile Sync • {{prefix}}fm",
+      "accountLinkedTitle": "Account Linked Successfully",
+      "accountUnlinkedTitle": "Account Unlinked",
+      "scrobbleTitle": "Scrobble Status Updated",
+      "playlistsAuthor": "Last.fm Playlists"
     },
     "list": {
       "empty": "📭 The queue is empty. Use `{{prefix}}play` to add songs!",
@@ -597,7 +609,10 @@
       "sourceFooter": "{{source}} • {{lines}} lines",
       "controlsExpired": "⌛ Controls expired • NodeLink • {{lines}} lines",
       "sessionClosed": "Session closed • NodeLink • {{lines}} lines",
-      "author": "Lyrics"
+      "author": "Lyrics",
+      "lyricsAuthor": "🎤 Lyrics",
+      "manualSearchFooter": "Use {{prefix}}lyrics <song> to search manually",
+      "artistSearchFooter": "Try {{prefix}}lyrics <artist - song> for better matches"
     },
     "messages": {
       "missingCriticalPermsTitle": "Missing Permissions — Bot Cannot Work Properly",
@@ -702,7 +717,11 @@
       "loopOffLabel": "Off",
       "sourceSpotify": "Spotify",
       "sourceSoundcloud": "SoundCloud",
-      "sourceYoutube": "YouTube"
+      "sourceYoutube": "YouTube",
+      "playbackErrorAuthor": "🎵 Playback Stream Watchdog",
+      "streamUnavailableTitle": "Stream Unavailable",
+      "streamErrorTitle": "Playback Stream Interrupted",
+      "streamErrorFooter": "Skipping to next track • {{prefix}}play to queue more songs"
     },
     "playnext": {
       "searching": "🔍 Searching...",
@@ -1064,7 +1083,10 @@
       "voteVotersAuthor": "🏆 Top Community Supporters",
       "voteAuthor": "🗳️ FluxerList Community",
       "voteFooterHint": "Check your vote status: {{prefix}}vote check • {{prefix}}voters",
-      "defaultTitle": "Voting System Handbook"
+      "defaultTitle": "Voting System Handbook",
+      "notConfiguredTitle": "Integration Disabled",
+      "noResourceIdTitle": "Resource Identifier Missing",
+      "noVotersTitle": "No Supporters Yet"
     },
     "volumedefault": {
       "title": "🔊 Volume Settings",

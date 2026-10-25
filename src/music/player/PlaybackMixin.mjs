@@ -10,6 +10,7 @@
 
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../../ui/index.mjs";
+import { ERROR_COLOR } from "../../utils/UI.mjs";
 import { Utils, cleanId } from "../../utils/Utils.mjs";
 import { logger } from "../../core/Logger.mjs";
 import meta from "../probe.mjs";
@@ -233,7 +234,14 @@ const PlaybackMixin = {
           }
         } catch (searchErr) {
           logger.error("[Player] Could not resolve track:", searchErr?.message);
-          this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.couldNotGetStream", { title: songData.title }))] });
+          const pfx = this._getPrefix?.(this._guildId) ?? "%";
+          const streamErrEmbed = new EmbedBuilder()
+            .setColor(ERROR_COLOR)
+            .setAuthor({ name: this._t("responses.play.playbackErrorAuthor") })
+            .setTitle(this._t("responses.play.streamUnavailableTitle"))
+            .setDescription(this._t("responses._common.couldNotGetStream", { title: songData.title }))
+            .setFooter({ text: this._t("responses.play.streamErrorFooter", { prefix: pfx }) });
+          this.emit("message", { embeds: [streamErrEmbed] });
           this.emit("stopplay");
           if (!this._is247Enabled()) {
             this._startInactivityTimer();
@@ -255,7 +263,14 @@ const PlaybackMixin = {
     } catch (err) {
       logger.error("[Player] Play error:", err.message);
       if (!this._skipping && !this.leaving && !this._paused && songData.type !== "radio") {
-        this.emit("message", { embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t("responses._common.errorStreaming", { title: songData.title }))] });
+        const pfx = this._getPrefix?.(this._guildId) ?? "%";
+        const playErrEmbed = new EmbedBuilder()
+          .setColor(ERROR_COLOR)
+          .setAuthor({ name: this._t("responses.play.playbackErrorAuthor") })
+          .setTitle(this._t("responses.play.streamErrorTitle"))
+          .setDescription(this._t("responses._common.errorStreaming", { title: songData.title }))
+          .setFooter({ text: this._t("responses.play.streamErrorFooter", { prefix: pfx }) });
+        this.emit("message", { embeds: [playErrEmbed] });
       }
       if (!this._skipping && !this.leaving) {
         this._consecutiveErrors = (this._consecutiveErrors || 0) + 1;

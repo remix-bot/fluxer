@@ -82,7 +82,7 @@ export async function applySet(ctx, message, set, key, rawValue) {
 
   if (runnables[key]) {
     const err = runnables[key].call(ctx, rawValue, { msg: message });
-    if (err) return "\u274c " + err;
+    if (err) return "❌ " + err;
   }
 
   set.set(key, rawValue);

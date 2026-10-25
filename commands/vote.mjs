@@ -51,7 +51,10 @@ function notConfigured(t, guildId) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(ERROR_COLOR)
-      .setDescription(t(guildId, "responses.vote.notConfigured"))]
+      .setAuthor({ name: t(guildId, "responses.vote.voteAuthor") })
+      .setTitle(t(guildId, "responses.vote.notConfiguredTitle"))
+      .setDescription(t(guildId, "responses.vote.notConfigured"))
+      .setFooter({ text: t(guildId, "responses.vote.voteFooterHint", { prefix: "%" }) })]
   };
 }
 
@@ -68,7 +71,10 @@ function noResourceId(type, prefix, t, guildId) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(ERROR_COLOR)
-      .setDescription(t(guildId, "responses.vote.noResourceId", { type, prefix }))]
+      .setAuthor({ name: t(guildId, "responses.vote.voteAuthor") })
+      .setTitle(t(guildId, "responses.vote.noResourceIdTitle"))
+      .setDescription(t(guildId, "responses.vote.noResourceId", { type, prefix }))
+      .setFooter({ text: t(guildId, "responses.vote.voteFooterHint", { prefix }) })]
   };
 }
 
@@ -236,7 +242,10 @@ export async function run(msg, data) {
         return msg.reply({
           embeds: [new EmbedBuilder()
             .setColor(getGlobalColor())
-            .setDescription(this.t(msg, "responses.vote.noVotersYet", { type: resolvedType }))]
+            .setAuthor({ name: this.t(msg, "responses.vote.voteVotersAuthor") })
+            .setTitle(this.t(msg, "responses.vote.noVotersTitle"))
+            .setDescription(this.t(msg, "responses.vote.noVotersYet", { type: resolvedType }))
+            .setFooter({ text: this.t(msg, "responses.vote.voteFooterHint", { prefix }) })]
         });
       }
 

@@ -18,6 +18,7 @@ import { get247ChannelMode, isPlayerConnectionDead, detachPlayerFromManager, res
 import { EmbedBuilder, PermissionFlags } from "@fluxerjs/core";
 import { getVoiceManager } from "@fluxerjs/voice";
 import { getGlobalColor, getMessageGuildId } from "../ui/index.mjs";
+import { ERROR_COLOR } from "../utils/UI.mjs";
 import { hasHumansInChannel, iterateVoiceStates } from "../voice/VoiceStateResolver.mjs";
 import { getPlayerChannelId } from "./PlayerEventsMixin.mjs";
 
@@ -465,7 +466,13 @@ const PlayerLifecycleMixin = {
         ? (() => { const t = { id: ch.id, type: ch.type }; t.send = (o) => autoleaveChMgr.send(ch.id, o); return t; })()
         : ch;
       if (typeof leaveCh?.send === "function") {
-        leaveCh.send({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(desc)], allowedMentions: { parse: [] } }).catch(err => {
+        const autoleaveEmbed = new EmbedBuilder()
+          .setColor(getGlobalColor())
+          .setAuthor({ name: this.locale?.translate(guildId, "responses.join.autoLeaveAuthor") ?? "⏱️ Voice Watchdog • Session Inactive" })
+          .setTitle(this.locale?.translate(guildId, "responses.join.autoLeaveTitle") ?? "Disconnected Due to Inactivity")
+          .setDescription(desc)
+          .setFooter({ text: this.locale?.translate(guildId, "responses.join.autoLeaveFooter", { prefix }) ?? `Keep bot in voice 24/7 with ${prefix}247` });
+        leaveCh.send({ embeds: [autoleaveEmbed], allowedMentions: { parse: [] } }).catch(err => {
           if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
             logger.warn(`[PlayerManager] Cannot send autoleave message in channel ${leaveCh.id} — missing permissions`);
           }
@@ -626,7 +633,14 @@ const PlayerLifecycleMixin = {
       } else {
         errorMsg = this._t(message, "responses.join.joinFailed", { error: err.message });
       }
-      const errorEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(errorMsg);
+      const guildId = cleanId(channel.guildId ?? getMessageGuildId(message));
+      const prefix = this.commands?.getPrefix?.(guildId) ?? "%";
+      const errorEmbed = new EmbedBuilder()
+        .setColor(ERROR_COLOR)
+        .setAuthor({ name: this._t(message, "responses.join.joinFailedAuthor") })
+        .setTitle(this._t(message, "responses.join.joinFailedTitle"))
+        .setDescription(errorMsg)
+        .setFooter({ text: this._t(message, "responses.join.joinFailedFooter", { prefix }) });
       await statusMsg?.edit?.({ content: null, embeds: [errorEmbed] }).catch(() => {});
       this.playerMap.delete(cleanChannelId);
       this._unindexPlayer(channel.guildId ?? getMessageGuildId(message), cleanChannelId);

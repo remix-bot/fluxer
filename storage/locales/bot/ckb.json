@@ -330,7 +330,13 @@
       "playPromptFooter": "هەر کاتێک مۆسیقا پەخش بکە بە {{prefix}}play <song>",
       "promptAuthor": "🔊 پەیوەندی دەنگی",
       "promptTitle": "پەیوەندیکردن بە کەناڵی دەنگی",
-      "promptFooter": "بچۆ ناو کەناڵێک یان {{prefix}}join <channel> بەکاربهێنە • {{prefix}}help join"
+      "promptFooter": "بچۆ ناو کەناڵێک یان {{prefix}}join <channel> بەکاربهێنە • {{prefix}}help join",
+      "autoLeaveAuthor": "⏱️ پاسەوانی دەنگ • دانیشتن ناچالاکە",
+      "autoLeaveTitle": "پەیوەندی پچڕا بەهۆی ناچالاکییەوە",
+      "autoLeaveFooter": "بۆتەکە لە دەنگدا بهێڵەرەوە 24/7 بە {{prefix}}247",
+      "joinFailedAuthor": "🔊 هەڵەی پەیوەستبوونی دەنگ",
+      "joinFailedTitle": "پەیوەستبوون سەرکەوتوو نەبوو",
+      "joinFailedFooter": "مۆڵەتەکانی کەناڵی دەنگی بپشکنە و دووبارە تاقی بکەرەوە بە {{prefix}}join"
     },
     "leave": {
       "noVoiceChannel": "⚠️ تکایە سەرەتا بەشداری کەناڵێکی دەنگی بکە، یان یەکێک دیاریبکە: `{{prefix}}leave <#channel>`",
@@ -396,7 +402,10 @@
       "sourceFooter": "{{source}} • {{lines}} هێڵ",
       "controlsExpired": "⌛ کۆنتڕۆڵەکان بەسەرچوون • NodeLink • {{lines}} هێڵ",
       "sessionClosed": "دانیشتن داخرا • NodeLink • {{lines}} هێڵ",
-      "author": "تێکستی گۆرانی"
+      "author": "تێکستی گۆرانی",
+      "lyricsAuthor": "🎤 هۆنراوە",
+      "manualSearchFooter": "بەکاری بێنە {{prefix}}lyrics <song> بۆ گەڕانی دەستی",
+      "artistSearchFooter": "تاقیبکەرەوە {{prefix}}lyrics <artist - song> بۆ ئەنجامی باشتر"
     },
     "np": {
       "loading": "⏳ بارکردن...",
@@ -493,7 +502,11 @@
       "loopOffLabel": "ناچالاکە",
       "sourceSpotify": "سپۆتیفای",
       "sourceSoundcloud": "ساوندکلاود",
-      "sourceYoutube": "یوتیوب"
+      "sourceYoutube": "یوتیوب",
+      "playbackErrorAuthor": "🎵 پاسەوانی پەخشی لێدان",
+      "streamUnavailableTitle": "پەخش بەردەست نییە",
+      "streamErrorTitle": "پەخشی لێدان پچڕا",
+      "streamErrorFooter": "پەڕینەوە بۆ گۆرانی داهاتوو • {{prefix}}play بۆ زیادکردنی گۆرانی زیاتر"
     },
     "playnext": {
       "searching": "🔍 گەڕان...",
@@ -1034,7 +1047,13 @@
       "playLoadingDesc": "{{emoji}} بارکردنی **{{count}}** تراکی {{category}} بۆ **{{username}}**{{provider}}...",
       "playDoneTitle": "ڕیزبەندی لێدان نوێکرایەوە",
       "playDoneAdded": "**{{count}}** تراک بۆ ڕیزبەندی زیادکرا",
-      "playDoneNotFound": "نەتوانرا {{count}} تراک بدۆزرێتەوە"
+      "playDoneNotFound": "نەتوانرا {{count}} تراک بدۆزرێتەوە",
+      "accountAuthor": "هەژماری Last.fm",
+      "accountFooter": "Last.fm • هاوکاتکردنی سکڕۆبڵ و پڕۆفایل • {{prefix}}fm",
+      "accountLinkedTitle": "هەژمار بە سەرکەوتوویی بەسترا",
+      "accountUnlinkedTitle": "بەستنەوەی هەژمار هەڵوەشێنرایەوە",
+      "scrobbleTitle": "دۆخی سکڕۆبڵ نوێکرایەوە",
+      "playlistsAuthor": "لیستی گۆرانییەکانی Last.fm"
     },
     "messages": {
       "missingCriticalPermsTitle": "مۆڵەتە کەمەکان — بۆت ناتوانێت بە دروستی کار بکات",
@@ -1080,7 +1099,10 @@
       "voteVotersAuthor": "🏆 باڵاترین پاڵپشتیکاران",
       "voteAuthor": "🗳️ کۆمەڵگەی FluxerList",
       "voteFooterHint": "پشکنینی دۆخی دەنگدانت: {{prefix}}vote check • {{prefix}}voters",
-      "defaultTitle": "ڕێبەری سیستەمی دەنگدان"
+      "defaultTitle": "ڕێبەری سیستەمی دەنگدان",
+      "notConfiguredTitle": "بەستنەوە ناچالاکە",
+      "noResourceIdTitle": "ناسێنەری سەرچاوە دیار نییە",
+      "noVotersTitle": "هێشتا هیچ پشتگیریکەرێک نییە"
     },
     "seek": {
       "nothingPlaying": "❌ هیچ شتێک پەخش ناکرێت لە ئێستادا!",

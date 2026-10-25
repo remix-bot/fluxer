@@ -330,7 +330,13 @@
       "playPromptFooter": "Spiele Musik jederzeit ab mit {{prefix}}play <titel>",
       "promptAuthor": "🔊 Sprachverbindung",
       "promptTitle": "Mit Sprachkanal verbinden",
-      "promptFooter": "Kanal beitreten oder {{prefix}}join <kanal> nutzen • {{prefix}}help join"
+      "promptFooter": "Kanal beitreten oder {{prefix}}join <kanal> nutzen • {{prefix}}help join",
+      "autoLeaveAuthor": "⏱️ Sprachüberwachung • Sitzung inaktiv",
+      "autoLeaveTitle": "Wegen Inaktivität getrennt",
+      "autoLeaveFooter": "Halte den Bot rund um die Uhr mit {{prefix}}247 im Sprachkanal",
+      "joinFailedAuthor": "🔊 Sprachverbindungsfehler",
+      "joinFailedTitle": "Verbindung fehlgeschlagen",
+      "joinFailedFooter": "Überprüfe die Kanalberechtigungen und versuche es erneut mit {{prefix}}join"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Bitte trete zuerst einem Sprachkanal bei oder gib einen an: `{{prefix}}leave <#channel>`",
@@ -396,7 +402,10 @@
       "sourceFooter": "{{source}} • {{lines}} Zeilen",
       "controlsExpired": "⌛ Steuerung abgelaufen • NodeLink • {{lines}} Zeilen",
       "sessionClosed": "Sitzung geschlossen • NodeLink • {{lines}} Zeilen",
-      "author": "Songtext"
+      "author": "Songtext",
+      "lyricsAuthor": "🎤 Songtext",
+      "manualSearchFooter": "Nutze {{prefix}}lyrics <song>, um manuell zu suchen",
+      "artistSearchFooter": "Versuche {{prefix}}lyrics <künstler - song> für bessere Treffer"
     },
     "np": {
       "loading": "⏳ Laden...",
@@ -493,7 +502,11 @@
       "loopOffLabel": "Aus",
       "sourceSpotify": "Spotify",
       "sourceSoundcloud": "SoundCloud",
-      "sourceYoutube": "YouTube"
+      "sourceYoutube": "YouTube",
+      "playbackErrorAuthor": "🎵 Wiedergabe-Stream-Wächter",
+      "streamUnavailableTitle": "Stream nicht verfügbar",
+      "streamErrorTitle": "Wiedergabe-Stream unterbrochen",
+      "streamErrorFooter": "Überspringe zum nächsten Track • {{prefix}}play für weitere Songs"
     },
     "playnext": {
       "searching": "🔍 Suche...",
@@ -1034,7 +1047,13 @@
       "playLoadingDesc": "{{emoji}} Lade **{{count}}** {{category}}-Titel für **{{username}}**{{provider}}...",
       "playDoneTitle": "Warteschlange aktualisiert",
       "playDoneAdded": "**{{count}}** Titel zur Warteschlange hinzugefügt",
-      "playDoneNotFound": "{{count}} Titel konnten nicht gefunden werden"
+      "playDoneNotFound": "{{count}} Titel konnten nicht gefunden werden",
+      "accountAuthor": "Last.fm-Konto",
+      "accountFooter": "Last.fm • Scrobbeln & Profilsynchronisierung • {{prefix}}fm",
+      "accountLinkedTitle": "Konto erfolgreich verknüpft",
+      "accountUnlinkedTitle": "Konto getrennt",
+      "scrobbleTitle": "Scrobble-Status aktualisiert",
+      "playlistsAuthor": "Last.fm-Wiedergabelisten"
     },
     "messages": {
       "missingCriticalPermsTitle": "Fehlende Berechtigungen — Bot kann nicht ordnungsgemäß arbeiten",
@@ -1080,7 +1099,10 @@
       "voteVotersAuthor": "🏆 Top-Unterstützer",
       "voteAuthor": "🗳️ FluxerList-Community",
       "voteFooterHint": "Vote-Status prüfen: {{prefix}}vote check • {{prefix}}voters",
-      "defaultTitle": "Abstimmungssystem-Handbuch"
+      "defaultTitle": "Abstimmungssystem-Handbuch",
+      "notConfiguredTitle": "Integration deaktiviert",
+      "noResourceIdTitle": "Ressourcen-ID fehlt",
+      "noVotersTitle": "Noch keine Unterstützer"
     },
     "seek": {
       "nothingPlaying": "❌ Es wird gerade nichts abgespielt!",

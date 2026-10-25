@@ -460,10 +460,10 @@ export async function run(msg) {
       activeKeys = previousActiveKeys;
       const errEmbed = new EmbedBuilder()
           .setColor(getGlobalColor())
+          .setAuthor({ name: `🎛️ ${this.t(msg, "responses.filter.pickerTitle")}` })
           .setDescription(
               this.t(msg, "responses.filter.applyFailed", { filter: filter.label, reason })
-          )
-          ;
+          );
       await menuMsg.edit({ embeds: [errEmbed] }).catch(() => {});
       await Utils.sleep(1500);
       await menuMsg.edit({
@@ -488,12 +488,12 @@ export async function run(msg) {
 
     const confirmEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
+        .setAuthor({ name: `🎛️ ${this.t(msg, "responses.filter.pickerTitle")}` })
         .setDescription(
             `${successMsg}\n\n` +
             `*${filter.desc}*\n\n` +
             `💡 ${this.t(msg, "responses.filter.reactToToggle")}`
-        )
-        ;
+        );
 
     await menuMsg.edit({ embeds: [confirmEmbed] }).catch(() => {});
     await Utils.sleep(1200);

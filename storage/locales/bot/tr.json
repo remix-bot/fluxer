@@ -330,7 +330,13 @@
       "playPromptFooter": "{{prefix}}play <şarkı> ile istediğiniz zaman müzik çalın",
       "promptAuthor": "🔊 Ses Bağlantısı",
       "promptTitle": "Ses Kanalına Bağlan",
-      "promptFooter": "Bir kanala katılın veya {{prefix}}join <kanal> kullanın • {{prefix}}help join"
+      "promptFooter": "Bir kanala katılın veya {{prefix}}join <kanal> kullanın • {{prefix}}help join",
+      "autoLeaveAuthor": "⏱️ Ses Denetleyicisi • Oturum Etkin Değil",
+      "autoLeaveTitle": "Hareketsizlik Nedeniyle Bağlantı Kesildi",
+      "autoLeaveFooter": "Botu {{prefix}}247 ile 7/24 seste tutun",
+      "joinFailedAuthor": "🔊 Ses Bağlantısı Hatası",
+      "joinFailedTitle": "Bağlantı Başarısız",
+      "joinFailedFooter": "Ses kanalı izinlerini kontrol edin ve {{prefix}}join ile tekrar deneyin"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Lütfen önce bir ses kanalına katılın veya bir tane belirtin: `{{prefix}}leave <#kanal>`",
@@ -546,7 +552,13 @@
       "playLoadingDesc": "{{emoji}} **{{username}}** için **{{count}}** {{category}} parçası yükleniyor{{provider}}...",
       "playDoneTitle": "Çalma Sırası Güncellendi",
       "playDoneAdded": "Kuyruğa **{{count}}** parça eklendi",
-      "playDoneNotFound": "{{count}} parça bulunamadı"
+      "playDoneNotFound": "{{count}} parça bulunamadı",
+      "accountAuthor": "Last.fm Hesabı",
+      "accountFooter": "Last.fm • Scrobble ve Profil Senkronizasyonu • {{prefix}}fm",
+      "accountLinkedTitle": "Hesap Başarıyla Bağlandı",
+      "accountUnlinkedTitle": "Hesap Bağlantısı Kesildi",
+      "scrobbleTitle": "Scrobble Durumu Güncellendi",
+      "playlistsAuthor": "Last.fm Çalma Listeleri"
     },
     "list": {
       "empty": "📭 Kuyruk boş. Şarkı eklemek için `{{prefix}}play` kullanın!",
@@ -594,7 +606,10 @@
       "sourceFooter": "{{source}} • {{lines}} satır",
       "controlsExpired": "⌛ Kontrollerin süresi doldu • NodeLink • {{lines}} satır",
       "sessionClosed": "Oturum kapatıldı • NodeLink • {{lines}} satır",
-      "author": "Şarkı Sözleri"
+      "author": "Şarkı Sözleri",
+      "lyricsAuthor": "🎤 Şarkı Sözleri",
+      "manualSearchFooter": "Manuel aramak için {{prefix}}lyrics <şarkı> kullanın",
+      "artistSearchFooter": "Daha iyi eşleşmeler için {{prefix}}lyrics <sanatçı - şarkı> deneyin"
     },
     "np": {
       "loading": "⏳ Yükleniyor...",
@@ -691,7 +706,11 @@
       "loopOffLabel": "Kapalı",
       "sourceSpotify": "Spotify",
       "sourceSoundcloud": "SoundCloud",
-      "sourceYoutube": "YouTube"
+      "sourceYoutube": "YouTube",
+      "playbackErrorAuthor": "🎵 Oynatma Akışı Denetleyicisi",
+      "streamUnavailableTitle": "Akış Kullanılamıyor",
+      "streamErrorTitle": "Oynatma Akışı Kesildi",
+      "streamErrorFooter": "Sonraki parçaya geçiliyor • Daha fazla şarkı için {{prefix}}play"
     },
     "playnext": {
       "searching": "🔍 Aranıyor...",
@@ -1192,7 +1211,10 @@
       "voteVotersAuthor": "🏆 En İyi Destekçiler",
       "voteAuthor": "🗳️ FluxerList Topluluğu",
       "voteFooterHint": "Oy durumunuzu kontrol edin: {{prefix}}vote check • {{prefix}}voters",
-      "defaultTitle": "Oy Sistemi Rehberi"
+      "defaultTitle": "Oy Sistemi Rehberi",
+      "notConfiguredTitle": "Entegrasyon Devre Dışı",
+      "noResourceIdTitle": "Kaynak Tanımlayıcısı Eksik",
+      "noVotersTitle": "Henüz Destekçi Yok"
     },
     "move": {
       "reorderedAuthor": "🔀 Parça Yeniden Sıralandı",

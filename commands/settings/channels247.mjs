@@ -135,7 +135,7 @@ function build247PanelDescription(set, ctx, guildId, justToggledId = null) {
       .sort((a, b) => a.order - b.order);
 
   const lines = statuses.map(s =>
-    s.line + (justToggledId && s.line.includes("<#" + cleanId(justToggledId) + ">") ? " \u2190" : "")
+    s.line + (justToggledId && s.line.includes("<#" + cleanId(justToggledId) + ">") ? " ←" : "")
   );
 
   const allConnected = statuses.every(s => s.state === "connected");
@@ -187,7 +187,7 @@ export function build247Panel(set, ctx, guildId, justToggledId = null) {
       .sort((a, b) => a.order - b.order);
 
     const lines = statuses.map(s =>
-      s.line + (justToggledId && s.line.includes("<#" + cleanId(justToggledId) + ">") ? " \u2190" : "")
+      s.line + (justToggledId && s.line.includes("<#" + cleanId(justToggledId) + ">") ? " ←" : "")
     );
 
     const allConnected = statuses.every(s => s.state === "connected");

@@ -330,7 +330,13 @@
       "playPromptFooter": "شغّل الموسيقى في أي وقت باستخدام {{prefix}}play <song>",
       "promptAuthor": "🔊 الاتصال الصوتي",
       "promptTitle": "الاتصال بالقناة الصوتية",
-      "promptFooter": "انضم إلى قناة أو استخدم {{prefix}}join <channel> • {{prefix}}help join"
+      "promptFooter": "انضم إلى قناة أو استخدم {{prefix}}join <channel> • {{prefix}}help join",
+      "autoLeaveAuthor": "⏱️ حارس الصوت • الجلسة غير نشطة",
+      "autoLeaveTitle": "تم قطع الاتصال بسبب عدم النشاط",
+      "autoLeaveFooter": "إبقاء البوت في القناة الصوتية 24/7 باستخدام {{prefix}}247",
+      "joinFailedAuthor": "🔊 خطأ في الاتصال الصوتي",
+      "joinFailedTitle": "فشل في الاتصال",
+      "joinFailedFooter": "تحقق من أذونات القناة الصوتية وأعد المحاولة باستخدام {{prefix}}join"
     },
     "leave": {
       "noVoiceChannel": "⚠️ يرجى الانضمام إلى قناة صوتية أولاً، أو حدد واحدة: `{{prefix}}leave <#channel>`",
@@ -396,7 +402,10 @@
       "sourceFooter": "{{source}} • {{lines}} سطر",
       "controlsExpired": "⌛ انتهت صلاحية عناصر التحكم • NodeLink • {{lines}} سطر",
       "sessionClosed": "تم إغلاق الجلسة • NodeLink • {{lines}} سطر",
-      "author": "كلمات الأغنية"
+      "author": "كلمات الأغنية",
+      "lyricsAuthor": "🎤 الكلمات",
+      "manualSearchFooter": "استخدم {{prefix}}lyrics <song> للبحث يدويًا",
+      "artistSearchFooter": "جرب {{prefix}}lyrics <artist - song> للحصول على نتائج أفضل"
     },
     "np": {
       "loading": "⏳ جارٍ التحميل...",
@@ -493,7 +502,11 @@
       "loopOffLabel": "معطّل",
       "sourceSpotify": "سبوتيفاي",
       "sourceSoundcloud": "ساوندكلاود",
-      "sourceYoutube": "يوتيوب"
+      "sourceYoutube": "يوتيوب",
+      "playbackErrorAuthor": "🎵 حارس بث التشغيل",
+      "streamUnavailableTitle": "البث غير متوفر",
+      "streamErrorTitle": "انقطع بث التشغيل",
+      "streamErrorFooter": "التخطي إلى المسار التالي • {{prefix}}play لإضافة المزيد من الأغاني"
     },
     "playnext": {
       "searching": "🔍 جارٍ البحث...",
@@ -1034,7 +1047,13 @@
       "playLoadingDesc": "{{emoji}} جاري تحميل **{{count}}** مسار {{category}} لـ **{{username}}**{{provider}}...",
       "playDoneTitle": "تم تحديث قائمة التشغيل",
       "playDoneAdded": "تمت إضافة **{{count}}** مسار إلى قائمة الانتظار",
-      "playDoneNotFound": "تعذر العثور على {{count}} مسار"
+      "playDoneNotFound": "تعذر العثور على {{count}} مسار",
+      "accountAuthor": "حساب Last.fm",
+      "accountFooter": "Last.fm • مزامنة السكروبل والملف الشخصي • {{prefix}}fm",
+      "accountLinkedTitle": "تم ربط الحساب بنجاح",
+      "accountUnlinkedTitle": "تم إلغاء ربط الحساب",
+      "scrobbleTitle": "تم تحديث حالة السكروبل",
+      "playlistsAuthor": "قوائم تشغيل Last.fm"
     },
     "messages": {
       "missingCriticalPermsTitle": "صلاحيات مفقودة — البوت لا يستطيع العمل بشكل صحيح",
@@ -1080,7 +1099,10 @@
       "voteVotersAuthor": "🏆 كبار الداعمين",
       "voteAuthor": "🗳️ مجتمع FluxerList",
       "voteFooterHint": "تحقق من حالة تصويتك: {{prefix}}vote check • {{prefix}}voters",
-      "defaultTitle": "دليل نظام التصويت"
+      "defaultTitle": "دليل نظام التصويت",
+      "notConfiguredTitle": "التكامل معطّل",
+      "noResourceIdTitle": "معرّف المورد مفقود",
+      "noVotersTitle": "لا يوجد داعمون بعد"
     },
     "seek": {
       "nothingPlaying": "❌ لا يوجد شيء يعمل حالياً!",

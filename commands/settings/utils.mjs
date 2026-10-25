@@ -83,7 +83,7 @@ export function parseBool(str) {
  * @returns {string} Formatted display string.
  */
 export function displayValue(key, value) {
-  if (BOOL_SETTINGS.has(key)) return value ? "\u2705 enabled" : "\u274c disabled";
+  if (BOOL_SETTINGS.has(key)) return value ? "✅ enabled" : "❌ disabled";
   if (value === null || value === undefined || value === "none") return "none";
   return "`" + value + "`";
 }

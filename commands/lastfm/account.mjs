@@ -45,7 +45,9 @@ export async function runAccountActions(msg, data, lastfm, prefix, userId, targe
         return msg.reply({
           embeds: [new EmbedBuilder()
             .setColor(getGlobalColor())
-            .setDescription(this.t(msg, "responses.lastfm.alreadyLinked", { username: existing.username, prefix }))]
+            .setAuthor({ name: this.t(msg, "responses.lastfm.accountAuthor") })
+            .setDescription(this.t(msg, "responses.lastfm.alreadyLinked", { username: existing.username, prefix }))
+            .setFooter({ text: this.t(msg, "responses.lastfm.accountFooter", { prefix }) })]
         });
       }
 
@@ -75,11 +77,14 @@ export async function runAccountActions(msg, data, lastfm, prefix, userId, targe
 
       const replyEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
+        .setAuthor({ name: this.t(msg, "responses.lastfm.accountAuthor") })
+        .setTitle(this.t(msg, "responses.lastfm.authLinkTitle"))
         .setDescription(
           sent
             ? this.t(msg, "responses.lastfm.authDM", { prefix })
             : this.t(msg, "responses.lastfm.authDMFailed", { url: authUrl, prefix })
-        );
+        )
+        .setFooter({ text: this.t(msg, "responses.lastfm.accountFooter", { prefix }) });
 
       return msg.reply({ embeds: [replyEmbed] });
     }
@@ -113,7 +118,10 @@ export async function runAccountActions(msg, data, lastfm, prefix, userId, targe
       return msg.reply({
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
-          .setDescription(this.t(msg, "responses.lastfm.linked", { username: session.name }))]
+          .setAuthor({ name: this.t(msg, "responses.lastfm.accountAuthor") })
+          .setTitle(this.t(msg, "responses.lastfm.accountLinkedTitle"))
+          .setDescription(this.t(msg, "responses.lastfm.linked", { username: session.name }))
+          .setFooter({ text: this.t(msg, "responses.lastfm.accountFooter", { prefix }) })]
       });
     }
 
@@ -123,7 +131,12 @@ export async function runAccountActions(msg, data, lastfm, prefix, userId, targe
 
       await lastfm.removeUser(userId);
       return msg.reply({
-        embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.unlinked", { username: user.username }))]
+        embeds: [new EmbedBuilder()
+          .setColor(getGlobalColor())
+          .setAuthor({ name: this.t(msg, "responses.lastfm.accountAuthor") })
+          .setTitle(this.t(msg, "responses.lastfm.accountUnlinkedTitle"))
+          .setDescription(this.t(msg, "responses.lastfm.unlinked", { username: user.username }))
+          .setFooter({ text: this.t(msg, "responses.lastfm.accountFooter", { prefix }) })]
       });
     }
 
@@ -137,10 +150,13 @@ export async function runAccountActions(msg, data, lastfm, prefix, userId, targe
       return msg.reply({
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
+          .setAuthor({ name: this.t(msg, "responses.lastfm.accountAuthor") })
+          .setTitle(this.t(msg, "responses.lastfm.scrobbleTitle"))
           .setDescription(newState
             ? this.t(msg, "responses.lastfm.scrobbleEnabled", { username: user.username })
             : this.t(msg, "responses.lastfm.scrobbleDisabled")
-          )]
+          )
+          .setFooter({ text: this.t(msg, "responses.lastfm.accountFooter", { prefix }) })]
       });
     }
 
@@ -246,7 +262,12 @@ export async function runAccountActions(msg, data, lastfm, prefix, userId, targe
 
       if (!playlists.length) {
         return msg.reply({
-          embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.lastfm.noPlaylists", { username: user.username }))]
+          embeds: [new EmbedBuilder()
+            .setColor(getGlobalColor())
+            .setAuthor({ name: this.t(msg, "responses.lastfm.playlistsAuthor") })
+            .setTitle(this.t(msg, "responses.lastfm.playlistsTitle", { username: user.username }))
+            .setDescription(this.t(msg, "responses.lastfm.noPlaylists", { username: user.username }))
+            .setFooter({ text: this.t(msg, "responses.lastfm.playlistsFooter", { prefix }) })]
         });
       }
 
@@ -261,6 +282,7 @@ export async function runAccountActions(msg, data, lastfm, prefix, userId, targe
       return msg.reply({
         embeds: [new EmbedBuilder()
           .setColor(getGlobalColor())
+          .setAuthor({ name: this.t(msg, "responses.lastfm.playlistsAuthor") })
           .setTitle(this.t(msg, "responses.lastfm.playlistsTitle", { username: user.username }))
           .setDescription(desc)
           .setFooter({ text: this.t(msg, "responses.lastfm.playlistsFooter", { prefix }) })]
