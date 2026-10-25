@@ -284,7 +284,10 @@
       "pickerClosed": "👋 Filtre seçici kapatıldı.",
       "footer": "Sayfa {{page}}/{{total}} • Açıp kapatmak için bir filtre emojisine tepki verin",
       "activeLabel": "**← aktif**",
-      "closeHint": "❌ Kapat"
+      "closeHint": "❌ Kapat",
+      "activePrefix": "Etkin:",
+      "realtimeDsp": "Gerçek Zamanlı DSP",
+      "navHint": "Değiştirmek için emojiyle tepki verin • ❌ kapatmak için"
     },
     "forceleave": {
       "channelNotFound": "❌ Kanal bulunamadı.",
@@ -308,7 +311,10 @@
       "autoLeaveInactive": "Hareketsizlik nedeniyle <#{{channel}}> kanalından ayrılındı.",
       "autoLeaveInactive247": "Hareketsizlik nedeniyle <#{{channel}}> kanalından ayrılındı.\nSesli kalmamı istiyorsanız `{{prefix}}247 on` veya `{{prefix}}247 auto` kullanın\nKayıtlı tüm kanalları görüntülemek ve yönetmek için `{{prefix}}247` kullanın.",
       "joinFailedPerms": "❌ <#{{channel}}> kanalına katılma iznim yok. Lütfen **Bağlan** iznim olduğundan emin olun.",
-      "voiceChannelUnknown": "bilinmeyen ses kanalı"
+      "voiceChannelUnknown": "bilinmeyen ses kanalı",
+      "sessionStartedTitle": "Ses Oturumu Bağlandı",
+      "joinedChannel": "{{channel}} kanalına bağlandı",
+      "connectedBadge": "Bağlandı"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Lütfen önce bir ses kanalına katılın veya bir tane belirtin: `{{prefix}}leave <#kanal>`",
@@ -321,7 +327,12 @@
       "left": "✅ Başarıyla Ayrıldı",
       "leftRejoin247": "✅ Başarıyla Ayrıldı — birkaç saniye içinde <#{{channel}}> kanalına tekrar katılınıyor.\n24/7 modunu kalıcı olarak devre dışı bırakmak için `{{prefix}}247 off` kullanın.",
       "left247On": "✅ Başarıyla Ayrıldı.\n24/7 modu **açık** — bot otomatik olarak tekrar katılmayacak. Geri getirmek için `{{prefix}}play` veya tamamen devre dışı bırakmak için `{{prefix}}247 off` kullanın.\nKayıtlı tüm kanalları görüntülemek için `{{prefix}}247` kullanın.",
-      "autoRejoinHint": "⚠️ 24/7 modu etkin (auto) — birkaç saniye içinde <#{{channel}}> kanalına tekrar katılacağım.\nBeni kalıcı olarak çıkarmak için önce 24/7 modunu devre dışı bırakın: `{{prefix}}247 off`"
+      "autoRejoinHint": "⚠️ 24/7 modu etkin (auto) — birkaç saniye içinde <#{{channel}}> kanalına tekrar katılacağım.\nBeni kalıcı olarak çıkarmak için önce 24/7 modunu devre dışı bırakın: `{{prefix}}247 off`",
+      "sessionEndedTitle": "Ses Oturumu Sona Erdi",
+      "leftChannel": "{{channel}} kanalından ayrıldı",
+      "disconnectedBadge": "Bağlantı Kesildi",
+      "queueCleared": "Sıra temizlendi",
+      "rejoinHint": "Tekrar katılmak için: {{prefix}}join veya {{prefix}}play"
     },
     "lastfm": {
       "notConfigured": "❌ Last.fm entegrasyonu bu botta yapılandırılmamış. Bot sahibinden yapılandırmayı isteyin.",
@@ -499,7 +510,12 @@
       "measuring": "🏓  Ping ölçülüyor...",
       "roundtrip": "📶  **Gecikme**",
       "gateway": "🌐  **Gateway**",
-      "node": "🎧  **NodeLink**"
+      "node": "🎧  **NodeLink**",
+      "pingDashboard": "Ağ ve Ses Düğümü Durumu",
+      "operational": "Sorunsuz",
+      "restApi": "REST API",
+      "gatewayWs": "Ağ Geçidi WebSocket",
+      "audioNode": "Ses Düğümü"
     },
     "play": {
       "searching": "🔍 Aranıyor...",
@@ -827,7 +843,11 @@
     "thumbnail": {
       "nothingPlaying": "Şu anda çalan bir şey yok.",
       "noThumbnail": "Küçük resim mevcut değil.",
-      "thumbnail": "[{{title}}]({{url}}) küçük resmi:"
+      "thumbnail": "[{{title}}]({{url}}) küçük resmi:",
+      "thumbTitle": "Albüm Resmi",
+      "highRes": "Yüksek Çözünürlük",
+      "noArtwork": "❌ Bu parça için kapak resmi bulunamadı.",
+      "expandHint": "Görseli büyütmek için tıklayın"
     },
     "volume": {
       "current": "🔊 Mevcut ses seviyesi: `{{volume}}%`",
@@ -856,7 +876,9 @@
       "exceedsDuration": "❌ Konum parça süresini aşıyor (**{{duration}}**).",
       "seeked": "⏩ **{{position}}** konumuna gidildi",
       "notSupported": "❌ Mevcut ses düğümü konuma gitmeyi desteklemiyor.",
-      "failed": "❌ Konuma gitme başarısız: {{error}}"
+      "failed": "❌ Konuma gitme başarısız: {{error}}",
+      "seekTitle": "Konuma Atlandı",
+      "seekSubtitle": "{{position}} / {{duration}}"
     },
     "autoplay": {
       "enabled": "🔁 Otomatik çalma **etkin** — kuyruk bittiğinde benzer parçalar otomatik olarak eklenecek.",
@@ -904,19 +926,30 @@
     "bassboost": {
       "disabled": "🔇 Bas güçlendirme devre dışı bırakıldı — orijinal ses dengesi geri yüklendi.",
       "applied": "🔊 **Bas Güçlendirme ({{level}})** uygulandı! Gerçek zamanlı ekolayzer aktif.",
-      "failed": "❌ Bas güçlendirme uygulanamadı: {{reason}}"
+      "failed": "❌ Bas güçlendirme uygulanamadı: {{reason}}",
+      "eqTitle": "Ekolayzır Önayarı Uygulandı",
+      "subBass": "Alt Bas",
+      "midBass": "Orta Bas",
+      "high": "Tiz",
+      "resetHint": "Sıfırlamak için: {{prefix}}bassboost off"
     },
     "speed": {
       "reset": "⏩ Oynatma hızı normal **1.0×** seviyesine sıfırlandı.",
       "current": "⏩ Mevcut oynatma hızı: **{{speed}}×**.\nHızı değiştirmek için `{{prefix}}speed <0.5-2.0>` kullanın.",
       "set": "{{emoji}} Oynatma hızı **{{speed}}×** olarak ayarlandı.",
-      "failed": "❌ Hız ayarlanamadı: {{reason}}"
+      "failed": "❌ Hız ayarlanamadı: {{reason}}",
+      "speedTitle": "Oynatma Hızı Ayarlandı",
+      "speedMultiplier": "{{speed}}× Çarpanı",
+      "resetHint": "Sıfırlamak için: {{prefix}}speed"
     },
     "pitch": {
       "reset": "🎵 Ses perdesi normal **1.0×** seviyesine sıfırlandı.",
       "current": "🎵 Mevcut ses perdesi: **{{pitch}}×**.\nPerdeyi değiştirmek için `{{prefix}}pitch <0.5-2.0>` kullanın.",
       "set": "🎵 Ses perdesi **{{pitch}}×** olarak ayarlandı.",
-      "failed": "❌ Ses perdesi ayarlanamadı: {{reason}}"
+      "failed": "❌ Ses perdesi ayarlanamadı: {{reason}}",
+      "pitchTitle": "Ses Tonu Ayarlandı",
+      "pitchMultiplier": "{{pitch}}× Ton Kaydırma",
+      "resetHint": "Sıfırlamak için: {{prefix}}pitch"
     },
     "gateway": {
       "missingPermsFallback": "⚠️ Düzgün çalışmak için ihtiyacım olan izinler eksik! Eksik: **{{perms}}**. Lütfen bir sunucu yöneticisinden bu izinleri Sunucu Ayarları → Roller'den vermesini isteyin."

@@ -284,7 +284,10 @@
       "pickerClosed": "👋 Seletor de filtros fechado.",
       "footer": "Página {{page}}/{{total}} • Reaja com o emoji de um filtro para alternar",
       "activeLabel": "**← ativo**",
-      "closeHint": "❌ Fechar"
+      "closeHint": "❌ Fechar",
+      "activePrefix": "Ativo:",
+      "realtimeDsp": "DSP em Tempo Real",
+      "navHint": "Reaja com emoji para alternar • ❌ para fechar"
     },
     "forceleave": {
       "channelNotFound": "❌ Canal não encontrado.",
@@ -308,7 +311,10 @@
       "autoLeaveInactive": "Sai do canal <#{{channel}}> por inatividade.",
       "autoLeaveInactive247": "Sai do canal <#{{channel}}> por inatividade.\nSe quiser que eu permaneça no canal de voz, use `{{prefix}}247 on/auto`\nUse `{{prefix}}247` para ver e gerenciar todos os canais salvos.",
       "joinFailedPerms": "❌ Não tenho permissão para entrar em <#{{channel}}>. Por favor, verifique se tenho a permissão de **Conectar**.",
-      "voiceChannelUnknown": "canal de voz desconhecido"
+      "voiceChannelUnknown": "canal de voz desconhecido",
+      "sessionStartedTitle": "Sessão de Voz Conectada",
+      "joinedChannel": "Conectado a {{channel}}",
+      "connectedBadge": "Conectado"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Por favor, entre em um canal de voz primeiro ou especifique um: `{{prefix}}leave <#channel>`",
@@ -321,7 +327,12 @@
       "left": "✅ Sai com sucesso",
       "leftRejoin247": "✅ Sai com sucesso — reentrando em <#{{channel}}> em alguns segundos.\nPara desativar o modo 24/7 permanentemente, use `{{prefix}}247 off`.",
       "left247On": "✅ Sai com sucesso.\nO modo 24/7 está **ativo** — o bot não voltará automaticamente. Use `{{prefix}}play` para trazê-lo de volta ou `{{prefix}}247 off` para desativar completamente.\nUse `{{prefix}}247` para ver todos os canais salvos.",
-      "autoRejoinHint": "⚠️ O modo 24/7 está ativado (auto) — vou reentrar em <#{{channel}}> em alguns segundos.\nPara me remover permanentemente, desative o modo 24/7 primeiro: `{{prefix}}247 off`"
+      "autoRejoinHint": "⚠️ O modo 24/7 está ativado (auto) — vou reentrar em <#{{channel}}> em alguns segundos.\nPara me remover permanentemente, desative o modo 24/7 primeiro: `{{prefix}}247 off`",
+      "sessionEndedTitle": "Sessão de Voz Encerrada",
+      "leftChannel": "Saiu de {{channel}}",
+      "disconnectedBadge": "Desconectado",
+      "queueCleared": "Fila limpa",
+      "rejoinHint": "Entre a qualquer momento com {{prefix}}join ou {{prefix}}play"
     },
     "list": {
       "empty": "📭 A fila está vazia. Use `{{prefix}}play` para adicionar músicas!",
@@ -393,7 +404,12 @@
       "measuring": "🏓  Medindo o ping...",
       "roundtrip": "📶  **Latência**",
       "gateway": "🌐  **Gateway**",
-      "node": "🎧  **NodeLink**"
+      "node": "🎧  **NodeLink**",
+      "pingDashboard": "Saúde da Rede e do Nó de Áudio",
+      "operational": "Operacional",
+      "restApi": "API REST",
+      "gatewayWs": "WebSocket da Gateway",
+      "audioNode": "Nó de Áudio"
     },
     "play": {
       "searching": "🔍 Buscando...",
@@ -721,7 +737,11 @@
     "thumbnail": {
       "nothingPlaying": "Não está tocando nada no momento.",
       "noThumbnail": "Nenhuma thumbnail disponível.",
-      "thumbnail": "Thumbnail de [{{title}}]({{url}}):"
+      "thumbnail": "Thumbnail de [{{title}}]({{url}}):",
+      "thumbTitle": "Capa do Álbum",
+      "highRes": "Alta Resolução",
+      "noArtwork": "❌ Nenhuma capa disponível para esta faixa.",
+      "expandHint": "Clique na imagem para expandir"
     },
     "volume": {
       "current": "🔊 Volume atual: `{{volume}}%`",
@@ -896,7 +916,9 @@
       "exceedsDuration": "❌ Posição de busca excede a duração da faixa (**{{duration}}**).",
       "seeked": "⏩ Pulou para **{{position}}**",
       "notSupported": "❌ Busca não é suportada pelo nó de áudio atual.",
-      "failed": "❌ Falha ao buscar: {{error}}"
+      "failed": "❌ Falha ao buscar: {{error}}",
+      "seekTitle": "Posição Alterada",
+      "seekSubtitle": "{{position}} / {{duration}}"
     },
     "autoplay": {
       "enabled": "🔁 Autoplay **ativado** — faixas similares serão adicionadas automaticamente quando a fila terminar.",
@@ -944,19 +966,30 @@
     "bassboost": {
       "disabled": "🔇 Reforço de graves desativado — equilíbrio de áudio original restaurado.",
       "applied": "🔊 **Reforço de Graves ({{level}})** aplicado! Equalizador em tempo real ativo.",
-      "failed": "❌ Falha ao aplicar reforço de graves: {{reason}}"
+      "failed": "❌ Falha ao aplicar reforço de graves: {{reason}}",
+      "eqTitle": "Predefinição de Equalizador Aplicada",
+      "subBass": "Sub-Grave",
+      "midBass": "Grave-Médio",
+      "high": "Agudo",
+      "resetHint": "Redefina a qualquer momento com {{prefix}}bassboost off"
     },
     "speed": {
       "reset": "⏩ Velocidade de reprodução redefinida para **1.0×** normal.",
       "current": "⏩ Velocidade de reprodução atual: **{{speed}}×**.\nUse `{{prefix}}speed <0.5-2.0>` para alterar a velocidade.",
       "set": "{{emoji}} Velocidade de reprodução definida para **{{speed}}×**.",
-      "failed": "❌ Falha ao ajustar velocidade: {{reason}}"
+      "failed": "❌ Falha ao ajustar velocidade: {{reason}}",
+      "speedTitle": "Velocidade de Reprodução Ajustada",
+      "speedMultiplier": "Multiplicador de {{speed}}×",
+      "resetHint": "Redefina a qualquer momento com {{prefix}}speed"
     },
     "pitch": {
       "reset": "🎵 Tom de áudio redefinido para **1.0×** normal.",
       "current": "🎵 Tom de áudio atual: **{{pitch}}×**.\nUse `{{prefix}}pitch <0.5-2.0>` para alterar o tom.",
       "set": "🎵 Tom de áudio definido para **{{pitch}}×**.",
-      "failed": "❌ Falha ao ajustar tom: {{reason}}"
+      "failed": "❌ Falha ao ajustar tom: {{reason}}",
+      "pitchTitle": "Tom de Áudio Ajustado",
+      "pitchMultiplier": "Mudança de Tom de {{pitch}}×",
+      "resetHint": "Redefina a qualquer momento com {{prefix}}pitch"
     }
   }
 }

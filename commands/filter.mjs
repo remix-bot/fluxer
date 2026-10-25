@@ -260,7 +260,7 @@ function buildPageEmbed(t, msg, page, activeKeys, current) {
   const lines = pageItems.map(f => {
     const isActive = activeSet.has(f.key);
     const active = isActive ? " " + t(msg, "responses.filter.activeLabel") : "";
-    return `${f.emoji} **${f.label}**${active} — *${f.desc}*`;
+    return `${f.emoji} **${f.label}**${active}\n   *${f.desc}*`;
   });
 
   const navHint = totalPages > 1
@@ -273,21 +273,26 @@ function buildPageEmbed(t, msg, page, activeKeys, current) {
       const f = FILTERS.find(f => f.key === k);
       return f ? `${f.emoji} ${f.label}` : k;
     });
-    activeSummary = `\n🔥 Active: ${activeLabels.join(" + ")}\n`;
+    activeSummary = `\n🟢 **${t(msg, "responses.filter.activePrefix") || "Active:"}** ${activeLabels.join(" + ")}\n`;
   }
 
-  return new EmbedBuilder()
-      .setColor(getGlobalColor())
-      .setAuthor({ name: t(msg, "responses.filter.pickerTitle") })
+  const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setAuthor({ name: `🎛️ ${t(msg, "responses.filter.pickerTitle")}` })
       .setDescription(
           `${trackLine}\n${activeSummary}\n` +
-          lines.join("\n") +
+          lines.join("\n\n") +
           navHint
       )
       .setFooter({
-        text: t(msg, "responses.filter.footer", { page: page + 1, total: totalPages })
-      })
-      ;
+        text: `${t(msg, "responses.filter.footer", { page: page + 1, total: totalPages })} • ${t(msg, "responses.filter.realtimeDsp") || "Real-time DSP"}`
+      });
+
+  if (current?.thumbnail) {
+    embed.setThumbnail(current.thumbnail);
+  }
+
+  return embed;
 }
 
 /**

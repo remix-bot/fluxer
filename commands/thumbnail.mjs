@@ -5,7 +5,7 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/ui/index.mjs";
+import { Utils } from "../src/utils/Utils.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the thumbnail command. */
 export const command = new CommandBuilder()
@@ -24,12 +24,38 @@ export const command = new CommandBuilder()
 export async function run(msg) {
   const p = await this.getPlayer(msg);
   if (!p) return;
-  const data = await p.getThumbnail();
+
+  const current = p.queue?.getCurrent();
+  if (!current) {
+    const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setDescription(this.t(msg, "responses._common.nothingPlaying"));
+    return msg.reply({ embeds: [embed] }).catch(() => {});
+  }
+
+  if (!current.thumbnail) {
+    const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setDescription(this.t(msg, "responses.thumbnail.noArtwork"));
+    return msg.reply({ embeds: [embed] }).catch(() => {});
+  }
+
+  const trackUrl = current.spotifyUrl || current.url || null;
+  const rawAuthor = current.artist || (typeof current.author === "object" ? current.author?.name : current.author);
+  const titleDisplay = Utils.truncate(current.title || this.t(msg, "responses.play.unknownTrack"), 50);
+
+  let desc = trackUrl ? `**[${titleDisplay}](${trackUrl})**` : `**${titleDisplay}**`;
+  if (rawAuthor) {
+    desc += `\n${this.t(msg, "responses.play.byAuthor", { author: rawAuthor })}`;
+  }
 
   const embed = new EmbedBuilder()
-    .setColor(getGlobalColor())
-    .setDescription(data.msg);
-  if (data.image) embed.setImage(data.image);
+    .setColor(0xe9196c)
+    .setAuthor({ name: `🖼️ ${this.t(msg, "responses.thumbnail.thumbTitle")}` })
+    .setTitle(this.t(msg, "responses.thumbnail.highRes"))
+    .setDescription(desc)
+    .setImage(current.thumbnail)
+    .setFooter({ text: this.t(msg, "responses.thumbnail.expandHint") });
 
   msg.reply({ embeds: [embed] }).catch(() => {});
 }

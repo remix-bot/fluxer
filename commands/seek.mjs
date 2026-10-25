@@ -5,9 +5,7 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/ui/index.mjs";
 import { Utils } from "../src/utils/Utils.mjs";
-import { ERROR_COLOR } from "../src/utils/UI.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the seek command. */
 export const command = new CommandBuilder()
@@ -35,42 +33,67 @@ export async function run(msg, data) {
   if (!p) return;
 
   if (!p.queue?.getCurrent()) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.seek.nothingPlaying"))] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.nothingPlaying"))] });
   }
 
   if (p._paused) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.seek.paused"))] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.paused"))] });
   }
 
   const current = p.queue.getCurrent();
 
   if (current?.type === "radio" || current?.isLive || p._getTrackDurationMs(current) === 0) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.seek.live"))] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.live"))] });
   }
 
   const trimmed = String(positionInput ?? "").trim();
   const isZero = /^0+(:0+)?(:0+)?$/.test(trimmed);
   const seekMs = isZero ? 0 : Utils.parseDuration(trimmed);
   if (seekMs === null || isNaN(seekMs) || seekMs < 0 || (!isZero && seekMs === 0)) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.seek.invalidFormat"))] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.invalidFormat"))] });
   }
 
   const trackDuration = p._getTrackDurationMs(p.queue.getCurrent());
 
   if (trackDuration > 0 && seekMs >= trackDuration) {
     const maxStr = Utils.prettifyMS(trackDuration);
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.seek.exceedsDuration", { duration: maxStr }))] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.exceedsDuration", { duration: maxStr }))] });
   }
 
   try {
     const result = await p.seekToPosition(seekMs);
     if (result) {
       const seekStr = Utils.prettifyMS(seekMs);
-      return msg.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.seek.seeked", { position: seekStr }))] });
+      const totalStr = Utils.prettifyMS(trackDuration);
+      const trackUrl = current.spotifyUrl || current.url || null;
+      const rawAuthor = current.artist || (typeof current.author === "object" ? current.author?.name : current.author);
+      const progressBar = Utils.progressBar(seekMs, trackDuration, 18, "▬", "▬", "🔘");
+
+      let desc = trackUrl
+        ? `**[${Utils.truncate(current.title || this.t(msg, "responses.play.unknownTrack"), 50)}](${trackUrl})**`
+        : `**${Utils.truncate(current.title || this.t(msg, "responses.play.unknownTrack"), 50)}**`;
+
+      if (rawAuthor) {
+        desc += `\n${this.t(msg, "responses.play.byAuthor", { author: rawAuthor })}`;
+      }
+      desc += `\n\n` + "`" + progressBar + "`";
+
+      const embed = new EmbedBuilder()
+        .setColor(0xe9196c)
+        .setAuthor({ name: `⏩ ${this.t(msg, "responses.seek.seekTitle")}` })
+        .setTitle(this.t(msg, "responses.seek.seekSubtitle", { position: seekStr, duration: totalStr }))
+        .setDescription(desc)
+        .setFooter({ text: this.t(msg, "responses.seek.seeked", { position: seekStr }) });
+
+      if (current.thumbnail) {
+        embed.setThumbnail(current.thumbnail);
+      }
+
+      return msg.reply({ embeds: [embed] });
     } else {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.seek.notSupported"))] });
+      return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.notSupported"))] });
     }
   } catch (err) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription(this.t(msg, "responses.seek.failed", { error: err.message }))] });
+    return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.failed", { error: err.message }))] });
   }
 }

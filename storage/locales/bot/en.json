@@ -284,7 +284,10 @@
       "pickerClosed": "👋 Filter picker closed.",
       "footer": "Page {{page}}/{{total}} • React with a filter emoji to toggle it",
       "activeLabel": "**← active**",
-      "closeHint": "❌ Close"
+      "closeHint": "❌ Close",
+      "activePrefix": "Active:",
+      "realtimeDsp": "Real-time DSP",
+      "navHint": "React with emoji to toggle • ❌ to close"
     },
     "forceleave": {
       "channelNotFound": "❌ Channel not found.",
@@ -311,7 +314,10 @@
       "autoLeaveInactive": "Left channel <#{{channel}}> because of inactivity.",
       "autoLeaveInactive247": "Left channel <#{{channel}}> because of inactivity.\nIf you want me to stay in voice, use `{{prefix}}247 on` or `{{prefix}}247 auto`\nUse `{{prefix}}247` to view and manage all saved channels.",
       "joinFailedPerms": "❌ I don't have permission to join <#{{channel}}>. Please check that I have the **Connect** permission.",
-      "voiceChannelUnknown": "unknown voice channel"
+      "voiceChannelUnknown": "unknown voice channel",
+      "sessionStartedTitle": "Voice Session Connected",
+      "joinedChannel": "Connected to {{channel}}",
+      "connectedBadge": "Connected"
     },
     "leave": {
       "noVoiceChannel": "⚠️ I can't find you in a voice channel. Please join one, or if you're already in one, make sure I have **View Channel** and **Connect** permissions. You can also specify a channel: `{{prefix}}leave <#channel>`",
@@ -324,7 +330,12 @@
       "left": "✅ Successfully Left",
       "leftRejoin247": "✅ Successfully Left — rejoining <#{{channel}}> in a few seconds.\nTo disable 24/7 mode permanently, use `{{prefix}}247 off`.",
       "left247On": "✅ Successfully Left.\n24/7 mode is **on** — bot won't rejoin automatically. Use `{{prefix}}play` to bring it back, or `{{prefix}}247 off` to fully disable.\nUse `{{prefix}}247` to view all saved channels.",
-      "autoRejoinHint": "⚠️ 24/7 mode is enabled (auto) — I'll rejoin <#{{channel}}> in a few seconds.\nTo permanently remove me, disable 24/7 mode first: `{{prefix}}247 off`"
+      "autoRejoinHint": "⚠️ 24/7 mode is enabled (auto) — I'll rejoin <#{{channel}}> in a few seconds.\nTo permanently remove me, disable 24/7 mode first: `{{prefix}}247 off`",
+      "sessionEndedTitle": "Voice Session Ended",
+      "leftChannel": "Left {{channel}}",
+      "disconnectedBadge": "Disconnected",
+      "queueCleared": "Queue cleared",
+      "rejoinHint": "Join anytime with {{prefix}}join or {{prefix}}play"
     },
     "lastfm": {
       "notConfigured": "❌ Last.fm integration is not configured on this bot. Ask the bot owner to add a Last.fm API key to the config.",
@@ -510,7 +521,12 @@
       "measuring": "🏓  Pinging...",
       "roundtrip": "📶  **Roundtrip**",
       "gateway": "🌐  **Gateway**",
-      "node": "🎧  **NodeLink**"
+      "node": "🎧  **NodeLink**",
+      "pingDashboard": "Network & Node Health",
+      "operational": "Operational",
+      "restApi": "REST API",
+      "gatewayWs": "Gateway WebSocket",
+      "audioNode": "Audio Node"
     },
     "play": {
       "searching": "🔍 Searching...",
@@ -838,7 +854,11 @@
     "thumbnail": {
       "nothingPlaying": "There's nothing playing at the moment.",
       "noThumbnail": "No thumbnail available.",
-      "thumbnail": "Thumbnail of [{{title}}]({{url}}):"
+      "thumbnail": "Thumbnail of [{{title}}]({{url}}):",
+      "thumbTitle": "Album Artwork",
+      "highRes": "High Resolution",
+      "noArtwork": "❌ No thumbnail available for this track.",
+      "expandHint": "Click image to expand"
     },
     "volume": {
       "current": "🔊 Current volume: `{{volume}}%`",
@@ -896,7 +916,9 @@
       "exceedsDuration": "❌ Seek position exceeds track duration (**{{duration}}**).",
       "seeked": "⏩ Seeked to **{{position}}**",
       "notSupported": "❌ Seeking is not supported by the current audio node.",
-      "failed": "❌ Failed to seek: {{error}}"
+      "failed": "❌ Failed to seek: {{error}}",
+      "seekTitle": "Position Jumped",
+      "seekSubtitle": "{{position}} / {{duration}}"
     },
     "autoplay": {
       "enabled": "🔁 Autoplay **enabled** — similar tracks will be added automatically when the queue ends.",
@@ -944,19 +966,30 @@
     "bassboost": {
       "disabled": "🔇 Bass boost disabled — restored original audio balance.",
       "applied": "🔊 Applied **Bass Boost ({{level}})**! Real-time equalizer active.",
-      "failed": "❌ Failed to apply bass boost: {{reason}}"
+      "failed": "❌ Failed to apply bass boost: {{reason}}",
+      "eqTitle": "Equalizer Preset Applied",
+      "subBass": "Sub-Bass",
+      "midBass": "Mid-Bass",
+      "high": "High",
+      "resetHint": "Reset anytime with {{prefix}}bassboost off"
     },
     "speed": {
       "reset": "⏩ Playback speed reset to normal **1.0×**.",
       "current": "⏩ Current playback speed: **{{speed}}×**.\nUse `{{prefix}}speed <0.5-2.0>` to change playback speed.",
       "set": "{{emoji}} Playback speed set to **{{speed}}×**.",
-      "failed": "❌ Failed to adjust speed: {{reason}}"
+      "failed": "❌ Failed to adjust speed: {{reason}}",
+      "speedTitle": "Playback Speed Adjusted",
+      "speedMultiplier": "{{speed}}× Multiplier",
+      "resetHint": "Reset anytime with {{prefix}}speed"
     },
     "pitch": {
       "reset": "🎵 Audio pitch reset to normal **1.0×**.",
       "current": "🎵 Current audio pitch: **{{pitch}}×**.\nUse `{{prefix}}pitch <0.5-2.0>` to change pitch.",
       "set": "🎵 Audio pitch set to **{{pitch}}×**.",
-      "failed": "❌ Failed to adjust pitch: {{reason}}"
+      "failed": "❌ Failed to adjust pitch: {{reason}}",
+      "pitchTitle": "Audio Pitch Adjusted",
+      "pitchMultiplier": "{{pitch}}× Pitch Shift",
+      "resetHint": "Reset anytime with {{prefix}}pitch"
     }
   }
 }

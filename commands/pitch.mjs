@@ -5,7 +5,6 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/ui/index.mjs";
 import { Utils } from "../src/utils/Utils.mjs";
 
 /**
@@ -14,14 +13,14 @@ import { Utils } from "../src/utils/Utils.mjs";
  */
 export const command = new CommandBuilder()
     .setName("pitch")
-    .setDescription("Adjust the audio pitch of the current track (0.5× to 2.0×).", "commands.pitch")
+    .setDescription("Adjust the pitch of the current track (0.5× to 2.0×).", "commands.pitch")
     .setCategory("music")
     .addNumberOption(o =>
-        o.setName("pitch")
-            .setDescription("Audio pitch multiplier between 0.5 and 2.0 (e.g. 1.25). Omit to reset to 1.0×.", "options.pitch.pitch")
+        o.setName("multiplier")
+            .setDescription("Pitch multiplier between 0.5 and 2.0 (e.g. 1.25). Omit to reset to 1.0×.", "options.pitch.multiplier")
             .setRequired(false)
     )
-    .addAliases("semitone", "tune");
+    .addAliases("key");
 
 /**
  * Run handler for the pitch command.
@@ -34,8 +33,10 @@ export async function run(message, data) {
   const p = await this.getPlayer(message, false, false, false);
   if (!p) return;
 
-  const rawPitch = data.get("pitch")?.value;
-  const embed = new EmbedBuilder().setColor(getGlobalColor());
+  const current = p.queue?.getCurrent();
+  const rawPitch = data.get("multiplier")?.value;
+  const prefix = this.handler?.getPrefix?.(message.message?.guildId ?? message.guild?.id) ?? "%";
+  const embed = new EmbedBuilder().setColor(0xe9196c);
 
   if (rawPitch === null || rawPitch === undefined || isNaN(Number(rawPitch))) {
     const currentTimescale = p.activeFilterPayload?.timescale;
@@ -44,10 +45,15 @@ export async function run(message, data) {
       const existingPayload = { ...(p.activeFilterPayload || {}) };
       delete existingPayload.timescale;
       await p.applyFilter(existingPayload, Object.keys(existingPayload).length > 0 ? p.activeFilter : null);
-      embed.setDescription(this.t(message, "responses.pitch.reset"));
+      embed.setAuthor({ name: `🎵 ${this.t(message, "responses.pitch.pitchTitle")}` })
+        .setTitle("1.0× Normal")
+        .setDescription(this.t(message, "responses.pitch.reset"))
+        .setFooter({ text: this.t(message, "responses.pitch.resetHint", { prefix }) });
     } else {
-      const prefix = this.handler?.getPrefix?.(message.message?.guildId ?? message.guild?.id) ?? "%";
-      embed.setDescription(this.t(message, "responses.pitch.current", { pitch: "1.0", prefix }));
+      embed.setAuthor({ name: `🎵 ${this.t(message, "responses.pitch.pitchTitle")}` })
+        .setTitle("1.0× Normal")
+        .setDescription(this.t(message, "responses.pitch.current", { pitch: "1.0", prefix }))
+        .setFooter({ text: this.t(message, "responses.pitch.resetHint", { prefix }) });
     }
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
@@ -79,6 +85,19 @@ export async function run(message, data) {
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
 
-  embed.setDescription(this.t(message, "responses.pitch.set", { pitch }));
+  let desc = this.t(message, "responses.pitch.set", { pitch });
+  if (current?.title) {
+    const rawAuthor = current.artist || (typeof current.author === "object" ? current.author?.name : current.author);
+    const authorStr = rawAuthor ? ` • ${rawAuthor}` : "";
+    desc += `\n**${Utils.truncate(current.title, 45)}**${authorStr}`;
+  }
+
+  embed.setAuthor({ name: `🎵 ${this.t(message, "responses.pitch.pitchTitle")}` })
+    .setTitle(this.t(message, "responses.pitch.pitchMultiplier", { pitch }))
+    .setDescription(desc)
+    .setFooter({ text: this.t(message, "responses.pitch.resetHint", { prefix }) });
+
+  if (current?.thumbnail) embed.setThumbnail(current.thumbnail);
+
   message.reply({ embeds: [embed] }).catch(() => {});
 }

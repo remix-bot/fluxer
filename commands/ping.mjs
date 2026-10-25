@@ -5,7 +5,6 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/ui/index.mjs";
 
 /**
  * @type {CommandBuilder}
@@ -68,7 +67,7 @@ export async function run(message) {
   const t = (...a) => this.t(message, ...a);
 
   const waitingEmbed = new EmbedBuilder()
-      .setColor(getGlobalColor())
+      .setColor(0xe9196c)
       .setDescription(t("responses.ping.measuring"));
 
   const t0 = Date.now();
@@ -76,29 +75,34 @@ export async function run(message) {
   try {
     sent = await message.reply({ embeds: [waitingEmbed] });
   } catch (e) {
-    return; // couldn't even send the placeholder — nothing to edit
+    return;
   }
   const roundtrip = Date.now() - t0;
 
-  const lines = [
-    `${t("responses.ping.roundtrip")} — \`${roundtrip}ms\``,
-  ];
-
   const gateway = readGatewayPing(this.client);
-  if (gateway >= 0) lines.push(`${t("responses.ping.gateway")} — \`${gateway}ms\``);
-
   const node = readNodePing(this.lavalink);
+
+  const restLabel = t("responses.ping.restApi") || "REST API";
+  const gatewayLabel = t("responses.ping.gatewayWs") || "Gateway WebSocket";
+  const nodeLabel = t("responses.ping.audioNode") || "Audio Node";
+
+  const lines = [
+    `⚡ **${restLabel}** — \`${roundtrip}ms\``,
+  ];
+  if (gateway >= 0) lines.push(`🌐 **${gatewayLabel}** — \`${gateway}ms\``);
   if (node) {
-    lines.push(`${t("responses.ping.node")} — \`${node.ping !== null ? node.ping + "ms" : "connected"}\``);
+    lines.push(`🎵 **${nodeLabel}** — \`${node.ping !== null ? node.ping + "ms" : "connected"}\``);
   }
 
   const embed = new EmbedBuilder()
-      .setColor(getGlobalColor())
+      .setColor(0xe9196c)
       .setAuthor({
-        name: t("responses.ping.title"),
+        name: `🏓 ${t("responses.ping.pingDashboard") || t("responses.ping.title")}`,
         iconURL: this.client?.user?.displayAvatarURL?.() || null,
       })
-      .setDescription(lines.join("\n"));
+      .setTitle(`🟢 ${t("responses.ping.operational") || "Operational"}`)
+      .setDescription(lines.join("\n\n"))
+      .setFooter({ text: `Shard #${this.client?.shardId ?? 0} • NodeLink DSP` });
 
   sent.edit({ embeds: [embed] }).catch(() => {});
 }

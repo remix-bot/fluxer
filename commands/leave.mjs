@@ -155,8 +155,23 @@ export async function run(msg, data) {
     }, rejoinDelay);
   }
 
+  const prefix = this.handler.getPrefix(cleanGuildId) || "%";
+  const chObj = client?.channels?.get?.(activeChannelId);
+  const channelName = chObj?.name ? `#${chObj.name}` : `<#${activeChannelId}>`;
+
   const label247 = was247
-      ? " (rejoining in " + Math.round(rejoinDelay / 1000) + "s — 24/7 is still saved. Use `" + this.handler.getPrefix(cleanGuildId) + "247` to disable it.)"
+      ? "\n\n⏱️ " + "*(rejoining in " + Math.round(rejoinDelay / 1000) + "s — 24/7 is still saved. Use `" + prefix + "247` to disable it.)*"
       : "";
-  msg.reply(this.t(msg, "responses.leave.left") + label247);
+
+  const embed = new EmbedBuilder()
+    .setColor(0xe9196c)
+    .setAuthor({ name: `👋 ${this.t(msg, "responses.leave.sessionEndedTitle")}` })
+    .setTitle(this.t(msg, "responses.leave.disconnectedBadge"))
+    .setDescription(
+      `🔊 **${this.t(msg, "responses.leave.leftChannel", { channel: channelName })}**\n` +
+      `🗑️ ${this.t(msg, "responses.leave.queueCleared")}` + label247
+    )
+    .setFooter({ text: this.t(msg, "responses.leave.rejoinHint", { prefix }) });
+
+  msg.reply({ embeds: [embed] }).catch(() => {});
 }

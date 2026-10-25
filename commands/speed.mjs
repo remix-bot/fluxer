@@ -5,7 +5,6 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/ui/index.mjs";
 import { Utils } from "../src/utils/Utils.mjs";
 
 /**
@@ -34,29 +33,33 @@ export async function run(message, data) {
   const p = await this.getPlayer(message, false, false, false);
   if (!p) return;
 
+  const current = p.queue?.getCurrent();
   const rawRate = data.get("rate")?.value;
-  const embed = new EmbedBuilder().setColor(getGlobalColor());
+  const prefix = this.handler?.getPrefix?.(message.message?.guildId ?? message.guild?.id) ?? "%";
+  const embed = new EmbedBuilder().setColor(0xe9196c);
 
   if (rawRate === null || rawRate === undefined || isNaN(Number(rawRate))) {
-    // Reset to 1.0 or show current speed
     const currentTimescale = p.activeFilterPayload?.timescale;
     const currentSpeed = currentTimescale?.speed ?? 1.0;
     if (currentSpeed !== 1.0) {
-      // Reset
       const existingPayload = { ...(p.activeFilterPayload || {}) };
       delete existingPayload.timescale;
       await p.applyFilter(existingPayload, Object.keys(existingPayload).length > 0 ? p.activeFilter : null);
-      embed.setDescription(this.t(message, "responses.speed.reset"));
+      embed.setAuthor({ name: `⏩ ${this.t(message, "responses.speed.speedTitle")}` })
+        .setTitle("1.0× Normal")
+        .setDescription(this.t(message, "responses.speed.reset"))
+        .setFooter({ text: this.t(message, "responses.speed.resetHint", { prefix }) });
     } else {
-      const prefix = this.handler?.getPrefix?.(message.message?.guildId ?? message.guild?.id) ?? "%";
-      embed.setDescription(this.t(message, "responses.speed.current", { speed: "1.0", prefix }));
+      embed.setAuthor({ name: `⏩ ${this.t(message, "responses.speed.speedTitle")}` })
+        .setTitle("1.0× Normal")
+        .setDescription(this.t(message, "responses.speed.current", { speed: "1.0", prefix }))
+        .setFooter({ text: this.t(message, "responses.speed.resetHint", { prefix }) });
     }
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
 
   const speed = Utils.clamp(Number(rawRate), 0.5, 2.0);
 
-  // Preserve other active filters if present, update only timescale speed
   const existingTimescale = p.activeFilterPayload?.timescale || {};
   const newTimescale = {
     ...existingTimescale,
@@ -73,7 +76,7 @@ export async function run(message, data) {
   const filterMeta = {
     key: `speed_${speed}`,
     label: `${speed}× Speed`,
-    emoji: speed > 1 ? "⏩" : "🐢",
+    emoji: speed > 1 ? "⚡" : "🐢",
   };
 
   const res = await p.applyFilter(payload, filterMeta);
@@ -82,6 +85,19 @@ export async function run(message, data) {
     return message.reply({ embeds: [embed] }).catch(() => {});
   }
 
-  embed.setDescription(this.t(message, "responses.speed.set", { emoji: speed > 1 ? "⏩" : "🐢", speed }));
+  let desc = this.t(message, "responses.speed.applied", { speed });
+  if (current?.title) {
+    const rawAuthor = current.artist || (typeof current.author === "object" ? current.author?.name : current.author);
+    const authorStr = rawAuthor ? ` • ${rawAuthor}` : "";
+    desc += `\n**${Utils.truncate(current.title, 45)}**${authorStr}`;
+  }
+
+  embed.setAuthor({ name: `⏩ ${this.t(message, "responses.speed.speedTitle")}` })
+    .setTitle(this.t(message, "responses.speed.speedMultiplier", { speed }))
+    .setDescription(desc)
+    .setFooter({ text: this.t(message, "responses.speed.resetHint", { prefix }) });
+
+  if (current?.thumbnail) embed.setThumbnail(current.thumbnail);
+
   message.reply({ embeds: [embed] }).catch(() => {});
 }

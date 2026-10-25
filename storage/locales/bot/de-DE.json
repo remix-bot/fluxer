@@ -284,7 +284,10 @@
       "pickerClosed": "👋 Filter-Picker geschlossen.",
       "footer": "Seite {{page}}/{{total}} • Reagiere mit einem Filter-Emoji zum Umschalten",
       "activeLabel": "**← aktiv**",
-      "closeHint": "❌ Schließen"
+      "closeHint": "❌ Schließen",
+      "activePrefix": "Aktiv:",
+      "realtimeDsp": "Echtzeit-DSP",
+      "navHint": "Mit Emoji reagieren zum Umschalten • ❌ zum Schließen"
     },
     "forceleave": {
       "channelNotFound": "❌ Kanal nicht gefunden.",
@@ -308,7 +311,10 @@
       "autoLeaveInactive": "Kanal <#{{channel}}> wegen Inaktivität verlassen.",
       "autoLeaveInactive247": "Kanal <#{{channel}}> wegen Inaktivität verlassen.\nWenn ich im Sprachkanal bleiben soll, nutze `{{prefix}}247 on` oder `{{prefix}}247 auto`\n💡 Nutze `{{prefix}}247` um alle gespeicherten Kanäle zu sehen und zu verwalten.",
       "joinFailedPerms": "❌ Ich habe keine Berechtigung, <#{{channel}}> beizutreten. Bitte prüfe, ob ich die **Verbinden**-Berechtigung habe.",
-      "voiceChannelUnknown": "unbekannter Sprachkanal"
+      "voiceChannelUnknown": "unbekannter Sprachkanal",
+      "sessionStartedTitle": "Sprach-Sitzung Verbunden",
+      "joinedChannel": "Verbunden mit {{channel}}",
+      "connectedBadge": "Verbunden"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Bitte trete zuerst einem Sprachkanal bei oder gib einen an: `{{prefix}}leave <#channel>`",
@@ -321,7 +327,12 @@
       "left": "✅ Erfolgreich verlassen",
       "leftRejoin247": "✅ Erfolgreich verlassen — trete <#{{channel}}> in wenigen Sekunden wieder bei.\nUm den 24/7-Modus dauerhaft zu deaktivieren, nutze `{{prefix}}247 off`.",
       "left247On": "✅ Erfolgreich verlassen.\n24/7-Modus ist **aktiv** — Bot wird nicht automatisch wiederkommen. Nutze `{{prefix}}play`, um ihn zurückzuholen, oder `{{prefix}}247 off` zum vollständigen Deaktivieren.\nNutze `{{prefix}}247` um alle gespeicherten Kanäle zu sehen.",
-      "autoRejoinHint": "⚠️ 24/7-Modus ist aktiviert (auto) — trete <#{{channel}}> in wenigen Sekunden wieder bei.\nUm mich dauerhaft zu entfernen, deaktiviere zuerst den 24/7-Modus: `{{prefix}}247 off`"
+      "autoRejoinHint": "⚠️ 24/7-Modus ist aktiviert (auto) — trete <#{{channel}}> in wenigen Sekunden wieder bei.\nUm mich dauerhaft zu entfernen, deaktiviere zuerst den 24/7-Modus: `{{prefix}}247 off`",
+      "sessionEndedTitle": "Sprach-Sitzung Beendet",
+      "leftChannel": "{{channel}} verlassen",
+      "disconnectedBadge": "Getrennt",
+      "queueCleared": "Warteschlange geleert",
+      "rejoinHint": "Jederzeit beitreten mit {{prefix}}join oder {{prefix}}play"
     },
     "list": {
       "empty": "📭 Die Warteschlange ist leer. Nutze `{{prefix}}play`, um Songs hinzuzufügen!",
@@ -393,7 +404,12 @@
       "measuring": "🏓  Ping wird gemessen...",
       "roundtrip": "📶  **Latenz**",
       "gateway": "🌐  **Gateway**",
-      "node": "🎧  **NodeLink**"
+      "node": "🎧  **NodeLink**",
+      "pingDashboard": "Netzwerk- und Audio-Knoten-Status",
+      "operational": "Betriebsbereit",
+      "restApi": "REST-API",
+      "gatewayWs": "Gateway-WebSocket",
+      "audioNode": "Audio-Knoten"
     },
     "play": {
       "searching": "🔍 Suche...",
@@ -721,7 +737,11 @@
     "thumbnail": {
       "nothingPlaying": "Es wird gerade nichts abgespielt.",
       "noThumbnail": "Kein Thumbnail verfügbar.",
-      "thumbnail": "Thumbnail von [{{title}}]({{url}}):"
+      "thumbnail": "Thumbnail von [{{title}}]({{url}}):",
+      "thumbTitle": "Album-Cover",
+      "highRes": "Hohe Auflösung",
+      "noArtwork": "❌ Kein Cover für diesen Titel verfügbar.",
+      "expandHint": "Klicke auf das Bild zum Vergrößern"
     },
     "volume": {
       "current": "🔊 Aktuelle Lautstärke: `{{volume}}%`",
@@ -896,7 +916,9 @@
       "exceedsDuration": "❌ Sprungposition überschreitet Track-Dauer (**{{duration}}**).",
       "seeked": "⏩ Gesprungen zu **{{position}}**",
       "notSupported": "❌ Springen wird vom aktuellen Audio-Knoten nicht unterstützt.",
-      "failed": "❌ Springen fehlgeschlagen: {{error}}"
+      "failed": "❌ Springen fehlgeschlagen: {{error}}",
+      "seekTitle": "Position Angesteuert",
+      "seekSubtitle": "{{position}} / {{duration}}"
     },
     "autoplay": {
       "enabled": "🔁 Autoplay **aktiviert** — ähnliche Tracks werden automatisch hinzugefügt, wenn die Warteschlange endet.",
@@ -944,19 +966,30 @@
     "bassboost": {
       "disabled": "🔇 Bass-Boost deaktiviert — ursprüngliche Audiobalance wiederhergestellt.",
       "applied": "🔊 **Bass-Boost ({{level}})** angewendet! Echtzeit-Equalizer aktiv.",
-      "failed": "❌ Bass-Boost konnte nicht angewendet werden: {{reason}}"
+      "failed": "❌ Bass-Boost konnte nicht angewendet werden: {{reason}}",
+      "eqTitle": "Equalizer-Voreinstellung Angewendet",
+      "subBass": "Sub-Bass",
+      "midBass": "Mittel-Bass",
+      "high": "Höhen",
+      "resetHint": "Jederzeit zurücksetzen mit {{prefix}}bassboost off"
     },
     "speed": {
       "reset": "⏩ Wiedergabegeschwindigkeit auf normale **1.0×** zurückgesetzt.",
       "current": "⏩ Aktuelle Wiedergabegeschwindigkeit: **{{speed}}×**.\nVerwende `{{prefix}}speed <0.5-2.0>`, um die Geschwindigkeit zu ändern.",
       "set": "{{emoji}} Wiedergabegeschwindigkeit auf **{{speed}}×** gesetzt.",
-      "failed": "❌ Geschwindigkeit konnte nicht geändert werden: {{reason}}"
+      "failed": "❌ Geschwindigkeit konnte nicht geändert werden: {{reason}}",
+      "speedTitle": "Wiedergabegeschwindigkeit Angepasst",
+      "speedMultiplier": "{{speed}}× Multiplikator",
+      "resetHint": "Jederzeit zurücksetzen mit {{prefix}}speed"
     },
     "pitch": {
       "reset": "🎵 Tonhöhe auf normale **1.0×** zurückgesetzt.",
       "current": "🎵 Aktuelle Tonhöhe: **{{pitch}}×**.\nVerwende `{{prefix}}pitch <0.5-2.0>`, um die Tonhöhe zu ändern.",
       "set": "🎵 Tonhöhe auf **{{pitch}}×** gesetzt.",
-      "failed": "❌ Tonhöhe konnte nicht geändert werden: {{reason}}"
+      "failed": "❌ Tonhöhe konnte nicht geändert werden: {{reason}}",
+      "pitchTitle": "Tonhöhe Angepasst",
+      "pitchMultiplier": "{{pitch}}× Tonhöhenverschiebung",
+      "resetHint": "Jederzeit zurücksetzen mit {{prefix}}pitch"
     }
   }
 }
