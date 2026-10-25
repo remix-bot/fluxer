@@ -334,6 +334,7 @@ const SearchMixin = {
       },
       artists: null,
       requester: trackMeta?.requester ?? trackMeta?.userId ?? null,
+      requesterName: trackMeta?.requesterName ?? null,
     };
     if (trackMeta) {
       video.artist          = trackMeta.artist ?? null;
@@ -528,7 +529,7 @@ const SearchMixin = {
                 const video = this._lcTrackToVideo(fbResult.tracks[0], trackMeta);
                 if (video) {
                   this.addToQueue(video, top);
-                  events.emit("message", this.buildAddedToQueueEmbed(video, top, trackMeta?.requester));
+                  events.emit("message", this.buildAddedToQueueEmbed(video, top, trackMeta));
                   if (!this.queue.getCurrent()) {
                     this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
                   }
@@ -631,7 +632,7 @@ const SearchMixin = {
           const video = this._lcTrackToVideo(firstTrack, trackMeta);
           if (video) {
             this.addToQueue(video, top);
-            events.emit("message", this.buildAddedToQueueEmbed(video, top, trackMeta?.requester));
+            events.emit("message", this.buildAddedToQueueEmbed(video, top, trackMeta));
             if (playlistQuery) {
               events.emit("message", "⚠️ Couldn't load the full playlist — added just this video.");
             }
@@ -805,7 +806,7 @@ const SearchMixin = {
 
         if (tracks.length === 1) {
           this.addToQueue(tracks[0], top);
-          events.emit("message", this.buildAddedToQueueEmbed(tracks[0], top, trackMeta?.requester));
+          events.emit("message", this.buildAddedToQueueEmbed(tracks[0], top, trackMeta));
         } else {
           this.addManyToQueue(tracks, top);
           events.emit("message", this._t("responses.play.addedPlaylist", { count: tracks.length }));

@@ -387,8 +387,24 @@ const DisplayMixin = {
       { name: this._t("responses.play.estimatedWait"), value: waitStr, inline: true }
     );
 
-    const userReq = requester || video.requester || null;
-    const reqText = userReq ? `${this._t("responses.play.requestedBy", { user: `<@${userReq}>` })} • ` : "";
+    const userReq = (typeof requester === "string" ? requester : requester?.requester) || video.requester || null;
+    let reqDisplayName = (typeof requester === "object" ? requester?.requesterName : null) || video.requesterName || null;
+    if (!reqDisplayName && userReq) {
+      if (typeof userReq === "object" && (userReq.username || userReq.displayName)) {
+        reqDisplayName = userReq.displayName || userReq.username;
+      } else {
+        const cleanUid = cleanId(userReq);
+        const cached = this.client?.users?.get?.(cleanUid)
+          || this.client?.guilds?.get?.(cleanId(this._guildId))?.members?.get?.(cleanUid);
+        reqDisplayName = cached?.user?.username || cached?.username || cached?.displayName || null;
+      }
+    }
+    const resolvedReq = reqDisplayName
+      ? `@${reqDisplayName.replace(/^@+/, "")}`
+      : (userReq ? (typeof userReq === "string" && userReq.startsWith("<@") ? userReq.replace(/[<@!>]/g, "") : `@${userReq}`) : null);
+    const reqText = resolvedReq
+      ? `${this._t("responses.play.requestedBy", { user: resolvedReq })} • `
+      : "";
     const pluralStr = queueCount === 1 ? this._t("responses.play.trackSingle") : this._t("responses.play.trackPlural");
     embed.setFooter({
       text: `${reqText}${this._t("responses.play.queueCount", { count: queueCount, plural: pluralStr })}`

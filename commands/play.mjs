@@ -270,12 +270,14 @@ export async function run(message, data) {
 
     if (parsed && parsed.track) {
       const requester = message.author?.id ?? message.authorId ?? null;
+      const requesterName = message.member?.displayName || message.author?.globalName || message.author?.username || null;
       const lastfmTrackMeta = {
         artist: parsed.artist,
         name: parsed.track,
         source: "lastfm",
         url: parsed.url,
         requester,
+        requesterName,
       };
 
       const p = await this.getPlayer(message, true, true, true);
@@ -305,7 +307,8 @@ export async function run(message, data) {
       try { statusMsg = await message.reply({ embeds: [searchEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
 
       const playQuery = parsed.artist;
-      const messages = p.play(playQuery, false, provider === "lastfm" || provider === "lf" ? "yt" : provider, { requester });
+      const requesterName = message.member?.displayName || message.author?.globalName || message.author?.username || null;
+      const messages = p.play(playQuery, false, provider === "lastfm" || provider === "lf" ? "yt" : provider, { requester, requesterName });
       messages.on("message", d => forwardPlayMessage(d, statusMsg, message));
       return;
     }
@@ -386,12 +389,14 @@ export async function run(message, data) {
         }
 
         const requester = message.author?.id ?? message.authorId ?? null;
+        const requesterName = message.member?.displayName || message.author?.globalName || message.author?.username || null;
         const lastfmTrackMeta = {
           artist: searchResult.artist,
           name: searchResult.name,
           source: "lastfm",
           url: searchResult.url ?? "",
           requester,
+          requesterName,
         };
 
         const playProvider = resolveProvider && resolveProvider !== "lf" && resolveProvider !== "lastfm"
@@ -410,6 +415,7 @@ export async function run(message, data) {
   }
 
   const requester = message.author?.id ?? message.authorId ?? null;
+  const requesterName = message.member?.displayName || message.author?.globalName || message.author?.username || null;
   const resolvedProvider =
     provider === "lastfm" || provider === "lf"
       ? (flagProvider && flagProvider !== "lastfm" && flagProvider !== "lf" ? flagProvider : "yt")
@@ -419,8 +425,8 @@ export async function run(message, data) {
       ? parseLastFmTrackQuery(query)
       : null;
   const lastfmTrackMeta = parsedLastfmTrackMeta
-    ? { ...parsedLastfmTrackMeta, requester }
-    : { requester };
+    ? { ...parsedLastfmTrackMeta, requester, requesterName }
+    : { requester, requesterName };
 
   const p = await this.getPlayer(message, true, true, true);
   if (!p) return;
