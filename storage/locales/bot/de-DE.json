@@ -88,7 +88,9 @@
     "normalize": "Dynamische Lautstärkenormalisierung (ReplayGain-Pegel) über verschiedene Musikquellen umschalten.",
     "bassboost": "Equalizer-Bass-Boost mit Voreinstellungen (niedrig, mittel, stark) anwenden.",
     "speed": "Wiedergabegeschwindigkeit des aktuellen Tracks anpassen (0.5× bis 2.0×).",
-    "pitch": "Tonhöhe (Pitch) des aktuellen Tracks anpassen (0.5× bis 2.0×)."
+    "pitch": "Tonhöhe (Pitch) des aktuellen Tracks anpassen (0.5× bis 2.0×).",
+    "previous": "Den vorherigen Titel aus dem Wiedergabeverlauf abspielen.",
+    "replay": "Den aktuellen Titel von vorne starten."
   },
   "options": {
     "debug": {
@@ -1226,6 +1228,21 @@
       "reorderedDesc": "Von Position **#{{from}}** ➔ **#{{to}}** in der Warteschlange verschoben.",
       "nowPlayingNext": "Wird als Nächstes nach dem aktuellen Titel abgespielt • {{prefix}}np",
       "viewUpdatedQueue": "{{prefix}}list um die aktualisierte Warteschlange anzuzeigen"
+    },
+    "previous": {
+      "noHistory": "Es befindet sich kein vorheriger Titel im Wiedergabeverlauf.",
+      "failed": "Der vorherige Titel konnte nicht abgespielt werden.",
+      "author": "Wiedergabeverlauf • Vorheriger Titel",
+      "title": "Vorheriger Titel wiederhergestellt",
+      "footer": "Wiedergabeverlauf • Noch {{count}} vorherige(r) Titel verfügbar"
+    },
+    "replay": {
+      "nothingPlaying": "Derzeit wird nichts abgespielt!",
+      "live": "Livestreams oder Radiosender können nicht von vorne gestartet werden.",
+      "failed": "Der Titel konnte nicht erneut abgespielt werden.",
+      "author": "Wiederholung • 0:00",
+      "title": "Titel von Anfang an neu gestartet",
+      "footer": "Remix Music • Wiedergabe vom Beginn (Dauer: {{duration}})"
     }
   }
 }

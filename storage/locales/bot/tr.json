@@ -88,7 +88,9 @@
     "bassboost": "Düşük, orta veya sert bas güçlendirme ekolayzer efekti uygulayın.",
     "speed": "Mevcut parçanın oynatma hızını ayarlayın (0.5× ile 2.0× arası).",
     "pitch": "Mevcut parçanın ses perdesini (pitch) ayarlayın (0.5× ile 2.0× arası).",
-    "vote": "FluxerList üzerinde sunucunuz/botunuz için oylama bilgilerini görüntüleyin veya oy verenleri kontrol edin"
+    "vote": "FluxerList üzerinde sunucunuz/botunuz için oylama bilgilerini görüntüleyin veya oy verenleri kontrol edin",
+    "previous": "Oynatma geçmişindeki önceki şarkıyı çal.",
+    "replay": "Çalan şarkıyı baştan başlat."
   },
   "options": {
     "debug": {
@@ -1226,6 +1228,21 @@
       "reorderedDesc": "Kuyrukta **#{{from}}** ➔ **#{{to}}** konumuna taşındı.",
       "nowPlayingNext": "Şimdi geçerli şarkıdan sonra çalacak • {{prefix}}np",
       "viewUpdatedQueue": "Güncellenmiş kuyruğu görmek için {{prefix}}list"
+    },
+    "previous": {
+      "noHistory": "Oynatma geçmişinde önceki bir şarkı bulunmuyor.",
+      "failed": "Önceki şarkı çalınamadı.",
+      "author": "Oynatma Geçmişi • Önceki Şarkı",
+      "title": "Önceki Şarkı Geri Yüklendi",
+      "footer": "Oynatma Geçmişi • Kalan {{count}} önceki şarkı"
+    },
+    "replay": {
+      "nothingPlaying": "Şu anda hiçbir şey çalmıyor!",
+      "live": "Canlı yayınlar veya radyo istasyonları yeniden başlatılamaz.",
+      "failed": "Şarkı yeniden başlatılamadı.",
+      "author": "Yeniden Oynat • 0:00",
+      "title": "Şarkı Baştan Başlatıldı",
+      "footer": "Remix Music • Baştan çalınıyor (süre: {{duration}})"
     }
   }
 }

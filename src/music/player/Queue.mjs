@@ -26,6 +26,10 @@ export class Queue extends EventEmitter {
   loop = false;
   /** @type {boolean} Whether single-song loop is enabled. */
   songLoop = false;
+  /** @type {Array<object>} Circular buffer of recently played tracks. */
+  history = [];
+  /** @type {number} Maximum number of tracks preserved in playback history. */
+  static MAX_HISTORY = 20;
 
   /** Initialize an empty queue with no loop enabled. */
   constructor() {
@@ -49,6 +53,13 @@ export class Queue extends EventEmitter {
 
     if (!ignoreSongLoop && this.songLoop && this.current) return this.current;
     if (this.loop && this.current) this.data.push(this.current);
+
+    if (previous && (!this.songLoop || ignoreSongLoop)) {
+      this.history.push(previous);
+      if (this.history.length > Queue.MAX_HISTORY) {
+        this.history.shift();
+      }
+    }
 
     if (this.isEmpty()) {
       this.current = null;
@@ -143,10 +154,33 @@ export class Queue extends EventEmitter {
     return count;
   }
 
+  /**
+   * Step backward to the previous track from history.
+   * Restores the current track to the front of the queue so it is not lost.
+   * @returns {object|null} The restored previous track, or null if history is empty.
+   */
+  previous() {
+    if (this.history.length === 0) return null;
+    const prevTrack = this.history.pop();
+    if (this.current) {
+      this.data.unshift(this.current);
+    }
+    const old = this.current;
+    this.current = prevTrack;
+    this.emit("queue", {
+      type: "update",
+      data: { current: this.current, old, restored: true, loop: this.loop }
+    });
+    return this.current;
+  }
+
+  /** @returns {Array<object>} Copy of recent playback history. */
+  getHistory() { return this.history.slice(); }
+
   /** Remove all tracks from the queue. */
   clear() { this.data.length = 0; }
-  /** Clear the queue and reset all state (current, loops). */
-  reset() { this.clear(); this.current = null; this.songLoop = false; this.loop = false; }
+  /** Clear the queue and reset all state (current, loops, history). */
+  reset() { this.clear(); this.current = null; this.songLoop = false; this.loop = false; this.history.length = 0; }
 
   /** @param {boolean} bool - Enable or disable song loop. */
   setSongLoop(bool) { this.songLoop = bool; }

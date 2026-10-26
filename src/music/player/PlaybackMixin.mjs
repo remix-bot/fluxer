@@ -111,6 +111,28 @@ const PlaybackMixin = {
   },
 
   /**
+   * @async Step backward to the previous track in history.
+   * Restores the current track to the top of the queue and plays the previous track.
+   * @this {import('./Player.mjs').Player}
+   * @returns {Promise<object|null>} The previous track or null if history is empty.
+   */
+  async playPrevious() {
+    if (!this.queue || this.queue.history.length === 0) return null;
+    this._skipping = true;
+    this._bridgeStop();
+    const prevSong = this.queue.previous();
+    if (!prevSong) {
+      this._skipping = false;
+      return null;
+    }
+    this._playingNext = false;
+    this._radioAnnounced = false;
+    await this.playNext({ reuseCurrent: true });
+    this._skipping = false;
+    return prevSong;
+  },
+
+  /**
    * @private @async Core logic for advancing to the next track: resolves
    * track options, announces, starts playback via the bridge, arms the
    * track-end timer, and handles the queue-end path.
@@ -121,8 +143,8 @@ const PlaybackMixin = {
     this._bridgeStop();
 
     const currentBeforeNext = this.queue.getCurrent();
-    if (currentBeforeNext) this._lastPlayedTrack = currentBeforeNext;
-    const songData = this.queue.next(opts);
+    if (currentBeforeNext && !opts.reuseCurrent) this._lastPlayedTrack = currentBeforeNext;
+    const songData = opts.reuseCurrent ? this.queue.getCurrent() : this.queue.next(opts);
     if (!songData) {
       this.emit("stopplay");
       this.emit("queueEnd");

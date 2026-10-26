@@ -827,9 +827,9 @@ class Player extends EventEmitter {
   async resumePlaybackAfterNodeReconnect() {
     if (this._destroyed || this.leaving || !this._voiceConn) return false;
     const current = this.queue?.getCurrent();
-    if (!current || !this._audioBridge?.playing) return false;
+    if (!current || this._paused) return false;
 
-    const posMs = this.computePosition();
+    const posMs = Math.max(0, this.computePosition());
     logger.player(`[Player:${this._guildId}] Node reconnected — resuming "${current.title}" at ${Math.round(posMs / 1000)}s`);
 
     try {
@@ -1061,8 +1061,8 @@ class Player extends EventEmitter {
 
   /** @private Stop the audio bridge if currently playing. */
   _bridgeStop() {
-    if (this._audioBridge?.playing) {
-      this._audioBridge.stop();
+    if (this._audioBridge) {
+      try { this._audioBridge.stop(); } catch (_) {}
     }
   }
 

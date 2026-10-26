@@ -330,6 +330,11 @@ export class FluxerAudioBridge extends EventEmitter {
         streamToPlay = remuxed;
       }
       this._stream = streamToPlay;
+      await this._awaitPendingUnpublishes(conn);
+      if (generation !== this._playGeneration) {
+        streamToPlay?.destroy?.();
+        return "stopped";
+      }
       await conn.play(streamToPlay);
     } catch (e) {
       if (generation !== this._playGeneration) return "stopped";
@@ -457,7 +462,9 @@ export class FluxerAudioBridge extends EventEmitter {
         }
         return await this._playOpened(conn, opened, durationMs, generation);
       }
-      // Zero-copy: the voice connection fetches the URL itself.
+      /* Zero-copy: ensure prior unpublish settled before publishing */
+      await this._awaitPendingUnpublishes(conn);
+      if (stale()) return "stopped";
       await conn.play(direct.url);
     } catch (e) {
       if (stale()) return "stopped";
@@ -508,14 +515,12 @@ export class FluxerAudioBridge extends EventEmitter {
     try {
       const room = conn?.room;
       const participant = room?.localParticipant;
-      if (!room?.isConnected || typeof participant?.unpublishTrack !== "function") return;
+      if (!room?.isConnected || !participant || typeof participant.unpublishTrack !== "function") return;
 
       const publications = participant.trackPublications;
       if (!publications || typeof publications.entries !== "function") return;
 
-      // One guard map per participant, shared by every bridge instance in this
-      // process: a SID currently being unpublished is skipped by later sweeps,
-      // and its promise is awaitable via _awaitPendingUnpublishes().
+      /* One guard map per participant, shared by every bridge instance in this process */
       let pending = pendingUnpublishSids.get(participant);
       if (!pending) {
         pending = new Map();
@@ -528,11 +533,20 @@ export class FluxerAudioBridge extends EventEmitter {
         if (pending.has(sid)) continue;
         try {
           const settle = Promise.resolve(participant.unpublishTrack(sid, true))
-              .catch(() => {}) // failed unpublish is still a settled state — don't block on it
+              .catch((err) => {
+                /* Suppress benign race-condition errors during rapid track skips */
+                if (!err || /Publication not found|AudioSource is closed|Participant not found|Track not found/i.test(err?.message || '')) {
+                  return;
+                }
+                logger.warn?.("[AudioBridge] unpublishTrack warning: " + err.message);
+              })
               .finally(() => { if (pending.get(sid) === settle) pending.delete(sid); });
           pending.set(sid, settle);
           logger.player("[AudioBridge] Unpublished stale audio track: " + sid);
-        } catch (_) {
+        } catch (err) {
+          if (!err || /Publication not found|AudioSource is closed|Participant not found|Track not found/i.test(err?.message || '')) {
+            /* Benign race condition */
+          }
           pending.delete(sid);
         }
       }

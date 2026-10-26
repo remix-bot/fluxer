@@ -73,14 +73,17 @@ export class LavalinkManager extends EventEmitter {
         nodeMgr.on("connect", (node) => {
           this._nodeConnected = true;
           logger.lavalink("[Lavalink] Node connected (nodeManager): " + node.id);
+          this.emit("nodeConnect", node);
         });
         nodeMgr.on("disconnect", (node, reason) => {
           this._nodeConnected = false;
           logger.warn("[Lavalink] Node disconnected (nodeManager):", node?.id, reason);
+          this.emit("nodeDisconnect", node, reason);
         });
         nodeMgr.on("reconnect", (node) => {
           this._nodeConnected = true;
           logger.lavalink("[Lavalink] Node reconnecting (nodeManager): " + node.id);
+          this.emit("nodeReconnect", node);
         });
       } catch (e) {
         logger.warn("[Lavalink] nodeManager event setup error:", e?.message);
@@ -92,16 +95,19 @@ export class LavalinkManager extends EventEmitter {
     this.lavalink.on("nodeConnect", (node) => {
       this._nodeConnected = true;
       logger.lavalink("[Lavalink] Node connected (manager): " + node.id);
+      this.emit("nodeConnect", node);
     });
 
     this.lavalink.on("nodeReconnect", (node) => {
       this._nodeConnected = true;
       logger.lavalink("[Lavalink] Node reconnecting (manager): " + node.id);
+      this.emit("nodeReconnect", node);
     });
 
     this.lavalink.on("nodeDisconnect", (node, reason) => {
       this._nodeConnected = false;
       logger.warn("[Lavalink] Node disconnected (manager):", node.id, reason);
+      this.emit("nodeDisconnect", node, reason);
     });
 
     this.lavalink.on("nodeError", (node, err) => {

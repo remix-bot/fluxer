@@ -88,7 +88,9 @@
     "normalize": "Alternar normalização dinâmica de volume (nivelamento ReplayGain) entre diferentes fontes de música.",
     "bassboost": "Aplicar equalizador de reforço de graves (baixo, médio ou pesado).",
     "speed": "Ajustar a velocidade de reprodução da faixa atual (0.5× a 2.0×).",
-    "pitch": "Ajustar o tom (pitch) do áudio da faixa atual (0.5× a 2.0×)."
+    "pitch": "Ajustar o tom (pitch) do áudio da faixa atual (0.5× a 2.0×).",
+    "previous": "Tocar a faixa anterior do histórico de reprodução.",
+    "replay": "Reiniciar a música atual do início."
   },
   "options": {
     "debug": {
@@ -1226,6 +1228,21 @@
       "reorderedDesc": "Movido da posição **#{{from}}** ➔ **#{{to}}** na fila.",
       "nowPlayingNext": "Tocará a seguir após a música atual • {{prefix}}np",
       "viewUpdatedQueue": "{{prefix}}list para ver a fila atualizada"
+    },
+    "previous": {
+      "noHistory": "Não há nenhuma música anterior no histórico de reprodução.",
+      "failed": "Falha ao tocar a música anterior.",
+      "author": "Histórico de Reprodução • Faixa Anterior",
+      "title": "Música Anterior Restaurada",
+      "footer": "Histórico de Reprodução • Restam {{count}} música(s) no histórico"
+    },
+    "replay": {
+      "nothingPlaying": "Não há nada tocando no momento!",
+      "live": "Não é possível reiniciar transmissões ao vivo ou rádios.",
+      "failed": "Falha ao reiniciar a faixa.",
+      "author": "Repetir Faixa • 0:00",
+      "title": "Música Reiniciada do Início",
+      "footer": "Remix Music • Tocando do início (duração: {{duration}})"
     }
   }
 }

@@ -88,7 +88,9 @@
     "normalize": "Toggle dynamic volume normalization (ReplayGain leveling) across music sources.",
     "bassboost": "Apply a low, medium, or hard bass boost equalizer effect.",
     "speed": "Adjust the playback speed of the current track (0.5× to 2.0×).",
-    "pitch": "Adjust the audio pitch of the current track (0.5× to 2.0×)."
+    "pitch": "Adjust the audio pitch of the current track (0.5× to 2.0×).",
+    "previous": "Play the previous track from playback history.",
+    "replay": "Restart the current song from the beginning."
   },
   "options": {
     "debug": {
@@ -1226,6 +1228,21 @@
       "reorderedDesc": "Moved from position **#{{from}}** ➔ **#{{to}}** in the queue.",
       "nowPlayingNext": "Now playing next after the current song • {{prefix}}np",
       "viewUpdatedQueue": "{{prefix}}list to view updated queue"
+    },
+    "previous": {
+      "noHistory": "There is no previous song in playback history.",
+      "failed": "Failed to play the previous track.",
+      "author": "Playback History • Previous Track",
+      "title": "Restored Previous Song",
+      "footer": "Playback History • {{count}} previous song(s) remaining"
+    },
+    "replay": {
+      "nothingPlaying": "There is nothing playing at the moment!",
+      "live": "Cannot replay live streams or radio stations.",
+      "failed": "Failed to replay the track.",
+      "author": "Playback Replay • 0:00",
+      "title": "Restarted Song From Beginning",
+      "footer": "Remix Music • Playing from start (duration: {{duration}})"
     }
   }
 }
