@@ -567,6 +567,7 @@ const PlayerLifecycleMixin = {
       ch = asSendable(ch);
       ch.send(payload).catch(err => {
         if (err.code === 'MISSING_PERMISSIONS' || err.statusCode === 403) {
+          player.textChannel = null;
           logger.warn(`[PlayerManager] Cannot send player message in channel ${ch.id} — missing permissions`);
         } else {
           logger.warn(`[PlayerManager] Failed to send player message in channel ${ch.id}:`, err?.message ?? err);
