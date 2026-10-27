@@ -46,6 +46,7 @@ let _enabled = false;
 let _channelId = null;
 let _token = null;
 let _client = null;
+let _locale = null;
 let _minIntervalMs = 1_500;
 let _maxQueue = 40;
 
