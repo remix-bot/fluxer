@@ -90,7 +90,8 @@
     "pitch": "Mevcut parçanın ses perdesini (pitch) ayarlayın (0.5× ile 2.0× arası).",
     "vote": "FluxerList üzerinde sunucunuz/botunuz için oylama bilgilerini görüntüleyin veya oy verenleri kontrol edin",
     "previous": "Oynatma geçmişindeki önceki şarkıyı çal.",
-    "replay": "Çalan şarkıyı baştan başlat."
+    "replay": "Çalan şarkıyı baştan başlat.",
+    "skipto": "Kuyruktaki belirli bir şarkıya doğrudan atla."
   },
   "options": {
     "debug": {
@@ -186,6 +187,9 @@
     },
     "lyrics": {
       "query": "Şarkı sözlerini aramak için şarkı adı ve sanatçı (isteğe bağlı)."
+    },
+    "skipto": {
+      "position": "Atlanacak şarkının kuyruktaki sıra numarası."
     }
   },
   "pagination": {
@@ -716,7 +720,15 @@
       "playbackErrorAuthor": "🎵 Oynatma Akışı Denetleyicisi",
       "streamUnavailableTitle": "Akış Kullanılamıyor",
       "streamErrorTitle": "Oynatma Akışı Kesildi",
-      "streamErrorFooter": "Sonraki parçaya geçiliyor • Daha fazla şarkı için {{prefix}}play"
+      "streamErrorFooter": "Sonraki parçaya geçiliyor • Daha fazla şarkı için {{prefix}}play",
+      "autoResumeAuthor": "▶️ Ses Kanalı Aktif",
+      "autoResumeDesc": "Ses kanalına bir dinleyici katıldı — oynatma otomatik olarak sürdürülüyor.",
+      "serverMutedAuthor": "🔇 Bot Sunucuda Susturuldu",
+      "serverMutedTitle": "Oynatma Duraklatıldı",
+      "serverMutedDesc": "Bot bir sunucu yöneticisi tarafından susturuldu. Şarkı konumunu korumak için oynatma duraklatıldı.",
+      "serverUnmutedAuthor": "🔊 Bot Susturması Kaldırıldı",
+      "serverUnmutedTitle": "Oynatma Sürdürülüyor",
+      "serverUnmutedDesc": "Botun susturması kaldırıldı — oynatma otomatik olarak devam ediyor."
     },
     "playnext": {
       "searching": "🔍 Aranıyor...",
@@ -1243,6 +1255,14 @@
       "author": "Yeniden Oynat • 0:00",
       "title": "Şarkı Baştan Başlatıldı",
       "footer": "Remix Music • Baştan çalınıyor (süre: {{duration}})"
+    },
+    "skipto": {
+      "emptyQueue": "Kuyruk boş! Atlanacak bir sonraki şarkı bulunmuyor.",
+      "invalidPosition": "Geçersiz sıra numarası! Lütfen 1 ile {{max}} arasında bir sayı girin.",
+      "failed": "Belirtilen şarkıya atlanamadı.",
+      "author": "Kuyruk Gezinme • Şarkıya Atla",
+      "title": "{{count}} şarkı atlandı — #{{position}} numaralı şarkıya geçildi",
+      "footer": "Remix Music • Kuyrukta kalan {{remaining}} şarkı"
     }
   }
 }

@@ -41,6 +41,7 @@ We believe essential music features should never be locked behind a paywall — 
 * 🔎 **Universal Music Search** — Seamless search and playback across YouTube, YouTube Music, Spotify, SoundCloud, Deezer, Apple Music, Tidal, Bandcamp, Bilibili, plus direct HTTP/HTTPS and radio streams.
 * 🔄 **24/7 Voice Persistence** — Keeps the bot in designated voice channels around the clock with exponential backoff recovery, boot rejoin, and state restore across restarts.
 * ⏪ **Playback History & `%previous`** — Dedicated 20-track circular playback history ring buffer to step backward (`%previous`, `%undo`) without lost tracks.
+* ⏸️ **Smart Auto-Pause & Mute Protection** — Automatically pauses playback when voice channels empty (auto-resuming when members return) or when server-muted by administrators.
 * 🔁 **Instant Track Replay** — Restart the current song from 0:00 with `%replay` (or `%restart`) without re-fetching network streams.
 * 🎛️ **Audio Filters & DSP Studio** — Real-time audio transformations: Bassboost (low/medium/hard), Nightcore, Vaporwave, 8D audio, and fine-grained `%speed` & `%pitch` tuning.
 * 📊 **Loudness Normalization** — Built-in EBU R128 / ReplayGain leveling (`%normalize`) to eliminate volume jumps between quiet acoustic songs and loud EDM tracks.
@@ -87,6 +88,7 @@ The default prefix is `%`. Server administrators can customize the prefix at any
 | Command | Aliases | Description | Example |
 | :--- | :--- | :--- | :--- |
 | `list` | `queue`, `q` | Display interactive paginated queue | `%list` |
+| `skipto` | `jump`, `jumpto` | Skip directly to track #X in the queue | `%skipto 4` |
 | `shuffle` | — | Randomize the order of queued tracks | `%shuffle` |
 | `move` | `mv`, `m` | Move a song from one position to another | `%move 4 1` |
 | `remove` | — | Remove a track or range from the queue | `%remove 3` / `%remove 5-8` |

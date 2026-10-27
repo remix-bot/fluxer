@@ -90,7 +90,8 @@
     "speed": "Adjust the playback speed of the current track (0.5× to 2.0×).",
     "pitch": "Adjust the audio pitch of the current track (0.5× to 2.0×).",
     "previous": "Play the previous track from playback history.",
-    "replay": "Restart the current song from the beginning."
+    "replay": "Restart the current song from the beginning.",
+    "skipto": "Skip directly to a specific track in the queue."
   },
   "options": {
     "debug": {
@@ -186,6 +187,9 @@
     },
     "lyrics": {
       "query": "The song title and artist to search lyrics for (optional)."
+    },
+    "skipto": {
+      "position": "The track number in the queue to jump to."
     }
   },
   "pagination": {
@@ -727,7 +731,15 @@
       "playbackErrorAuthor": "🎵 Playback Stream Watchdog",
       "streamUnavailableTitle": "Stream Unavailable",
       "streamErrorTitle": "Playback Stream Interrupted",
-      "streamErrorFooter": "Skipping to next track • {{prefix}}play to queue more songs"
+      "streamErrorFooter": "Skipping to next track • {{prefix}}play to queue more songs",
+      "autoResumeAuthor": "▶️ Voice Channel Active",
+      "autoResumeDesc": "Listener joined the voice channel — automatically resuming playback.",
+      "serverMutedAuthor": "🔇 Bot Muted by Server",
+      "serverMutedTitle": "Playback Paused",
+      "serverMutedDesc": "The bot was muted by a server administrator. Playback is paused to preserve track position.",
+      "serverUnmutedAuthor": "🔊 Bot Unmuted",
+      "serverUnmutedTitle": "Playback Resumed",
+      "serverUnmutedDesc": "The bot was unmuted — automatically resuming playback."
     },
     "playnext": {
       "searching": "🔍 Searching...",
@@ -1243,6 +1255,14 @@
       "author": "Playback Replay • 0:00",
       "title": "Restarted Song From Beginning",
       "footer": "Remix Music • Playing from start (duration: {{duration}})"
+    },
+    "skipto": {
+      "emptyQueue": "The queue is empty! There are no upcoming songs to jump to.",
+      "invalidPosition": "Invalid position! Please enter a number between 1 and {{max}}.",
+      "failed": "Failed to jump to the specified song.",
+      "author": "Queue Navigation • Jump Track",
+      "title": "Skipped {{count}} track(s) — Jumped to #{{position}}",
+      "footer": "Remix Music • {{remaining}} track(s) remaining in queue"
     }
   }
 }

@@ -42,6 +42,8 @@ export async function run(message) {
   }
 
   p.pause();
+  p._autoPausedEmpty = false;
+  p._serverMutedAutoPaused = false;
   const elapsed = p.getCurrentElapsedDuration();
   const trackUrl = current.spotifyUrl || current.url || null;
   const rawAuthor = current.artist || (typeof current.author === "object" ? current.author?.name : current.author);

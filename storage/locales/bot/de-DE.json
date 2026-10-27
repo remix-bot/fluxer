@@ -90,7 +90,8 @@
     "speed": "Wiedergabegeschwindigkeit des aktuellen Tracks anpassen (0.5× bis 2.0×).",
     "pitch": "Tonhöhe (Pitch) des aktuellen Tracks anpassen (0.5× bis 2.0×).",
     "previous": "Den vorherigen Titel aus dem Wiedergabeverlauf abspielen.",
-    "replay": "Den aktuellen Titel von vorne starten."
+    "replay": "Den aktuellen Titel von vorne starten.",
+    "skipto": "Direkt zu einem bestimmten Titel in der Warteschlange springen."
   },
   "options": {
     "debug": {
@@ -186,6 +187,9 @@
     },
     "lyrics": {
       "query": "Der Songtitel und Künstler, nach dessen Songtext gesucht werden soll (optional)."
+    },
+    "skipto": {
+      "position": "Die Nummer des Titels in der Warteschlange, zu dem gesprungen werden soll."
     }
   },
   "pagination": {
@@ -512,7 +516,15 @@
       "playbackErrorAuthor": "🎵 Wiedergabe-Stream-Wächter",
       "streamUnavailableTitle": "Stream nicht verfügbar",
       "streamErrorTitle": "Wiedergabe-Stream unterbrochen",
-      "streamErrorFooter": "Überspringe zum nächsten Track • {{prefix}}play für weitere Songs"
+      "streamErrorFooter": "Überspringe zum nächsten Track • {{prefix}}play für weitere Songs",
+      "autoResumeAuthor": "▶️ Sprachkanal aktiv",
+      "autoResumeDesc": "Ein Hörer ist dem Sprachkanal beigetreten — Wiedergabe wird automatisch fortgesetzt.",
+      "serverMutedAuthor": "🔇 Bot vom Server stummgeschaltet",
+      "serverMutedTitle": "Wiedergabe pausiert",
+      "serverMutedDesc": "Der Bot wurde von einem Server-Administrator stummgeschaltet. Die Wiedergabe wurde pausiert, um die Position zu sichern.",
+      "serverUnmutedAuthor": "🔊 Bot-Stummschaltung aufgehoben",
+      "serverUnmutedTitle": "Wiedergabe fortgesetzt",
+      "serverUnmutedDesc": "Die Stummschaltung des Bots wurde aufgehoben — Wiedergabe wird automatisch fortgesetzt."
     },
     "playnext": {
       "searching": "🔍 Suche...",
@@ -1243,6 +1255,14 @@
       "author": "Wiederholung • 0:00",
       "title": "Titel von Anfang an neu gestartet",
       "footer": "Remix Music • Wiedergabe vom Beginn (Dauer: {{duration}})"
+    },
+    "skipto": {
+      "emptyQueue": "Die Warteschlange ist leer! Keine weiteren Titel zum Überspringen vorhanden.",
+      "invalidPosition": "Ungültige Position! Bitte gib eine Zahl zwischen 1 und {{max}} ein.",
+      "failed": "Das Springen zum ausgewählten Titel ist fehlgeschlagen.",
+      "author": "Warteschlangen-Navigation • Titel überspringen",
+      "title": "{{count}} Titel übersprungen — Zu #{{position}} gesprungen",
+      "footer": "Remix Music • Noch {{remaining}} Titel in der Warteschlange"
     }
   }
 }

@@ -90,7 +90,8 @@
     "speed": "Ajustar a velocidade de reprodução da faixa atual (0.5× a 2.0×).",
     "pitch": "Ajustar o tom (pitch) do áudio da faixa atual (0.5× a 2.0×).",
     "previous": "Tocar a faixa anterior do histórico de reprodução.",
-    "replay": "Reiniciar a música atual do início."
+    "replay": "Reiniciar a música atual do início.",
+    "skipto": "Pular diretamente para uma faixa específica na fila."
   },
   "options": {
     "debug": {
@@ -186,6 +187,9 @@
     },
     "lyrics": {
       "query": "O título da música e o artista para pesquisar a letra (opcional)."
+    },
+    "skipto": {
+      "position": "O número da faixa na fila para onde pular."
     }
   },
   "pagination": {
@@ -512,7 +516,15 @@
       "playbackErrorAuthor": "🎵 Monitor de Fluxo de Reprodução",
       "streamUnavailableTitle": "Transmissão Indisponível",
       "streamErrorTitle": "Fluxo de Reprodução Interrompido",
-      "streamErrorFooter": "Pulando para a próxima faixa • {{prefix}}play para adicionar mais músicas"
+      "streamErrorFooter": "Pulando para a próxima faixa • {{prefix}}play para adicionar mais músicas",
+      "autoResumeAuthor": "▶️ Canal de Voz Ativo",
+      "autoResumeDesc": "Um ouvinte entrou no canal de voz — retomando a reprodução automaticamente.",
+      "serverMutedAuthor": "🔇 Bot Mutado pelo Servidor",
+      "serverMutedTitle": "Reprodução Pausada",
+      "serverMutedDesc": "O bot foi mutado por um administrador do servidor. A reprodução foi pausada para preservar a posição.",
+      "serverUnmutedAuthor": "🔊 Bot Desmutado",
+      "serverUnmutedTitle": "Reprodução Retomada",
+      "serverUnmutedDesc": "O bot foi desmutado — retomando a reprodução automaticamente."
     },
     "playnext": {
       "searching": "🔍 Buscando...",
@@ -1243,6 +1255,14 @@
       "author": "Repetir Faixa • 0:00",
       "title": "Música Reiniciada do Início",
       "footer": "Remix Music • Tocando do início (duração: {{duration}})"
+    },
+    "skipto": {
+      "emptyQueue": "A fila está vazia! Não há faixas seguintes para pular.",
+      "invalidPosition": "Posição inválida! Insira um número entre 1 e {{max}}.",
+      "failed": "Falha ao pular para a faixa especificada.",
+      "author": "Navegação na Fila • Pular Faixa",
+      "title": "{{count}} faixa(s) pulada(s) — Pulou para #{{position}}",
+      "footer": "Remix Music • Restam {{remaining}} faixa(s) na fila"
     }
   }
 }

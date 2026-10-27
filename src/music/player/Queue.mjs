@@ -177,6 +177,22 @@ export class Queue extends EventEmitter {
   /** @returns {Array<object>} Copy of recent playback history. */
   getHistory() { return this.history.slice(); }
 
+  /**
+   * Remove all tracks before target index (0-based) and return the skipped tracks.
+   * @param {number} targetIndex - 0-based index of track to jump to.
+   * @returns {Array<object>} Array of skipped tracks.
+   */
+  skipTo(targetIndex) {
+    if (targetIndex <= 0) return [];
+    const count = Math.min(targetIndex, this.data.length);
+    const skipped = this.data.splice(0, count);
+    this.emit("queue", {
+      type: "skipTo",
+      data: { targetIndex, skipped, remaining: this.data.length }
+    });
+    return skipped;
+  }
+
   /** Remove all tracks from the queue. */
   clear() { this.data.length = 0; }
   /** Clear the queue and reset all state (current, loops, history). */

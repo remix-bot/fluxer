@@ -15,6 +15,7 @@ import { get247ChannelMode, isPlayerConnectionDead } from "../../utils/Helpers24
 import { VoiceStateCache } from "../VoiceStateCache.mjs";
 import { resolveIsBotUser } from "../VoiceStateResolver.mjs";
 import { cleanId } from "../../utils/Utils.mjs";
+import { EmbedBuilder } from "@fluxerjs/core";
 
 /**
  * @type {object}
@@ -59,6 +60,40 @@ const VoiceStateRouting = {
     const { player, playerGuildId, homeChannelId } = this._findAffectedPlayer(vsuGuildId, oldChannelId, newChannelId);
 
     const isBotUser = isBot === true && userId === client.user?.id;
+
+    /* Handle server-mute (admin / community mute) on the bot */
+    if (isBotUser && player) {
+      const isMuted = data?.mute === true || data?.suppress === true;
+      if (isMuted && !player._serverMuted) {
+        player._serverMuted = true;
+        if (player._audioBridge?.playing && !player._paused) {
+          player._serverMutedAutoPaused = true;
+          player.pause();
+          logger.player(`[Player:${player._guildId}] Bot was server-muted by an admin — pausing playback`);
+          const muteEmbed = new EmbedBuilder()
+            .setColor(0xe9196c)
+            .setAuthor({ name: player._t?.("responses.play.serverMutedAuthor") ?? "🔇 Bot Muted by Server" })
+            .setTitle(player._t?.("responses.play.serverMutedTitle") ?? "Playback Paused")
+            .setDescription(player._t?.("responses.play.serverMutedDesc") ?? "The bot was muted by a server administrator. Playback is paused to preserve track position.")
+            .setFooter({ text: "Remix Music • Will auto-resume when unmuted" });
+          player.emit("message", { embeds: [muteEmbed] });
+        }
+      } else if (!isMuted && player._serverMuted) {
+        player._serverMuted = false;
+        if (player._serverMutedAutoPaused && player._paused) {
+          player._serverMutedAutoPaused = false;
+          player.resume();
+          logger.player(`[Player:${player._guildId}] Bot was server-unmuted — resuming playback`);
+          const unmuteEmbed = new EmbedBuilder()
+            .setColor(0xe9196c)
+            .setAuthor({ name: player._t?.("responses.play.serverUnmutedAuthor") ?? "🔊 Bot Unmuted" })
+            .setTitle(player._t?.("responses.play.serverUnmutedTitle") ?? "Playback Resumed")
+            .setDescription(player._t?.("responses.play.serverUnmutedDesc") ?? "The bot was unmuted — automatically resuming playback.")
+            .setFooter({ text: "Remix Music • Auto-Resumed" });
+          player.emit("message", { embeds: [unmuteEmbed] });
+        }
+      }
+    }
 
     if (!isBotUser) {
 
@@ -211,6 +246,12 @@ const VoiceStateRouting = {
           setTimeout(() => {
             if (!oldPlayer._hasHumansInChannel()) {
               logger.voiceState(`[VoiceState] Last human left ${cleanOld}, starting inactivity timer`);
+              /* Smart Auto-Pause: pause if playing to conserve bandwidth & hold position */
+              if (oldPlayer._audioBridge?.playing && !oldPlayer._paused) {
+                oldPlayer._autoPausedEmpty = true;
+                oldPlayer.pause();
+                logger.player(`[Player:${oldPlayer._guildId}] Auto-paused playback because voice channel is empty`);
+              }
               oldPlayer._startInactivityTimer();
             }
           }, this.T.aloneCheckDebounce);
@@ -225,6 +266,18 @@ const VoiceStateRouting = {
         if (newPlayer && typeof newPlayer._stopInactivityTimer === "function") {
           logger.voiceState(`[VoiceState] Human joined ${cleanChId}, stopping inactivity timer`);
           newPlayer._stopInactivityTimer();
+          /* Smart Auto-Resume: resume if was paused because channel was empty */
+          if (newPlayer._autoPausedEmpty && newPlayer._paused) {
+            newPlayer._autoPausedEmpty = false;
+            newPlayer.resume();
+            logger.player(`[Player:${newPlayer._guildId}] Human joined ${cleanChId} — auto-resuming playback`);
+            const resumeEmbed = new EmbedBuilder()
+              .setColor(0xe9196c)
+              .setAuthor({ name: newPlayer._t?.("responses.play.autoResumeAuthor") ?? "▶️ Voice Channel Active" })
+              .setDescription(newPlayer._t?.("responses.play.autoResumeDesc") ?? "Listener joined the voice channel — automatically resuming playback.")
+              .setFooter({ text: "Remix Music • Auto-Pause & Resume" });
+            newPlayer.emit("message", { embeds: [resumeEmbed] });
+          }
         }
       } catch(e) { logger.warn("[VoiceState] Inactivity timer stop failed:", e?.message); }
     }
