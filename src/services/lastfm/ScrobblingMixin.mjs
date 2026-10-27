@@ -124,7 +124,9 @@ const ScrobblingMixin = {
         }
         return 0;
       }
-      logger.warn("[LastFm] Error:", e?.message);
+      if (!e?.message?.includes("fetch failed")) {
+        logger.warn("[LastFm] Error:", e?.message);
+      }
       return 0;
     }
   }

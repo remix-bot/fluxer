@@ -258,14 +258,26 @@ const ServerStatsMixin = {
       return this._totalScrobblesCache;
     }
 
-    if (this._totalScrobblesInflight) return this._totalScrobblesInflight;
-
-    this._totalScrobblesInflight = this._refreshTotalScrobbles(concurrency);
+    /* Fast path: immediately read cached sum from local database so caller (%stats) never times out */
     try {
-      return await this._totalScrobblesInflight;
-    } finally {
-      this._totalScrobblesInflight = null;
+      const pool = await this._getPool();
+      const f = this._botIdFilter();
+      const [sumRows] = await pool.execute(
+        `SELECT COALESCE(SUM(scrobble_count), 0) AS total FROM lastfm_users WHERE 1=1${f.where}`,
+        [...f.params]
+      );
+      const dbTotal = Number(sumRows[0]?.total ?? 0);
+      if (this._totalScrobblesCache === null) {
+        this._totalScrobblesCache = dbTotal;
+      }
+    } catch (_) { }
+
+    if (!this._totalScrobblesInflight) {
+      this._totalScrobblesInflight = this._refreshTotalScrobbles(concurrency)
+        .finally(() => { this._totalScrobblesInflight = null; });
     }
+
+    return this._totalScrobblesCache ?? 0;
   },
 
   /** @private @async Sync all users' scrobble counts from Last.fm and cache the total. @param {number} concurrency - Concurrent sync batch size. @returns {Promise<number>} Fresh total scrobble count. */
@@ -290,6 +302,9 @@ const ServerStatsMixin = {
       for (let i = 0; i < userIds.length; i += concurrency) {
         const batch = userIds.slice(i, i + concurrency);
         await Promise.allSettled(batch.map(uid => this.syncUserScrobbleCount(uid)));
+        if (i + concurrency < userIds.length) {
+          await new Promise(r => setTimeout(r, 200));
+        }
       }
 
       const [sumRows] = await pool.execute(

@@ -131,7 +131,16 @@ async function apiCall(params, apiSecret, post = false) {
       }
     : { signal: AbortSignal.timeout(LASTFM_FETCH_TIMEOUT_MS) };
 
-  const res = await fetch(url, opts);
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch (err) {
+    const cause = err?.cause?.message ?? err?.cause?.code ?? err?.cause ?? "";
+    const detail = cause ? ` (${cause})` : "";
+    const networkErr = new Error(`fetch failed${detail}`);
+    networkErr.cause = err?.cause ?? err;
+    throw networkErr;
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     let code = 0;
