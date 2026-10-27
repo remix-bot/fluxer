@@ -16,8 +16,10 @@ const PROBE_TIMEOUT_MS = 15_000;
  */
 export default function probe(file) {
   return new Promise((res, rej) => {
+    const isHttp = typeof file === "string" && file.startsWith("http");
     const args = [
       "-hide_banner",
+      ...(isHttp ? ["-icy", "1", "-analyzeduration", "1000000"] : []),
       "-show_entries", "format_tags:format=duration",
       "-print_format", "json",
       "-i", file,

@@ -9,7 +9,6 @@
  */
 
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../../ui/index.mjs";
 import { Utils } from "../../utils/Utils.mjs";
 import { logger } from "../../core/Logger.mjs";
 import meta from "../probe.mjs";
@@ -219,8 +218,8 @@ const DisplayMixin = {
         const data = await meta(current.url);
         radioLiveTitle = data?.title || null;
         textMsg = `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n${current.description || ""}\n\n🎵 Now playing: ${radioLiveTitle || "Unknown"}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`;
-      } catch (e) {
-        logger.warn("[Player] Error:", e?.message);
+      } catch (_) {
+        /* Radio live metadata probe is optional — gracefully fall back to station display */
         textMsg = `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`;
       }
     } else if (current.type === "external" || current.type === "stream") {
