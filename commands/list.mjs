@@ -4,7 +4,7 @@
  */
 
 import { CommandBuilder }  from "../src/commands/index.mjs";
-import { QueuePaginator, getGlobalColor }  from "../src/ui/index.mjs";
+import { QueuePaginator } from "../src/ui/index.mjs";
 import { EmbedBuilder }    from "@fluxerjs/core";
 
 const PAGE_SIZE  = 10;

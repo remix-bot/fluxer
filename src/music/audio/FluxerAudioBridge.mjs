@@ -163,16 +163,13 @@ export class FluxerAudioBridge extends EventEmitter {
       // this point get the explicit error below instead of fetching their
       // source page.
       if (!trackInfo.encoded && trackInfo.url && trackInfo.url.startsWith("http")) {
-        logger.player("[AudioBridge] Route 3: Fetching directly: " + trackInfo.url.substring(0, 80) + "...");
-        const response = await fetch(trackInfo.url, {
+        logger.player("[AudioBridge] Route 3: Fetching directly via SafeHttp: " + trackInfo.url.substring(0, 80) + "...");
+        const { openPublicStream } = await import("./SafeHttp.mjs");
+        const { stream, req } = await openPublicStream(trackInfo.url, {
           headers: { "User-Agent": "Mozilla/5.0 (compatible; Bot/1.0)" },
-          redirect: "follow",
         });
-        if (!response.ok) {
-          throw new Error("HTTP " + response.status + " for " + trackInfo.url);
-        }
-        const stream = Readable.fromWeb(response.body);
         this._sourceStream = stream;
+        this._sourceReq = req || null;
 
         const routed = await this._routeByMagic(stream);
         if (routed.kind === "webm") {

@@ -14,7 +14,7 @@ import { logger } from "../../core/Logger.mjs";
 import { normalizeTrackText } from "./constants.mjs";
 import { applyMixins } from "../../utils/mixins.mjs";
 import { parseLastFmUrl, isLastFmUrl } from "./urlUtils.mjs";
-import { MYSQL_POOL_DEFAULTS, attachMysqlPoolGuard } from "../../db/MysqlGuard.mjs";
+import { attachMysqlPoolGuard } from "../../db/MysqlGuard.mjs";
 import { getSharedPromisePool } from "../../db/PoolManager.mjs";
 import UserStoreMixin from "./UserStoreMixin.mjs";
 import ScrobblingMixin from "./ScrobblingMixin.mjs";

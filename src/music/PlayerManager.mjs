@@ -12,7 +12,7 @@
  */
 
 import Player from "./player/index.mjs";
-import { Utils, cleanId } from "../utils/Utils.mjs";
+import { cleanId } from "../utils/Utils.mjs";
 import { logger } from "../core/Logger.mjs";
 import { getMessageGuildId } from "../ui/index.mjs";
 import { applyMixins } from "../utils/mixins.mjs";

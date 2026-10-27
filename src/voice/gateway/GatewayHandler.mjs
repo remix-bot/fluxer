@@ -10,10 +10,10 @@
 import { Events, GatewayOpcodes } from "@fluxerjs/core";
 import { logger, _wsErrorCooldown } from "../../core/Logger.mjs";
 import { ServerSettings } from "../../db/Settings.mjs";
-import { get247ChannelMode, remove247ChannelMode } from "../../utils/Helpers247.mjs";
+import { get247ChannelMode } from "../../utils/Helpers247.mjs";
 import { cleanId } from "../../utils/Utils.mjs";
 import * as ShardingUtils from "../../utils/ShardingUtils.mjs";
-import { iterateVoiceStates, hasHumansInChannel, getChannelsWithHumans, resolveIsBotUser } from "../VoiceStateResolver.mjs";
+import { iterateVoiceStates, resolveIsBotUser } from "../VoiceStateResolver.mjs";
 import { applyMixins } from "../../utils/mixins.mjs";
 import VoiceStateRouting from "./VoiceStateRouting.mjs";
 import GuildSync from "./GuildSync.mjs";

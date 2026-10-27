@@ -9,6 +9,7 @@ import { getGlobalColor } from "../src/ui/index.mjs";
 import { logger } from "../src/core/Logger.mjs";
 import { inspect } from "node:util";
 import { ERROR_COLOR, EMOJI_REMOVE_TIMEOUT } from "../src/utils/UI.mjs";
+import { collectSecrets, redactSecrets } from "../src/utils/Redact.mjs";
 
 /** @private @type {string[]} Property name substrings that indicate sensitive/secret data. */
 const RESTRICTED = [
@@ -92,7 +93,7 @@ function removeSensitive(obj, level = 0, visited = new WeakSet()) {
  * @param {*} value - The raw eval result.
  * @returns {Promise<string>} The sanitized output string.
  */
-async function clean(value) {
+async function clean(value, config = null) {
   if (value instanceof Promise) value = await value;
 
   if (typeof value === "object" && value !== null) {
@@ -106,6 +107,12 @@ async function clean(value) {
     output = typeof value === "string" ? value : inspect(value, { depth: 4, compact: false, maxArrayLength: 50, maxStringLength: 500, breakLength: 80 });
   } catch (err) {
     output = `[Inspection Error]: ${err.message}`;
+  }
+
+  /* Mask all configured secret values */
+  if (config) {
+    const secrets = collectSecrets(config);
+    output = redactSecrets(output, secrets);
   }
 
   return output

@@ -1,7 +1,6 @@
 /** @module src/utils/Utils @description General-purpose utility functions for formatting, validation, string manipulation, and ID cleaning. */
 
-import { escapeMarkdown as _escapeMarkdown, truncate as _truncate } from "@fluxerjs/util";
-import { logger } from "../core/Logger.mjs";
+import { escapeMarkdown as _escapeMarkdown } from "@fluxerjs/util";
 
 /**
  * Strip all non-digit characters from a value to extract a Snowflake/numeric ID.

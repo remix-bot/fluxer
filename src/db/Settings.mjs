@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import mysql from "mysql2";
 import { EventEmitter } from "node:events";
-import { MYSQL_POOL_DEFAULTS, attachMysqlPoolGuard } from "./MysqlGuard.mjs";
+import { attachMysqlPoolGuard } from "./MysqlGuard.mjs";
 import { getSharedMysqlPool } from "./PoolManager.mjs";
 import { logger } from "../core/Logger.mjs";
 

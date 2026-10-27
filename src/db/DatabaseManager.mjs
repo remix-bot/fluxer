@@ -5,9 +5,7 @@
  */
 
 import { compare, genSalt, hash } from "bcryptjs";
-import { createPool } from "mysql2/promise";
-import { logger } from "../core/Logger.mjs";
-import { MYSQL_POOL_DEFAULTS, attachMysqlPoolGuard } from "./MysqlGuard.mjs";
+import { attachMysqlPoolGuard } from "./MysqlGuard.mjs";
 import { getSharedPromisePool } from "./PoolManager.mjs";
 
 /**

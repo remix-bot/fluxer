@@ -4,7 +4,7 @@
  */
 
 import { CommandBuilder } from "../src/commands/index.mjs";
-import { Message, getGlobalColor } from "../src/ui/index.mjs";
+import { Message } from "../src/ui/index.mjs";
 import { EmbedBuilder }   from "@fluxerjs/core";
 import { PROVIDER_CHOICES, PROVIDER_NAMES, parseInlineProvider } from "../src/music/providers.mjs";
 import { NUMBER_EMOJIS, CANCEL_EMOJI } from "../src/utils/UI.mjs";

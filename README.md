@@ -126,6 +126,8 @@ A few things worth knowing:
 - **Radio stations** — built-in support for custom radio streams with keyword-based search
 - **Last.fm integration** — account linking, scrobbling, now-playing, play loved/top/recent/albums, whoknows, crowns, compare, leaderboards, and profiles
 - **Autoplay** — automatically play similar tracks when the queue ends (powered by Last.fm)
+- **Playback history & undo** — circular playback history buffer (up to 20 tracks) allowing listeners to step backwards in the queue (`%previous`, `%prev`, `%undo`) without lost tracks
+- **Instant song replay** — restart the currently playing track from 0:00 with zero stream lag (`%replay`, `%restart`)
 - **Seek** — jump to a specific position in the current track
 - **Track options** — set custom start/end times per track, great for album compilations and hidden tracks
 - **Queue move** — reorder tracks by moving them to a different position
@@ -164,6 +166,8 @@ Below is the complete list of Remix's commands. The default prefix is `%`.
 | `pause` | Pause the current playback | `%pause` | |
 | `resume` | Resume the paused playback | `%resume` | |
 | `skip` | Skip the currently playing song | `%skip` | `s` |
+| `previous` | Play the previous track from recent playback history | `%previous` / `%prev` | `prev`, `back`, `undo` |
+| `replay` | Restart the current song from the beginning (0:00) | `%replay` | `restart` |
 | `np` | Show the currently playing song | `%np` | `current`, `nowplaying` |
 | `list` | View the upcoming queue | `%list` | `queue`, `q` |
 | `loop` | Toggle loop mode (song or queue) | `%loop queue` | |
@@ -261,7 +265,7 @@ docker/
 | `bot` | remix-bot | `${WEB_PORT:-8080}` → 80 | The Remix bot (+ optional dashboard backend) |
 | `mysql` | remix-mysql | — | Settings, Last.fm users, and track options storage |
 | `redis` | remix-redis | — | Dashboard RPC pub/sub (optional) |
-| `nodelink` | remix-nodelink | `${NODELINK_PORT:-3000}` | Lavalink-compatible audio node |
+| `nodelink` | remix-nodelink | `${NODELINK_PORT:-3000}` | Lavalink-compatible audio node (`ghcr.io/performanc/nodelink:latest`) |
 
 #### Useful Docker commands
 

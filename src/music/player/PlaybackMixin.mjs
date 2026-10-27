@@ -9,13 +9,10 @@
  */
 
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../../ui/index.mjs";
 import { ERROR_COLOR } from "../../utils/UI.mjs";
 import { Utils, cleanId } from "../../utils/Utils.mjs";
 import { logger } from "../../core/Logger.mjs";
-import meta from "../probe.mjs";
 import { getBilibiliStreamUrl } from "../bilibili/index.mjs";
-import { isLoadstreamEnabled } from "../audio/AudioSettings.mjs";
 
 /**
  * @type {object}

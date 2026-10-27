@@ -1,6 +1,5 @@
 /** @module src/voice/VoiceStateCache */
 
-import { logger } from "../core/Logger.mjs";
 import { cleanId } from "../utils/Utils.mjs";
 
 /**

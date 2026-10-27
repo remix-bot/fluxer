@@ -6,7 +6,7 @@
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { logger } from "../src/core/Logger.mjs";
-import { getGlobalColor, cleanId } from "../src/ui/index.mjs";
+import { cleanId } from "../src/ui/index.mjs";
 
 /** @type {CommandBuilder} @description Command definition for the leave/stop command. */
 export const command = new CommandBuilder()

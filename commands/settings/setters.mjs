@@ -10,12 +10,12 @@ import { cleanId, getMessageGuildId, getGlobalColor } from "../../src/ui/index.m
 import { EmbedBuilder } from "@fluxerjs/core";
 import runnables from "../../settings/runnables.mjs";
 import {
-  parseBool, displayValue, getGuildName, embed, tWrap, prettifySettingLabel,
-  BOOL_SETTINGS, VALID_LOCALES, VOLUME_MIN, VOLUME_MAX, PREFIX_MAX, SHORTCUTS,
+  parseBool, displayValue, embed, tWrap, prettifySettingLabel,
+  BOOL_SETTINGS, VALID_LOCALES, VOLUME_MIN, VOLUME_MAX, PREFIX_MAX,
   VOTE_SKIP_THRESHOLD_MIN, VOTE_SKIP_THRESHOLD_MAX,
 } from "./utils.mjs";
 import {
-  get247Channels, save247Channels, build247Panel, disable247, handle247Toggle,
+  save247Channels, disable247, handle247Toggle,
 } from "./channels247.mjs";
 
 /**

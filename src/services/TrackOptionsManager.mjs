@@ -1,7 +1,6 @@
 /** @module src/services/TrackOptionsManager @description Per-user track options (start/end timestamps) stored in MySQL. Provides caching, matching, and CRUD for track segments. */
-import mysql from "mysql2";
 import { logger } from "../core/Logger.mjs";
-import { MYSQL_POOL_DEFAULTS, attachMysqlPoolGuard } from "../db/MysqlGuard.mjs";
+import { attachMysqlPoolGuard } from "../db/MysqlGuard.mjs";
 import { getSharedMysqlPool } from "../db/PoolManager.mjs";
 
 const DEFAULT_ALIAS = "default";
