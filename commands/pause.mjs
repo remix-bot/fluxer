@@ -26,7 +26,10 @@ export async function run(message) {
 
   const current = p.queue.getCurrent();
   if (!p.connection || !current) {
-    const embed = new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(message, "responses._common.nothingPlaying"));
+    const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setAuthor({ name: `⏸️ ${this.t(message, "responses.pause.pausedTitle")}` })
+      .setDescription(this.t(message, "responses._common.nothingPlaying"));
     return message.reply({ embeds: [embed] });
   }
 

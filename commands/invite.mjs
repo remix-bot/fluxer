@@ -34,15 +34,9 @@ export async function run(message) {
             name: this.t(message, "responses.invite.title"),
             iconURL: botIcon
         })
-        .setTitle("Add Remix to Your Server")
-        .setDescription(
-            "High-fidelity 24/7 Music Bot supporting YouTube, Spotify, SoundCloud, Apple Music & Deezer.\n\n" +
-            "💎 **48kHz Hi-Fi Audio** • 🎛️ **30+ Filters** • ⚡ **Dynamic Normalizer** • 📻 **Live Web Radio**\n\n" +
-            "**Quick Links:**\n" +
-            "• [➕ **Add Remix to Server**](https://fluxerlist.com/bots/remix)\n" +
-            "• [💬 **Join Support Community**](https://fluxer.gg/remix)"
-        )
-        .setFooter({ text: "Remix • Free & Open-Source Music" });
+        .setTitle(this.t(message, "responses.invite.addRemixTitle"))
+        .setDescription(this.t(message, "responses.invite.description"))
+        .setFooter({ text: this.t(message, "responses.invite.footer") });
 
     if (botIcon) embed.setThumbnail(botIcon);
 

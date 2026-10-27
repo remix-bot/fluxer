@@ -269,7 +269,14 @@
       "voiceTitle": "🔧 Debug de Voz",
       "summary": "📊 **Resumo**",
       "pageLabel": "Página {{page}}/{{total}}",
-      "navigateHint": "Use ⬅️➡️ para navegar"
+      "navigateHint": "Use ⬅️➡️ para navegar",
+      "author": "🛠️ Telemetria de Diagnóstico",
+      "rejoinAuthor": "🛠️ Controlador de Reconexão de Voz",
+      "voiceAuthor": "🛠️ Diagnóstico de Voz",
+      "unknownTitle": "Debug — Alvo Desconhecido",
+      "rejoinFooter": "Diagnóstico do Proprietário • Reconexão em Lote",
+      "telemetryFooter": "Telemetria de Estado de Voz • 1 Página",
+      "footerHelp": "Diagnóstico do Proprietário • %debug <target>"
     },
     "eval": {
       "resultTitle": "Resultado da Avaliação",
@@ -280,7 +287,8 @@
       "pageLabel": "Página {{page}}/{{total}}",
       "navigateHint": "• ⬅️ ➡️ Navegar • ❌ Excluir",
       "deleteHint": "• ❌ Excluir",
-      "controlsExpired": "⌛ Controles expirados"
+      "controlsExpired": "⌛ Controles expirados",
+      "author": "💻 Avaliador JavaScript"
     },
     "filter": {
       "pickerTitle": "🎛️ Seletor de Filtros de Áudio",
@@ -316,7 +324,9 @@
     },
     "invite": {
       "title": "Convide o Remix",
-      "description": "Adicione o Remix ao seu servidor diretamente pelo [FluxerList](<https://fluxerlist.com/bots/remix>).\n\nJunte-se à nossa comunidade em [fluxer.gg/remix](https://fluxer.gg/remix) para suporte, atualizações e feedback direto."
+      "description": "Adicione o Remix ao seu servidor diretamente pelo [FluxerList](<https://fluxerlist.com/bots/remix>).\n\nJunte-se à nossa comunidade em [fluxer.gg/remix](https://fluxer.gg/remix) para suporte, atualizações e feedback direto.",
+      "addRemixTitle": "Adicione o Remix ao seu Servidor",
+      "footer": "Remix • Música Gratuita e de Código Aberto"
     },
     "join": {
       "channelNotFound": "Não foi possível encontrar o canal `{{channel}}`\nUse o comando de ajuda para saber mais. (`$prefixhelp join`)",
@@ -426,7 +436,8 @@
       "queueLoop": "Loop da fila: **{{state}}**",
       "songLoop": "Loop de música: **{{state}}**",
       "streaming": "📻 Transmitindo **[{{title}}]({{url}})**",
-      "playingBy": "Tocando **[{{title}}]({{url}})** por [{{artist}}]({{artistUrl}})"
+      "playingBy": "Tocando **[{{title}}]({{url}})** por [{{artist}}]({{artistUrl}})",
+      "nowPlayingAuthor": "🎵 Tocando Agora"
     },
     "pause": {
       "nothingPlaying": "❌ Não está tocando nada no momento!",
@@ -524,7 +535,12 @@
       "serverMutedDesc": "O bot foi mutado por um administrador do servidor. A reprodução foi pausada para preservar a posição.",
       "serverUnmutedAuthor": "🔊 Bot Desmutado",
       "serverUnmutedTitle": "Reprodução Retomada",
-      "serverUnmutedDesc": "O bot foi desmutado — retomando a reprodução automaticamente."
+      "serverUnmutedDesc": "O bot foi desmutado — retomando a reprodução automaticamente.",
+      "streamPipelineAuthor": "🔎 Pipeline de Fluxo de Áudio",
+      "loadingDirectStream": "🔎 Carregando transmissão direta...",
+      "resolvingLavalinkStream": "🔎 Resolvendo fluxo via Lavalink...",
+      "lastfmPlaybackAuthor": "🎵 Reprodução do Last.fm",
+      "lastfmSearchAuthor": "🔎 Pesquisa no Last.fm"
     },
     "playnext": {
       "searching": "🔍 Buscando...",
@@ -584,7 +600,9 @@
       "nowPlaying": "📻 Transmitindo agora _{{title}}_ por [{{author}}]({{url}}) em <#{{channel}}>",
       "skipHint": "_Use `$prefixskip` para parar o rádio ou `$prefixradio list` para trocar de estação._",
       "prevNext": "⬅️ Anterior   ➡️ Próximo   ❌ Cancelar",
-      "stationsAuthor": "Diretório de Rádios 24/7"
+      "stationsAuthor": "Diretório de Rádios 24/7",
+      "liveRadioAuthor": "📻 Rádio ao Vivo 24/7",
+      "webRadioFooter": "{{prefix}}radio list • Web Rádio 24/7"
     },
     "reload": {
       "indexNoReload": "❌ `index.mjs` não pode ser recarregado — faça uma reinicialização completa.",
@@ -597,7 +615,9 @@
       "availableTargetsTitle": "🔄 Recarregar — Alvos Disponíveis",
       "runHint": "Execute `$prefixreload <alvo>` ou use uma palavra-chave em lote:",
       "batchKeywords": "`all` · `commands`",
-      "resultsHeader": "✅ **{{ok}}** recarregados · ❌ **{{bad}}** falharam"
+      "resultsHeader": "✅ **{{ok}}** recarregados · ❌ **{{bad}}** falharam",
+      "author": "🔄 Recarga Rápida de Módulos",
+      "footer": "Diagnóstico do Proprietário • Carregador Dinâmico de Módulos"
     },
     "remove": {
       "indexOutOfBounds": "Índice fora do intervalo",
@@ -830,7 +850,10 @@
       "notInServer": "❌ Deve ser usado em um servidor.",
       "noOneInVoice": "Ninguém está no canal de voz.",
       "title": "🎙️ Membros do Canal de Voz",
-      "channelEntry": "🔊 **{{name}}**: {{count}} membros"
+      "channelEntry": "🔊 **{{name}}**: {{count}} membros",
+      "author": "📊 Diagnóstico de Canal de Voz",
+      "footerZero": "Telemetria de Estado de Voz • 0 canais ativos",
+      "footerCount": "Total de Canais Ativos: {{count}} • Telemetria de Voz"
     },
     "thumbnail": {
       "nothingPlaying": "Não está tocando nada no momento.",
@@ -1224,7 +1247,8 @@
       "speedTitle": "Velocidade de Reprodução Ajustada",
       "speedMultiplier": "Multiplicador de {{speed}}×",
       "resetHint": "Redefina a qualquer momento com {{prefix}}speed",
-      "applied": "{{emoji}} Velocidade de reprodução definida para **{{speed}}×**."
+      "applied": "{{emoji}} Velocidade de reprodução definida para **{{speed}}×**.",
+      "normalRate": "1.0× Normal"
     },
     "pitch": {
       "reset": "🎵 Tom de áudio redefinido para **1.0×** normal.",
@@ -1233,7 +1257,8 @@
       "failed": "❌ Falha ao ajustar tom: {{reason}}",
       "pitchTitle": "Tom de Áudio Ajustado",
       "pitchMultiplier": "Mudança de Tom de {{pitch}}×",
-      "resetHint": "Redefina a qualquer momento com {{prefix}}pitch"
+      "resetHint": "Redefina a qualquer momento com {{prefix}}pitch",
+      "normalRate": "1.0× Normal"
     },
     "move": {
       "reorderedAuthor": "🔀 Faixa Reordenada",
@@ -1263,6 +1288,35 @@
       "author": "Navegação na Fila • Pular Faixa",
       "title": "{{count}} faixa(s) pulada(s) — Pulou para #{{position}}",
       "footer": "Remix Music • Restam {{remaining}} faixa(s) na fila"
+    },
+    "logtest": {
+      "author": "🛠️ Telemetria do Canal de Erros",
+      "disabledTitle": "Canal de Log de Erros Desativado",
+      "queuedTitle": "Evento de Teste Disparado",
+      "footerConfig": "Diagnóstico do Proprietário • config.errorLogChannel",
+      "footerPipeline": "Diagnóstico do Proprietário • pipeline logger.error"
+    },
+    "errorChannel": {
+      "author": "🛠️ Telemetria do Canal de Erros",
+      "connectedTitle": "Canal de Registros Conectado",
+      "connectedDesc": "O encaminhamento de diagnósticos e relatórios de falhas em tempo real está ativo para este canal.\n\n🔴 **Erros:** Exceções de banco de dados, reprodutor, nós de áudio e gateway\n🟡 **Avisos:** Limites de taxa, reconexões recuperáveis e alertas\n🚨 **Relatórios de Falhas:** Exceções fatais de processo com estatísticas de memória e tempo de atividade",
+      "connectedFooter": "Remix Watchdog • Verifique a entrega a qualquer momento com $prefixlogtest",
+      "crashFatalAuthor": "🚨 Falha Fatal de Processo",
+      "crashAlertAuthor": "⚠️ Alerta de Processo",
+      "crashFatalTitle": "🚨 Falha Fatal: {{title}}",
+      "crashAlertTitle": "⚠️ Alerta de Processo: {{title}}",
+      "uptimeField": "⏱️ Tempo de Atividade",
+      "memoryField": "💾 Memória (RSS)",
+      "crashFooter": "Telemetria de Erros de Processo • Exceção Não Tratada",
+      "forwardErrorAuthor": "🔴 Erro do Sistema",
+      "forwardWarnAuthor": "🟡 Aviso do Sistema",
+      "forwardInfoAuthor": "ℹ️ Informação do Sistema",
+      "forwardNoDetails": "*Nenhum detalhe adicional fornecido.*",
+      "forwardFooter": "Telemetria de Registros • Encaminhamento Automático",
+      "floodAuthor": "📦 Controle de Inundação de Registros",
+      "floodTitle": "Mensagens de Registro Descartadas",
+      "floodDesc": "⚠️ **{{count}}** mensagem(ns) de registro adicionais foram descartadas durante uma inundação para proteger os limites de taxa da API.",
+      "floodFooter": "Proteção de Limite de Taxa • ErrorChannel"
     }
   }
 }

@@ -248,6 +248,7 @@ export async function run(msg, data) {
 
     const embed = new EmbedBuilder()
         .setColor(isError ? ERROR_COLOR : getGlobalColor())
+        .setAuthor({ name: this.t(msg, "responses.eval.author") })
         .setTitle(title)
         .setDescription(desc)
         .setFooter({ text: footerText })

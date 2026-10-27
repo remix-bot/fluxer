@@ -30,6 +30,7 @@ export async function run(message) {
   if (p.isEmpty()) {
     const embed = new EmbedBuilder()
       .setColor(0xe9196c)
+      .setAuthor({ name: `🔀 ${this.t(message, "responses.shuffle.shuffledTitle")}` })
       .setDescription(this.t(message, "responses._common.nothingPlaying"));
     return message.reply({ embeds: [embed] });
   }

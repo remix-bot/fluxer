@@ -269,7 +269,14 @@
       "voiceTitle": "🔧 Sprach-Debug",
       "summary": "📊 **Zusammenfassung**",
       "pageLabel": "Seite {{page}}/{{total}}",
-      "navigateHint": "Nutze ⬅️➡️ zum Navigieren"
+      "navigateHint": "Nutze ⬅️➡️ zum Navigieren",
+      "author": "🛠️ Diagnose-Telemetrie",
+      "rejoinAuthor": "🛠️ Sprach-Rejoin-Controller",
+      "voiceAuthor": "🛠️ Sprachdiagnose",
+      "unknownTitle": "Debug — Unbekanntes Ziel",
+      "rejoinFooter": "Besitzer-Diagnose • Batch-Rejoin",
+      "telemetryFooter": "Sprachstatus-Telemetrie • 1 Seite",
+      "footerHelp": "Besitzer-Diagnose • %debug <target>"
     },
     "eval": {
       "resultTitle": "Auswertungsergebnis",
@@ -280,7 +287,8 @@
       "pageLabel": "Seite {{page}}/{{total}}",
       "navigateHint": "• ⬅️ ➡️ Navigieren • ❌ Löschen",
       "deleteHint": "• ❌ Löschen",
-      "controlsExpired": "⌛ Steuerung abgelaufen"
+      "controlsExpired": "⌛ Steuerung abgelaufen",
+      "author": "💻 JavaScript-Evaluator"
     },
     "filter": {
       "pickerTitle": "🎛️ Audio-Filter-Picker",
@@ -316,7 +324,9 @@
     },
     "invite": {
       "title": "Remix einladen",
-      "description": "Füge Remix direkt über [FluxerList](<https://fluxerlist.com/bots/remix>) zu deinem Server hinzu.\n\nTritt unserer Community auf [fluxer.gg/remix](https://fluxer.gg/remix) für Support, Updates und Feedback bei."
+      "description": "Füge Remix direkt über [FluxerList](<https://fluxerlist.com/bots/remix>) zu deinem Server hinzu.\n\nTritt unserer Community auf [fluxer.gg/remix](https://fluxer.gg/remix) für Support, Updates und Feedback bei.",
+      "addRemixTitle": "Füge Remix zu deinem Server hinzu",
+      "footer": "Remix • Kostenlose & Open-Source-Musik"
     },
     "join": {
       "channelNotFound": "Konnte den Kanal `{{channel}}` nicht finden.\nNutze den Hilfe-Befehl für mehr Infos. (`$prefixhelp join`)",
@@ -426,7 +436,8 @@
       "queueLoop": "Warteschlangen-Schleife: **{{state}}**",
       "songLoop": "Song-Schleife: **{{state}}**",
       "streaming": "📻 Streamt **[{{title}}]({{url}})**",
-      "playingBy": "Spielt **[{{title}}]({{url}})** von [{{artist}}]({{artistUrl}})"
+      "playingBy": "Spielt **[{{title}}]({{url}})** von [{{artist}}]({{artistUrl}})",
+      "nowPlayingAuthor": "🎵 Aktuelle Wiedergabe"
     },
     "pause": {
       "nothingPlaying": "❌ Es wird gerade nichts abgespielt!",
@@ -524,7 +535,12 @@
       "serverMutedDesc": "Der Bot wurde von einem Server-Administrator stummgeschaltet. Die Wiedergabe wurde pausiert, um die Position zu sichern.",
       "serverUnmutedAuthor": "🔊 Bot-Stummschaltung aufgehoben",
       "serverUnmutedTitle": "Wiedergabe fortgesetzt",
-      "serverUnmutedDesc": "Die Stummschaltung des Bots wurde aufgehoben — Wiedergabe wird automatisch fortgesetzt."
+      "serverUnmutedDesc": "Die Stummschaltung des Bots wurde aufgehoben — Wiedergabe wird automatisch fortgesetzt.",
+      "streamPipelineAuthor": "🔎 Audiostream-Pipeline",
+      "loadingDirectStream": "🔎 Direkter Stream wird geladen...",
+      "resolvingLavalinkStream": "🔎 Stream wird über Lavalink aufgelöst...",
+      "lastfmPlaybackAuthor": "🎵 Last.fm-Wiedergabe",
+      "lastfmSearchAuthor": "🔎 Last.fm-Suche"
     },
     "playnext": {
       "searching": "🔍 Suche...",
@@ -584,7 +600,9 @@
       "nowPlaying": "📻 Streamt jetzt _{{title}}_ von [{{author}}]({{url}}) in <#{{channel}}>",
       "skipHint": "_Nutze `$prefixskip`, um das Radio zu stoppen, oder `$prefixradio list`, um Sender zu wechseln._",
       "prevNext": "⬅️ Zurück   ➡️ Weiter   ❌ Abbrechen",
-      "stationsAuthor": "24/7 Radiosender-Verzeichnis"
+      "stationsAuthor": "24/7 Radiosender-Verzeichnis",
+      "liveRadioAuthor": "📻 24/7 Live-Radio",
+      "webRadioFooter": "{{prefix}}radio list • 24/7 Web-Radio"
     },
     "reload": {
       "indexNoReload": "❌ `index.mjs` kann nicht neu geladen werden — führe einen vollständigen Neustart durch.",
@@ -597,7 +615,9 @@
       "availableTargetsTitle": "🔄 Neu laden — Verfügbare Ziele",
       "runHint": "Führe `$prefixreload <Ziel>` aus oder nutze ein Stichwort:",
       "batchKeywords": "`all` · `commands`",
-      "resultsHeader": "✅ **{{ok}}** neu geladen · ❌ **{{bad}}** fehlgeschlagen"
+      "resultsHeader": "✅ **{{ok}}** neu geladen · ❌ **{{bad}}** fehlgeschlagen",
+      "author": "🔄 Modul-Hot-Reload",
+      "footer": "Besitzer-Diagnose • Dynamischer Modullader"
     },
     "remove": {
       "indexOutOfBounds": "Index außerhalb des Bereichs",
@@ -830,7 +850,10 @@
       "notInServer": "❌ Muss in einem Server verwendet werden.",
       "noOneInVoice": "Niemand ist im Sprachkanal.",
       "title": "🎙️ Sprachkanal-Mitglieder",
-      "channelEntry": "🔊 **{{name}}**: {{count}} Mitglieder"
+      "channelEntry": "🔊 **{{name}}**: {{count}} Mitglieder",
+      "author": "📊 Sprachkanal-Diagnose",
+      "footerZero": "Sprachstatus-Telemetrie • 0 aktive Kanäle",
+      "footerCount": "Aktive Kanäle gesamt: {{count}} • Sprach-Telemetrie"
     },
     "thumbnail": {
       "nothingPlaying": "Es wird gerade nichts abgespielt.",
@@ -1224,7 +1247,8 @@
       "speedTitle": "Wiedergabegeschwindigkeit Angepasst",
       "speedMultiplier": "{{speed}}× Multiplikator",
       "resetHint": "Jederzeit zurücksetzen mit {{prefix}}speed",
-      "applied": "{{emoji}} Wiedergabegeschwindigkeit auf **{{speed}}×** eingestellt."
+      "applied": "{{emoji}} Wiedergabegeschwindigkeit auf **{{speed}}×** eingestellt.",
+      "normalRate": "1.0× Normal"
     },
     "pitch": {
       "reset": "🎵 Tonhöhe auf normale **1.0×** zurückgesetzt.",
@@ -1233,7 +1257,8 @@
       "failed": "❌ Tonhöhe konnte nicht geändert werden: {{reason}}",
       "pitchTitle": "Tonhöhe Angepasst",
       "pitchMultiplier": "{{pitch}}× Tonhöhenverschiebung",
-      "resetHint": "Jederzeit zurücksetzen mit {{prefix}}pitch"
+      "resetHint": "Jederzeit zurücksetzen mit {{prefix}}pitch",
+      "normalRate": "1.0× Normal"
     },
     "move": {
       "reorderedAuthor": "🔀 Titel neu angeordnet",
@@ -1263,6 +1288,35 @@
       "author": "Warteschlangen-Navigation • Titel überspringen",
       "title": "{{count}} Titel übersprungen — Zu #{{position}} gesprungen",
       "footer": "Remix Music • Noch {{remaining}} Titel in der Warteschlange"
+    },
+    "logtest": {
+      "author": "🛠️ Fehlerkanal-Telemetrie",
+      "disabledTitle": "Fehlerprotokoll-Kanal deaktiviert",
+      "queuedTitle": "Testereignis gesendet",
+      "footerConfig": "Besitzer-Diagnose • config.errorLogChannel",
+      "footerPipeline": "Besitzer-Diagnose • logger.error-Pipeline"
+    },
+    "errorChannel": {
+      "author": "🛠️ Fehlerkanal-Telemetrie",
+      "connectedTitle": "Protokollkanal verbunden",
+      "connectedDesc": "Die Echtzeit-Diagnose und Absturzweiterleitung ist jetzt für diesen Kanal aktiv.\n\n🔴 **Fehler:** Datenbank-, Player-, Audioknoten- und Gateway-Ausnahmen\n🟡 **Warnungen:** Ratenbegrenzungen, behebbare Neuverbindungen und Warnungen\n🚨 **Absturzberichte:** Schwerwiegende Prozessausnahmen mit Speicher- und Betriebszeit-Statistiken",
+      "connectedFooter": "Remix Watchdog • Überprüfe die Zustellung jederzeit mit $prefixlogtest",
+      "crashFatalAuthor": "🚨 Schwerwiegender Prozessabsturz",
+      "crashAlertAuthor": "⚠️ Prozesswarnung",
+      "crashFatalTitle": "🚨 Schwerwiegender Absturz: {{title}}",
+      "crashAlertTitle": "⚠️ Prozesswarnung: {{title}}",
+      "uptimeField": "⏱️ Betriebszeit",
+      "memoryField": "💾 Speicher (RSS)",
+      "crashFooter": "Prozessfehler-Telemetrie • Unbehandelte Ausnahme",
+      "forwardErrorAuthor": "🔴 Systemfehler",
+      "forwardWarnAuthor": "🟡 Systemwarnung",
+      "forwardInfoAuthor": "ℹ️ Systeminfo",
+      "forwardNoDetails": "*Keine weiteren Details angegeben.*",
+      "forwardFooter": "Logger-Telemetrie • Automatische Weiterleitung",
+      "floodAuthor": "📦 Protokoll-Flutschutz",
+      "floodTitle": "Protokollnachrichten verworfen",
+      "floodDesc": "⚠️ **{{count}}** zusätzliche Protokollnachricht(en) wurden während einer Flut verworfen, um API-Ratenbegrenzungen zu schützen.",
+      "floodFooter": "Ratenbegrenzungsschutz • ErrorChannel"
     }
   }
 }

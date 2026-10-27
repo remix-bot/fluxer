@@ -269,7 +269,14 @@
       "voiceTitle": "🔧 دیباگی دەنگ",
       "summary": "📊 **پوختە**",
       "pageLabel": "لاپەڕە {{page}}/{{total}}",
-      "navigateHint": "بۆ ناوەڕۆک ⬅️➡️ بەکاربهێنە"
+      "navigateHint": "بۆ ناوەڕۆک ⬅️➡️ بەکاربهێنە",
+      "author": "🛠️ تەلەمیتری دەستنیشانکردن",
+      "rejoinAuthor": "🛠️ کۆنترۆڵکەری دووبارە چوونەژوورەوەی دەنگ",
+      "voiceAuthor": "🛠️ دەستنیشانکردنی دەنگ",
+      "unknownTitle": "چاککردنی هەڵە — ئامانجی نەزانراو",
+      "rejoinFooter": "دەستنیشانکردنی خاوەن • چوونەژوورەوەی بەکۆمەڵ",
+      "telemetryFooter": "تەلەمیتری دۆخی دەنگ • ١ پەڕە",
+      "footerHelp": "دەستنیشانکردنی خاوەن • %debug <target>"
     },
     "eval": {
       "resultTitle": "ئەنجامی هەڵسەنگاندن",
@@ -280,7 +287,8 @@
       "pageLabel": "لاپەڕە {{page}}/{{total}}",
       "navigateHint": "• ⬅️ ➡️ ناوەڕۆک • ❌ سڕینەوە",
       "deleteHint": "• ❌ سڕینەوە",
-      "controlsExpired": "⌛ کۆنتڕۆڵەکان بەسەرچوون"
+      "controlsExpired": "⌛ کۆنتڕۆڵەکان بەسەرچوون",
+      "author": "💻 هەڵسەنگێنەری جاڤاسکریپت"
     },
     "filter": {
       "pickerTitle": "🎛️ هەڵبژاردەری فلتەری دەنگ",
@@ -316,7 +324,9 @@
     },
     "invite": {
       "title": "Banngکردنی Remix",
-      "description": "Remix زیاد بکە بۆ سێرڤەرەکەت لەڕێگەی [FluxerList](<https://fluxerlist.com/bots/remix>).\n\nبەشداری کۆمەڵگەکەمان بکە لە [fluxer.gg/remix](https://fluxer.gg/remix) بۆ پشتگیری، نوێکارییەکان، و ڕاوبۆچوونی ڕاستەوخۆ."
+      "description": "Remix زیاد بکە بۆ سێرڤەرەکەت لەڕێگەی [FluxerList](<https://fluxerlist.com/bots/remix>).\n\nبەشداری کۆمەڵگەکەمان بکە لە [fluxer.gg/remix](https://fluxer.gg/remix) بۆ پشتگیری، نوێکارییەکان، و ڕاوبۆچوونی ڕاستەوخۆ.",
+      "addRemixTitle": "ڕیمیکس زیادبکە بۆ سێرڤەرەکەت",
+      "footer": "ڕیمیکس • مۆسیقای بێبەرامبەر و سەرچاوەکراوە"
     },
     "join": {
       "channelNotFound": "نەتوانرا کەناڵ `{{channel}}` بدۆزرێتەوە\nفەرمانی یارمەتی بەکاربهێنە بۆ زانینی زیاتر. (`$prefixhelp join`)",
@@ -426,7 +436,8 @@
       "queueLoop": "لووپی ڕیزبەندی: **{{state}}**",
       "songLoop": "لووپی گۆرانی: **{{state}}**",
       "streaming": "📻 پەخشی ڕاستەوخۆ **[{{title}}]({{url}})**",
-      "playingBy": "پەخش دەکرێت **[{{title}}]({{url}})** لەلایەن [{{artist}}]({{artistUrl}})"
+      "playingBy": "پەخش دەکرێت **[{{title}}]({{url}})** لەلایەن [{{artist}}]({{artistUrl}})",
+      "nowPlayingAuthor": "🎵 ئێستا پەخش دەکرێت"
     },
     "pause": {
       "nothingPlaying": "❌ هیچ شتێک پەخش ناکرێت لە ئێستادا!",
@@ -524,7 +535,12 @@
       "serverMutedDesc": "بۆتەکە لەلایەن بەڕێوەبەری سێرڤەرەوە بێدەنگ کرا. لێدان ڕاگیرا بۆ پاراستنی شوێنی گۆرانی.",
       "serverUnmutedAuthor": "🔊 بێدەنگی بۆت هەڵگیرا",
       "serverUnmutedTitle": "لێدان دەستیپێکردەوە",
-      "serverUnmutedDesc": "بێدەنگی بۆت هەڵگیرا — لێدان بەشێوەی خۆکار دەستیپێکردەوە."
+      "serverUnmutedDesc": "بێدەنگی بۆت هەڵگیرا — لێدان بەشێوەی خۆکار دەستیپێکردەوە.",
+      "streamPipelineAuthor": "🔎 هێڵی پەخشی دەنگ",
+      "loadingDirectStream": "🔎 بارکردنی پەخشی ڕاستەوخۆ...",
+      "resolvingLavalinkStream": "🔎 شیکارکردنی پەخش لە ڕێگەی Lavalink...",
+      "lastfmPlaybackAuthor": "🎵 لێدانی Last.fm",
+      "lastfmSearchAuthor": "🔎 گەڕانی Last.fm"
     },
     "playnext": {
       "searching": "🔍 گەڕان...",
@@ -584,7 +600,9 @@
       "nowPlaying": "📻 پەخشی ڕاستەوخۆ _{{title}}_ لەلایەن [{{author}}]({{url}}) لە <#{{channel}}>",
       "skipHint": "_`$prefixskip` بەکاربهێنە بۆ وەستاندنی ڕادیۆ، یان `$prefixradio list` بۆ گۆڕینی ستەیشنەکان._",
       "prevNext": "⬅️ پێشوو   ➡️ دواتر   ❌ پاشگەزبوونەوە",
-      "stationsAuthor": "ڕێبەری وێستگەکانی ڕادیۆ ٢٤/٧"
+      "stationsAuthor": "ڕێبەری وێستگەکانی ڕادیۆ ٢٤/٧",
+      "liveRadioAuthor": "📻 ڕادیۆی ڕاستەوخۆ ٢٤/٧",
+      "webRadioFooter": "{{prefix}}radio list • ڕادیۆی وێب ٢٤/٧"
     },
     "reload": {
       "indexNoReload": "❌ `index.mjs` ناتوانرێت بارکردنەوەی خێرا بکات — سەرەتا دەستپێکردنەوەی تەواو بکە.",
@@ -597,7 +615,9 @@
       "availableTargetsTitle": "🔄 بارکردنەوە — ئامانجە بەردەستەکان",
       "runHint": "`$prefixreload <ئامانج>` بەکاربهێنە یان وشەیەکی گرووپی بەکاربهێنە:",
       "batchKeywords": "`all` · `commands`",
-      "resultsHeader": "✅ **{{ok}}** بارکرانەوە · ❌ **{{bad}}** سەرکەوتوو نەبوون"
+      "resultsHeader": "✅ **{{ok}}** بارکرانەوە · ❌ **{{bad}}** سەرکەوتوو نەبوون",
+      "author": "🔄 بارکردنەوەی خێرای مۆدیوول",
+      "footer": "دەستنیشانکردنی خاوەن • بارکەری دینامیکی مۆدیوول"
     },
     "remove": {
       "indexOutOfBounds": "ئیندێکس لە دەرەوەی سنوورە",
@@ -830,7 +850,10 @@
       "notInServer": "❌ پێویستە لە سێرڤەرێکدا بەکارهێنرێت.",
       "noOneInVoice": "کەس لە دەنگدا نییە.",
       "title": "🎙️ ئەندامانی کەناڵی دەنگ",
-      "channelEntry": "🔊 **{{name}}**: {{count}} ئەندام"
+      "channelEntry": "🔊 **{{name}}**: {{count}} ئەندام",
+      "author": "📊 دەستنیشانکردنی کەناڵی دەنگی",
+      "footerZero": "تەلەمیتری دۆخی دەنگ • ٠ کەناڵی چالاک",
+      "footerCount": "کۆی گشتی کەناڵە چالاکەکان: {{count}} • تەلەمیتری دەنگ"
     },
     "thumbnail": {
       "nothingPlaying": "هیچ شتێک پەخش ناکرێت لە ئێستادا.",
@@ -1224,7 +1247,8 @@
       "speedTitle": "خێرایی لێدان ڕێکخرا",
       "speedMultiplier": "لێکدانی {{speed}}×",
       "resetHint": "ڕێکخستنەوە لە هەر کاتێکدا بە {{prefix}}speed",
-      "applied": "{{emoji}} خێرایی لێدان دیاریکرا بۆ **{{speed}}×**."
+      "applied": "{{emoji}} خێرایی لێدان دیاریکرا بۆ **{{speed}}×**.",
+      "normalRate": "١.٠× ئاسایی"
     },
     "pitch": {
       "reset": "🎵 تۆنی دەنگ گەڕایەوە بۆ باری ئاسایی **1.0×**.",
@@ -1233,7 +1257,8 @@
       "failed": "❌ گۆڕینی تۆنی دەنگ سەرکەوتوو نەبوو: {{reason}}",
       "pitchTitle": "تۆنی دەنگ ڕێکخرا",
       "pitchMultiplier": "گۆڕینی تۆن {{pitch}}×",
-      "resetHint": "ڕێکخستنەوە لە هەر کاتێکدا بە {{prefix}}pitch"
+      "resetHint": "ڕێکخستنەوە لە هەر کاتێکدا بە {{prefix}}pitch",
+      "normalRate": "١.٠× ئاسایی"
     },
     "move": {
       "reorderedAuthor": "🔀 گۆرانی دووبارە ڕیزکرایەوە",
@@ -1263,6 +1288,35 @@
       "author": "گەڕان لە ڕیزبەندی • پەڕینەوەی گۆرانی",
       "title": "{{count}} گۆرانی پەڕێندرا — پەڕینەوە بۆ #{{position}}",
       "footer": "Remix Music • {{remaining}} گۆرانی لە ڕیزبەندی ماوەتەوە"
+    },
+    "logtest": {
+      "author": "🛠️ تەلەمیتری کەناڵی هەڵەکان",
+      "disabledTitle": "کەناڵی تۆماری هەڵەکان ناچالاک کراوە",
+      "queuedTitle": "ڕووداوی تاقیکردنەوە نێردرا",
+      "footerConfig": "دەستنیشانکردنی خاوەن • config.errorLogChannel",
+      "footerPipeline": "دەستنیشانکردنی خاوەن • هێڵی logger.error"
+    },
+    "errorChannel": {
+      "author": "🛠️ داتای پەیوەندی کەناڵی هەڵەکان",
+      "connectedTitle": "کەناڵی تۆمارەکان بە سەرکەوتوویی بەستراوە",
+      "connectedDesc": "گواستنەوەی دەستبەجێی کێشەکان و ڕاپۆرتی لەکارکەوتن بۆ ئەم کەناڵە چالاک کرا.\n\n🔴 **هەڵەکان:** کێشەکانی بنکەدراوە، لێدەر، نۆدی دەنگ و دەروازە\n🟡 **ئاگادارییەکان:** سنووردارکردنی ڕێژە، پەیوەندییەوە و هۆشدارییەکان\n🚨 **ڕاپۆرتی لەکارکەوتن:** هەڵە کوشندەکانی پرۆسە لەگەڵ داتای بیرگە و کاتی کارکردن",
+      "connectedFooter": "چاودێری Remix • دەتوانیت لە هەر کاتێکدا دڵنیا بیتەوە بە $prefixlogtest",
+      "crashFatalAuthor": "🚨 لەکارکەوتنی کوشندەی پرۆسە",
+      "crashAlertAuthor": "⚠️ ئاگاداریی پرۆسە",
+      "crashFatalTitle": "🚨 لەکارکەوتنی کوشندە: {{title}}",
+      "crashAlertTitle": "⚠️ ئاگاداریی پرۆسە: {{title}}",
+      "uptimeField": "⏱️ کاتی کارکردن",
+      "memoryField": "💾 بیرگە (RSS)",
+      "crashFooter": "تێلیمیترای هەڵەی پرۆسە • هەڵەی چارەسەرنەکراو",
+      "forwardErrorAuthor": "🔴 هەڵەی سیستەم",
+      "forwardWarnAuthor": "🟡 ئاگاداریی سیستەم",
+      "forwardInfoAuthor": "ℹ️ زانیاریی سیستەم",
+      "forwardNoDetails": "*هیچ وردەکارییەکی زیاتر پێشکەش نەکراوە.*",
+      "forwardFooter": "تێلیمیترای تۆمارکەر • ناردنی خۆکار",
+      "floodAuthor": "📦 دەروازەی قەرەباڵغیی تۆمارەکان",
+      "floodTitle": "پەیامەکانی تۆمار فڕێدران",
+      "floodDesc": "⚠️ **{{count}}** پەیامی زیاتری تۆمار لە کاتی قەرەباڵغیدا فڕێدران بۆ پاراستنی سنووری خێرایی API.",
+      "floodFooter": "پارێزەری سنووری خێرایی • ErrorChannel"
     }
   }
 }

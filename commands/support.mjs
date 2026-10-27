@@ -27,17 +27,12 @@ export function run(msg) {
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
     .setAuthor({
-      name: "Remix Support Community",
+      name: this.t(msg, "responses.support.title"),
       iconURL: botIcon
     })
-    .setTitle(this.t(msg, "responses.support.title"))
-    .setDescription(
-      "Need help, want to report a bug, or suggest a new feature? Join our official community server:\n\n" +
-      "🚀 **[Join Support Server (fluxer.gg/remix)](https://fluxer.gg/remix)**\n\n" +
-      "🟢 **24/7 Community & Staff Assistance**\n" +
-      "Feature requests, announcements, and audio troubleshooting guides."
-    )
-    .setFooter({ text: "Remix Support • fluxer.gg/remix" });
+    .setTitle("Remix HQ (fluxer.gg/remix)")
+    .setDescription(this.t(msg, "responses.support.description"))
+    .setFooter({ text: "fluxer.gg/remix" });
 
   if (botIcon) embed.setThumbnail(botIcon);
   msg.reply({ embeds: [embed] }).catch(() => {});

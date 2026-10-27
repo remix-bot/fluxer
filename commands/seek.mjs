@@ -32,32 +32,37 @@ export async function run(msg, data) {
   const p = await this.getPlayer(msg, true, true, false);
   if (!p) return;
 
+  const seekNotice = (desc) => new EmbedBuilder()
+    .setColor(0xe9196c)
+    .setAuthor({ name: `⏩ ${this.t(msg, "responses.seek.seekTitle")}` })
+    .setDescription(desc);
+
   if (!p.queue?.getCurrent()) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.nothingPlaying"))] });
+    return msg.reply({ embeds: [seekNotice(this.t(msg, "responses.seek.nothingPlaying"))] });
   }
 
   if (p._paused) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.paused"))] });
+    return msg.reply({ embeds: [seekNotice(this.t(msg, "responses.seek.paused"))] });
   }
 
   const current = p.queue.getCurrent();
 
   if (current?.type === "radio" || current?.isLive || p._getTrackDurationMs(current) === 0) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.live"))] });
+    return msg.reply({ embeds: [seekNotice(this.t(msg, "responses.seek.live"))] });
   }
 
   const trimmed = String(positionInput ?? "").trim();
   const isZero = /^0+(:0+)?(:0+)?$/.test(trimmed);
   const seekMs = isZero ? 0 : Utils.parseDuration(trimmed);
   if (seekMs === null || isNaN(seekMs) || seekMs < 0 || (!isZero && seekMs === 0)) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.invalidFormat"))] });
+    return msg.reply({ embeds: [seekNotice(this.t(msg, "responses.seek.invalidFormat"))] });
   }
 
   const trackDuration = p._getTrackDurationMs(p.queue.getCurrent());
 
   if (trackDuration > 0 && seekMs >= trackDuration) {
     const maxStr = Utils.prettifyMS(trackDuration);
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.exceedsDuration", { duration: maxStr }))] });
+    return msg.reply({ embeds: [seekNotice(this.t(msg, "responses.seek.exceedsDuration", { duration: maxStr }))] });
   }
 
   try {
@@ -91,9 +96,9 @@ export async function run(msg, data) {
 
       return msg.reply({ embeds: [embed] });
     } else {
-      return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.notSupported"))] });
+      return msg.reply({ embeds: [seekNotice(this.t(msg, "responses.seek.notSupported"))] });
     }
   } catch (err) {
-    return msg.reply({ embeds: [new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(msg, "responses.seek.failed", { error: err.message }))] });
+    return msg.reply({ embeds: [seekNotice(this.t(msg, "responses.seek.failed", { error: err.message }))] });
   }
 }

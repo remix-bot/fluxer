@@ -7,7 +7,7 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor, cleanId } from "../src/ui/index.mjs";
+import { cleanId } from "../src/ui/index.mjs";
 import { countHumansInChannel } from "../src/voice/VoiceStateResolver.mjs";
 import { Utils } from "../src/utils/Utils.mjs";
 
@@ -29,7 +29,10 @@ async function doSkip(ctx, message, p) {
 
   const err = p.skip();
   if (!p.connection || !current) {
-    const embed = new EmbedBuilder().setColor(0xe9196c).setDescription(err);
+    const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setAuthor({ name: `⏭️ ${ctx.t(message, "responses.skip.skippedTitle")}` })
+      .setDescription(err);
     return message.reply({ embeds: [embed] });
   }
 
@@ -81,7 +84,10 @@ export async function run(message) {
 
   const current = p.queue.getCurrent();
   if (!p.connection || !current) {
-    const embed = new EmbedBuilder().setColor(0xe9196c).setDescription(this.t(message, "responses._common.nothingPlaying"));
+    const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setAuthor({ name: `⏭️ ${this.t(message, "responses.skip.skippedTitle")}` })
+      .setDescription(this.t(message, "responses._common.nothingPlaying"));
     return message.reply({ embeds: [embed] });
   }
 

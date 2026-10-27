@@ -29,6 +29,7 @@ export async function run(msg) {
   if (!current) {
     const embed = new EmbedBuilder()
       .setColor(0xe9196c)
+      .setAuthor({ name: `🖼️ ${this.t(msg, "responses.thumbnail.thumbTitle")}` })
       .setDescription(this.t(msg, "responses._common.nothingPlaying"));
     return msg.reply({ embeds: [embed] }).catch(() => {});
   }
@@ -36,6 +37,7 @@ export async function run(msg) {
   if (!current.thumbnail) {
     const embed = new EmbedBuilder()
       .setColor(0xe9196c)
+      .setAuthor({ name: `🖼️ ${this.t(msg, "responses.thumbnail.thumbTitle")}` })
       .setDescription(this.t(msg, "responses.thumbnail.noArtwork"));
     return msg.reply({ embeds: [embed] }).catch(() => {});
   }

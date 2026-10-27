@@ -147,7 +147,7 @@ async function processRejoinBatch(ctx, entries, statusMsg, title) {
       const icon = r.success ? "✅" : "❌";
       progressLines.push(`${icon} \`${r.label}\`${r.success ? ` — room:${r.roomState}` : ` — failed (${r.reason ?? "?"})`}`);
     }
-    await statusMsg.edit({ embeds: [new EmbedBuilder().setColor(WARN_COLOR).setTitle(`Debug — ${title}`).setDescription(progressLines.join("\n").slice(0, MAX_DESC))] }).catch(() => {});
+    await statusMsg.edit({ embeds: [new EmbedBuilder().setColor(WARN_COLOR).setAuthor({ name: this.t ? this.t(msg, "responses.debug.rejoinAuthor") : (ctx.t ? ctx.t(msg, "responses.debug.rejoinAuthor") : "🛠️ Voice Rejoin Controller") }).setTitle(`Debug — ${title}`).setDescription(progressLines.join("\n").slice(0, MAX_DESC)).setFooter({ text: this.t ? this.t(msg, "responses.debug.rejoinFooter") : (ctx.t ? ctx.t(msg, "responses.debug.rejoinFooter") : "Owner Diagnostics • Batch Rejoin") })] }).catch(() => {});
 
     const result = await forceRejoinPlayer(ctx, player);
     result.label = label;
@@ -197,7 +197,7 @@ function buildRejoinResultEmbed(results, title, noun) {
   }
 
   const finalColor = failedCount === 0 ? SUCCESS_COLOR : DANGER_COLOR;
-  return { embeds: [new EmbedBuilder().setColor(finalColor).setTitle(`Debug — ${title}`).setDescription(resultLines.join("\n").slice(0, MAX_DESC))] };
+  return { embeds: [new EmbedBuilder().setColor(finalColor).setAuthor({ name: this.t ? this.t(msg, "responses.debug.rejoinAuthor") : (ctx.t ? ctx.t(msg, "responses.debug.rejoinAuthor") : "🛠️ Voice Rejoin Controller") }).setTitle(`Debug — ${title}`).setDescription(resultLines.join("\n").slice(0, MAX_DESC)).setFooter({ text: this.t ? this.t(msg, "responses.debug.rejoinFooter") : (ctx.t ? ctx.t(msg, "responses.debug.rejoinFooter") : "Owner Diagnostics • Batch Rejoin") })] };
 }
 /**
  * Run a batch rejoin operation on matching players.
@@ -222,8 +222,10 @@ export async function runBatchRejoin(msg, key, title, noun, filter, showHintIfEm
         : "";
     const embed = new EmbedBuilder()
         .setColor(SUCCESS_COLOR)
+        .setAuthor({ name: this.t ? this.t(msg, "responses.debug.rejoinAuthor") : (ctx.t ? ctx.t(msg, "responses.debug.rejoinAuthor") : "🛠️ Voice Rejoin Controller") })
         .setTitle(`Debug — ${title}`)
         .setDescription(`No ${noun} found. All voice connections appear healthy.${hintLine}`)
+        .setFooter({ text: this.t ? this.t(msg, "responses.debug.rejoinFooter") : (ctx.t ? ctx.t(msg, "responses.debug.rejoinFooter") : "Owner Diagnostics • Batch Rejoin") })
     ;
     return msg.reply({ embeds: [embed] });
   }
@@ -245,8 +247,10 @@ export async function runBatchRejoin(msg, key, title, noun, filter, showHintIfEm
 
   const statusEmbed = new EmbedBuilder()
       .setColor(WARN_COLOR)
+      .setAuthor({ name: this.t ? this.t(msg, "responses.debug.rejoinAuthor") : (ctx.t ? ctx.t(msg, "responses.debug.rejoinAuthor") : "🛠️ Voice Rejoin Controller") })
       .setTitle(`Debug — ${title}`)
       .setDescription(statusLines.join("\n").slice(0, MAX_DESC))
+      .setFooter({ text: this.t ? this.t(msg, "responses.debug.rejoinFooter") : (ctx.t ? ctx.t(msg, "responses.debug.rejoinFooter") : "Owner Diagnostics • Batch Rejoin") })
   ;
   const statusMsg = await msg.reply({ embeds: [statusEmbed] });
 

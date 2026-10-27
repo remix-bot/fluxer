@@ -57,8 +57,8 @@ export async function run(message, data) {
 
   const searchEmbed = new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setDescription(this.t(message, "responses.playnext.searching"))
-    ;
+    .setAuthor({ name: `🔎 ${this.t(message, "responses.playnext.searching")}` })
+    .setDescription(this.t(message, "responses.playnext.searching"));
 
   let statusMsg;
   try {

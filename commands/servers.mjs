@@ -30,9 +30,10 @@ export async function run(msg) {
   if (guilds.length === 0) {
     const emptyEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
+        .setAuthor({ name: this.t(msg, "responses.servers.serversAuthor") })
         .setTitle(this.t(msg, "responses.servers.title", { count: 0 }))
         .setDescription(this.t(msg, "responses.servers.noServers"))
-        ;
+        .setFooter({ text: this.t(msg, "responses.servers.listComplete") });
     return msg.reply({ embeds: [emptyEmbed] });
   }
 

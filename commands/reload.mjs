@@ -113,9 +113,10 @@ async function showPaged(msg, title, lines, pageSize = 14) {
     embeds: [
       new EmbedBuilder()
           .setColor(getGlobalColor())
+          .setAuthor({ name: this.t ? this.t(msg, "responses.reload.author") : "🔄 Module Hot Reload" })
           .setTitle(title)
           .setDescription(pages[n].join("\n") + (pages.length > 1 ? `\n\nPage **${n + 1}** / **${pages.length}**` : ""))
-
+          .setFooter({ text: this.t ? this.t(msg, "responses.reload.footer") : "Owner Diagnostics • Dynamic Module Loader" })
     ]
   });
 

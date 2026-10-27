@@ -269,7 +269,14 @@
       "voiceTitle": "🔧 Voice Debug",
       "summary": "📊 **Summary**",
       "pageLabel": "Page {{page}}/{{total}}",
-      "navigateHint": "Use ⬅️➡️ to navigate"
+      "navigateHint": "Use ⬅️➡️ to navigate",
+      "author": "🛠️ Diagnostic Telemetry",
+      "rejoinAuthor": "🛠️ Voice Rejoin Controller",
+      "voiceAuthor": "🛠️ Voice Diagnostics",
+      "unknownTitle": "Debug — Unknown Target",
+      "rejoinFooter": "Owner Diagnostics • Batch Rejoin",
+      "telemetryFooter": "Voice State Telemetry • 1 Page",
+      "footerHelp": "Owner Diagnostics • %debug <target>"
     },
     "eval": {
       "resultTitle": "Eval Result",
@@ -280,7 +287,8 @@
       "pageLabel": "Page {{page}}/{{total}}",
       "navigateHint": "• ⬅️ ➡️ Navigate • ❌ Delete",
       "deleteHint": "• ❌ Delete",
-      "controlsExpired": "⌛ Controls expired"
+      "controlsExpired": "⌛ Controls expired",
+      "author": "💻 JavaScript Evaluator"
     },
     "filter": {
       "pickerTitle": "🎛️ Audio Filter Picker",
@@ -319,7 +327,9 @@
     },
     "invite": {
       "title": "Invite Remix",
-      "description": "Add Remix to your server directly from [FluxerList](<https://fluxerlist.com/bots/remix>).\n\nJoin our community at [fluxer.gg/remix](https://fluxer.gg/remix) for support, updates, and direct feedback."
+      "description": "Add Remix to your server directly from [FluxerList](<https://fluxerlist.com/bots/remix>).\n\nJoin our community at [fluxer.gg/remix](https://fluxer.gg/remix) for support, updates, and direct feedback.",
+      "addRemixTitle": "Add Remix to Your Server",
+      "footer": "Remix • Free & Open-Source Music"
     },
     "join": {
       "channelNotFound": "Couldn't find the channel `{{channel}}`\nUse the help command to learn more about this. (`$prefixhelp join`)",
@@ -641,7 +651,8 @@
       "queueLoop": "Queue loop: **{{state}}**",
       "songLoop": "Song loop: **{{state}}**",
       "streaming": "📻 Streaming **[{{title}}]({{url}})**",
-      "playingBy": "Playing **[{{title}}]({{url}})** by [{{artist}}]({{artistUrl}})"
+      "playingBy": "Playing **[{{title}}]({{url}})** by [{{artist}}]({{artistUrl}})",
+      "nowPlayingAuthor": "🎵 Now Playing"
     },
     "pause": {
       "nothingPlaying": "❌ There's nothing playing at the moment!",
@@ -739,7 +750,12 @@
       "serverMutedDesc": "The bot was muted by a server administrator. Playback is paused to preserve track position.",
       "serverUnmutedAuthor": "🔊 Bot Unmuted",
       "serverUnmutedTitle": "Playback Resumed",
-      "serverUnmutedDesc": "The bot was unmuted — automatically resuming playback."
+      "serverUnmutedDesc": "The bot was unmuted — automatically resuming playback.",
+      "streamPipelineAuthor": "🔎 Audio Stream Pipeline",
+      "loadingDirectStream": "🔎 Loading direct stream...",
+      "resolvingLavalinkStream": "🔎 Resolving stream via Lavalink...",
+      "lastfmPlaybackAuthor": "🎵 Last.fm Playback",
+      "lastfmSearchAuthor": "🔎 Last.fm Search"
     },
     "playnext": {
       "searching": "🔍 Searching...",
@@ -799,7 +815,9 @@
       "nowPlaying": "📻 Now streaming _{{title}}_ by [{{author}}]({{url}}) in <#{{channel}}>",
       "skipHint": "_Use `$prefixskip` to stop the radio, or `$prefixradio list` to switch stations._",
       "prevNext": "⬅️ Previous   ➡️ Next   ❌ Cancel",
-      "stationsAuthor": "24/7 Radio Station Directory"
+      "stationsAuthor": "24/7 Radio Station Directory",
+      "liveRadioAuthor": "📻 24/7 Live Radio",
+      "webRadioFooter": "{{prefix}}radio list • 24/7 Web Radio"
     },
     "reload": {
       "indexNoReload": "❌ `index.mjs` cannot be hot-reloaded — do a full restart.",
@@ -812,7 +830,9 @@
       "availableTargetsTitle": "🔄 Reload — Available Targets",
       "runHint": "Run `$prefixreload <target>` or use a batch keyword:",
       "batchKeywords": "`all` · `commands`",
-      "resultsHeader": "✅ **{{ok}}** reloaded · ❌ **{{bad}}** failed"
+      "resultsHeader": "✅ **{{ok}}** reloaded · ❌ **{{bad}}** failed",
+      "author": "🔄 Module Hot Reload",
+      "footer": "Owner Diagnostics • Dynamic Module Loader"
     },
     "remove": {
       "indexOutOfBounds": "Index out of bounds",
@@ -1045,7 +1065,10 @@
       "notInServer": "❌ Must be used in a server.",
       "noOneInVoice": "No one is in voice.",
       "title": "🎙️ Voice Channel Members",
-      "channelEntry": "🔊 **{{name}}**: {{count}} members"
+      "channelEntry": "🔊 **{{name}}**: {{count}} members",
+      "author": "📊 Voice Channel Diagnostics",
+      "footerZero": "Voice State Telemetry • 0 active channels",
+      "footerCount": "Total Active Channels: {{count}} • Voice Telemetry"
     },
     "thumbnail": {
       "nothingPlaying": "There's nothing playing at the moment.",
@@ -1224,7 +1247,8 @@
       "speedTitle": "Playback Speed Adjusted",
       "speedMultiplier": "{{speed}}× Multiplier",
       "resetHint": "Reset anytime with {{prefix}}speed",
-      "applied": "{{emoji}} Playback speed set to **{{speed}}×**."
+      "applied": "{{emoji}} Playback speed set to **{{speed}}×**.",
+      "normalRate": "1.0× Normal"
     },
     "pitch": {
       "reset": "🎵 Audio pitch reset to normal **1.0×**.",
@@ -1233,7 +1257,8 @@
       "failed": "❌ Failed to adjust pitch: {{reason}}",
       "pitchTitle": "Audio Pitch Adjusted",
       "pitchMultiplier": "{{pitch}}× Pitch Shift",
-      "resetHint": "Reset anytime with {{prefix}}pitch"
+      "resetHint": "Reset anytime with {{prefix}}pitch",
+      "normalRate": "1.0× Normal"
     },
     "move": {
       "reorderedAuthor": "🔀 Track Reordered",
@@ -1263,6 +1288,35 @@
       "author": "Queue Navigation • Jump Track",
       "title": "Skipped {{count}} track(s) — Jumped to #{{position}}",
       "footer": "Remix Music • {{remaining}} track(s) remaining in queue"
+    },
+    "logtest": {
+      "author": "🛠️ Error Channel Telemetry",
+      "disabledTitle": "Error-Log Channel Disabled",
+      "queuedTitle": "Test Event Dispatched",
+      "footerConfig": "Owner Diagnostics • config.errorLogChannel",
+      "footerPipeline": "Owner Diagnostics • logger.error pipeline"
+    },
+    "errorChannel": {
+      "author": "🛠️ Error Channel Telemetry",
+      "connectedTitle": "Log Channel Connected",
+      "connectedDesc": "Real-time diagnostic and crash forwarding is now active for this channel.\n\n🔴 **Errors:** Database, player, audio node, and gateway exceptions\n🟡 **Warnings:** Rate-limits, recoverable reconnections, and warnings\n🚨 **Crash Reports:** Fatal process exceptions with memory and uptime stats",
+      "connectedFooter": "Remix Watchdog • Verify delivery anytime with $prefixlogtest",
+      "crashFatalAuthor": "🚨 Fatal Process Crash",
+      "crashAlertAuthor": "⚠️ Process Alert",
+      "crashFatalTitle": "🚨 Fatal Crash: {{title}}",
+      "crashAlertTitle": "⚠️ Process Alert: {{title}}",
+      "uptimeField": "⏱️ Uptime",
+      "memoryField": "💾 Memory (RSS)",
+      "crashFooter": "Process Error Telemetry • Unhandled Exception",
+      "forwardErrorAuthor": "🔴 System Error",
+      "forwardWarnAuthor": "🟡 System Warning",
+      "forwardInfoAuthor": "ℹ️ System Info",
+      "forwardNoDetails": "*No additional details provided.*",
+      "forwardFooter": "Logger Telemetry • Automatic Forwarding",
+      "floodAuthor": "📦 Log Flood Gate",
+      "floodTitle": "Log Messages Dropped",
+      "floodDesc": "⚠️ **{{count}}** additional log message(s) were dropped during a flood to protect API rate limits.",
+      "floodFooter": "Rate Limit Guard • ErrorChannel"
     }
   }
 }

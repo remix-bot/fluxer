@@ -26,7 +26,10 @@ export const command = new CommandBuilder()
 export async function run(msg, data) {
   const guild = msg.channel?.channel?.guild ?? msg.message?.guild;
   if (!guild) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.test.notInServer"));
+    const embed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: this.t(msg, "responses.test.author") })
+      .setDescription(this.t(msg, "responses.test.notInServer"));
     return msg.reply({ embeds: [embed] });
   }
 
@@ -54,7 +57,11 @@ export async function run(msg, data) {
   }
 
   if (channelCounts.size === 0) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses.test.noOneInVoice"));
+    const embed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: this.t(msg, "responses.test.author") })
+      .setDescription(this.t(msg, "responses.test.noOneInVoice"))
+      .setFooter({ text: this.t(msg, "responses.test.footerZero") });
     return msg.reply({ embeds: [embed] });
   }
 
@@ -93,8 +100,9 @@ export async function run(msg, data) {
 
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
+    .setAuthor({ name: this.t(msg, "responses.test.author") })
     .setTitle(this.t(msg, "responses.test.title"))
     .setDescription(desc.trim().slice(0, 4096))
-    ;
+    .setFooter({ text: this.t(msg, "responses.test.footerCount", { count: channelCounts.size }) });
   msg.reply({ embeds: [embed] }).catch(() => {});
 }

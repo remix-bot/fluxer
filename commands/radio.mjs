@@ -5,7 +5,6 @@
 
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/ui/index.mjs";
 import { logger } from "../src/core/Logger.mjs";
 import { NUMBER_EMOJIS, CANCEL_EMOJI, PREV_EMOJI, NEXT_EMOJI } from "../src/utils/UI.mjs";
 
@@ -38,7 +37,13 @@ export const command = function() {
  */
 export async function run(msg, data) {
   const radios = this.config.radio;
-  if (!radios?.length) return msg.reply(this.t(msg, "responses.radio.noStations"));
+  if (!radios?.length) {
+    const embed = new EmbedBuilder()
+      .setColor(0xe9196c)
+      .setAuthor({ name: this.t(msg, "responses.radio.stationsAuthor") || "24/7 Radio Station Directory" })
+      .setDescription(this.t(msg, "responses.radio.noStations"));
+    return msg.reply({ embeds: [embed] });
+  }
 
   const input = (data.get("station")?.value ?? "").trim().toLowerCase();
 
@@ -100,7 +105,11 @@ export async function run(msg, data) {
       settled = true;
       unobserve();
       clearReactions().catch(() => {});
-      listMsg.edit(this.t(msg, "responses.radio.timedOut")).catch(() => {});
+      const timedOutEmbed = new EmbedBuilder()
+        .setColor(0xe9196c)
+        .setAuthor({ name: this.t(msg, "responses.radio.stationsAuthor") || "24/7 Radio Station Directory" })
+        .setDescription(this.t(msg, "responses.radio.timedOut"));
+      listMsg.edit({ embeds: [timedOutEmbed] }).catch(() => {});
     }, 60_000);
 
     const normalize = (s) => s.replace(/\uFE0F/g, "");
@@ -114,7 +123,11 @@ export async function run(msg, data) {
         clearTimeout(timeout);
         unobserve();
         await clearReactions();
-        listMsg.edit(this.t(msg, "responses.radio.cancelled")).catch(() => {});
+        const cancelEmbed = new EmbedBuilder()
+          .setColor(0xe9196c)
+          .setAuthor({ name: this.t(msg, "responses.radio.stationsAuthor") || "24/7 Radio Station Directory" })
+          .setDescription(this.t(msg, "responses.radio.cancelled"));
+        listMsg.edit({ embeds: [cancelEmbed] }).catch(() => {});
         return;
       }
       if (emoji === normalize(NEXT_EMOJI)) page = (page + 1) % totalPages;
@@ -143,7 +156,11 @@ export async function run(msg, data) {
     const radio = radios.find(r => String(r.name ?? "").toLowerCase() === input);
     if (!radio) {
       const names = radios.map(r => `\`${r.name ?? "station"}\``).join(", ");
-      return msg.reply(this.t(msg, "responses.radio.unknownStation", { station: input, stations: names }));
+      const embed = new EmbedBuilder()
+        .setColor(0xe9196c)
+        .setAuthor({ name: this.t(msg, "responses.radio.stationsAuthor") || "24/7 Radio Station Directory" })
+        .setDescription(this.t(msg, "responses.radio.unknownStation", { station: input, stations: names }));
+      return msg.reply({ embeds: [embed] });
     }
     return playStation(this, msg, radio);
   }
@@ -180,13 +197,14 @@ async function playStation(ctx, msg, radio, editTarget = null) {
   const skipHint = ctx.t(msg, "responses.radio.skipHint", { prefix }) || `_Use \`${prefix}skip\` to stop the radio, or \`${prefix}radio list\` to switch stations._`;
   const embed = new EmbedBuilder()
     .setColor(0xe9196c)
+    .setAuthor({ name: ctx.t(msg, "responses.radio.liveRadioAuthor") })
     .setTitle(`📻 ${stationName}`)
     .setDescription(
       stationLine +
       `${stationDesc}\n\n` +
       skipHint
     )
-    ;
+    .setFooter({ text: ctx.t(msg, "responses.radio.webRadioFooter", { prefix }) });
 
   if (editTarget) editTarget.edit({ embeds: [embed] }).catch(() => {});
   else msg.reply({ embeds: [embed] }).catch(() => {});

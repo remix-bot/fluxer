@@ -269,7 +269,14 @@
       "voiceTitle": "🔧 تصحيح الصوت",
       "summary": "📊 **الملخص**",
       "pageLabel": "صفحة {{page}}/{{total}}",
-      "navigateHint": "استخدم ⬅️➡️ للتنقل"
+      "navigateHint": "استخدم ⬅️➡️ للتنقل",
+      "author": "🛠️ القياس التشخيصي عن بعد",
+      "rejoinAuthor": "🛠️ وحدة تحكم إعادة الانضمام الصوتي",
+      "voiceAuthor": "🛠️ تشخيص الصوت",
+      "unknownTitle": "تصحيح — هدف غير معروف",
+      "rejoinFooter": "تشخيص المالك • إعادة انضمام جماعية",
+      "telemetryFooter": "بيانات الحالة الصوتية • صفحة 1",
+      "footerHelp": "تشخيص المالك • %debug <target>"
     },
     "eval": {
       "resultTitle": "نتيجة التقييم",
@@ -280,7 +287,8 @@
       "pageLabel": "صفحة {{page}}/{{total}}",
       "navigateHint": "• ⬅️ ➡️ تصفح • ❌ حذف",
       "deleteHint": "• ❌ حذف",
-      "controlsExpired": "⌛ انتهت صلاحية عناصر التحكم"
+      "controlsExpired": "⌛ انتهت صلاحية عناصر التحكم",
+      "author": "💻 مفسر جافا سكريبت"
     },
     "filter": {
       "pickerTitle": "🎛️ أداة اختيار الفلاتر الصوتية",
@@ -316,7 +324,9 @@
     },
     "invite": {
       "title": "ادعُ Remix",
-      "description": "أضف Remix إلى خادمك مباشرة من [FluxerList](<https://fluxerlist.com/bots/remix>).\n\nانضم إلى مجتمعنا على [fluxer.gg/remix](https://fluxer.gg/remix) للحصول على الدعم والتحديثات والتعليقات المباشرة."
+      "description": "أضف Remix إلى خادمك مباشرة من [FluxerList](<https://fluxerlist.com/bots/remix>).\n\nانضم إلى مجتمعنا على [fluxer.gg/remix](https://fluxer.gg/remix) للحصول على الدعم والتحديثات والتعليقات المباشرة.",
+      "addRemixTitle": "أضف ريمكس إلى خادمك",
+      "footer": "ريمكس • موسيقى مجانية ومفتوحة المصدر"
     },
     "join": {
       "channelNotFound": "لم أتمكن من العثور على القناة `{{channel}}`\nاستخدم أمر المساعدة لمعرفة المزيد. (`$prefixhelp join`)",
@@ -426,7 +436,8 @@
       "queueLoop": "تكرار القائمة: **{{state}}**",
       "songLoop": "تكرار الأغنية: **{{state}}**",
       "streaming": "📻 بث مباشر **[{{title}}]({{url}})**",
-      "playingBy": "يعمل **[{{title}}]({{url}})** لـ [{{artist}}]({{artistUrl}})"
+      "playingBy": "يعمل **[{{title}}]({{url}})** لـ [{{artist}}]({{artistUrl}})",
+      "nowPlayingAuthor": "🎵 يُعرض الآن"
     },
     "pause": {
       "nothingPlaying": "❌ لا يوجد شيء يعمل حالياً!",
@@ -524,7 +535,12 @@
       "serverMutedDesc": "تم كتم البوت بواسطة مسؤول السيرفر. تم إيقاف التشغيل مؤقتاً للحفاظ على موضع الأغنية.",
       "serverUnmutedAuthor": "🔊 تم إلغاء كتم البوت",
       "serverUnmutedTitle": "تم استئناف التشغيل",
-      "serverUnmutedDesc": "تم إلغاء كتم البوت — استئناف التشغيل تلقائياً."
+      "serverUnmutedDesc": "تم إلغاء كتم البوت — استئناف التشغيل تلقائياً.",
+      "streamPipelineAuthor": "🔎 مسار تدفق الصوت",
+      "loadingDirectStream": "🔎 جاري تحميل البث المباشر...",
+      "resolvingLavalinkStream": "🔎 جاري حل البث عبر Lavalink...",
+      "lastfmPlaybackAuthor": "🎵 تشغيل Last.fm",
+      "lastfmSearchAuthor": "🔎 بحث Last.fm"
     },
     "playnext": {
       "searching": "🔍 جارٍ البحث...",
@@ -584,7 +600,9 @@
       "nowPlaying": "📻 بث مباشر _{{title}}_ لـ [{{author}}]({{url}}) في <#{{channel}}>",
       "skipHint": "_استخدم `$prefixskip` لإيقاف الإذاعة، أو `$prefixradio list` لتبديل المحطات._",
       "prevNext": "⬅️ السابق   ➡️ التالي   ❌ إلغاء",
-      "stationsAuthor": "دليل محطات الراديو 24/7"
+      "stationsAuthor": "دليل محطات الراديو 24/7",
+      "liveRadioAuthor": "📻 راديو مباشر 24/7",
+      "webRadioFooter": "{{prefix}}radio list • راديو ويب 24/7"
     },
     "reload": {
       "indexNoReload": "❌ لا يمكن إعادة تحميل `index.mjs` — قم بإعادة تشغيل كاملة.",
@@ -597,7 +615,9 @@
       "availableTargetsTitle": "🔄 إعادة التحميل — الأهداف المتاحة",
       "runHint": "شغّل `$prefixreload <هدف>` أو استخدم كلمة دفعية:",
       "batchKeywords": "`all` · `commands`",
-      "resultsHeader": "✅ **{{ok}}** تمت إعادة التحميل · ❌ **{{bad}}** فشل"
+      "resultsHeader": "✅ **{{ok}}** تمت إعادة التحميل · ❌ **{{bad}}** فشل",
+      "author": "🔄 إعادة تحميل الوحدات الفورية",
+      "footer": "تشخيص المالك • محمل الوحدات الديناميكي"
     },
     "remove": {
       "indexOutOfBounds": "الفهرس خارج النطاق",
@@ -830,7 +850,10 @@
       "notInServer": "❌ يجب استخدامه في خادم.",
       "noOneInVoice": "لا يوجد أحد في الصوت.",
       "title": "🎙️ أعضاء القناة الصوتية",
-      "channelEntry": "🔊 **{{name}}**: {{count}} عضو"
+      "channelEntry": "🔊 **{{name}}**: {{count}} عضو",
+      "author": "📊 تشخيص القنوات الصوتية",
+      "footerZero": "بيانات الحالة الصوتية • 0 قنوات نشطة",
+      "footerCount": "إجمالي القنوات النشطة: {{count}} • القياس الصوتي عن بعد"
     },
     "thumbnail": {
       "nothingPlaying": "لا يوجد شيء يعمل حالياً.",
@@ -1224,7 +1247,8 @@
       "speedTitle": "تم تعديل سرعة التشغيل",
       "speedMultiplier": "مضاعف {{speed}}×",
       "resetHint": "إعادة التعيين في أي وقت بـ {{prefix}}speed",
-      "applied": "{{emoji}} تم تعيين سرعة التشغيل إلى **{{speed}}×**."
+      "applied": "{{emoji}} تم تعيين سرعة التشغيل إلى **{{speed}}×**.",
+      "normalRate": "1.0× عادي"
     },
     "pitch": {
       "reset": "🎵 تمت إعادة ضبط طبقة الصوت إلى الوضع الطبيعي **1.0×**.",
@@ -1233,7 +1257,8 @@
       "failed": "❌ فشل تعديل طبقة الصوت: {{reason}}",
       "pitchTitle": "تم تعديل نبرة الصوت",
       "pitchMultiplier": "تغيير النبرة {{pitch}}×",
-      "resetHint": "إعادة التعيين في أي وقت بـ {{prefix}}pitch"
+      "resetHint": "إعادة التعيين في أي وقت بـ {{prefix}}pitch",
+      "normalRate": "1.0× عادي"
     },
     "move": {
       "reorderedAuthor": "🔀 تمت إعادة ترتيب المسار",
@@ -1263,6 +1288,35 @@
       "author": "التنقل في القائمة • تخطي الأغاني",
       "title": "تم تخطي {{count}} مسار(مسارات) — الانتقال إلى #{{position}}",
       "footer": "Remix Music • متبقي {{remaining}} مسار في قائمة الانتظار"
+    },
+    "logtest": {
+      "author": "🛠️ القياس عن بعد لقناة الأخطاء",
+      "disabledTitle": "قناة سجل الأخطاء معطلة",
+      "queuedTitle": "تم إرسال حدث الاختبار",
+      "footerConfig": "تشخيص المالك • config.errorLogChannel",
+      "footerPipeline": "تشخيص المالك • مسار logger.error"
+    },
+    "errorChannel": {
+      "author": "🛠️ القياس عن بُعد لقناة الأخطاء",
+      "connectedTitle": "تم ربط قناة السجلات بنجاح",
+      "connectedDesc": "أصبحت خدمة تحويل التشخيصات وتقارير الأعطال الفورية مفعّلة الآن لهذه القناة.\n\n🔴 **الأخطاء:** استثناءات قواعد البيانات والمشغّل وعقد الصوت والبوابة\n🟡 **التحذيرات:** قيود المعدل وإعادة الاتصال القابلة للاسترداد والتحذيرات\n🚨 **تقارير الانهيار:** استثناءات العمليات الحرجة مع إحصائيات الذاكرة ومدة التشغيل",
+      "connectedFooter": "مراقب ريمكس • تحقق من التوصيل في أي وقت باستخدام $prefixlogtest",
+      "crashFatalAuthor": "🚨 انهيار حرِج للعملية",
+      "crashAlertAuthor": "⚠️ تنبيه العملية",
+      "crashFatalTitle": "🚨 انهيار حرج: {{title}}",
+      "crashAlertTitle": "⚠️ تنبيه عملية: {{title}}",
+      "uptimeField": "⏱️ مدة التشغيل",
+      "memoryField": "💾 الذاكرة (RSS)",
+      "crashFooter": "القياس عن بُعد لأخطاء العمليات • استثناء غير معالج",
+      "forwardErrorAuthor": "🔴 خطأ في النظام",
+      "forwardWarnAuthor": "🟡 تحذير النظام",
+      "forwardInfoAuthor": "ℹ️ معلومات النظام",
+      "forwardNoDetails": "*لم يتم تقديم أي تفاصيل إضافية.*",
+      "forwardFooter": "القياس عن بُعد للسجلات • إعادة توجيه تلقائية",
+      "floodAuthor": "📦 بوابة تدفق السجلات",
+      "floodTitle": "تم إسقاط رسائل السجل",
+      "floodDesc": "⚠️ تم إسقاط **{{count}}** رسالة سجل إضافية أثناء الفيضان لحماية قيود معدل واجهة برمجة التطبيقات.",
+      "floodFooter": "حارس حد المعدل • ErrorChannel"
     }
   }
 }

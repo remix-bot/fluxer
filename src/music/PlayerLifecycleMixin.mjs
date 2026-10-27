@@ -151,6 +151,7 @@ const PlayerLifecycleMixin = {
     if (!cleanGuildId) {
       const serverOnlyEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
+        .setAuthor({ name: this._t(msg, "responses.join.selectVCAuthor") || "🔊 Voice Channel Setup" })
         .setDescription(this._t(msg, "responses._common.serverOnlyForMusic"));
       await msg.reply({ embeds: [serverOnlyEmbed] }).catch(() => {});
       return false;
@@ -197,6 +198,7 @@ const PlayerLifecycleMixin = {
         cleanup();
         const timeoutEmbed = new EmbedBuilder()
           .setColor(getGlobalColor())
+          .setAuthor({ name: this._t(msg, "responses.join.selectVCAuthor") || "🔊 Voice Channel Setup" })
           .setDescription(this._t(msg, "responses._common.voiceSelectionTimedOut"));
         msg.reply({ embeds: [timeoutEmbed] }).catch(() => {});
         resolve(false);
@@ -371,12 +373,14 @@ const PlayerLifecycleMixin = {
         } catch(e) {
           logger.warn("[PlayerManager] Failed to save announcement channel ID:", e?.message);
         }
-        message.reply({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t(message, "responses.join.alreadyJoined", { channel: cid }))] });
+        const alreadyJoinedEmbed = new EmbedBuilder().setColor(getGlobalColor()).setAuthor({ name: this._t(message, "responses.join.connectedAuthor") }).setDescription(this._t(message, "responses.join.alreadyJoined", { channel: cid }));
+        message.reply({ embeds: [alreadyJoinedEmbed] });
         return existing;
       }
     }
     if (this._pendingJoins.has(cleanChannelId)) {
-      message.reply(this._t(message, "responses.join.joining"));
+      const pendingEmbed = new EmbedBuilder().setColor(getGlobalColor()).setAuthor({ name: this._t(message, "responses.join.connectedAuthor") }).setDescription(this._t(message, "responses.join.joining"));
+      message.reply({ embeds: [pendingEmbed] });
       return null;
     }
     this._pendingJoins.add(cleanChannelId);
@@ -575,7 +579,7 @@ const PlayerLifecycleMixin = {
       });
     });
 
-    const joiningEmbed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(this._t(message, "responses.join.joining"));
+    const joiningEmbed = new EmbedBuilder().setColor(getGlobalColor()).setAuthor({ name: this._t(message, "responses.join.connectedAuthor") }).setDescription(this._t(message, "responses.join.joining"));
     const statusMsg = await message.reply({ embeds: [joiningEmbed] }).catch(() => null);
     try {
       await player.join(cid);

@@ -100,7 +100,7 @@ export async function openLyricsViewer(bot, msg, player, refresh, session) {
 
       const embed = new EmbedBuilder()
         .setColor(getGlobalColor())
-        .setAuthor({ name: "🎤 " + (bot.t(msg, "responses.lyrics.author") || "Lyrics") })
+        .setAuthor({ name: bot.t(msg, "responses.lyrics.lyricsAuthor") })
         .setTitle(title)
         .setDescription(desc)
         .setFooter({ text: footerText });

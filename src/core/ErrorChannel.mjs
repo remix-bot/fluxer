@@ -29,9 +29,10 @@
  */
 
 import util from "node:util";
+import { EmbedBuilder } from "@fluxerjs/core";
 import { logger } from "./Logger.mjs";
 
-const API_BASE = "https://api.fluxer.app/v1";
+const DEFAULT_API_BASE = "https://api.fluxer.app/v1";
 const SEND_TIMEOUT_MS = 5_000;
 const CRASH_SEND_BUDGET_MS = 3_500;
 const FORWARD_DEDUP_MS = 60_000;
@@ -40,6 +41,7 @@ const FAIL_LOG_COOLDOWN_MS = 30_000;
 const CONTENT_MAX = 1_900;
 const BODY_MAX = 1_500;
 
+let _apiBase = DEFAULT_API_BASE;
 let _enabled = false;
 let _channelId = null;
 let _token = null;
@@ -89,14 +91,23 @@ const _originals = { error: null, warn: null, info: null };
  * @param {object} [opts.config] - Full bot configuration (uses config.errorLogChannel and config.token).
  * @param {object} [opts.client] - The Fluxer client (provides client.rest.post for sending).
  */
-export function initErrorChannel({ config, client } = {}) {
+export function initErrorChannel({ config, client, locale } = {}) {
   const cfg = config?.errorLogChannel ?? {};
   _channelId = typeof cfg.channelId === "string" && cfg.channelId.trim() ? cfg.channelId.trim() : null;
   _enabled = cfg.enabled === true && Boolean(_channelId);
   _token = typeof config?.token === "string" ? config.token : null;
   _client = client ?? null;
+  _locale = locale ?? client?.locale ?? null;
   _minIntervalMs = Number(cfg.minIntervalMs) > 0 ? Number(cfg.minIntervalMs) : 1_500;
   _maxQueue = Number(cfg.maxQueue) > 0 ? Number(cfg.maxQueue) : 40;
+
+  const customBase = config?.apiBase ?? config?.["fluxer.js"]?.api ?? client?.options?.rest?.api ?? null;
+  if (typeof customBase === "string" && customBase.trim()) {
+    const trimmed = customBase.trim().replace(/\/+$/, "");
+    _apiBase = trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
+  } else {
+    _apiBase = DEFAULT_API_BASE;
+  }
 
   if (!_enabled) {
     console.info(`[ErrorChannel] Disabled (${!_channelId ? "no channelId configured" : "enabled=false"}).`);
@@ -119,14 +130,41 @@ export function isLogChannelEnabled() {
 }
 
 /** @private Send the one-time startup confirmation through the real send path. */
+/**
+ * @private
+ * Resolve a localized string from the bot's configured locale or fallback.
+ * @param {string} key
+ * @param {Object} [vars={}]
+ * @param {string} [fallback=""]
+ * @returns {string}
+ */
+function _t(key, vars = {}, fallback = "") {
+  try {
+    if (_locale && typeof _locale.translate === "function") {
+      const res = _locale.translate(null, `responses.errorChannel.${key}`, vars);
+      if (res && res !== `responses.errorChannel.${key}`) return res;
+    }
+  } catch (_) { }
+  return fallback;
+}
+
 function _announceOnce() {
   if (_announced) return;
   _announced = true;
-  const content =
-    "✅ **Log channel connected** — from now on this channel receives:\n" +
-    "🔴 every error · 🟡 every warning · 🚨 crash reports (with uptime + memory)\n" +
-    "Verify delivery any time with the `logtest` command.";
-  _sendWithFallback(content).catch((e) => {
+  const embed = new EmbedBuilder()
+    .setColor(0x2ecc71)
+    .setAuthor({ name: _t("author", {}, "🛠️ Error Channel Telemetry") })
+    .setTitle(`✅ ${_t("connectedTitle", {}, "Log Channel Connected")}`)
+    .setDescription(_t("connectedDesc", {},
+      "Real-time diagnostic and crash forwarding is now active for this channel.\n\n" +
+      "🔴 **Errors:** Database, player, audio node, and gateway exceptions\n" +
+      "🟡 **Warnings:** Rate-limits, recoverable reconnections, and warnings\n" +
+      "🚨 **Crash Reports:** Fatal process exceptions with memory and uptime stats"
+    ))
+    .setFooter({ text: _t("connectedFooter", {}, "Remix Watchdog • Verify delivery anytime with %logtest") });
+  if (typeof embed.setTimestamp === "function") embed.setTimestamp();
+
+  _sendWithFallback(embed).catch((e) => {
     console.error(
       `[ErrorChannel] Startup notice FAILED for channel ${_channelId}: ${e?.message ?? e}` +
       " — check that the bot has View Channel + Send Messages permission there and that errorLogChannel.channelId is correct."
@@ -155,20 +193,38 @@ export async function reportCrash(title, err, { fatal = false } = {}) {
   _lastCrashReportTime = now;
   try {
     const body = _formatArgs([err]).split("```").join("‹›");
-    const now = Date.now();
     const key = body.slice(0, 300);
     if (_crashDedup.get(key) && now - _crashDedup.get(key) < CRASH_DEDUP_MS) return false;
     _crashDedup.set(key, now);
     if (_crashDedup.size > 100) _crashDedup.delete(_crashDedup.keys().next().value);
 
     const mem = Math.round(process.memoryUsage().rss / 1_048_576);
-    const content =
-      `${fatal ? "🚨" : "⚠️"} **${title}**\n${body.slice(0, BODY_MAX)}\n— uptime ${_uptime()} · rss ${mem}MB`
-        .slice(0, CONTENT_MAX);
+    const embedColor = fatal ? 0xe74c3c : 0xf39c12;
+    const authorTitle = fatal
+      ? _t("crashFatalAuthor", {}, "🚨 Fatal Process Crash")
+      : _t("crashAlertAuthor", {}, "⚠️ Process Alert");
+    const embedTitle = fatal
+      ? _t("crashFatalTitle", { title }, `🚨 Fatal Crash: ${title}`)
+      : _t("crashAlertTitle", { title }, `⚠️ Process Alert: ${title}`);
+
+    const embed = new EmbedBuilder()
+      .setColor(embedColor)
+      .setAuthor({ name: authorTitle })
+      .setTitle(embedTitle)
+      .setDescription("```js\n" + body.slice(0, 1800) + "\n```")
+      .addFields(
+        { name: _t("uptimeField", {}, "⏱️ Uptime"), value: `\`${_uptime()}\``, inline: true },
+        { name: _t("memoryField", {}, "💾 Memory (RSS)"), value: `\`${mem} MB\``, inline: true }
+      )
+      .setFooter({ text: _t("crashFooter", {}, "Process Error Telemetry • Unhandled Exception") });
+    if (typeof embed.setTimestamp === "function") embed.setTimestamp();
 
     try {
-      await Promise.race([_sendWithFallback(content), _sleep(CRASH_SEND_BUDGET_MS)]);
-      return true;
+      const delivered = await Promise.race([
+        _sendWithFallback(embed).then(() => true),
+        _sleep(CRASH_SEND_BUDGET_MS).then(() => false),
+      ]);
+      return Boolean(delivered);
     } catch (_) {
       return false;
     }
@@ -193,6 +249,8 @@ export function _resetErrorChannelForTests() {
   _channelId = null;
   _token = null;
   _client = null;
+  _locale = null;
+  _apiBase = DEFAULT_API_BASE;
   _queue = [];
   _dropped = 0;
   _flushing = false;
@@ -230,14 +288,37 @@ function _forward(level, tag, args) {
     if (tag.startsWith("[ErrorChannel]") || tag.startsWith("[Error_Handling]")) return;
     const body = _formatArgs(args);
     const now = Date.now();
-    const emoji = level === "error" ? "🔴" : level === "info" ? "ℹ️" : "🟡";
-    const text = body ? `${emoji} **${tag}** ${body}` : `${emoji} **${tag}**`;
     const key = `${level}|${tag}|${(body || tag).slice(0, 200)}`;
     const last = _forwardDedup.get(key);
     if (last && now - last < FORWARD_DEDUP_MS) return;
     _forwardDedup.set(key, now);
     if (_forwardDedup.size > 300) _forwardDedup.delete(_forwardDedup.keys().next().value);
-    _enqueue(text.slice(0, CONTENT_MAX));
+
+    const color = level === "error" ? 0xe74c3c : level === "info" ? 0x3498db : 0xf1c40f;
+    const author = level === "error"
+      ? _t("forwardErrorAuthor", {}, "🔴 System Error")
+      : level === "info"
+        ? _t("forwardInfoAuthor", {}, "ℹ️ System Info")
+        : _t("forwardWarnAuthor", {}, "🟡 System Warning");
+
+    let desc;
+    if (body) {
+      desc = body.length > 200
+        ? "```\n" + body.slice(0, 3900) + "\n```"
+        : `**${body}**`;
+    } else {
+      desc = _t("forwardNoDetails", {}, "*No additional details provided.*");
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(color)
+      .setAuthor({ name: author })
+      .setTitle(tag)
+      .setDescription(desc)
+      .setFooter({ text: _t("forwardFooter", {}, "Logger Telemetry • Automatic Forwarding") });
+    if (typeof embed.setTimestamp === "function") embed.setTimestamp();
+
+    _enqueue(embed);
   } catch (_) { }
 }
 
@@ -281,7 +362,14 @@ async function _runFlush() {
     if (_dropped > 0 && _enabled) {
       const n = _dropped;
       _dropped = 0;
-      await _sendQuietly(`📦 ${n} additional error log message(s) were dropped during a flood to protect rate limits.`);
+      const floodEmbed = new EmbedBuilder()
+        .setColor(0xe67e22)
+        .setAuthor({ name: _t("floodAuthor", {}, "📦 Log Flood Gate") })
+        .setTitle(_t("floodTitle", {}, "Log Messages Dropped"))
+        .setDescription(_t("floodDesc", { count: n }, `⚠️ **${n}** additional log message(s) were dropped during a flood to protect API rate limits.`))
+        .setFooter({ text: _t("floodFooter", {}, "Rate Limit Guard • ErrorChannel") });
+      if (typeof floodEmbed.setTimestamp === "function") floodEmbed.setTimestamp();
+      await _sendQuietly(floodEmbed);
     }
   } finally {
     _flushing = false;
@@ -301,13 +389,39 @@ async function _sendQuietly(content) {
   }
 }
 
+/**
+ * @private
+ * Normalize a send payload into { content, embeds } format expected by Fluxer API.
+ * @param {string|object|EmbedBuilder} data
+ * @returns {object}
+ */
+function _normalizePayload(data) {
+  if (data instanceof EmbedBuilder) {
+    const raw = typeof data.toJSON === "function" ? data.toJSON() : data;
+    return { embeds: [raw] };
+  }
+  if (data && typeof data === "object") {
+    if (Array.isArray(data.embeds)) {
+      const rawEmbeds = data.embeds.map(e => (typeof e?.toJSON === "function" ? e.toJSON() : e));
+      return { ...data, embeds: rawEmbeds };
+    }
+    if (data.embed) {
+      const raw = typeof data.embed.toJSON === "function" ? data.embed.toJSON() : data.embed;
+      return { embeds: [raw] };
+    }
+    return data;
+  }
+  return { content: String(data ?? "") };
+}
+
 /** @private Send through the client's REST client when available, else raw fetch. */
-async function _send(content) {
+async function _send(payload) {
   if (!_enabled || _isRateLimited()) return;
   const rest = _client?.rest;
+  const body = _normalizePayload(payload);
   if (typeof rest?.post === "function") {
     try {
-      await rest.post(`/channels/${_channelId}/messages`, { body: { content } });
+      await rest.post(`/channels/${_channelId}/messages`, { body });
       _consecutiveFailures = 0;
       return;
     } catch (err) {
@@ -324,29 +438,30 @@ async function _send(content) {
       throw err;
     }
   }
-  await _sendRaw(content);
+  await _sendRaw(payload);
 }
 
 /** @private Send via client REST, retrying once via raw fetch when that throws. */
-async function _sendWithFallback(content) {
+async function _sendWithFallback(payload) {
   if (!_enabled || _isRateLimited()) return;
   try {
-    await _send(content);
+    await _send(payload);
   } catch (_) {
     if (!_enabled || _isRateLimited()) return;
-    await _sendRaw(content);
+    await _sendRaw(payload);
   }
 }
 
 /** @private Send via a direct Fluxer REST call (Authorization: Bot <token>). */
-async function _sendRaw(content) {
-  if (!_enabled || _isRateLimited()) return;
+async function _sendRaw(payload) {
+  if (!_enabled || !_token || _isRateLimited()) return;
+  const body = _normalizePayload(payload);
   let res;
   try {
-    res = await fetch(`${API_BASE}/channels/${_channelId}/messages`, {
+    res = await fetch(`${_apiBase}/channels/${_channelId}/messages`, {
       method: "POST",
       headers: { "Authorization": `Bot ${_token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
   } catch (err) {

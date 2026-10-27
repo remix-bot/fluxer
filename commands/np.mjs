@@ -27,23 +27,24 @@ export async function run(msg) {
 
   const loadingEmbed = new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setDescription(this.t(msg, "responses.np.loading"))
-    ;
+    .setAuthor({ name: this.t(msg, "responses.np.nowPlayingAuthor") })
+    .setDescription(this.t(msg, "responses.np.loading"));
   const loadingMsg = await msg.reply({ embeds: [loadingEmbed] });
 
   try {
     const data = await p.nowPlaying();
     if (!data?.msg && !data?.embed) {
-      loadingMsg.edit({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses._common.nothingPlaying"))] }).catch(() => {});
+      loadingMsg.edit({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setAuthor({ name: this.t(msg, "responses.np.nowPlayingAuthor") }).setDescription(this.t(msg, "responses._common.nothingPlaying"))] }).catch(() => {});
       return;
     }
     const embed = data.embed || new EmbedBuilder()
       .setColor(getGlobalColor())
+      .setAuthor({ name: this.t(msg, "responses.np.nowPlayingAuthor") })
       .setDescription(data.msg);
     if (!data.embed && data.image) embed.setThumbnail(data.image);
 
     loadingMsg.edit({ embeds: [embed] }).catch(() => {});
   } catch (e) {
-    loadingMsg.edit({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setDescription(this.t(msg, "responses._common.nothingPlaying"))] }).catch(() => {});
+    loadingMsg.edit({ embeds: [new EmbedBuilder().setColor(getGlobalColor()).setAuthor({ name: this.t(msg, "responses.np.nowPlayingAuthor") }).setDescription(this.t(msg, "responses._common.nothingPlaying"))] }).catch(() => {});
   }
 }

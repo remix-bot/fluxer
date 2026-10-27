@@ -71,20 +71,27 @@ export async function run(msg, data) {
     if (userChannelId) targetChannelId = cleanId(userChannelId);
   }
 
+  const leaveNotice = (desc) => new EmbedBuilder()
+    .setColor(0xe9196c)
+    .setAuthor({ name: `👋 ${this.t(msg, "responses.leave.sessionEndedTitle")}` })
+    .setDescription(desc);
+
   if (!targetChannelId) {
     if (guildPlayers.length === 0) {
-      return msg.reply(this.t(msg, "responses.leave.notInVoice"));
+      return msg.reply({ embeds: [leaveNotice(this.t(msg, "responses.leave.notInVoice"))] });
     }
     const channelList = guildPlayers.map(([mapKey, p]) => {
       const id = cleanId(p._channelId ?? mapKey);
       return id ? `<#${id}>` : "\`unknown\`";
     });
-    return msg.reply(
+    return msg.reply({
+      embeds: [leaveNotice(
         this.t(msg, "responses.leave.specifyChannel", {
           channels: channelList.map(c => `• ${c}`).join("\n"),
           prefix: this.handler.getPrefix(msg.message?.guildId ?? msg.channel?.guild?.id)
         })
-    );
+      )]
+    });
   }
 
   const player = this.players.playerMap.get(targetChannelId)
@@ -95,29 +102,33 @@ export async function run(msg, data) {
 
   if (!player) {
     if (guildPlayers.length === 0) {
-      return msg.reply(this.t(msg, "responses.leave.notInVoice"));
+      return msg.reply({ embeds: [leaveNotice(this.t(msg, "responses.leave.notInVoice"))] });
     }
     const channelList = guildPlayers.map(([mapKey, p]) => {
       const id = cleanId(p._channelId ?? mapKey);
       return id ? `<#${id}>` : "\`unknown\`";
     });
     if (!client?.channels?.get?.(targetChannelId)) {
-      return msg.reply(
+      return msg.reply({
+        embeds: [leaveNotice(
           this.t(msg, "responses.leave.specifyChannel", {
             channels: channelList.map(c => `• ${c}`).join("\n"),
             prefix: this.handler.getPrefix(msg.message?.guildId ?? msg.channel?.guild?.id)
           })
-      );
+        )]
+      });
     }
-    return msg.reply(
+    return msg.reply({
+      embeds: [leaveNotice(
         this.t(msg, "responses.leave.noPlayerInChannel", {
           channel: targetChannelId,
           channels: channelList.map(c => `• ${c}`).join("\n")
         })
-    );
+      )]
+    });
   }
 
-  if (!player?.connection) return msg.reply(this.t(msg, "responses.leave.playerNotInit"));
+  if (!player?.connection) return msg.reply({ embeds: [leaveNotice(this.t(msg, "responses.leave.playerNotInit"))] });
 
   const activeChannelId = cleanId(player._channelId) || targetChannelId;
   const homeChannelId = cleanId(player._home247Channel) || activeChannelId;

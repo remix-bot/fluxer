@@ -28,10 +28,15 @@ export const command = new CommandBuilder()
  */
 export async function run(msg) {
   if (!isLogChannelEnabled()) {
-    const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(
-      "❌ The error-log channel is **disabled**.\n" +
-      "Set `errorLogChannel.enabled` to `true` and `errorLogChannel.channelId` to your log channel ID in config.json, then restart the bot."
-    );
+    const embed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: this.t(msg, "responses.logtest.author") })
+      .setTitle(this.t(msg, "responses.logtest.disabledTitle"))
+      .setDescription(
+        "❌ The error-log channel is **disabled**.\n" +
+        "Set `errorLogChannel.enabled` to `true` and `errorLogChannel.channelId` to your log channel ID in config.json, then restart the bot."
+      )
+      .setFooter({ text: this.t(msg, "responses.logtest.footerConfig") });
     return msg.reply({ embeds: [embed] });
   }
 
@@ -41,8 +46,13 @@ export async function run(msg) {
     `Manual test entry requested by ${who} — if you can read this in the log channel, error forwarding is working.`
   );
 
-  const embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(
-    "📨 Test entry queued — check the log channel; it should arrive within a few seconds."
-  );
+  const embed = new EmbedBuilder()
+    .setColor(getGlobalColor())
+    .setAuthor({ name: this.t(msg, "responses.logtest.author") })
+    .setTitle(this.t(msg, "responses.logtest.queuedTitle"))
+    .setDescription(
+      "📨 Test entry queued — check the log channel; it should arrive within a few seconds."
+    )
+    .setFooter({ text: this.t(msg, "responses.logtest.footerPipeline") });
   return msg.reply({ embeds: [embed] }).catch(() => {});
 }

@@ -55,9 +55,10 @@ export async function run(msg, data) {
     default: {
       const embed = new EmbedBuilder()
           .setColor(ERROR_COLOR)
-          .setTitle("Debug — Unknown Target")
+          .setAuthor({ name: this.t(msg, "responses.debug.author") })
+          .setTitle(this.t(msg, "responses.debug.unknownTitle"))
           .setDescription(`Unknown debug target: \`${target}\`.\nValid options: \`voice\`, \`voice-rejoin\`, \`247-rejoin\`.`)
-      ;
+          .setFooter({ text: this.t(msg, "responses.debug.footerHelp") });
       return msg.reply({ embeds: [embed] });
     }
   }

@@ -11,7 +11,7 @@ import { initErrorChannel, reportCrash } from "./src/core/ErrorChannel.mjs";
 
 const remix = new Remix();
 
-initErrorChannel({ config: remix.config, client: remix.client });
+initErrorChannel({ config: remix.config, client: remix.client, locale: remix.locale });
 
 /**
  * Check whether an error is a known-ignorable WebSocket transport crash from

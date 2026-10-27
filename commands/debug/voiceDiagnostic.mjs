@@ -153,8 +153,10 @@ export async function runVoiceDiagnostic(msg) {
     const embedColor = ghostConnections.length > 0 ? DANGER_COLOR : getGlobalColor();
     const embed = new EmbedBuilder()
         .setColor(embedColor)
+        .setAuthor({ name: this.t(msg, "responses.debug.voiceAuthor") })
         .setTitle(this.t(msg, "responses.debug.voiceTitle") + (ghostConnections.length > 0 ? ` — ${ghostConnections.length} Ghost(s) Detected!` : ""))
         .setDescription(pages[0].slice(0, MAX_DESC))
+        .setFooter({ text: this.t(msg, "responses.debug.telemetryFooter") })
     ;
     return msg.reply({ embeds: [embed] });
   }
@@ -176,6 +178,7 @@ export async function runVoiceDiagnostic(msg) {
 
     const embed = new EmbedBuilder()
         .setColor(embedColor)
+        .setAuthor({ name: this.t(msg, "responses.debug.voiceAuthor") })
         .setTitle(this.t(msg, "responses.debug.voiceTitle") + titleSuffix + ` — ${pageLabel}`)
         .setDescription(pages[pageIdx].slice(0, MAX_DESC))
         .setFooter({ text: footerText })

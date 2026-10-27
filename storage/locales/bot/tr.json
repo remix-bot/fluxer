@@ -269,7 +269,14 @@
       "voiceTitle": "🔧 Ses Hata Ayıklama",
       "summary": "📊 **Özet**",
       "pageLabel": "Sayfa {{page}}/{{total}}",
-      "navigateHint": "Gezinmek için ⬅️➡️ kullanın"
+      "navigateHint": "Gezinmek için ⬅️➡️ kullanın",
+      "author": "🛠️ Teşhis Telemetrisi",
+      "rejoinAuthor": "🛠️ Sese Yeniden Katılma Denetleyicisi",
+      "voiceAuthor": "🛠️ Ses Teşhisi",
+      "unknownTitle": "Hata Ayıklama — Bilinmeyen Hedef",
+      "rejoinFooter": "Sahip Teşhisi • Toplu Yeniden Katılma",
+      "telemetryFooter": "Ses Durumu Telemetrisi • 1 Sayfa",
+      "footerHelp": "Sahip Teşhisi • %debug <target>"
     },
     "eval": {
       "resultTitle": "Değerlendirme Sonucu",
@@ -280,7 +287,8 @@
       "pageLabel": "Sayfa {{page}}/{{total}}",
       "navigateHint": "• ⬅️ ➡️ Gezin • ❌ Sil",
       "deleteHint": "• ❌ Sil",
-      "controlsExpired": "⌛ Kontrollerin süresi doldu"
+      "controlsExpired": "⌛ Kontrollerin süresi doldu",
+      "author": "💻 JavaScript Değerlendirici"
     },
     "filter": {
       "pickerTitle": "🎛️ Ses Filtresi Seçici",
@@ -316,7 +324,9 @@
     },
     "invite": {
       "title": "Remix'i Davet Et",
-      "description": "Remix'i doğrudan [FluxerList](<https://fluxerlist.com/bots/remix>) üzerinden sunucunuza ekleyin.\n\nDestek, güncellemeler ve doğrudan geri bildirim için [fluxer.gg/remix](https://fluxer.gg/remix) topluluğumuza katılın."
+      "description": "Remix'i doğrudan [FluxerList](<https://fluxerlist.com/bots/remix>) üzerinden sunucunuza ekleyin.\n\nDestek, güncellemeler ve doğrudan geri bildirim için [fluxer.gg/remix](https://fluxer.gg/remix) topluluğumuza katılın.",
+      "addRemixTitle": "Remix'i Sunucunuza Ekleyin",
+      "footer": "Remix • Ücretsiz ve Açık Kaynaklı Müzik"
     },
     "join": {
       "channelNotFound": "`{{channel}}` kanalı bulunamadı\nBu komut hakkında daha fazla bilgi için yardım komutunu kullanın. (`$prefixhelp join`)",
@@ -630,7 +640,8 @@
       "queueLoop": "Kuyruk döngüsü: **{{state}}**",
       "songLoop": "Şarkı döngüsü: **{{state}}**",
       "streaming": "📻 Yayınlanıyor **[{{title}}]({{url}})**",
-      "playingBy": "[{{artist}}]({{artistUrl}}) tarafından **[{{title}}]({{url}})** çalınıyor"
+      "playingBy": "[{{artist}}]({{artistUrl}}) tarafından **[{{title}}]({{url}})** çalınıyor",
+      "nowPlayingAuthor": "🎵 Şu An Çalıyor"
     },
     "pause": {
       "nothingPlaying": "❌ Şu anda çalan bir şey yok!",
@@ -728,7 +739,12 @@
       "serverMutedDesc": "Bot bir sunucu yöneticisi tarafından susturuldu. Şarkı konumunu korumak için oynatma duraklatıldı.",
       "serverUnmutedAuthor": "🔊 Bot Susturması Kaldırıldı",
       "serverUnmutedTitle": "Oynatma Sürdürülüyor",
-      "serverUnmutedDesc": "Botun susturması kaldırıldı — oynatma otomatik olarak devam ediyor."
+      "serverUnmutedDesc": "Botun susturması kaldırıldı — oynatma otomatik olarak devam ediyor.",
+      "streamPipelineAuthor": "🔎 Ses Akışı Hattı",
+      "loadingDirectStream": "🔎 Doğrudan akış yükleniyor...",
+      "resolvingLavalinkStream": "🔎 Lavalink üzerinden akış çözülüyor...",
+      "lastfmPlaybackAuthor": "🎵 Last.fm Çalma",
+      "lastfmSearchAuthor": "🔎 Last.fm Arama"
     },
     "playnext": {
       "searching": "🔍 Aranıyor...",
@@ -788,7 +804,9 @@
       "nowPlaying": "📻 <#{{channel}}> kanalında [{{author}}]({{url}}) tarafından _{{title}}_ yayınlanıyor",
       "skipHint": "_Radyoyu durdurmak için `$prefixskip` veya istasyon değiştirmek için `$prefixradio list` kullanın._",
       "prevNext": "⬅️ Önceki   ➡️ Sonraki   ❌ İptal",
-      "stationsAuthor": "7/24 Radyo İstasyonu Dizini"
+      "stationsAuthor": "7/24 Radyo İstasyonu Dizini",
+      "liveRadioAuthor": "📻 7/24 Canlı Radyo",
+      "webRadioFooter": "{{prefix}}radio list • 7/24 Web Radyosu"
     },
     "reload": {
       "indexNoReload": "❌ `index.mjs` sıcak yeniden yüklenemez — tam yeniden başlatma yapın.",
@@ -801,7 +819,9 @@
       "availableTargetsTitle": "🔄 Yeniden Yükle — Kullanılabilir Hedefler",
       "runHint": "`$prefixreload <hedef>` çalıştırın veya bir toplu anahtar kelime kullanın:",
       "batchKeywords": "`all` · `commands`",
-      "resultsHeader": "✅ **{{ok}}** yeniden yüklendi · ❌ **{{bad}}** başarısız"
+      "resultsHeader": "✅ **{{ok}}** yeniden yüklendi · ❌ **{{bad}}** başarısız",
+      "author": "🔄 Modül Dinamik Yeniden Yükleme",
+      "footer": "Sahip Teşhisi • Dinamik Modül Yükleyici"
     },
     "remove": {
       "indexOutOfBounds": "Geçersiz sıra numarası",
@@ -1034,7 +1054,10 @@
       "notInServer": "❌ Bir sunucuda kullanılmalıdır.",
       "noOneInVoice": "Sesli kanalda kimse yok.",
       "title": "🎙️ Ses Kanalı Üyeleri",
-      "channelEntry": "🔊 **{{name}}**: {{count}} üye"
+      "channelEntry": "🔊 **{{name}}**: {{count}} üye",
+      "author": "📊 Ses Kanalı Teşhisi",
+      "footerZero": "Ses Durumu Telemetrisi • 0 aktif kanal",
+      "footerCount": "Toplam Aktif Kanal: {{count}} • Ses Telemetrisi"
     },
     "thumbnail": {
       "nothingPlaying": "Şu anda çalan bir şey yok.",
@@ -1172,7 +1195,8 @@
       "speedTitle": "Oynatma Hızı Ayarlandı",
       "speedMultiplier": "{{speed}}× Çarpanı",
       "resetHint": "Sıfırlamak için: {{prefix}}speed",
-      "applied": "{{emoji}} Oynatma hızı **{{speed}}×** olarak ayarlandı."
+      "applied": "{{emoji}} Oynatma hızı **{{speed}}×** olarak ayarlandı.",
+      "normalRate": "1.0× Normal"
     },
     "pitch": {
       "reset": "🎵 Ses perdesi normal **1.0×** seviyesine sıfırlandı.",
@@ -1181,7 +1205,8 @@
       "failed": "❌ Ses perdesi ayarlanamadı: {{reason}}",
       "pitchTitle": "Ses Tonu Ayarlandı",
       "pitchMultiplier": "{{pitch}}× Ton Kaydırma",
-      "resetHint": "Sıfırlamak için: {{prefix}}pitch"
+      "resetHint": "Sıfırlamak için: {{prefix}}pitch",
+      "normalRate": "1.0× Normal"
     },
     "gateway": {
       "missingPermsFallback": "⚠️ Düzgün çalışmak için ihtiyacım olan izinler eksik! Eksik: **{{perms}}**. Lütfen bir sunucu yöneticisinden bu izinleri Sunucu Ayarları → Roller'den vermesini isteyin."
@@ -1263,6 +1288,35 @@
       "author": "Kuyruk Gezinme • Şarkıya Atla",
       "title": "{{count}} şarkı atlandı — #{{position}} numaralı şarkıya geçildi",
       "footer": "Remix Music • Kuyrukta kalan {{remaining}} şarkı"
+    },
+    "logtest": {
+      "author": "🛠️ Hata Kanalı Telemetrisi",
+      "disabledTitle": "Hata Günlüğü Kanalı Devre Dışı",
+      "queuedTitle": "Test Olayı Gönderildi",
+      "footerConfig": "Sahip Teşhisi • config.errorLogChannel",
+      "footerPipeline": "Sahip Teşhisi • logger.error boru hattı"
+    },
+    "errorChannel": {
+      "author": "🛠️ Hata Kanalı Telemetrisi",
+      "connectedTitle": "Günlük Kanalı Bağlandı",
+      "connectedDesc": "Gerçek zamanlı arıza teşhisi ve çökme raporlama bu kanal için aktif edildi.\n\n🔴 **Hatalar:** Veritabanı, oynatıcı, ses düğümü ve ağ geçidi istisnaları\n🟡 **Uyarılar:** Hız sınırları, kurtarılabilir yeniden bağlantılar ve uyarılar\n🚨 **Çökme Raporları:** Bellek ve çalışma süresi istatistikleriyle kritik işlem istisnaları",
+      "connectedFooter": "Remix Gözlemcisi • $prefixlogtest ile istediğiniz zaman teslimatı doğrulayın",
+      "crashFatalAuthor": "🚨 Kritik İşlem Çökmesi",
+      "crashAlertAuthor": "⚠️ İşlem Uyarısı",
+      "crashFatalTitle": "🚨 Kritik Çökme: {{title}}",
+      "crashAlertTitle": "⚠️ İşlem Uyarısı: {{title}}",
+      "uptimeField": "⏱️ Çalışma Süresi",
+      "memoryField": "💾 Bellek (RSS)",
+      "crashFooter": "İşlem Hata Telemetrisi • Yakalanmamış İstisna",
+      "forwardErrorAuthor": "🔴 Sistem Hatası",
+      "forwardWarnAuthor": "🟡 Sistem Uyarısı",
+      "forwardInfoAuthor": "ℹ️ Sistem Bilgisi",
+      "forwardNoDetails": "*Ek bir ayrıntı verilmedi.*",
+      "forwardFooter": "Günlük Telemetrisi • Otomatik Yönlendirme",
+      "floodAuthor": "📦 Günlük Taşkın Kapısı",
+      "floodTitle": "Günlük Mesajları Düşürüldü",
+      "floodDesc": "⚠️ API hız limitlerini korumak için taşkın sırasında fazladan **{{count}}** günlük mesajı düşürüldü.",
+      "floodFooter": "Hız Limiti Koruması • ErrorChannel"
     }
   }
 }

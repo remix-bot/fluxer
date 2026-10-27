@@ -6,7 +6,6 @@
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { logger } from "../src/core/Logger.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../src/ui/index.mjs";
 import { Utils } from "../src/utils/Utils.mjs";
 import { EMOJI_REMOVE_TIMEOUT } from "../src/utils/UI.mjs";
 
@@ -243,7 +242,7 @@ export async function run(message, data) {
 
       const singleEmbed = new EmbedBuilder()
         .setColor(0xe9196c)
-        .setAuthor({ name: "🎤 Lyrics" })
+        .setAuthor({ name: this.t(message, "responses.lyrics.lyricsAuthor") })
         .setTitle(Utils.truncate(displayTitle, 50))
         .setDescription(singleDesc.slice(0, MAX_DESC))
         .setFooter({ text: this.t(message, "responses.lyrics.sourceFooter", { source: result.source, lines: totalLines }) });
@@ -268,7 +267,7 @@ export async function run(message, data) {
 
       const b = new EmbedBuilder()
         .setColor(0xe9196c)
-        .setAuthor({ name: "🎤 Lyrics" })
+        .setAuthor({ name: this.t(message, "responses.lyrics.lyricsAuthor") })
         .setTitle(Utils.truncate(displayTitle, 50))
         .setDescription(desc.slice(0, MAX_DESC))
         .setFooter({ text: expired

@@ -240,7 +240,8 @@ export async function run(message, data) {
 
     const statusEmbed = new EmbedBuilder()
       .setColor(getGlobalColor())
-      .setDescription(":mag_right: Loading direct stream...");
+      .setAuthor({ name: this.t(message, "responses.play.streamPipelineAuthor") })
+      .setDescription(this.t(message, "responses.play.loadingDirectStream"));
     let statusMsg = null;
     try { statusMsg = await message.reply({ embeds: [statusEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
 
@@ -255,7 +256,8 @@ export async function run(message, data) {
 
     const statusEmbed = new EmbedBuilder()
       .setColor(getGlobalColor())
-      .setDescription(":mag_right: Resolving stream via Lavalink...");
+      .setAuthor({ name: this.t(message, "responses.play.streamPipelineAuthor") })
+      .setDescription(this.t(message, "responses.play.resolvingLavalinkStream"));
     let statusMsg = null;
     try { statusMsg = await message.reply({ embeds: [statusEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
 
@@ -285,6 +287,7 @@ export async function run(message, data) {
 
       const searchEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
+        .setAuthor({ name: `🔎 ${this.t(message, "responses.play.searching")}` })
         .setDescription(this.t(message, "responses.play.searching"));
       let statusMsg = null;
       try { statusMsg = await message.reply({ embeds: [searchEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
@@ -302,6 +305,7 @@ export async function run(message, data) {
 
       const searchEmbed = new EmbedBuilder()
         .setColor(getGlobalColor())
+        .setAuthor({ name: `🔎 ${this.t(message, "responses.play.searching")}` })
         .setDescription(this.t(message, "responses.play.searching"));
       let statusMsg = null;
       try { statusMsg = await message.reply({ embeds: [searchEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
@@ -329,7 +333,7 @@ export async function run(message, data) {
 
     if (!lowerQuery && resolveProvider && (resolveProvider === "lf" || resolveProvider === "lastfm")) {
       return message.reply({
-        embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setDescription([
+        embeds: [new EmbedBuilder().setColor(ERROR_COLOR).setAuthor({ name: this.t(message, "responses.play.lastfmPlaybackAuthor") }).setDescription([
           `❌ Specify a Last.fm category after \`lf:\``,
           ``,
           `**Available categories:**`,
@@ -433,8 +437,8 @@ export async function run(message, data) {
 
   const searchEmbed = new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setDescription(this.t(message, "responses.play.searching"))
-    ;
+    .setAuthor({ name: `🔎 ${this.t(message, "responses.play.searching")}` })
+    .setDescription(this.t(message, "responses.play.searching"));
 
   let statusMsg = null;
   try {

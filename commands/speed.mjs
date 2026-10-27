@@ -46,12 +46,12 @@ export async function run(message, data) {
       delete existingPayload.timescale;
       await p.applyFilter(existingPayload, Object.keys(existingPayload).length > 0 ? p.activeFilter : null);
       embed.setAuthor({ name: `⏩ ${this.t(message, "responses.speed.speedTitle")}` })
-        .setTitle("1.0× Normal")
+        .setTitle(this.t(message, "responses.speed.normalRate"))
         .setDescription(this.t(message, "responses.speed.reset"))
         .setFooter({ text: this.t(message, "responses.speed.resetHint", { prefix }) });
     } else {
       embed.setAuthor({ name: `⏩ ${this.t(message, "responses.speed.speedTitle")}` })
-        .setTitle("1.0× Normal")
+        .setTitle(this.t(message, "responses.speed.normalRate"))
         .setDescription(this.t(message, "responses.speed.current", { speed: "1.0", prefix }))
         .setFooter({ text: this.t(message, "responses.speed.resetHint", { prefix }) });
     }
