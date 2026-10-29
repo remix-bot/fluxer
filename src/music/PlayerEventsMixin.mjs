@@ -268,7 +268,7 @@ const PlayerEventsMixin = {
     const durationMs = (() => {
       const d = song.duration;
       if (!d) return null;
-      if (typeof d === "object" && d.seconds) return d.seconds * 1000;
+      if (typeof d === "object" && d?.seconds) return d.seconds * 1000;
       if (typeof d === "number") return d;
       return null;
     })();

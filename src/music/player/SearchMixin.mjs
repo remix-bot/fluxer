@@ -306,7 +306,7 @@ const SearchMixin = {
     if (ms === 0 && info.duration != null) {
       if (typeof info.duration === "number") {
         ms = info.duration;
-      } else if (typeof info.duration === "object" && info.duration.seconds != null) {
+      } else if (typeof info.duration === "object" && info.duration?.seconds != null) {
         ms = info.duration.seconds * 1000;
       }
     }

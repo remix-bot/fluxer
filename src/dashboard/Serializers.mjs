@@ -58,8 +58,7 @@ const Serializers = {
     if (!vid) return null;
     const durationMs =
         typeof vid.duration === "number" ? vid.duration :
-            typeof vid.duration === "object" && vid.duration?.seconds !== null ? vid.duration.seconds * 1000 :
-                0;
+            (vid.duration?.seconds != null ? vid.duration.seconds * 1000 : 0);
     return {
       title: vid.title,
       url: vid.type === "radio" ? vid.author?.url : vid.url,

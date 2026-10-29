@@ -7,7 +7,6 @@
 
 import { Utils } from "../../src/utils/Utils.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
-import { getGlobalColor } from "../../src/ui/index.mjs";
 import { STATES, PROGRESS } from "./consts.mjs";
 
 /**
@@ -30,7 +29,7 @@ export function buildPlayerEmbed(bot, msg, player, timeout, state = {}) {
   if (current?.duration && player.startedPlaying) {
     const elapsed = Date.now() - player.startedPlaying;
     const totalMs = typeof current.duration === "object"
-        ? (current.duration.seconds ?? 0) * 1000
+        ? (current.duration?.seconds ?? 0) * 1000
         : current.duration;
 
     const bar = Utils.progressBar(elapsed, totalMs, 20, PROGRESS.filled, PROGRESS.empty, isPlaying ? PROGRESS.indicator : PROGRESS.filled);

@@ -372,7 +372,7 @@ export class Utils {
     if (includeDuration && track.duration) {
       const duration = typeof track.duration === "number"
           ? this.prettifyMS(track.duration)
-          : track.duration.timestamp || track.duration.seconds
+          : (track.duration?.timestamp || track.duration?.seconds)
               ? this.formatSeconds(track.duration.seconds)
               : "?:??";
       return `${title} - ${author} [${duration}]`;

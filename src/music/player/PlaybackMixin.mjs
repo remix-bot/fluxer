@@ -69,7 +69,7 @@ const PlaybackMixin = {
     if (track?.info?.length) return track.info.length;
     if (track?.info?.duration != null) {
       if (typeof track.info.duration === "number") return track.info.duration;
-      if (typeof track.info.duration === "object" && track.info.duration.seconds != null)
+      if (typeof track.info.duration === "object" && track.info.duration?.seconds != null)
         return track.info.duration.seconds * 1000;
     }
     return 0;

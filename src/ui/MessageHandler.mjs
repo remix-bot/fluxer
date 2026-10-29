@@ -398,6 +398,19 @@ export class MessageHandler {
     try {
       return new Message(await replyingTo.reply(opts, { ping: false }), this);
     } catch (err) {
+      if (err.code === ErrorCodes.MessageNotFound || err.code === "UNKNOWN_MESSAGE" || err.statusCode === 404 || String(err?.message ?? "").includes("Message wasn't found")) {
+        /* Referenced message was deleted before reply arrived — fall back to channel send */
+        try {
+          const ch = replyingTo.channel ?? (typeof this.getChannel === "function" ? this.getChannel(replyingTo.channelId) : null);
+          if (ch && typeof ch.send === "function") {
+            return new Message(await ch.send(opts), this);
+          }
+        } catch (fallbackErr) {
+          logger.warn(`[MessageHandler] Fallback channel send failed in ${replyingTo.channelId ?? replyingTo.channel?.id}: ${fallbackErr.code ?? fallbackErr.message}`);
+          return null;
+        }
+        return null;
+      }
       if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
         logger.warn(`[MessageHandler] Cannot reply in channel ${replyingTo.channelId ?? replyingTo.channel?.id}: ${err.code ?? err.message}`);
         return null;
@@ -420,6 +433,19 @@ export class MessageHandler {
       try {
         return new Message(await replyingTo.reply(message, { ping: false }), this);
       } catch (err) {
+        if (err.code === ErrorCodes.MessageNotFound || err.code === "UNKNOWN_MESSAGE" || err.statusCode === 404 || String(err?.message ?? "").includes("Message wasn't found")) {
+          /* Referenced message was deleted before reply arrived — fall back to channel send */
+          try {
+            const ch = replyingTo.channel ?? (typeof this.getChannel === "function" ? this.getChannel(replyingTo.channelId) : null);
+            if (ch && typeof ch.send === "function") {
+              return new Message(await ch.send(message), this);
+            }
+          } catch (fallbackErr) {
+            logger.warn(`[MessageHandler] Fallback channel send failed in ${replyingTo.channelId ?? replyingTo.channel?.id}: ${fallbackErr.code ?? fallbackErr.message}`);
+            return null;
+          }
+          return null;
+        }
         if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
           logger.warn(`[MessageHandler] Cannot replyEmbed in channel ${replyingTo.channelId ?? replyingTo.channel?.id}: ${err.code ?? err.message}`);
           return null;
@@ -442,6 +468,19 @@ export class MessageHandler {
     try {
       return new Message(await replyingTo.reply(payload, { ping: false }), this);
     } catch (err) {
+      if (err.code === ErrorCodes.MessageNotFound || err.code === "UNKNOWN_MESSAGE" || err.statusCode === 404 || String(err?.message ?? "").includes("Message wasn't found")) {
+        /* Referenced message was deleted before reply arrived — fall back to channel send */
+        try {
+          const ch = replyingTo.channel ?? (typeof this.getChannel === "function" ? this.getChannel(replyingTo.channelId) : null);
+          if (ch && typeof ch.send === "function") {
+            return new Message(await ch.send(payload), this);
+          }
+        } catch (fallbackErr) {
+          logger.warn(`[MessageHandler] Fallback channel send failed in ${replyingTo.channelId ?? replyingTo.channel?.id}: ${fallbackErr.code ?? fallbackErr.message}`);
+          return null;
+        }
+        return null;
+      }
       if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
         logger.warn(`[MessageHandler] Cannot replyEmbed in channel ${replyingTo.channelId ?? replyingTo.channel?.id}: ${err.code ?? err.message}`);
         return null;

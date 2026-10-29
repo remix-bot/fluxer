@@ -243,8 +243,8 @@ export class LastFmManager {
 
   /** @private Extract the duration in seconds from a track object, supporting number (ms), object with .seconds, ISO 8601, or plain seconds. @param {object} track - Track object. @returns {string|number} Duration in seconds, or empty string if unavailable. */
   _extractDurationSec(track) {
-    if (!track.duration) return "";
-    if (typeof track.duration === "object" && track.duration.seconds) return track.duration.seconds;
+    if (!track?.duration) return "";
+    if (typeof track.duration === "object" && track.duration?.seconds) return track.duration.seconds;
     if (typeof track.duration === "number") return Math.round(track.duration / 1000);
     if (typeof track.duration === "string") {
       const m = track.duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
@@ -260,9 +260,9 @@ export class LastFmManager {
    * @returns {boolean} True if the track meets the scrobble threshold.
    */
   shouldScrobble(track, playedMs) {
-    const durationMs = typeof track.duration === "object" && track.duration.seconds
+    const durationMs = track?.duration?.seconds != null
       ? track.duration.seconds * 1000
-      : typeof track.duration === "number"
+      : typeof track?.duration === "number"
         ? track.duration
         : null;
 
