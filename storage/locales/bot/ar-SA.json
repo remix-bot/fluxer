@@ -540,7 +540,12 @@
       "loadingDirectStream": "🔎 جاري تحميل البث المباشر...",
       "resolvingLavalinkStream": "🔎 جاري حل البث عبر Lavalink...",
       "lastfmPlaybackAuthor": "🎵 تشغيل Last.fm",
-      "lastfmSearchAuthor": "🔎 بحث Last.fm"
+      "lastfmSearchAuthor": "🔎 بحث Last.fm",
+      "loadingAttachmentStream": "جارٍ تحميل مرفق وسائط Fluxer...",
+      "sourceAttachment": "مرفق Fluxer",
+      "noQueryTitle": "الأغنية أو المرفق مطلوب",
+      "noQueryDesc": "يرجى تقديم استعلام بحث أو رابط وسائط مباشر أو تحميل ملف صوت/فيديو مع هذا الأمر.",
+      "noQueryFooter": "مشغّل الموسيقى • دعم المرفقات المباشرة"
     },
     "playnext": {
       "searching": "🔍 جارٍ البحث...",

@@ -744,7 +744,12 @@
       "loadingDirectStream": "🔎 Doğrudan akış yükleniyor...",
       "resolvingLavalinkStream": "🔎 Lavalink üzerinden akış çözülüyor...",
       "lastfmPlaybackAuthor": "🎵 Last.fm Çalma",
-      "lastfmSearchAuthor": "🔎 Last.fm Arama"
+      "lastfmSearchAuthor": "🔎 Last.fm Arama",
+      "loadingAttachmentStream": "Fluxer medya eki yükleniyor...",
+      "sourceAttachment": "Fluxer Eki",
+      "noQueryTitle": "Şarkı veya Ek Gerekli",
+      "noQueryDesc": "Lütfen bir arama sorgusu, doğrudan medya bağlantısı girin veya bu komutla bir ses/video dosyası yükleyin.",
+      "noQueryFooter": "Müzik Çalar • Doğrudan Ek Desteği"
     },
     "playnext": {
       "searching": "🔍 Aranıyor...",

@@ -540,7 +540,12 @@
       "loadingDirectStream": "🔎 بارکردنی پەخشی ڕاستەوخۆ...",
       "resolvingLavalinkStream": "🔎 شیکارکردنی پەخش لە ڕێگەی Lavalink...",
       "lastfmPlaybackAuthor": "🎵 لێدانی Last.fm",
-      "lastfmSearchAuthor": "🔎 گەڕانی Last.fm"
+      "lastfmSearchAuthor": "🔎 گەڕانی Last.fm",
+      "loadingAttachmentStream": "بارکردنی هاوپێچی میدیای Fluxer...",
+      "sourceAttachment": "هاوپێچی Fluxer",
+      "noQueryTitle": "گۆرانی یان هاوپێچ پێویستە",
+      "noQueryDesc": "تکایە گەڕانێک بنووسە، یان بەستەرێکی ڕاستەوخۆی میدیا یان فایلێکی دەنگ/ڤیدیۆ باربکە لەگەڵ ئەم فەرمانەدا.",
+      "noQueryFooter": "لێدەری مۆسیقا • پشتگیری هاوپێچی ڕاستەوخۆ"
     },
     "playnext": {
       "searching": "🔍 گەڕان...",

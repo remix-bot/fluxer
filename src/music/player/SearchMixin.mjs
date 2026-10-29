@@ -13,6 +13,7 @@ import { Utils } from "../../utils/Utils.mjs";
 import { logger } from "../../core/Logger.mjs";
 import { PROVIDERS, PROVIDER_NAMES } from "../providers.mjs";
 import { bilibiliEnabled, isBilibiliUrl, resolveBilibiliVideo } from "../bilibili/index.mjs";
+import { isFluxerAttachmentUrl, extractMediaTitle } from "../../utils/AttachmentUtils.mjs";
 
 /**
  * Broad music genres are ambiguous when used by themselves: searching for
@@ -743,12 +744,15 @@ const SearchMixin = {
    * @returns {object}
    */
   _buildExternalTrack(url, title = null, artist = null, trackType = "external") {
-    const displayTitle = title || this._extractFilenameFromUrl(url);
+    const isAttachment = isFluxerAttachmentUrl(url);
+    const resolvedType = isAttachment ? "attachment" : trackType;
+    const displayTitle = title || (isAttachment ? extractMediaTitle(url) : this._extractFilenameFromUrl(url));
+    const displayArtist = artist || (isAttachment ? "Fluxer Attachment" : null);
     return {
-      type:      trackType,
+      type:      resolvedType,
       title:     displayTitle,
       url:       url,
-      artist:    artist || null,
+      artist:    displayArtist,
       thumbnail: null,
     };
   },

@@ -540,7 +540,12 @@
       "loadingDirectStream": "🔎 Carregando transmissão direta...",
       "resolvingLavalinkStream": "🔎 Resolvendo fluxo via Lavalink...",
       "lastfmPlaybackAuthor": "🎵 Reprodução do Last.fm",
-      "lastfmSearchAuthor": "🔎 Pesquisa no Last.fm"
+      "lastfmSearchAuthor": "🔎 Pesquisa no Last.fm",
+      "loadingAttachmentStream": "Carregando anexo de mídia do Fluxer...",
+      "sourceAttachment": "Anexo do Fluxer",
+      "noQueryTitle": "Música ou Anexo Obrigatório",
+      "noQueryDesc": "Por favor, forneça um termo de pesquisa, um link direto de mídia ou envie um arquivo de áudio/vídeo com este comando.",
+      "noQueryFooter": "Reprodutor de Música • Suporte a Anexos Diretos"
     },
     "playnext": {
       "searching": "🔍 Buscando...",

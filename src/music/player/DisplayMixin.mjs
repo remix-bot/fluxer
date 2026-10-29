@@ -73,7 +73,7 @@ const DisplayMixin = {
           ? `[Radio]: ${vid.title} - ${vid.author?.url || ""}`
           : `[Radio] [${vid.title} by ${vid.author?.name || "Unknown"}](${vid.author?.url || ""})`;
     }
-    if (vid.type === "external" || vid.type === "stream") {
+    if (vid.type === "external" || vid.type === "stream" || vid.type === "attachment") {
       return code
           ? `${vid.title} - ${vid.url}`
           : `[${vid.title}](${vid.url})`;
@@ -185,6 +185,9 @@ const DisplayMixin = {
     if (current.type === "radio") {
       sourceName = this._t("responses.play.sourceRadio");
       sourceIcon = "📻";
+    } else if (current.type === "attachment" || current.url?.includes("fluxerusercontent.com") || current.url?.includes("cdn.fluxer.app")) {
+      sourceName = this._t("responses.play.sourceAttachment");
+      sourceIcon = "📎";
     } else if (current.spotifyUrl || current.type === "spotify") {
       sourceName = this._t("responses.play.sourceSpotify");
       sourceIcon = "🟢";
@@ -222,7 +225,7 @@ const DisplayMixin = {
         /* Radio live metadata probe is optional — gracefully fall back to station display */
         textMsg = `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`;
       }
-    } else if (current.type === "external" || current.type === "stream") {
+    } else if (current.type === "external" || current.type === "stream" || current.type === "attachment") {
       const totalMs = this._getTrackDurationMs(current);
       const progressLine = totalMs > 0 ? `\n${this._createProgressBar(20)}` : "";
       textMsg = `${vcLine}🎵 **[${current.title}](${current.url})** by ${artistName}${progressLine}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`;

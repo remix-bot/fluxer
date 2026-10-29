@@ -540,7 +540,12 @@
       "loadingDirectStream": "🔎 Direkter Stream wird geladen...",
       "resolvingLavalinkStream": "🔎 Stream wird über Lavalink aufgelöst...",
       "lastfmPlaybackAuthor": "🎵 Last.fm-Wiedergabe",
-      "lastfmSearchAuthor": "🔎 Last.fm-Suche"
+      "lastfmSearchAuthor": "🔎 Last.fm-Suche",
+      "loadingAttachmentStream": "Lade Fluxer-Medienanhang...",
+      "sourceAttachment": "Fluxer-Anhang",
+      "noQueryTitle": "Titel oder Anhang erforderlich",
+      "noQueryDesc": "Bitte gib einen Suchbegriff oder direkten Medienlink an oder lade eine Audio-/Videodatei mit diesem Befehl hoch.",
+      "noQueryFooter": "Musikplayer • Direkte Anhangsunterstützung"
     },
     "playnext": {
       "searching": "🔍 Suche...",

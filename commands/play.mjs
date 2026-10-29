@@ -12,6 +12,11 @@ import { PROVIDER_CHOICES, parseInlineProvider } from "../src/music/providers.mj
 import { playLastFmCategory } from "./lastfm.mjs";
 import { parseLastFmUrl, isLastFmUrl } from "../src/services/lastfm/LastFmManager.mjs";
 import { ERROR_COLOR } from "../src/utils/UI.mjs";
+import {
+  getPlayableAttachment,
+  isFluxerAttachmentUrl,
+  extractMediaTitle,
+} from "../src/utils/AttachmentUtils.mjs";
 
 const LASTFM_PLAY_CATEGORIES = ["loved", "top", "recent", "albums"];
 
@@ -102,7 +107,7 @@ const KNOWN_SERVICE_HOSTS = /(?:youtu(?:be\.com|\.be)|youtube\.com|music\.youtub
 const NATIVE_AUDIO_EXTENSIONS = /\.(?:opus|webm|ogg)(?:\?|$)/i;
 
 /** Audio file extensions that indicate any direct audio URL (broader set). */
-const AUDIO_EXTENSIONS = /\.(?:mp3|m4a|aac|ogg|opus|flac|wav|wma|webm|stream|m3u8|pls)(?:\?|$)/i;
+const AUDIO_EXTENSIONS = /\.(?:mp3|m4a|aac|ogg|opus|flac|wav|wma|webm|mp4|mkv|mov|stream|m3u8|pls)(?:\?|$)/i;
 
 /** Common stream/radio content-type paths or patterns. */
 const STREAM_PATH_HINTS = /\/(?:stream|live|radio|audio|playlist|play|listen|mp3|aac|ogg)/i;
@@ -139,6 +144,7 @@ function isDirectAudioUrl(str) {
   try {
     const url = new URL(trimmed);
     if (KNOWN_SERVICE_HOSTS.test(url.hostname)) return false;
+    if (isFluxerAttachmentUrl(trimmed)) return true;
     if (AUDIO_EXTENSIONS.test(url.pathname)) return true;
     if (STREAM_PATH_HINTS.test(url.pathname) && !url.pathname.includes(".html") && !url.pathname.includes(".php")) {
       return true;
@@ -185,7 +191,7 @@ export const command = new CommandBuilder()
     .addTextOption(option =>
         option.setName("query")
             .setDescription("A search query, music genre (for example `pop`), URL, or provider-prefixed query like `sp: song name`.", "options.play.query")
-            .setRequired(true)
+            .setRequired(false)
     )
     .addChoiceOption(o =>
             o.setName("provider")
@@ -229,7 +235,39 @@ function forwardPlayMessage(d, statusMsg, message) {
  * @returns {Promise<void>}
  */
 export async function run(message, data) {
-  const rawQuery     = data.get("query").value;
+  const attachment = getPlayableAttachment(message);
+  const rawQuery = data.get("query")?.value?.trim() || "";
+
+  /* Handle case where neither a query nor an attachment was supplied */
+  if (!rawQuery && !attachment) {
+    const noQueryEmbed = new EmbedBuilder()
+      .setColor(ERROR_COLOR)
+      .setAuthor({ name: this.t(message, "responses.play.noQueryTitle") })
+      .setDescription(this.t(message, "responses.play.noQueryDesc"))
+      .setFooter({ text: this.t(message, "responses.play.noQueryFooter") });
+    return message.reply({ embeds: [noQueryEmbed] });
+  }
+
+  /* Handle direct Fluxer user attachment or fluxerusercontent.com URL */
+  const isAttachment = Boolean(attachment) || isFluxerAttachmentUrl(rawQuery);
+  if (isAttachment) {
+    const mediaUrl = attachment ? attachment.url : rawQuery;
+    const cleanTitle = attachment ? extractMediaTitle(attachment.filename) : extractMediaTitle(rawQuery);
+    const p = await this.getPlayer(message, true, true, true);
+    if (!p) return;
+
+    const statusEmbed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: this.t(message, "responses.play.streamPipelineAuthor") })
+      .setDescription(this.t(message, "responses.play.loadingAttachmentStream"));
+    let statusMsg = null;
+    try { statusMsg = await message.reply({ embeds: [statusEmbed] }); } catch(e) { logger.warn("[Play] Error:", e?.message); }
+
+    const messages = p.playExternal(mediaUrl, cleanTitle, "Fluxer Attachment", false, "attachment");
+    messages.on("message", d => forwardPlayMessage(d, statusMsg, message));
+    return;
+  }
+
   const flagProvider = data.get("provider")?.value;
   const { provider: inlineProvider, query } = parseInlineProvider(rawQuery);
   const provider = inlineProvider ?? flagProvider ?? "ytm";

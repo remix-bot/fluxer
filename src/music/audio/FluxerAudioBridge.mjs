@@ -35,6 +35,7 @@ export class FluxerAudioBridge extends EventEmitter {
   _endResolve = null;
   _endReject = null;
   _usedTrackstream = false;
+  _ffmpegProc = null;
 
   /** @type {boolean} @description Whether audio is currently playing. */
   get playing() { return this._playing; }
@@ -259,8 +260,51 @@ export class FluxerAudioBridge extends EventEmitter {
             }
           }
 
+          /* Route 3d: In-process FFmpeg decode fallback for MP4, AAC, MP3, WAV, and direct media */
+          try {
+            logger.player("[AudioBridge] Route 3d: Decoding direct media via in-process ffmpeg: " + trackInfo.url.substring(0, 80));
+            const { spawn } = await import("node:child_process");
+            const ffmpegArgs = [
+              "-reconnect", "1",
+              "-reconnect_streamed", "1",
+              "-reconnect_delay_max", "5",
+              "-i", trackInfo.url,
+              "-vn",
+              "-filter:a", "volume=1.0",
+              "-f", "s16le",
+              "-ar", "48000",
+              "-ac", "2",
+              "pipe:1"
+            ];
+            const proc = spawn("ffmpeg", ffmpegArgs, { stdio: ["ignore", "pipe", "pipe"] });
+            this._ffmpegProc = proc;
+
+            proc.on("error", (err) => {
+              logger.warn("[AudioBridge] Route 3d FFmpeg process error: " + err.message);
+            });
+            proc.stderr.on("data", () => {
+              /* Drain stderr so ffmpeg does not block on full pipe buffer */
+            });
+
+            this._stream = this._buildPcmPipeline(proc.stdout);
+            await conn.play(this._stream);
+            if (generation !== this._playGeneration) return "stopped";
+
+            await this._awaitEnd(durationMs);
+            if (generation !== this._playGeneration) return "stopped";
+
+            if (this._playing && !this._stopped) {
+              this._playing = false;
+              logger.player("[AudioBridge] Track finished naturally (Route 3d in-process ffmpeg)");
+              return "finished";
+            }
+            return "stopped";
+          } catch (ffmpegErr) {
+            logger.warn("[AudioBridge] Route 3d ffmpeg playback failed: " + ffmpegErr?.message);
+          }
+
           throw new Error(
-              "[AudioBridge] Direct stream is " + routed.kind + " (MP3/AAC/PCM?) — this format needs server-side decoding. " +
+              "[AudioBridge] Direct stream is " + routed.kind + " (MP3/AAC/PCM?) — this format needs server-side decoding or ffmpeg. " +
               "Set audio.allowLoadstream to true in config.json (requires a NodeLink exposing /v4/loadstream), " +
               "or play a WebM/Opus source."
           );
@@ -636,6 +680,10 @@ export class FluxerAudioBridge extends EventEmitter {
     }
     if (this._sourceReq) {
       try { this._sourceReq.destroy(); } catch (_) {}
+    }
+    if (this._ffmpegProc) {
+      try { this._ffmpegProc.kill("SIGKILL"); } catch (_) {}
+      this._ffmpegProc = null;
     }
     this._stream = null;
     this._encoder = null;

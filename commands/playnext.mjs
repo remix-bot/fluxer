@@ -8,6 +8,12 @@ import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getGlobalColor } from "../src/ui/index.mjs";
 import { PROVIDER_CHOICES, parseInlineProvider } from "../src/music/providers.mjs";
+import { ERROR_COLOR } from "../src/utils/UI.mjs";
+import {
+  getPlayableAttachment,
+  isFluxerAttachmentUrl,
+  extractMediaTitle,
+} from "../src/utils/AttachmentUtils.mjs";
 
 
 /**
@@ -27,7 +33,7 @@ export const command = new CommandBuilder()
     .addTextOption(option =>
         option.setName("query")
             .setDescription("A search query, URL, or provider-prefixed query like `sp: song name`.", "options.playnext.query")
-            .setRequired(true)
+            .setRequired(false)
     )
     .addChoiceOption(o =>
             o.setName("provider")
@@ -50,7 +56,48 @@ export async function run(message, data) {
   const p = await this.getPlayer(message, true, true, true);
   if (!p) return;
 
-  const rawQuery     = data.get("query").value;
+  const attachment = getPlayableAttachment(message);
+  const rawQuery = data.get("query")?.value?.trim() || "";
+
+  /* Handle case where neither a query nor an attachment was supplied */
+  if (!rawQuery && !attachment) {
+    const noQueryEmbed = new EmbedBuilder()
+      .setColor(ERROR_COLOR)
+      .setAuthor({ name: this.t(message, "responses.play.noQueryTitle") })
+      .setDescription(this.t(message, "responses.play.noQueryDesc"))
+      .setFooter({ text: this.t(message, "responses.play.noQueryFooter") });
+    return message.reply({ embeds: [noQueryEmbed] });
+  }
+
+  /* Handle direct Fluxer user attachment or fluxerusercontent.com URL */
+  const isAttachment = Boolean(attachment) || isFluxerAttachmentUrl(rawQuery);
+  if (isAttachment) {
+    const mediaUrl = attachment ? attachment.url : rawQuery;
+    const cleanTitle = attachment ? extractMediaTitle(attachment.filename) : extractMediaTitle(rawQuery);
+
+    const statusEmbed = new EmbedBuilder()
+      .setColor(getGlobalColor())
+      .setAuthor({ name: this.t(message, "responses.playnext.playingNext") })
+      .setDescription(this.t(message, "responses.play.loadingAttachmentStream"));
+    let statusMsg = null;
+    try { statusMsg = await message.reply({ embeds: [statusEmbed] }); } catch (_) {}
+
+    const messages = p.playExternal(mediaUrl, cleanTitle, "Fluxer Attachment", true, "attachment");
+    messages.on("message", d => {
+      let embed;
+      if (d instanceof EmbedBuilder) {
+        embed = d;
+      } else if (d?.embeds?.[0]) {
+        embed = d.embeds[0];
+      } else {
+        embed = new EmbedBuilder().setColor(getGlobalColor()).setDescription(String(d));
+      }
+      embed.setAuthor({ name: this.t(message, "responses.playnext.playingNext") });
+      if (statusMsg) statusMsg.edit({ embeds: [embed] }).catch(() => {});
+    });
+    return;
+  }
+
   const flagProvider = data.get("provider")?.value;
   const { provider: inlineProvider, query } = parseInlineProvider(rawQuery);
   const provider = inlineProvider ?? flagProvider ?? "ytm";

@@ -336,7 +336,7 @@ const PlaybackMixin = {
       bridgeUrl          = stream.url;
     }
 
-    if (!songData.encoded && bridgeUrl && bridgeUrl.startsWith("http") && this._lavalink && songData.type !== "external") {
+    if (!songData.encoded && bridgeUrl && bridgeUrl.startsWith("http") && this._lavalink && songData.type !== "external" && songData.type !== "attachment") {
       try {
         const nlInfo = this._lavalink.getNodeLinkInfo?.();
         if (nlInfo) {

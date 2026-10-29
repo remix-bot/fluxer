@@ -755,7 +755,12 @@
       "loadingDirectStream": "🔎 Loading direct stream...",
       "resolvingLavalinkStream": "🔎 Resolving stream via Lavalink...",
       "lastfmPlaybackAuthor": "🎵 Last.fm Playback",
-      "lastfmSearchAuthor": "🔎 Last.fm Search"
+      "lastfmSearchAuthor": "🔎 Last.fm Search",
+      "loadingAttachmentStream": "Loading Fluxer media attachment...",
+      "sourceAttachment": "Fluxer Attachment",
+      "noQueryTitle": "Song or Attachment Required",
+      "noQueryDesc": "Please provide a search query, a direct media link, or upload an audio/video file with this command.",
+      "noQueryFooter": "Music Player • Direct Attachment Support"
     },
     "playnext": {
       "searching": "🔍 Searching...",

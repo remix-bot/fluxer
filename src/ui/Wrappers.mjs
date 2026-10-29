@@ -128,6 +128,8 @@ export class Message {
   get authorId() { return this.message.author?.id; }
   /** @returns {object|null} The guild member, if available. */
   get member()   { return this.message.member ?? null; }
+  /** @returns {Array|object} Raw attachments attached to this message. */
+  get attachments() { return this.message.attachments ?? []; }
   /** @returns {Channel} The wrapped channel this message was sent in. */
   get channel()  { return this.handler.getChannel(this.message.channelId); }
 
