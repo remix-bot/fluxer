@@ -20,8 +20,8 @@ const MAX_REDIRECTS = 5;
 /** @type {number} @description Timeout (ms) for HTTP requests to Lavalink REST endpoints (trackstream, loadtracks JSON). */
 const REST_REQUEST_TIMEOUT_MS = 15_000;
 
-/** @type {number} @description Timeout (ms) to wait for the first byte from loadstream (Lavalink may need time to resolve HLS/external streams). */
-const LOADSTREAM_CONNECT_TIMEOUT_MS = 60_000;
+/** @type {number} @description Timeout (ms) to wait for the first byte from loadstream (reduced from 60s to 12s so dead node connections fail fast and fall back). */
+const LOADSTREAM_CONNECT_TIMEOUT_MS = 12_000;
 
 /** @type {number} @description Idle timeout (ms) once loadstream data is flowing — if no data arrives for this long, abort. */
 const LOADSTREAM_IDLE_TIMEOUT_MS = 30_000;
