@@ -716,6 +716,7 @@ export class FluxerAudioBridge extends EventEmitter {
     logger.player("[AudioBridge] Decoding media via in-process ffmpeg: " + url.substring(0, 80));
     const { spawn } = await import("node:child_process");
     const ffmpegArgs = [
+      "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "-reconnect", "1",
       "-reconnect_streamed", "1",
       "-reconnect_delay_max", "5",
@@ -730,18 +731,35 @@ export class FluxerAudioBridge extends EventEmitter {
     const proc = spawn("ffmpeg", ffmpegArgs, { stdio: ["ignore", "pipe", "pipe"] });
     this._ffmpegProc = proc;
 
+    let hasOutput = false;
+    let stderrBuf = "";
+
+    proc.stdout.once("data", () => {
+      hasOutput = true;
+    });
+
     proc.on("error", (err) => {
       logger.warn("[AudioBridge] FFmpeg process error: " + err.message);
     });
-    proc.stderr.on("data", () => {
-      /* Drain stderr so ffmpeg does not block on full pipe buffer */
+    proc.stderr.on("data", (chunk) => {
+      stderrBuf = (stderrBuf + chunk).slice(-600);
     });
 
     this._stream = this._buildPcmPipeline(proc.stdout);
     await conn.play(this._stream);
     if (generation !== this._playGeneration) return "stopped";
 
-    await this._awaitEnd(durationMs);
+    await new Promise((resolve, reject) => {
+      proc.once("close", (code) => {
+        if (!hasOutput && code !== 0 && !this._stopped) {
+          const errLine = stderrBuf.split("\n").filter(Boolean).pop() || "Process exited with code " + code;
+          reject(new Error("[FFmpeg] " + errLine));
+          return;
+        }
+      });
+      this._awaitEnd(durationMs).then(resolve, reject);
+    });
+
     if (generation !== this._playGeneration) return "stopped";
 
     if (this._playing && !this._stopped) {
