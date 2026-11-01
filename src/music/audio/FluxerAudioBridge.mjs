@@ -715,9 +715,14 @@ export class FluxerAudioBridge extends EventEmitter {
   async _playViaFfmpeg(conn, url, durationMs, generation) {
     logger.player("[AudioBridge] Decoding media via in-process ffmpeg: " + url.substring(0, 80));
     const { spawn } = await import("node:child_process");
+    const headers = url.includes("soundcloud.cloud")
+      ? "Origin: https://soundcloud.com\r\nReferer: https://soundcloud.com/\r\n"
+      : "Origin: https://www.youtube.com\r\nReferer: https://www.youtube.com/\r\n";
     const ffmpegArgs = [
+      "-headers", headers,
       "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "-reconnect", "1",
+      "-reconnect_at_eof", "1",
       "-reconnect_streamed", "1",
       "-reconnect_delay_max", "5",
       "-i", url,
@@ -751,7 +756,8 @@ export class FluxerAudioBridge extends EventEmitter {
 
     await new Promise((resolve, reject) => {
       proc.once("close", (code, signal) => {
-        logger.player("[AudioBridge] FFmpeg process closed (code=" + code + ", signal=" + signal + ", hasOutput=" + hasOutput + ")");
+        const lastErr = stderrBuf.split("\n").filter(Boolean).slice(-2).join(" | ");
+        logger.player("[AudioBridge] FFmpeg process closed (code=" + code + ", signal=" + signal + ", hasOutput=" + hasOutput + ")" + (lastErr ? ": " + lastErr : ""));
         if ((!hasOutput || code !== 0) && !this._stopped) {
           const errLine = stderrBuf.split("\n").filter(Boolean).pop() || "Process exited with code " + code;
           logger.warn("[AudioBridge] FFmpeg non-zero close: " + errLine);
