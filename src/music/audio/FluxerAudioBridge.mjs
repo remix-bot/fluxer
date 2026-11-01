@@ -722,7 +722,6 @@ export class FluxerAudioBridge extends EventEmitter {
       "-headers", headers,
       "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "-reconnect", "1",
-      "-reconnect_at_eof", "1",
       "-reconnect_streamed", "1",
       "-reconnect_delay_max", "5",
       "-i", url,
@@ -738,16 +737,25 @@ export class FluxerAudioBridge extends EventEmitter {
 
     let hasOutput = false;
     let stderrBuf = "";
+    let chunkCount = 0;
 
-    proc.stdout.once("data", () => {
-      hasOutput = true;
+    proc.stdout.on("data", (chunk) => {
+      chunkCount++;
+      if (chunkCount === 1) {
+        hasOutput = true;
+        logger.player("[AudioBridge] FFmpeg output stream started (" + chunk.length + " bytes)");
+      }
     });
 
     proc.on("error", (err) => {
       logger.warn("[AudioBridge] FFmpeg process error: " + err.message);
     });
     proc.stderr.on("data", (chunk) => {
-      stderrBuf = (stderrBuf + chunk).slice(-600);
+      const text = chunk.toString();
+      stderrBuf = (stderrBuf + text).slice(-600);
+      if (text.includes("403") || text.includes("404") || text.includes("Server returned")) {
+        logger.warn("[AudioBridge] FFmpeg HTTP: " + text.trim().split("\n").pop());
+      }
     });
 
     this._stream = this._buildPcmPipeline(proc.stdout);
