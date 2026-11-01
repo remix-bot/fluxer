@@ -718,10 +718,13 @@ export class FluxerAudioBridge extends EventEmitter {
     const headers = url.includes("soundcloud.cloud")
       ? "Origin: https://soundcloud.com\r\nReferer: https://soundcloud.com/\r\n"
       : "Origin: https://www.youtube.com\r\nReferer: https://www.youtube.com/\r\n";
+    const isHls = url.includes(".m3u8") || url.includes("manifest") || url.includes("hls");
+    const hlsArgs = isHls ? ["-live_start_index", "-3"] : [];
     const ffmpegArgs = [
       "-re",
       "-headers", headers,
       "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      ...hlsArgs,
       "-reconnect", "1",
       "-reconnect_streamed", "1",
       "-reconnect_delay_max", "5",
