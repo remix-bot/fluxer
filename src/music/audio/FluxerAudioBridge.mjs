@@ -460,8 +460,20 @@ export class FluxerAudioBridge extends EventEmitter {
       }
 
       if (!/webm|opus/i.test(String(direct.format || ""))) {
-        // Last chance: sniff the direct URL's actual bytes — format strings
-        // can lie (e.g. "mp4" that is really a WebM/Opus stream).
+        /* If format is HLS / m3u8 (YouTube Live, SoundCloud live), directly decode via in-process ffmpeg */
+        if (/hls|m3u8/i.test(String(direct.format || "")) || (direct.url && direct.url.includes(".m3u8"))) {
+          logger.player("[AudioBridge] trackstream direct URL is HLS (" + (direct.format || "m3u8") + ") — playing via in-process ffmpeg: " + direct.url.substring(0, 80));
+          this._usedTrackstream = true;
+          try {
+            return await this._playViaFfmpeg(conn, direct.url, durationMs, generation);
+          } catch (ffErr) {
+            if (stale()) return "stopped";
+            logger.warn("[AudioBridge] trackstream HLS ffmpeg playback failed: " + ffErr.message);
+            return null;
+          }
+        }
+
+        /* Try in-process byte positioning for WebM/Ogg streams (e.g. if format string lied) */
         try {
           const opened = await this._openPositionedStream(direct.url, seekMs);
           if (stale()) return "stopped";
@@ -471,8 +483,16 @@ export class FluxerAudioBridge extends EventEmitter {
           return result;
         } catch (e3) {
           if (stale()) return "stopped";
-          logger.player("[AudioBridge] trackstream direct URL not playable in-process (" + e3.message + ")");
-          return null;
+          /* Non-WebM direct stream (AAC, MP4, HLS fallback): play via in-process FFmpeg */
+          logger.player("[AudioBridge] trackstream direct URL is non-webm (" + (direct.format || e3.message) + ") — playing via in-process ffmpeg: " + direct.url.substring(0, 80));
+          this._usedTrackstream = true;
+          try {
+            return await this._playViaFfmpeg(conn, direct.url, durationMs, generation);
+          } catch (ffErr) {
+            if (stale()) return "stopped";
+            logger.warn("[AudioBridge] trackstream ffmpeg fallback failed: " + ffErr.message);
+            return null;
+          }
         }
       }
     }

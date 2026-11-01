@@ -54,6 +54,10 @@ const PlaybackMixin = {
    * @returns {number}
    */
   _getTrackDurationMs(track) {
+    /* Live streams have unbounded/indeterminate length: duration is always 0 */
+    if (track?.isLive || track?.isStream || track?.info?.isStream || track?.info?.isLive || track?.type === "livestream" || track?.type === "radio") {
+      return 0;
+    }
     if (track?._durationMs != null && track._durationMs > 0) {
       return track._durationMs;
     }
