@@ -469,6 +469,20 @@ export class FluxerAudioBridge extends EventEmitter {
           } catch (ffErr) {
             if (stale()) return "stopped";
             logger.warn("[AudioBridge] trackstream HLS ffmpeg playback failed: " + ffErr.message);
+            /* If media URL expired (403 Forbidden), try one fresh resolve from Lavalink */
+            if (ffErr.message.includes("403") && trackInfo.url && trackInfo.url.startsWith("http")) {
+              logger.player("[AudioBridge] Stream URL expired (HTTP 403) — refreshing track via Lavalink...");
+              const freshEncoded = await this._resolveUrlViaLavalink(trackInfo.url, trackInfo.guildId).catch(() => null);
+              if (freshEncoded && !stale()) {
+                trackInfo.encoded = freshEncoded;
+                try {
+                  const freshDirect = await this._getTrackstreamUrl(trackInfo);
+                  if (freshDirect?.url) {
+                    return await this._playViaFfmpeg(conn, freshDirect.url, durationMs, generation);
+                  }
+                } catch (_) {}
+              }
+            }
             return null;
           }
         }
