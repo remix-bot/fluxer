@@ -518,9 +518,14 @@ export class FluxerAudioBridge extends EventEmitter {
         (trackInfo.title || "unknown"));
 
     try {
-      if (seekMs > 0 || durationMs <= 0) {
-        // Streamed route: byte-positioned for seeks; also gives an
-        // end-of-stream handle when the duration is unknown.
+      if (durationMs <= 0) {
+        /* Live stream: decode via in-process FFmpeg to seek to the live edge */
+        logger.player("[AudioBridge] Live stream (duration <= 0) — playing via in-process ffmpeg: " + direct.url.substring(0, 80));
+        return await this._playViaFfmpeg(conn, direct.url, durationMs, generation);
+      }
+
+      if (seekMs > 0) {
+        /* Streamed route: byte-positioned for seeks */
         const opened = await this._openPositionedStream(direct.url, seekMs);
         if (stale()) {
           opened.stream.destroy();
@@ -732,13 +737,15 @@ export class FluxerAudioBridge extends EventEmitter {
     const headers = url.includes("soundcloud.cloud")
       ? "Origin: https://soundcloud.com\r\nReferer: https://soundcloud.com/\r\n"
       : "Origin: https://www.youtube.com\r\nReferer: https://www.youtube.com/\r\n";
-    const isHls = url.includes(".m3u8") || url.includes("manifest") || url.includes("hls");
-    const hlsArgs = isHls ? ["-live_start_index", "-3"] : [];
+    const isHls = url.includes(".m3u8");
+    const hlsArgs = isHls ? ["-f", "hls", "-live_start_index", "-3"] : [];
+    const liveArgs = (durationMs <= 0) ? ["-sseof", "-10"] : [];
     const ffmpegArgs = [
       "-re",
       "-headers", headers,
       "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       ...hlsArgs,
+      ...liveArgs,
       "-reconnect", "1",
       "-reconnect_streamed", "1",
       "-reconnect_delay_max", "5",
