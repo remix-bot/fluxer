@@ -800,14 +800,13 @@ export class FluxerAudioBridge extends EventEmitter {
       };
 
       proc.once("close", (code, signal) => {
-        const lastErr = stderrBuf.split("\n").filter(Boolean).slice(-2).join(" | ");
-        logger.player("[AudioBridge] FFmpeg process closed (code=" + code + ", signal=" + signal + ", hasOutput=" + hasOutput + ")" + (lastErr ? ": " + lastErr : ""));
         if ((!hasOutput || code !== 0) && !this._stopped) {
           const errLine = stderrBuf.split("\n").filter(Boolean).pop() || "Process exited with code " + code;
-          logger.warn("[AudioBridge] FFmpeg non-zero close: " + errLine);
+          logger.warn("[AudioBridge] FFmpeg non-zero close (code=" + code + "): " + errLine);
           doReject(new Error("[FFmpeg] " + errLine));
           return;
         }
+        logger.player("[AudioBridge] FFmpeg process closed cleanly (code=" + code + ")");
         doResolve();
       });
 
