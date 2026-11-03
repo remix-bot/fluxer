@@ -737,6 +737,7 @@ export class FluxerAudioBridge extends EventEmitter {
     const headers = url.includes("soundcloud.cloud")
       ? "Origin: https://soundcloud.com\r\nReferer: https://soundcloud.com/\r\n"
       : "Origin: https://www.youtube.com\r\nReferer: https://www.youtube.com/\r\n";
+    const isHls = url.includes(".m3u8") || /hls|m3u8/i.test(url);
     const ffmpegArgs = [
       "-re",
       "-headers", headers,
@@ -744,6 +745,12 @@ export class FluxerAudioBridge extends EventEmitter {
       "-reconnect", "1",
       "-reconnect_streamed", "1",
       "-reconnect_delay_max", "5",
+    ];
+    if (isHls) {
+      /* Start HLS live streams and DVR radios at the broadcast edge instead of starting from 0 (12h in the past) */
+      ffmpegArgs.push("-live_start_index", "-3");
+    }
+    ffmpegArgs.push(
       "-i", url,
       "-vn",
       "-filter:a", "volume=1.0",
@@ -751,7 +758,7 @@ export class FluxerAudioBridge extends EventEmitter {
       "-ar", "48000",
       "-ac", "2",
       "pipe:1"
-    ];
+    );
     const proc = spawn("ffmpeg", ffmpegArgs, { stdio: ["ignore", "pipe", "pipe"] });
     this._ffmpegProc = proc;
 
@@ -771,11 +778,8 @@ export class FluxerAudioBridge extends EventEmitter {
       logger.warn("[AudioBridge] FFmpeg process error: " + err.message);
     });
     proc.stderr.on("data", (chunk) => {
-      const text = chunk.toString();
-      stderrBuf = (stderrBuf + text).slice(-600);
-      if (text.includes("403") || text.includes("404") || text.includes("Server returned")) {
-        logger.warn("[AudioBridge] FFmpeg HTTP: " + text.trim().split("\n").pop());
-      }
+      /* Buffer trailing stderr for error reporting on non-zero exit; avoid logging in-flight progress lines */
+      stderrBuf = (stderrBuf + chunk.toString()).slice(-600);
     });
 
     this._stream = this._buildPcmPipeline(proc.stdout);

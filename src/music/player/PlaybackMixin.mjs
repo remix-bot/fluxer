@@ -388,9 +388,18 @@ const PlaybackMixin = {
       filterPayload: this.activeFilterPayload || null,
     });
 
+    if (result === null) {
+      throw new Error("Playback failed to start for track: " + (songData?.title ?? "unknown"));
+    }
+
     if (result === "finished" && !this._skipping && !this.leaving && !this._paused) {
       this._handleTrackEnd();
     } else if (result === "stopped") {
+      if (!this._skipping && !this.leaving && !this._paused) {
+        /* Unintended stop (audio connection drop or source early-close): advance queue so playback does not stall */
+        logger.player(`[Player] Track ended unexpectedly with status '${result}', auto-advancing`);
+        this._handleTrackEnd();
+      }
     }
   },
 
