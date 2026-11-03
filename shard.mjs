@@ -128,10 +128,14 @@ manager.on("error", (err) => {
   logger.error("[Sharding] Manager error:", err?.message ?? err);
 });
 
-// Event loop health heartbeat for Docker container healthcheck (Issue #12)
+/* Event loop health heartbeat for Docker container healthcheck (Issue #12) */
 const healthFile = path.join(os.tmpdir(), ".remix-health");
 const updateHealth = () => {
   try {
+    if (manager.shards && manager.shards.size > 0) {
+      const anyAlive = [...manager.shards.values()].some(s => s.process && !s.process.killed);
+      if (!anyAlive) return;
+    }
     fs.writeFile(healthFile, Date.now().toString(), () => {});
   } catch (_) {}
 };

@@ -132,9 +132,11 @@ class GatewayHandler {
           if (typeof old.removeEventListener === "function") {
             old.removeEventListener("message", remix._rawGatewayMessageListener ?? remix._rawGatewayHandler);
             old.removeEventListener("error",   remix._rawGatewayErrorHandler);
+            old.removeEventListener("close",   remix._rawGatewayCloseHandler);
           } else if (typeof old.off === "function") {
             old.off("message", remix._rawGatewayMessageListener ?? remix._rawGatewayHandler);
             old.off("error",   remix._rawGatewayErrorHandler);
+            old.off("close",   remix._rawGatewayCloseHandler);
           }
         } catch(e) { logger.warn("[Gateway] Failed to detach old WS listener:", e?.message); }
         attached.delete(old);
@@ -145,6 +147,8 @@ class GatewayHandler {
       if (!remix._rawGatewayHandler) {
         remix._rawGatewayHandler = (data) => {
           try {
+            remix._lastGatewayHeartbeat = Date.now();
+            remix._gatewayConnected = true;
             const client = remix.client;
             if (typeof data === "string" && !RAW_GATEWAY_INTEREST.test(data)) return;
             const payload = typeof data === "string" ? JSON.parse(data) : data;
@@ -167,6 +171,9 @@ class GatewayHandler {
 
             if (payload.t === "READY") {
               logger.player(`[Gateway] READY received (session ${payload.d?.session_id ?? "unknown"})`);
+              this._lastReadyAt = Date.now();
+              remix._lastGatewayHeartbeat = Date.now();
+              remix._gatewayConnected = true;
               const readyGuilds = payload.d?.guilds;
               if (Array.isArray(readyGuilds)) {
                 for (const g of readyGuilds) {
@@ -181,10 +188,41 @@ class GatewayHandler {
                   }
                 }
               }
+
+              if (remix._hasBooted) {
+                logger.voice247("[Gateway] Re-READY after gateway reconnection — scheduling 24/7 self-healing sweep in 3s...");
+                setTimeout(() => {
+                  if (typeof this._sweep247Channels === "function") {
+                    this._sweep247Channels().catch(err => {
+                      logger.warn("[Watchdog247] Post-reconnect sweep failed:", err?.message ?? err);
+                    });
+                  }
+                  if (remix.players?.resumeAllOnNodeReconnect) {
+                    remix.players.resumeAllOnNodeReconnect();
+                  }
+                }, 3_000).unref?.();
+              }
             }
 
             if (payload.t === "RESUMED") {
               logger.player("[Gateway] RESUMED received from gateway.");
+              this._lastReadyAt = Date.now();
+              remix._lastGatewayHeartbeat = Date.now();
+              remix._gatewayConnected = true;
+
+              if (remix._hasBooted) {
+                logger.voice247("[Gateway] RESUMED session active — scheduling 24/7 self-healing sweep in 3s...");
+                setTimeout(() => {
+                  if (typeof this._sweep247Channels === "function") {
+                    this._sweep247Channels().catch(err => {
+                      logger.warn("[Watchdog247] Post-resume sweep failed:", err?.message ?? err);
+                    });
+                  }
+                  if (remix.players?.resumeAllOnNodeReconnect) {
+                    remix.players.resumeAllOnNodeReconnect();
+                  }
+                }, 3_000).unref?.();
+              }
             }
 
             if (payload.t === "GUILD_CREATE") {
@@ -230,6 +268,15 @@ class GatewayHandler {
           _wsErrorCooldown.lastLogged = now;
           logger.warn("[Gateway] Raw WS socket error (will reconnect):", err?.message ?? err);
         };
+        remix._rawGatewayCloseHandler = (eventOrCode, maybeReason) => {
+          const code = eventOrCode?.code ?? (typeof eventOrCode === "number" ? eventOrCode : "unknown");
+          const reason = eventOrCode?.reason ?? maybeReason ?? "";
+          remix._gatewayConnected = false;
+          const now = Date.now();
+          if (now - _wsErrorCooldown.lastLogged < _wsErrorCooldown.COOLDOWN_MS) return;
+          _wsErrorCooldown.lastLogged = now;
+          logger.warn(`[Gateway] Raw WebSocket closed (code=${code}, reason=${reason || "none"}) — watchdog tracking reconnect.`);
+        };
         remix._rawGatewayMessageListener = (event) => remix._rawGatewayHandler(event?.data ?? event);
       }
 
@@ -239,9 +286,11 @@ class GatewayHandler {
         if (typeof wsObj.addEventListener === "function") {
           wsObj.addEventListener("message", remix._rawGatewayMessageListener);
           wsObj.addEventListener("error",   remix._rawGatewayErrorHandler);
+          wsObj.addEventListener("close",   remix._rawGatewayCloseHandler);
         } else if (typeof wsObj.on === "function") {
           wsObj.on("message", remix._rawGatewayMessageListener);
           wsObj.on("error",   remix._rawGatewayErrorHandler);
+          wsObj.on("close",   remix._rawGatewayCloseHandler);
         }
 
         attached.add(wsObj);

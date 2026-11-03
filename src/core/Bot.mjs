@@ -271,16 +271,52 @@ class Remix {
     this.fluxerlist = new FluxerListManager(config.fluxerlist);
     this.trackOptions = new TrackOptionsManager(sharedPool);
 
-    // Event loop health heartbeat for Docker container healthcheck (Issue #12)
+    /* Gateway activity timestamps and status tracking */
+    this._lastGatewayHeartbeat = Date.now();
+    this._gatewayConnected = false;
+
+    /* Event loop health heartbeat for Docker container healthcheck (Issue #12) */
     const healthFile = path.join(os.tmpdir(), ".remix-health");
     const updateHealth = () => {
       try {
-        fs.writeFile(healthFile, Date.now().toString(), () => {});
+        /* Only touch health file if gateway is healthy or still in initial boot */
+        const silenceMs = this._hasBooted ? Date.now() - (this._lastGatewayHeartbeat || 0) : 0;
+        if (silenceMs < 90_000) {
+          fs.writeFile(healthFile, Date.now().toString(), () => {});
+        }
       } catch (_) {}
     };
     updateHealth();
     this._healthInterval = setInterval(updateHealth, 10_000);
     this._healthInterval.unref?.();
+
+    /* Active gateway self-healing watchdog */
+    this._gatewayWatchdogInterval = setInterval(async () => {
+      if (!this._hasBooted) return;
+      const silenceMs = Date.now() - (this._lastGatewayHeartbeat || 0);
+
+      /* After 45s of silence, actively trigger reconnect attempts on local shards */
+      if (silenceMs >= 45_000) {
+        const shards = ShardingUtils.getLocalShards(this.client);
+        for (const [id, shard] of shards) {
+          try {
+            if (typeof shard.connect === "function") shard.connect();
+            else if (typeof shard.reconnect === "function") shard.reconnect();
+            else if (typeof shard.ws?.connect === "function") shard.ws.connect();
+          } catch (_) {}
+        }
+      }
+
+      /* After 120s of total gateway silence (dead/zombie socket), perform graceful restart to auto-recover */
+      if (silenceMs >= 120_000) {
+        logger.error(`[GatewayWatchdog] Gateway unresponsive for ${Math.round(silenceMs / 1000)}s — performing graceful restart to restore service.`);
+        try {
+          await this.gracefulShutdown();
+        } catch (_) {}
+        process.exit(1);
+      }
+    }, 15_000);
+    this._gatewayWatchdogInterval.unref?.();
 
     // Direct process signal fallback handlers
     process.once("SIGINT", () => {
@@ -737,8 +773,9 @@ class Remix {
       logger.warn("[Shutdown] MySQL pool close failed:", e?.message);
     }
 
-    // 9. Clean up event-loop health heartbeat
+    /* 9. Clean up event-loop health heartbeat and gateway watchdog */
     try {
+      if (this._gatewayWatchdogInterval) clearInterval(this._gatewayWatchdogInterval);
       if (this._healthInterval) clearInterval(this._healthInterval);
       const healthFile = path.join(os.tmpdir(), ".remix-health");
       fs.unlink(healthFile, () => {});
