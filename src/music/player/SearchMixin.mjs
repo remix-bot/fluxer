@@ -375,38 +375,17 @@ const SearchMixin = {
    */
   async _searchFreeText(query, source) {
     const variants = searchQueryVariants(query, source);
-    const attempts = await Promise.allSettled(
-      variants.map(candidate => this._lavalink.search(candidate, { source }))
-    );
-    const successful = attempts
-      .filter(attempt => attempt.status === "fulfilled")
-      .map(attempt => attempt.value)
-      .filter(Boolean);
-
-    if (successful.length === 0) {
-      const failed = attempts.find(attempt => attempt.status === "rejected");
-      if (failed) throw failed.reason;
-      return null;
-    }
-
-    const unique = new Map();
-    for (const result of successful) {
-      for (const track of result?.tracks ?? []) {
-        const key = searchTrackKey(track);
-        if (!unique.has(key)) unique.set(key, track);
+    for (const candidate of variants) {
+      try {
+        const res = await this._lavalink.search(candidate, { source });
+        if (res?.tracks?.length > 0) {
+          return res;
+        }
+      } catch (err) {
+        logger.warn(`[Player] Free text search candidate "${candidate}" failed (${source}):`, err?.message);
       }
     }
-
-    const tracks = [...unique.values()]
-      .map((track, index) => ({ track, index, score: scoreSearchTrack(track, query) }))
-      .sort((a, b) => b.score - a.score || a.index - b.index)
-      .map(({ track }) => track);
-
-    if (variants.length > 1) {
-      logger.player(`[Player] Topic-aware search for "${query}": ${tracks.length} unique results ranked from ${variants.length} queries.`);
-    }
-
-    return { ...successful[0], tracks };
+    return null;
   },
 
   /**
@@ -475,7 +454,6 @@ const SearchMixin = {
           } catch (searchErr) {
             logger.warn("[Player] URL/primary search failed:", searchErr?.message);
             result = null;
-            if (!isUrl) throw searchErr;
           }
         }
         let lcTracks = result?.tracks ?? [];
@@ -648,8 +626,12 @@ const SearchMixin = {
           this.playNext().catch(e => logger.error("[Player] playNext error:", e.message));
         }
       } catch (err) {
-        logger.error("[Player] play() search error:", err?.message);
-        events.emit("message", err?.message || "An error occurred while loading the track.");
+        logger.warn("[Player] play() search error:", err?.message);
+        const isTimeout = err?.name === "TimeoutError" || err?.message?.toLowerCase()?.includes("timeout");
+        const msg = isTimeout
+          ? "⚠️ **Search timed out.** The audio service took too long to respond. Please try again or specify a provider (e.g. `%p yt " + query + "`)."
+          : (err?.message || "An error occurred while loading the track.");
+        events.emit("message", msg);
       }
     })();
 
