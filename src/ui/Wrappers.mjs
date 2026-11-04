@@ -132,6 +132,10 @@ export class Message {
   get attachments() { return this.message.attachments ?? []; }
   /** @returns {Channel} The wrapped channel this message was sent in. */
   get channel()  { return this.handler.getChannel(this.message.channelId); }
+  /** @returns {string|null} The guild ID. */
+  get guildId()  { return this.message?.guildId ?? this.message?.guild?.id ?? this.channel?.channel?.guildId ?? this.channel?.guildId ?? null; }
+  /** @returns {object|null} The guild instance, if available. */
+  get guild()    { return this.message?.guild ?? this.channel?.channel?.guild ?? this.channel?.guild ?? null; }
 
   /**
    * Observe reactions on this message.

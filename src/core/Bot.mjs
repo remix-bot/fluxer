@@ -273,6 +273,7 @@ class Remix {
 
     /* Gateway activity timestamps and status tracking */
     this._lastGatewayHeartbeat = Date.now();
+    this._lastGatewayDisconnect = 0;
     this._gatewayConnected = false;
 
     /* Event loop health heartbeat for Docker container healthcheck (Issue #12) */
@@ -280,9 +281,11 @@ class Remix {
     const updateHealth = () => {
       try {
         /* Only touch health file if gateway is healthy or still in initial boot */
-        const silenceMs = this._hasBooted ? Date.now() - (this._lastGatewayHeartbeat || 0) : 0;
-        if (silenceMs < 90_000) {
-          fs.writeFile(healthFile, Date.now().toString(), () => {});
+        const now = Date.now();
+        const silenceMs = this._hasBooted ? now - (this._lastGatewayHeartbeat || 0) : 0;
+        const disconnectedMs = (!this._gatewayConnected && this._hasBooted) ? (now - (this._lastGatewayDisconnect || now)) : 0;
+        if (silenceMs < 60_000 && disconnectedMs < 45_000) {
+          fs.writeFile(healthFile, now.toString(), () => {});
         }
       } catch (_) {}
     };
@@ -293,10 +296,12 @@ class Remix {
     /* Active gateway self-healing watchdog */
     this._gatewayWatchdogInterval = setInterval(async () => {
       if (!this._hasBooted) return;
-      const silenceMs = Date.now() - (this._lastGatewayHeartbeat || 0);
+      const now = Date.now();
+      const silenceMs = now - (this._lastGatewayHeartbeat || 0);
+      const disconnectedMs = !this._gatewayConnected ? (now - (this._lastGatewayDisconnect || now)) : 0;
 
-      /* After 45s of silence, actively trigger reconnect attempts on local shards */
-      if (silenceMs >= 45_000) {
+      /* After 25s of silence or disconnection, actively trigger reconnect attempts on local shards */
+      if (!this._gatewayConnected || silenceMs >= 25_000) {
         const shards = ShardingUtils.getLocalShards(this.client);
         for (const [id, shard] of shards) {
           try {
@@ -307,15 +312,25 @@ class Remix {
         }
       }
 
-      /* After 120s of total gateway silence (dead/zombie socket), perform graceful restart to auto-recover */
-      if (silenceMs >= 120_000) {
-        logger.error(`[GatewayWatchdog] Gateway unresponsive for ${Math.round(silenceMs / 1000)}s — performing graceful restart to restore service.`);
+      /* After 60s of total gateway silence or 45s of persistent disconnection, restart to auto-recover */
+      if (silenceMs >= 60_000 || disconnectedMs >= 45_000) {
+        logger.error(`[GatewayWatchdog] Gateway unresponsive (silence=${Math.round(silenceMs / 1000)}s, disconnected=${Math.round(disconnectedMs / 1000)}s) — performing graceful restart to restore service.`);
+
+        /* Hard kill timer in case gracefulShutdown hangs on network or database locks */
+        const hardKillTimer = setTimeout(() => {
+          process.exit(1);
+        }, 5_000);
+        hardKillTimer.unref?.();
+
         try {
-          await this.gracefulShutdown();
+          await Promise.race([
+            this.gracefulShutdown(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("gracefulShutdown timed out")), 4_000))
+          ]);
         } catch (_) {}
         process.exit(1);
       }
-    }, 15_000);
+    }, 10_000);
     this._gatewayWatchdogInterval.unref?.();
 
     // Direct process signal fallback handlers
@@ -331,6 +346,9 @@ class Remix {
     client.on(Events.Ready, async () => {
       try {
         logger.player("Logged in as " + (client.user?.username ?? "bot"));
+        this._lastGatewayHeartbeat = Date.now();
+        this._gatewayConnected = true;
+        this._lastGatewayDisconnect = 0;
 
         this._attachWsErrorHandlers();
 
@@ -652,8 +670,42 @@ class Remix {
         shard._fluxerErrorHandled = true;
         attachedNew = true;
         shard.on("error", (err) => logWsError(`Shard ${id}`, err));
+        if (typeof shard.on === "function") {
+          shard.on("disconnect", () => {
+            this._gatewayConnected = false;
+            if (!this._lastGatewayDisconnect) this._lastGatewayDisconnect = Date.now();
+          });
+          shard.on("resume", () => {
+            this._gatewayConnected = true;
+            this._lastGatewayHeartbeat = Date.now();
+            this._lastGatewayDisconnect = 0;
+          });
+          shard.on("ready", () => {
+            this._gatewayConnected = true;
+            this._lastGatewayHeartbeat = Date.now();
+            this._lastGatewayDisconnect = 0;
+          });
+        }
         if (shard.ws) attachToSocket(shard.ws, `Shard ${id} socket`);
       };
+
+      if (typeof this.client?.on === "function" && !this.client._fluxerShardEventsBound) {
+        this.client._fluxerShardEventsBound = true;
+        this.client.on("shardDisconnect", () => {
+          this._gatewayConnected = false;
+          if (!this._lastGatewayDisconnect) this._lastGatewayDisconnect = Date.now();
+        });
+        this.client.on("shardResume", () => {
+          this._gatewayConnected = true;
+          this._lastGatewayHeartbeat = Date.now();
+          this._lastGatewayDisconnect = 0;
+        });
+        this.client.on("shardReady", () => {
+          this._gatewayConnected = true;
+          this._lastGatewayHeartbeat = Date.now();
+          this._lastGatewayDisconnect = 0;
+        });
+      }
 
       for (const [id, shard] of ShardingUtils.getLocalShards(this.client)) {
         attachToShard(shard, id);

@@ -132,9 +132,11 @@ manager.on("error", (err) => {
 const healthFile = path.join(os.tmpdir(), ".remix-health");
 const updateHealth = () => {
   try {
+    /* Only touch healthFile during supervisor boot before child shards are spawned.
+     * Once child processes exist, Bot.mjs in the child controls the heartbeat based on gateway health. */
     if (manager.shards && manager.shards.size > 0) {
       const anyAlive = [...manager.shards.values()].some(s => s.process && !s.process.killed);
-      if (!anyAlive) return;
+      if (anyAlive) return;
     }
     fs.writeFile(healthFile, Date.now().toString(), () => {});
   } catch (_) {}

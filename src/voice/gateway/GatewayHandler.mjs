@@ -22,7 +22,7 @@ import Watchdog247 from "./Watchdog247.mjs";
 import RejoinBackoff from "./RejoinBackoff.mjs";
 
 const RAW_GATEWAY_INTEREST =
-    /"(?:t|op)":\s*(?:"(?:VOICE_STATE_UPDATE|VOICE_SERVER_UPDATE|GUILD_CREATE|READY|RESUMED)"|(?:7|9|10|12)\b)/;
+    /"(?:t|op)":\s*(?:"(?:VOICE_STATE_UPDATE|VOICE_SERVER_UPDATE|GUILD_CREATE|READY|RESUMED|MESSAGE_CREATE)"|(?:0|7|9|10|11|12)\b)/;
 
 /** @class GatewayHandler @description Handles all gateway events relevant to voice state tracking, 24/7 mode, boot recovery, presence rotation, and permission checks. Key responsibilities include voice state cache seeding and updates, bot move-away detection with 24/7 rejoin scheduling, boot recovery with sequential rejoin of 24/7 channels, inactivity timer management on human join/leave, and guild create/delete handling with startup grace period. */
 class GatewayHandler {
@@ -147,27 +147,95 @@ class GatewayHandler {
       if (!remix._rawGatewayHandler) {
         remix._rawGatewayHandler = (data) => {
           try {
-            remix._lastGatewayHeartbeat = Date.now();
-            remix._gatewayConnected = true;
             const client = remix.client;
             if (typeof data === "string" && !RAW_GATEWAY_INTEREST.test(data)) return;
             const payload = typeof data === "string" ? JSON.parse(data) : data;
 
+            /* Opcode 11 (Heartbeat ACK): confirms the gateway received and acknowledged bot heartbeat */
+            if (payload?.op === GatewayOpcodes.HeartbeatAck || payload?.op === 11) {
+              remix._lastGatewayHeartbeat = Date.now();
+              remix._gatewayConnected = true;
+              remix._lastGatewayDisconnect = 0;
+              return;
+            }
+
             if (payload?.op === GatewayOpcodes.GatewayError || payload?.op === 12) {
               logger.warn("[Gateway] GatewayError (12) received from Fluxer:", payload.d);
+              remix._gatewayConnected = false;
+              if (!remix._lastGatewayDisconnect) remix._lastGatewayDisconnect = Date.now();
+              return;
             }
 
             if (payload?.op === GatewayOpcodes.Hello || payload?.op === 10) {
               logger.player(`[Gateway] HELLO received (heartbeat ${payload.d?.heartbeat_interval ?? "unknown"}ms)`);
+              remix._gatewayConnected = true;
+              return;
             }
+
+            /* Opcode 7 (Reconnect): Gateway requests immediate close and resume */
             if (payload?.op === GatewayOpcodes.Reconnect || payload?.op === 7) {
-              logger.warn("[Gateway] RECONNECT requested by gateway.");
+              logger.warn("[Gateway] RECONNECT (op 7) requested by gateway — terminating socket to trigger reconnect.");
+              remix._gatewayConnected = false;
+              if (!remix._lastGatewayDisconnect) remix._lastGatewayDisconnect = Date.now();
+              this._lastReadyAt = 0;
+              const wsObjs = ShardingUtils.localShardSockets(client);
+              for (const ws of wsObjs) {
+                try {
+                  if (typeof ws?.close === "function") ws.close(4000, "Gateway requested reconnect");
+                  else if (typeof ws?.terminate === "function") ws.terminate();
+                } catch (_) {}
+              }
+              setTimeout(() => {
+                for (const [id, shard] of ShardingUtils.getLocalShards(client)) {
+                  try {
+                    if (typeof shard.connect === "function") shard.connect();
+                    else if (typeof shard.reconnect === "function") shard.reconnect();
+                  } catch (_) {}
+                }
+              }, 1_000).unref?.();
+              return;
             }
+
+            /* Opcode 9 (InvalidSession): Session invalidated by gateway */
             if (payload?.op === GatewayOpcodes.InvalidSession || payload?.op === 9) {
-              logger.warn("[Gateway] INVALID_SESSION received from gateway.");
+              const canResume = Boolean(payload.d);
+              logger.warn(`[Gateway] INVALID_SESSION (op 9, resumable=${canResume}) received from gateway.`);
+              remix._gatewayConnected = false;
+              if (!remix._lastGatewayDisconnect) remix._lastGatewayDisconnect = Date.now();
+              this._lastReadyAt = 0;
+              if (!canResume) {
+                for (const [id, shard] of ShardingUtils.getLocalShards(client)) {
+                  try {
+                    if (shard.sessionId) shard.sessionId = null;
+                    if (shard.session_id) shard.session_id = null;
+                    if (shard.resumeGatewayUrl) shard.resumeGatewayUrl = null;
+                  } catch (_) {}
+                }
+              }
+              const wsObjs = ShardingUtils.localShardSockets(client);
+              for (const ws of wsObjs) {
+                try {
+                  if (typeof ws?.close === "function") ws.close(canResume ? 4000 : 1000, "Invalid session");
+                  else if (typeof ws?.terminate === "function") ws.terminate();
+                } catch (_) {}
+              }
+              setTimeout(() => {
+                for (const [id, shard] of ShardingUtils.getLocalShards(client)) {
+                  try {
+                    if (typeof shard.connect === "function") shard.connect();
+                    else if (typeof shard.reconnect === "function") shard.reconnect();
+                  } catch (_) {}
+                }
+              }, 1_500).unref?.();
+              return;
             }
 
             if (payload?.op !== 0) return;
+
+            /* Genuine Dispatch event (op 0) — gateway is actively delivering traffic */
+            remix._lastGatewayHeartbeat = Date.now();
+            remix._gatewayConnected = true;
+            remix._lastGatewayDisconnect = 0;
 
             if (payload.t === "READY") {
               logger.player(`[Gateway] READY received (session ${payload.d?.session_id ?? "unknown"})`);
@@ -272,10 +340,20 @@ class GatewayHandler {
           const code = eventOrCode?.code ?? (typeof eventOrCode === "number" ? eventOrCode : "unknown");
           const reason = eventOrCode?.reason ?? maybeReason ?? "";
           remix._gatewayConnected = false;
+          if (!remix._lastGatewayDisconnect) remix._lastGatewayDisconnect = Date.now();
           const now = Date.now();
-          if (now - _wsErrorCooldown.lastLogged < _wsErrorCooldown.COOLDOWN_MS) return;
-          _wsErrorCooldown.lastLogged = now;
-          logger.warn(`[Gateway] Raw WebSocket closed (code=${code}, reason=${reason || "none"}) — watchdog tracking reconnect.`);
+          if (now - _wsErrorCooldown.lastLogged >= _wsErrorCooldown.COOLDOWN_MS) {
+            _wsErrorCooldown.lastLogged = now;
+            logger.warn(`[Gateway] Raw WebSocket closed (code=${code}, reason=${reason || "none"}) — proactively reconnecting shards.`);
+          }
+          /* Immediately attempt proactive shard reconnect */
+          for (const [id, shard] of ShardingUtils.getLocalShards(remix.client)) {
+            try {
+              if (typeof shard.connect === "function") shard.connect();
+              else if (typeof shard.reconnect === "function") shard.reconnect();
+              else if (typeof shard.ws?.connect === "function") shard.ws.connect();
+            } catch (_) {}
+          }
         };
         remix._rawGatewayMessageListener = (event) => remix._rawGatewayHandler(event?.data ?? event);
       }

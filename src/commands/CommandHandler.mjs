@@ -143,7 +143,7 @@ export class CommandHandler extends EventEmitter {
       return;
     }
 
-    const guildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
+    const guildId = msg.guildId ?? msg.guild?.id ?? msg.channel?.guildId ?? msg.channel?.channel?.guildId ?? msg.message?.guildId ?? null;
     const prefix = this.getPrefix(guildId);
     const ping = `<@${this.client.user?.id}>`;
     const pingBang = `<@!${this.client.user?.id}>`;
