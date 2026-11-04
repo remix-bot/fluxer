@@ -186,6 +186,15 @@ const PlaybackMixin = {
     this._stopInactivityTimer();
     this._wasRadio = songData.type === "radio";
 
+    if ((!this._voiceConn || (typeof this._voiceConn.isConnected === "function" && !this._voiceConn.isConnected())) && this._channelId && !this.leaving && !this._destroyed) {
+      try {
+        logger.player(`[Player] Reconnecting voice channel before play: ${this._channelId}`);
+        await this.join(this._channelId);
+      } catch (joinErr) {
+        logger.warn(`[Player] Reconnect before play failed: ${joinErr.message}`);
+      }
+    }
+
     if (!this._voiceConn || this.leaving) return;
 
     if (this._voiceConn) {

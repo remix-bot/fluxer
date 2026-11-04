@@ -486,7 +486,8 @@ class Player extends EventEmitter {
       logger.player(`[Player] Busy joining. Ignoring: ${channelId}`);
       return;
     }
-    if (this._voiceConn && this._channelId === channelId) {
+    const isConnActive = this._voiceConn && (typeof this._voiceConn.isConnected !== "function" || this._voiceConn.isConnected());
+    if (isConnActive && this._channelId === channelId) {
       logger.player(`[Player] Already in channel: ${channelId}`);
       return;
     }
@@ -603,6 +604,13 @@ class Player extends EventEmitter {
         voiceConn.on("disconnect", () => {
           if (this.leaving || this._destroyed) return;
           logger.player(`[Player] Voice connection disconnected`);
+          this._voiceConn = null;
+          this.connection = null;
+          const cId = cleanId(this._channelId ?? this._home247Channel ?? "");
+          if (cId && (this._get247Mode() === "on" || this.queue?.getCurrent() || !(this.queue?.isEmpty?.() ?? true))) {
+            logger.player(`[Player] Voice disconnected with active session — scheduling reconnect to channel ${cId}`);
+            this.join(cId).catch(err => logger.warn(`[Player] Voice reconnect after disconnect failed: ${err?.message}`));
+          }
         });
       }
 

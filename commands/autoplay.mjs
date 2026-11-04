@@ -15,19 +15,19 @@ export const command = new CommandBuilder()
   .addAliases("ap");
 
 /** How many candidate results are considered for random picking. */
-const PICK_POOL = 8;
+const PICK_POOL = 20;
 /** Tracks considered "recently played" and excluded from re-picking. */
 const HISTORY_SIZE = 30;
 /** Sanity bounds for candidate durations (ms) — skip hour-long mixes and jingles. */
 const MIN_DURATION_MS = 45_000;
 const MAX_DURATION_MS = 15 * 60_000;
-/** Resolved mix candidate pools older than this are discarded. */
-const MIX_POOL_TTL_MS = 5 * 60_000;
+/** Resolved mix candidate pools older than this are discarded (2 hours). */
+const MIX_POOL_TTL_MS = 2 * 60 * 60_000;
 /** Max mix pools cached per player (LRU-style eviction). */
-const MAX_MIX_POOLS = 4;
+const MAX_MIX_POOLS = 8;
 
 /** Max Last.fm tag lookups per pick (each uncached lookup is a network call). */
-const MAX_TAG_CHECKS = 8;
+const MAX_TAG_CHECKS = 16;
 /** Last.fm tag weights are 0-100 relative to the top tag; ignore the long tail. */
 const TAG_MIN_COUNT = 30;
 /** Number of genre tags kept per artist. */
@@ -255,16 +255,19 @@ function rememberTrack(p, track) {
  * Check whether a candidate track is acceptable: not recently played, sane duration.
  * @param {object} p - The player instance.
  * @param {object} t - Candidate internal track object.
+ * @param {boolean} [allowOldHistory=false] - When true, only avoids the most recent 5 songs.
  * @returns {boolean} True if the candidate is playable and not a recent repeat.
  */
-function isCandidateOk(p, t) {
+function isCandidateOk(p, t, allowOldHistory = false) {
   if (!t) return false;
   const ms = Number(t._durationMs) || (Number(t.duration?.seconds) * 1000) || 0;
   if (ms && (ms < MIN_DURATION_MS || ms > MAX_DURATION_MS)) return false;
   const vid = extractVideoId(t);
-  if (vid && (p._autoplayHistory ?? []).some(h => h.vid === vid)) return false;
+  const history = p._autoplayHistory ?? [];
+  const historySlice = allowOldHistory ? history.slice(-5) : history;
+  if (vid && historySlice.some(h => h.vid === vid)) return false;
   const title = String(t?.title ?? "").toLowerCase().trim();
-  if (title && (p._autoplayHistory ?? []).some(h => h.title && h.title === title)) return false;
+  if (title && historySlice.some(h => h.title && h.title === title)) return false;
   return true;
 }
 
@@ -275,9 +278,10 @@ function isCandidateOk(p, t) {
  * @param {object} p - The player instance.
  * @param {string} videoId - The video ID the pool was resolved from.
  * @param {(t: object) => Promise<boolean>} [guard] - Optional genre guard.
+ * @param {boolean} [allowOldHistory=false] - Whether to relax history exclusion.
  * @returns {Promise<object|null>} An acceptable track from the pool, or null.
  */
-async function takeFromPool(p, videoId, guard) {
+async function takeFromPool(p, videoId, guard, allowOldHistory = false) {
   const pools = p._autoplayMixPools;
   if (!pools) return null;
   const pool = pools.get(videoId);
@@ -286,7 +290,7 @@ async function takeFromPool(p, videoId, guard) {
     pools.delete(videoId);
     return null;
   }
-  const ok = shuffle(pool.tracks.filter(t => isCandidateOk(p, t)));
+  const ok = shuffle(pool.tracks.filter(t => isCandidateOk(p, t, allowOldHistory)));
   const rejected = new Set();
   let found = null;
   for (const t of ok) {
@@ -294,7 +298,7 @@ async function takeFromPool(p, videoId, guard) {
     rejected.add(t);
   }
   if (rejected.size) pool.tracks = pool.tracks.filter(t => !rejected.has(t));
-  if (!found && !pool.tracks.some(t => isCandidateOk(p, t))) pools.delete(videoId);
+  if (!found && !pool.tracks.some(t => isCandidateOk(p, t, allowOldHistory))) pools.delete(videoId);
   return found;
 }
 
@@ -320,13 +324,14 @@ function storePool(p, videoId, candidates) {
  * @param {object} p - The player instance.
  * @param {string} query - The search query or URL.
  * @param {string} provider - Provider shorthand key ("yt", "ytm", ...).
+ * @param {boolean} [allowOldHistory=false] - Whether to relax history exclusion.
  * @returns {Promise<Array<object>>} Acceptable candidate tracks.
  */
-async function resolveCandidates(p, query, provider = "ytm") {
+async function resolveCandidates(p, query, provider = "ytm", allowOldHistory = false) {
   const resolved = await p.generalQuery({ query, provider });
   const list = resolved?.type === "list" ? (resolved.data ?? [])
     : resolved?.type === "video" && resolved.data ? [resolved.data] : [];
-  return list.filter(t => isCandidateOk(p, t));
+  return list.filter(t => isCandidateOk(p, t, allowOldHistory));
 }
 
 /**
@@ -335,10 +340,11 @@ async function resolveCandidates(p, query, provider = "ytm") {
  * @param {string} query - The search query.
  * @param {(t: object) => (boolean|Promise<boolean>)} accept - Extra acceptance test (artist/genre).
  * @param {string} [provider="ytm"] - Provider shorthand key.
+ * @param {boolean} [allowOldHistory=false] - Whether to relax history exclusion.
  * @returns {Promise<object|null>} A passing track, or null.
  */
-async function searchAccepted(p, query, accept, provider = "ytm") {
-  const found = await resolveCandidates(p, query, provider);
+async function searchAccepted(p, query, accept, provider = "ytm", allowOldHistory = false) {
+  const found = await resolveCandidates(p, query, provider, allowOldHistory);
   for (const t of shuffle(found.slice(0, PICK_POOL))) {
     if (await accept(t)) return t;
   }
@@ -346,12 +352,8 @@ async function searchAccepted(p, query, accept, provider = "ytm") {
 }
 
 /**
- * Choose the next track. Everything is anchored to the "seed" — the last track a
- * person actually chose — and, when Last.fm is available, every candidate's
- * artist must share the seed artist's genre tags. Search results must also be by
- * the artist we asked for, so a title collision (a different band's song with the
- * same name) can no longer slip through. The old title-only search fallback was
- * removed for the same reason.
+ * Choose the next track. Anchored to the seed while allowing smooth progression
+ * and infinite fallback so playback never halts after a handful of tracks.
  * @param {object} p - The player instance.
  * @param {object} ctx - The bot context (needs .lastfm).
  * @param {object|null} lastTrack - The last played internal track.
@@ -363,6 +365,7 @@ export async function pickAutoplayTrack(p, ctx, lastTrack) {
   const seedArtist = artistOf(seed);
   const seedName = titleOf(seed);
   const seedVid = extractVideoId(seed);
+  const lastVid = extractVideoId(lastTrack);
   const lf = ctx?.lastfm?.enabled ? ctx.lastfm : null;
 
   let seedTags = p._autoplaySeedTags ?? null;
@@ -372,14 +375,14 @@ export async function pickAutoplayTrack(p, ctx, lastTrack) {
   }
 
   const budget = { left: MAX_TAG_CHECKS };
-  /** True if the candidate belongs to the seed's genre (or genre can't be judged). */
+  /** True if candidate matches genre tags or tag budget is exhausted. */
   const genreOk = async (t) => {
     if (!lf || !seedTags?.size) return true;
     const ca = artistOf(t);
-    if (!ca) return false;
+    if (!ca) return true;
     if (artistMatches(ca, seedArtist)) return true;
     if (!hasFreshTags(ca)) {
-      if (budget.left <= 0) return false;
+      if (budget.left <= 0) return true;
       budget.left--;
     }
     return genreOverlaps(seedTags, await getGenreTags(lf, ca));
@@ -390,14 +393,18 @@ export async function pickAutoplayTrack(p, ctx, lastTrack) {
     return track;
   };
 
-  if (seedVid) {
-    const pooled = await takeFromPool(p, seedVid, genreOk);
-    if (pooled) { p._autoplayPreferredPoolVid = seedVid; return pooled; }
+  /* Check pre-resolved mix pools first */
+  const vidsToCheck = [seedVid, lastVid].filter(Boolean);
+  for (const v of vidsToCheck) {
+    const pooled = await takeFromPool(p, v, genreOk);
+    if (pooled) { p._autoplayPreferredPoolVid = v; return pooled; }
   }
 
   const tryLastfmSimilar = async () => {
     const bases = [seed];
-    if (lastWasPicked && lastTrack && artistOf(lastTrack) && !artistMatches(artistOf(lastTrack), seedArtist)) bases.push(lastTrack);
+    if (lastTrack && (artistOf(lastTrack) !== seedArtist || titleOf(lastTrack) !== seedName)) {
+      bases.push(lastTrack);
+    }
     for (const base of bases) {
       const bArtist = artistOf(base), bName = titleOf(base);
       if (!bArtist || !bName) continue;
@@ -417,45 +424,71 @@ export async function pickAutoplayTrack(p, ctx, lastTrack) {
   };
 
   const tryLastfmArtists = async () => {
-    if (!seedArtist) return null;
-    try {
-      const similar = await lf.getSimilarArtists(seedArtist, 12);
-      for (const a of shuffle(similar.filter(x => x.name)).slice(0, 4)) {
-        const track = await searchAccepted(
-          p, `${a.name} songs`,
-          async (t) => artistMatches(artistOf(t), a.name) && await genreOk(t),
-        );
-        if (track) return track;
-      }
-    } catch (e) { logger.warn("[Autoplay] Last.fm similar-artists strategy failed:", e?.message); }
+    const artists = [seedArtist, artistOf(lastTrack)].filter(Boolean);
+    for (const aName of artists) {
+      try {
+        const similar = await lf.getSimilarArtists(aName, 12);
+        for (const a of shuffle(similar.filter(x => x.name)).slice(0, 4)) {
+          const track = await searchAccepted(
+            p, `${a.name} songs`,
+            async (t) => artistMatches(artistOf(t), a.name) && await genreOk(t),
+          );
+          if (track) return track;
+        }
+      } catch (e) { logger.warn("[Autoplay] Last.fm similar-artists strategy failed:", e?.message); }
+    }
     return null;
   };
 
   const trySameArtist = async () => {
-    if (!seedArtist) return null;
-    try {
-      return await searchAccepted(p, `${seedArtist} songs`, (t) => artistMatches(artistOf(t), seedArtist));
-    } catch (e) { logger.warn("[Autoplay] Artist strategy failed:", e?.message); }
+    const artists = [seedArtist, artistOf(lastTrack)].filter(Boolean);
+    for (const a of artists) {
+      try {
+        const track = await searchAccepted(p, `${a} songs`, (t) => artistMatches(artistOf(t), a));
+        if (track) return track;
+        const trackHits = await searchAccepted(p, `${a} top tracks`, (t) => artistMatches(artistOf(t), a));
+        if (trackHits) return trackHits;
+      } catch (e) { logger.warn("[Autoplay] Artist strategy failed:", e?.message); }
+    }
     return null;
   };
 
   const tryMix = async () => {
-    if (!seedVid) return null;
+    for (const v of vidsToCheck) {
+      try {
+        const mixUrl = `https://www.youtube.com/watch?v=${v}&list=RD${v}`;
+        const candidates = await resolveCandidates(p, mixUrl, "yt");
+        if (candidates.length) {
+          storePool(p, v, candidates);
+          const track = await takeFromPool(p, v, genreOk);
+          if (track) { p._autoplayPreferredPoolVid = v; return track; }
+        }
+      } catch (e) { logger.warn("[Autoplay] Mix strategy failed:", e?.message); }
+    }
+    return null;
+  };
+
+  /* Robust safety net fallback so playback never dies */
+  const tryFallback = async () => {
     try {
-      const mixUrl = `https://www.youtube.com/watch?v=${seedVid}&list=RD${seedVid}`;
-      const candidates = await resolveCandidates(p, mixUrl, "yt");
-      if (!candidates.length) return null;
-      storePool(p, seedVid, candidates);
-      const track = await takeFromPool(p, seedVid, genreOk);
-      if (track) p._autoplayPreferredPoolVid = seedVid;
-      return track;
-    } catch (e) { logger.warn("[Autoplay] Mix strategy failed:", e?.message); }
+      for (const v of vidsToCheck) {
+        const pooled = await takeFromPool(p, v, null, true);
+        if (pooled) return pooled;
+      }
+      const q = lastTrack ? `${artistOf(lastTrack) || seedArtist} radio` : `${seedArtist} music`;
+      const fallbackTrack = await searchAccepted(p, q, () => true, "ytm", true);
+      if (fallbackTrack) return fallbackTrack;
+      const ytTrack = await searchAccepted(p, `${seedArtist || artistOf(lastTrack)} songs`, () => true, "yt", true);
+      if (ytTrack) return ytTrack;
+    } catch (e) {
+      logger.warn("[Autoplay] Fallback strategy failed:", e?.message);
+    }
     return null;
   };
 
   const order = lf
-    ? [tryLastfmSimilar, tryLastfmArtists, trySameArtist, tryMix]
-    : [tryMix, trySameArtist];
+    ? [tryLastfmSimilar, tryLastfmArtists, trySameArtist, tryMix, tryFallback]
+    : [tryMix, trySameArtist, tryFallback];
 
   for (const strat of order) {
     const track = await strat();
@@ -517,6 +550,7 @@ function buildQueueEndHandler(p, ctx) {
         p.addToQueue(track, false);
         logger.player(`[Autoplay] Queue ended — added and playing: ${track.title}`);
         if (!p.queue.getCurrent()) {
+          p._playingNext = false;
           p.playNext().catch(() => {});
         }
       } else if (!track && !p.queue?.getCurrent() && p.queue?.isEmpty() && !p._is247Enabled() && p._autoplay) {
