@@ -67,6 +67,7 @@ const StreamPipeline = {
           return resolve();
         }
         const onEnd = () => {
+          logger.player("[AudioBridge] Stream onEnd reached (durationMs=" + durationMs + ", playing=" + this._playing + ", stopped=" + this._stopped + ")");
           if (durationMs > 0 && this._playing && !this._stopped) return;
           resolve();
         };
@@ -349,7 +350,7 @@ const StreamPipeline = {
     try {
       const nlInfo = this._lavalink.getNodeLinkInfo?.();
       if (!nlInfo) {
-        logger.warn("[AudioBridge] _resolveUrlViaLavalink: no NodeLink info");
+        logger.player("[AudioBridge] _resolveUrlViaLavalink: no NodeLink info");
         return null;
       }
 
@@ -375,11 +376,13 @@ const StreamPipeline = {
         return encoded;
       }
 
-      const loadType = body?.loadType ?? body?.data?.loadType;
-      logger.warn("[AudioBridge] Lavalink loadtracks returned no playable track (loadType=" + loadType + ")");
+      const loadType = body?.loadType ?? body?.data?.loadType ?? "unknown";
+      const errorMsg = body?.data?.message ?? body?.exception?.message ?? body?.message;
+      const details = errorMsg ? `: ${errorMsg}` : "";
+      logger.player("[AudioBridge] Lavalink loadtracks returned no playable track (loadType=" + loadType + details + ")");
       return null;
     } catch (e) {
-      logger.warn("[AudioBridge] _resolveUrlViaLavalink failed: " + e.message);
+      logger.player("[AudioBridge] _resolveUrlViaLavalink failed: " + e.message);
       return null;
     }
   },

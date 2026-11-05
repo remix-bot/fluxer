@@ -385,6 +385,8 @@ const PlaybackMixin = {
     const totalMs   = this._getTrackDurationMs(songData);
     const durationMs = totalMs > 0 ? Math.max(0, totalMs - seekMs) : 0;
 
+    const myPlayGen = (this._playSessionGen = (this._playSessionGen ?? 0) + 1);
+
     const result = await this._audioBridge.play(this._voiceConn, {
       encoded: songData.encoded,
       url:     bridgeUrl,
@@ -396,6 +398,11 @@ const PlaybackMixin = {
       videoId: songData.videoId || null,
       filterPayload: this.activeFilterPayload || null,
     });
+
+    if (myPlayGen !== this._playSessionGen) {
+      /* Another track was started or stopped while this was playing — drop stale completion */
+      return;
+    }
 
     if (result === null) {
       throw new Error("Playback failed to start for track: " + (songData?.title ?? "unknown"));

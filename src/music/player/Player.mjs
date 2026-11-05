@@ -1068,6 +1068,7 @@ class Player extends EventEmitter {
 
   /** @private Stop the audio bridge if currently playing. */
   _bridgeStop() {
+    this._playSessionGen = (this._playSessionGen ?? 0) + 1;
     if (this._audioBridge) {
       try { this._audioBridge.stop(); } catch (_) {}
     }
