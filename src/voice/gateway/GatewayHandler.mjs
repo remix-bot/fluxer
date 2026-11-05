@@ -174,7 +174,7 @@ class GatewayHandler {
 
             /* Opcode 7 (Reconnect): Gateway requests immediate close and resume */
             if (payload?.op === GatewayOpcodes.Reconnect || payload?.op === 7) {
-              logger.warn("[Gateway] RECONNECT (op 7) requested by gateway — terminating socket to trigger reconnect.");
+              logger.player("[Gateway] RECONNECT (op 7) requested by gateway — terminating socket to trigger reconnect.");
               remix._gatewayConnected = false;
               if (!remix._lastGatewayDisconnect) remix._lastGatewayDisconnect = Date.now();
               this._lastReadyAt = 0;
@@ -199,7 +199,7 @@ class GatewayHandler {
             /* Opcode 9 (InvalidSession): Session invalidated by gateway */
             if (payload?.op === GatewayOpcodes.InvalidSession || payload?.op === 9) {
               const canResume = Boolean(payload.d);
-              logger.warn(`[Gateway] INVALID_SESSION (op 9, resumable=${canResume}) received from gateway.`);
+              logger.player(`[Gateway] INVALID_SESSION (op 9, resumable=${canResume}) received from gateway.`);
               remix._gatewayConnected = false;
               if (!remix._lastGatewayDisconnect) remix._lastGatewayDisconnect = Date.now();
               this._lastReadyAt = 0;
@@ -334,7 +334,7 @@ class GatewayHandler {
           const now = Date.now();
           if (now - _wsErrorCooldown.lastLogged < _wsErrorCooldown.COOLDOWN_MS) return;
           _wsErrorCooldown.lastLogged = now;
-          logger.warn("[Gateway] Raw WS socket error (will reconnect):", err?.message ?? err);
+          logger.player("[Gateway] Raw WS socket error (will reconnect):", err?.message ?? err);
         };
         remix._rawGatewayCloseHandler = (eventOrCode, maybeReason) => {
           const code = eventOrCode?.code ?? (typeof eventOrCode === "number" ? eventOrCode : "unknown");
@@ -344,7 +344,7 @@ class GatewayHandler {
           const now = Date.now();
           if (now - _wsErrorCooldown.lastLogged >= _wsErrorCooldown.COOLDOWN_MS) {
             _wsErrorCooldown.lastLogged = now;
-            logger.warn(`[Gateway] Raw WebSocket closed (code=${code}, reason=${reason || "none"}) — proactively reconnecting shards.`);
+            logger.player(`[Gateway] Raw WebSocket closed (code=${code}, reason=${reason || "none"}) — proactively reconnecting shards.`);
           }
           /* Immediately attempt proactive shard reconnect */
           for (const [id, shard] of ShardingUtils.getLocalShards(remix.client)) {

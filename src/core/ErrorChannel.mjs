@@ -326,7 +326,14 @@ function _forward(level, tag, args) {
 /** @private Format values the same way console would. */
 function _formatArgs(args) {
   try {
-    return util.format(...args).trim();
+    let text = util.format(...args).trim();
+    if (/<!doctype|<html/i.test(text)) {
+      /* Sanitize upstream Cloudflare/Fluxer raw HTML error pages to clean summary */
+      const match = text.match(/HTTP\s*(\d{3})/i) || text.match(/<title>([^<]+)<\/title>/i);
+      const hint = match ? match[1] : "503";
+      text = text.replace(/<!doctype[\s\S]*$/i, `[HTTP ${hint}: Fluxer API temporarily unavailable — see fluxerstatus.com]`);
+    }
+    return text;
   } catch (_) {
     return "";
   }

@@ -643,7 +643,7 @@ class Remix {
         const now = Date.now();
         if (now - _wsErrorCooldown.lastLogged < _wsErrorCooldown.COOLDOWN_MS) return;
         _wsErrorCooldown.lastLogged = now;
-        logger.warn(`[WS] ${label} transport error (auto-recovering): ${err?.message ?? err}`);
+        logger.player(`[WS] ${label} transport error (auto-recovering): ${err?.message ?? err}`);
       };
 
       const attachToSocket = (wsObj, label) => {

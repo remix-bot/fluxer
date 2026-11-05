@@ -574,6 +574,13 @@ const PlayerLifecycleMixin = {
           player.textChannel = null;
           logger.warn(`[PlayerManager] Cannot send player message in channel ${ch.id} — missing permissions`);
         } else {
+          const status = err?.status ?? err?.statusCode;
+          const is5xx = status >= 500 && status < 600;
+          const isHtml = typeof err?.message === "string" && /<!doctype|<html/i.test(err.message);
+          if (is5xx || isHtml) {
+            logger.player(`[PlayerManager] Could not send player message in channel ${ch.id} (Fluxer API HTTP ${status || 503} unavailable)`);
+            return;
+          }
           logger.warn(`[PlayerManager] Failed to send player message in channel ${ch.id}:`, err?.message ?? err);
         }
       });
