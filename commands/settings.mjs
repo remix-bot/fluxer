@@ -9,7 +9,6 @@
 import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { getMessageGuildId, getGlobalColor } from "../src/ui/index.mjs";
-import { logger } from "../src/core/Logger.mjs";
 import {
   SHORTCUTS, BOOL_SETTINGS, VALID_LOCALES, setValidLocales,
   VOLUME_MIN, VOLUME_MAX,

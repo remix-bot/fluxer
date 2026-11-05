@@ -203,7 +203,9 @@ const BotVoiceMixin = {
     if (!this._247RejoinTimers) this._247RejoinTimers = new Map();
     if (this._247RejoinTimers.has(cleanCh)) return;
 
-    const delay = delayMs ?? this.config?.timers?.rejoin247Delay ?? 3_000;
+    /* Stagger multiple simultaneous rejoins to avoid overwhelming the gateway and LiveKit */
+    const stagger = (this._247RejoinTimers.size) * 2_500;
+    const delay = delayMs ?? ((this.config?.timers?.rejoin247Delay ?? 3_000) + stagger);
     logger.voice247(`[247] Arming bot-level rejoin for ${cleanCh} (guild ${cleanG}) in ${delay / 1000}s`);
 
     const timer = setTimeout(() => {
@@ -212,13 +214,19 @@ const BotVoiceMixin = {
         logger.voice247(`[247] Rejoin for ${cleanCh} cancelled — intentional leave registered`);
         return;
       }
+      /* Defer if gateway is reconnecting or down — voice join requires an active gateway connection */
+      if (this._gatewayConnected === false) {
+        logger.voice247(`[247] Gateway not connected yet — deferring rejoin for ${cleanCh} by 5s`);
+        this.schedule247Rejoin(cleanCh, cleanG, 5_000);
+        return;
+      }
       try {
         const p = this.gatewayHandler?._rejoinChannel?.(cleanG, cleanCh);
         if (p && typeof p.catch === "function") {
-          p.catch(err => logger.warn(`[247] Rejoin failed for channel ${cleanCh}:`, err?.message ?? err));
+          p.catch(err => logger.voice247(`[247] Rejoin failed for channel ${cleanCh}:`, err?.message ?? err));
         }
       } catch (err) {
-        logger.warn(`[247] Rejoin failed for channel ${cleanCh}:`, err?.message ?? err);
+        logger.voice247(`[247] Rejoin failed for channel ${cleanCh}:`, err?.message ?? err);
       }
     }, delay);
 

@@ -11,6 +11,7 @@
 import { EmbedBuilder } from "@fluxerjs/core";
 import { ERROR_COLOR } from "../../utils/UI.mjs";
 import { Utils, cleanId } from "../../utils/Utils.mjs";
+import { isPlayerConnectionDead } from "../../utils/Helpers247.mjs";
 import { logger } from "../../core/Logger.mjs";
 import { getBilibiliStreamUrl } from "../bilibili/index.mjs";
 
@@ -293,7 +294,32 @@ const PlaybackMixin = {
         }
       }
     } catch (err) {
-      logger.error("[Player] Play error:", err.message);
+      const errMsg = err?.message ?? String(err);
+      logger.error("[Player] Play error:", errMsg);
+
+      /* In-place recovery if playback failed due to a lost or dead voice connection */
+      const isVoiceLost = isPlayerConnectionDead(this)
+          || /track publication timed out|No voice connection|Voice connection timeout/i.test(errMsg);
+
+      if (isVoiceLost && !this.leaving && !this._destroyed) {
+        logger.player(`[Player:${this._guildId}] Voice connection lost during playback — attempting in-place voice recovery`);
+        const cId = cleanId(this._channelId ?? this._home247Channel ?? "");
+        if (cId) {
+          this._voiceConn = null;
+          this.connection = null;
+          try {
+            await this.join(cId);
+            if (this._voiceConn) {
+              this._consecutiveErrors = 0;
+              await this._playTrackViaBridge(songData, { seekSeconds: seekSec });
+              return;
+            }
+          } catch (recErr) {
+            logger.player(`[Player:${this._guildId}] In-place voice recovery failed: ${recErr?.message}`);
+          }
+        }
+      }
+
       if (!this._skipping && !this.leaving && !this._paused && songData.type !== "radio") {
         const pfx = this._getPrefix?.(this._guildId) ?? "%";
         const playErrEmbed = new EmbedBuilder()
@@ -537,7 +563,6 @@ const PlaybackMixin = {
     this._seeking = true;
 
     try {
-      this._bridgeStop();
       const current = this.queue.getCurrent();
       if (current?.url) {
         this.startedPlaying = Date.now() - ms;
@@ -550,7 +575,7 @@ const PlaybackMixin = {
       return true;
     } catch (e) {
       this._seeking = false;
-      logger.error("[Player] Seek failed:", e?.message);
+      logger.player(`[Player] Seek failed: ${e?.message ?? e}`);
       return false;
     } finally {
       this._seeking = false;

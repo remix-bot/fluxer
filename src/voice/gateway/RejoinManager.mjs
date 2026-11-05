@@ -60,7 +60,7 @@ const RejoinManager = {
 
         if (isTransientError && attempt < maxRetries) {
           const backoffMs = baseDelay * Math.pow(2, attempt - 1);
-          logger.warn(
+          logger.voice247(
               `[${context}] Voice connection/track failed for channel ${channelId} (attempt ${attempt}/${maxRetries}) — ` +
               `retrying in ${backoffMs / 1000}s: ${errMsg}`
           );
@@ -74,7 +74,7 @@ const RejoinManager = {
               `[${context}] Background rejoin failed for channel ${channelId} (failure #${failCount + 1}): ${errMsg} — keeping 24/7 setting intact.`
           );
         } else {
-          logger.warn(
+          logger.voice247(
               `[${context}] Failed to rejoin channel ${channelId}: ${errMsg} — keeping 24/7 setting intact.`
           );
         }

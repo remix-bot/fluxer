@@ -15,7 +15,7 @@ const TRACK_KIND_AUDIO = 1;
 const pendingUnpublishSids = new WeakMap();
 
 /** @type {number} @description Max time to wait for a stale-track unpublish to settle before publishing anyway (defensive — an unpublish should resolve almost instantly; this only guards against a hung/never-resolving LiveKit promise blocking playback indefinitely). */
-const UNPUBLISH_WAIT_TIMEOUT_MS = 1200;
+const UNPUBLISH_WAIT_TIMEOUT_MS = 2500;
 
 /** @extends {EventEmitter} */
 export class FluxerAudioBridge extends EventEmitter {

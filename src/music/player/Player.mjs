@@ -607,9 +607,17 @@ class Player extends EventEmitter {
           this._voiceConn = null;
           this.connection = null;
           const cId = cleanId(this._channelId ?? this._home247Channel ?? "");
-          if (cId && (this._get247Mode() === "on" || this.queue?.getCurrent() || !(this.queue?.isEmpty?.() ?? true))) {
-            logger.player(`[Player] Voice disconnected with active session — scheduling reconnect to channel ${cId}`);
-            this.join(cId).catch(err => logger.warn(`[Player] Voice reconnect after disconnect failed: ${err?.message}`));
+          const is247 = this._get247Mode() === "on";
+          if (is247) {
+            /* 24/7 channels are managed centrally by GatewayHandler and schedule247Rejoin to prevent race conditions */
+            return;
+          }
+          if (cId && (this.queue?.getCurrent() || !(this.queue?.isEmpty?.() ?? true))) {
+            logger.player(`[Player] Voice disconnected with active session — scheduling reconnect to channel ${cId} in 2.5s`);
+            setTimeout(() => {
+              if (this.leaving || this._destroyed || this._voiceConn) return;
+              this.join(cId).catch(err => logger.player(`[Player] Voice reconnect after disconnect failed: ${err?.message}`));
+            }, 2_500).unref?.();
           }
         });
       }
