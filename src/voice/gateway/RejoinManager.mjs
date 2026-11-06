@@ -56,6 +56,8 @@ const RejoinManager = {
             || errMsg.includes("internal error")
             || errMsg.includes("ETIMEDOUT")
             || errMsg.includes("ECONNRESET")
+            || errMsg.includes("Gateway")
+            || this.remix?._gatewayConnected === false
         );
 
         if (isTransientError && attempt < maxRetries) {
@@ -97,7 +99,10 @@ const RejoinManager = {
     const cleanGuildId   = cleanId(guildId);
     const cleanChannelId = cleanId(channelId);
 
-    const guild = remix.client?.guilds?.get?.(cleanGuildId);
+    let guild = remix.client?.guilds?.get?.(cleanGuildId);
+    if (!guild && typeof remix.client?.guilds?.fetch === "function") {
+      try { guild = await remix.client.guilds.fetch(cleanGuildId).catch(() => null); } catch (_) {}
+    }
     if (!guild) {
       logger.voice247(`[Rejoin] Bot is not currently in guild ${cleanGuildId} — skipping ${cleanChannelId} (setting kept intact).`);
       return;
@@ -168,7 +173,10 @@ const RejoinManager = {
         }
       } else {
         this._rejoinAttempts.delete(cleanChannelId);
-        this.rejoinBackoff?.recordFailure?.(cleanChannelId);
+        /* Only apply backoff cool-down if failure was not caused by a gateway outage */
+        if (this.remix?._gatewayConnected !== false) {
+          this.rejoinBackoff?.recordFailure?.(cleanChannelId);
+        }
       }
       return player;
     } finally {

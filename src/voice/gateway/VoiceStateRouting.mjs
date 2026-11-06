@@ -28,38 +28,47 @@ const VoiceStateRouting = {
    * @returns {Promise<void>}
    * @private
    */
-  async _handleVoiceStateUpdate(data) {
+  async _handleVoiceStateUpdate(data, extraState = null) {
     const { remix } = this;
     const client = remix.client;
 
-    const userId = data?.user_id;
+    /* Normalize field names across raw gateway payloads and library VoiceState objects */
+    const rawState = data;
+    const userId = cleanId(rawState?.user_id ?? rawState?.userId ?? rawState?.id ?? rawState?.member?.user?.id ?? rawState?.member?.id);
     if (!userId) return;
 
-    const newChannelId = data?.channel_id ?? null;
-    const vsuGuildId   = data?.guild_id;
-    const isBot        = resolveIsBotUser({
+    const newChannelId = cleanId(rawState?.channel_id ?? rawState?.channelId ?? rawState?.channel?.id) || null;
+    const vsuGuildId   = cleanId(rawState?.guild_id ?? rawState?.guildId ?? rawState?.guild?.id);
+
+    const botId = cleanId(client.user?.id ?? remix.botId ?? remix.config?.botId ?? client.id ?? "");
+    const isBotUser = Boolean(botId && userId === botId);
+    const isBot = isBotUser || resolveIsBotUser({
       userId,
-      member: data?.member,
+      member: rawState?.member,
       guild:  client.guilds?.get?.(vsuGuildId),
       client,
-      botId:  client.user?.id,
+      botId,
     });
-
 
     const prevEntry    = this.findPrevVoiceStateEntry(userId, vsuGuildId);
     const prev         = prevEntry.value;
     const prevSameGuild = prev &&
         cleanId(prev.guildId ?? "") === cleanId(vsuGuildId ?? "");
-    const oldChannelId = prevSameGuild ? (prev?.channelId ?? null) : null;
+    let oldChannelId = prevSameGuild ? (prev?.channelId ?? null) : null;
 
-
-    this._updatePreviousStates(userId, vsuGuildId, oldChannelId, newChannelId, isBot, prevEntry, prev);
-    this._updateVoiceStateCache(userId, vsuGuildId, oldChannelId, newChannelId, isBot, prev);
-
+    if (!oldChannelId && extraState) {
+      oldChannelId = cleanId(extraState?.channel_id ?? extraState?.channelId ?? extraState?.channel?.id) || null;
+    }
 
     const { player, playerGuildId, homeChannelId } = this._findAffectedPlayer(vsuGuildId, oldChannelId, newChannelId);
 
-    const isBotUser = isBot === true && userId === client.user?.id;
+    /* If this is the bot disconnecting, but oldChannelId was not tracked in _prevVoiceState, resolve it from the player */
+    if (!oldChannelId && isBotUser && player) {
+      oldChannelId = cleanId(player._channelId ?? player._home247Channel ?? "") || null;
+    }
+
+    this._updatePreviousStates(userId, vsuGuildId, oldChannelId, newChannelId, isBot, prevEntry, prev);
+    this._updateVoiceStateCache(userId, vsuGuildId, oldChannelId, newChannelId, isBot, prev);
 
     /* Handle server-mute (admin / community mute) on the bot */
     if (isBotUser && player) {
@@ -212,6 +221,14 @@ const VoiceStateRouting = {
     if (newChannelId) {
       const cleanNew = cleanId(newChannelId);
       const player = remix.players.playerMap.get(cleanNew);
+      if (player) {
+        return { player, playerGuildId: player._guildId, homeChannelId: player._home247Channel };
+      }
+    }
+
+    if (guildId) {
+      const cleanG = cleanId(guildId);
+      const player = [...remix.players.playerMap.values()].find(p => !p._destroyed && cleanId(p._guildId) === cleanG);
       if (player) {
         return { player, playerGuildId: player._guildId, homeChannelId: player._home247Channel };
       }

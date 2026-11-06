@@ -150,6 +150,10 @@ const Watchdog247 = {
       logger.voice247("[Watchdog247] Boot recovery in progress — skipping sweep.");
       return;
     }
+    if (remix._gatewayConnected === false) {
+      logger.voice247("[Watchdog247] Gateway is currently disconnected — deferring sweep until connection is restored.");
+      return;
+    }
 
     let healthy = 0, healed = 0, pruned = 0, skipped = 0;
     const savedChannels = [];
@@ -170,9 +174,19 @@ const Watchdog247 = {
       const cleanG = cleanId(guildId);
       const cleanCh = cleanId(channelId);
 
-      const guild = remix.client?.guilds?.get?.(cleanG);
+      let guild = remix.client?.guilds?.get?.(cleanG);
+      if (!guild && typeof remix.client?.guilds?.fetch === "function") {
+        try { guild = await remix.client.guilds.fetch(cleanG).catch(() => null); } catch (_) {}
+      }
       if (!guild) {
-        // Bot is not in this guild — keep 24/7 setting intact for future invite, but skip sweep
+        /* If channel itself resolves via REST, the guild is accessible to the bot */
+        const { channel: chCheck } = await this._resolve247Channel(cleanCh);
+        if (chCheck) {
+          guild = chCheck.guild ?? { id: cleanG };
+        }
+      }
+      if (!guild) {
+        /* Bot is not in this guild — keep 24/7 setting intact for future invite, but skip sweep */
         skipped++;
         continue;
       }
@@ -219,11 +233,12 @@ const Watchdog247 = {
         skipped++;
         continue;
       }
-      if (channel && channel.type !== 2) {
+      const isVoice = channel.type === 2 || channel.type === 13 || channel.type === "voice";
+      if (channel && !isVoice) {
         if (this._prune247Channel(guildId, channelId)) {
           pruned++;
           remix.cancel247Rejoin?.(channelId);
-          logger.voice247(`[Watchdog247] ${channelId} is not a voice channel anymore — pruned.`);
+          logger.voice247(`[Watchdog247] ${channelId} is not a voice channel anymore (type: ${channel.type}) — pruned.`);
         }
         continue;
       }

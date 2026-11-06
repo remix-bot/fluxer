@@ -13,12 +13,12 @@
 export class RejoinBackoff {
   /**
    * @param {object} [o]
-   * @param {number} [o.baseMs=120000] - Cool-down after the first failed attempt cycle (doubles each time).
+   * @param {number} [o.baseMs=30000] - Cool-down after the first failed attempt cycle (doubles each time).
    * @param {number} [o.maxMs=3600000] - Upper bound for the cool-down.
    * @param {number} [o.maxEntries=5000] - Safety cap on remembered channels (oldest evicted first).
    * @param {() => number} [o.now] - Clock (injectable for tests).
    */
-  constructor({ baseMs = 120_000, maxMs = 3_600_000, maxEntries = 5_000, now = Date.now } = {}) {
+  constructor({ baseMs = 30_000, maxMs = 3_600_000, maxEntries = 5_000, now = Date.now } = {}) {
     this.baseMs = baseMs;
     this.maxMs = maxMs;
     this.maxEntries = maxEntries;
@@ -45,6 +45,11 @@ export class RejoinBackoff {
   /** Forget a channel (a join succeeded, or the channel is no longer relevant). */
   recordSuccess(channelId) {
     this._entries.delete(String(channelId));
+  }
+
+  /** Clear all backoff entries (used on gateway reconnection). */
+  clear() {
+    this._entries.clear();
   }
 
   /** @returns {number} Milliseconds until the watchdog may try this channel again (0 = go ahead). */

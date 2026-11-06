@@ -242,6 +242,7 @@ class GatewayHandler {
               this._lastReadyAt = Date.now();
               remix._lastGatewayHeartbeat = Date.now();
               remix._gatewayConnected = true;
+              this.rejoinBackoff?.clear?.();
               const readyGuilds = payload.d?.guilds;
               if (Array.isArray(readyGuilds)) {
                 for (const g of readyGuilds) {
@@ -277,6 +278,7 @@ class GatewayHandler {
               this._lastReadyAt = Date.now();
               remix._lastGatewayHeartbeat = Date.now();
               remix._gatewayConnected = true;
+              this.rejoinBackoff?.clear?.();
 
               if (remix._hasBooted) {
                 logger.voice247("[Gateway] RESUMED session active — scheduling 24/7 self-healing sweep in 3s...");
@@ -314,15 +316,20 @@ class GatewayHandler {
 
             if (payload.t === "VOICE_STATE_UPDATE") {
               const d         = payload.d;
-              const userId    = d?.user_id;
-              const channelId = d?.channel_id ?? null;
-              const guildId   = d?.guild_id;
+              const userId    = cleanId(d?.user_id ?? d?.userId);
+              const channelId = cleanId(d?.channel_id ?? d?.channelId) || null;
+              const guildId   = cleanId(d?.guild_id ?? d?.guildId);
               const isBot     = resolveIsBotUser({ userId, member: d?.member, guild: client.guilds?.get?.(guildId), client, botId: client.user?.id });
               if (!userId) return;
               if (channelId) {
                 remix.voiceCache.updateUser({ guildId, userId, channelId, isBot });
               } else {
                 remix.voiceCache.updateUser({ guildId, userId, channelId: null, isBot });
+              }
+              try {
+                this._handleVoiceStateUpdate(d);
+              } catch (e) {
+                logger.warn("[Gateway] Error in _handleVoiceStateUpdate from raw event:", e?.message);
               }
             }
           } catch(e) { logger.warn("[Gateway] Raw gateway handler error:", e?.message); }
@@ -536,8 +543,10 @@ class GatewayHandler {
       this._processGuildDelete(guildId);
     });
 
-    client.on(Events.VoiceStateUpdate, async (data) => {
-      this._handleVoiceStateUpdate(data);
+    client.on(Events.VoiceStateUpdate, async (oldOrNew, maybeNew) => {
+      const data = maybeNew ?? oldOrNew;
+      const extra = maybeNew ? oldOrNew : null;
+      this._handleVoiceStateUpdate(data, extra);
     });
 
     client.on(Events.VoiceStatesSync, (data) => {
@@ -674,6 +683,18 @@ class GatewayHandler {
       return;
     }
 
+    /* Ensure backoff cooldowns from previous session/downtime are reset */
+    this.rejoinBackoff?.clear?.();
+
+    /* Wait for gateway to establish connection so voice joins do not immediately time out */
+    if (remix._gatewayConnected === false) {
+      logger.voice247("[BootRecovery] Waiting up to 30s for gateway connection before rejoining 24/7 channels...");
+      const startWait = Date.now();
+      while (remix._gatewayConnected === false && Date.now() - startWait < 30_000) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
     try {
       const lava = remix.lavalink;
       if (lava?.hasConnectedNode && !lava.hasConnectedNode() && lava.waitForNode) {
@@ -696,7 +717,16 @@ class GatewayHandler {
       const cleanG = cleanId(guildId);
       const cleanC = cleanId(channelId);
 
-      const guild = remix.client?.guilds?.get?.(cleanG);
+      let guild = remix.client?.guilds?.get?.(cleanG);
+      if (!guild && typeof remix.client?.guilds?.fetch === "function") {
+        try { guild = await remix.client.guilds.fetch(cleanG).catch(() => null); } catch (_) {}
+      }
+      if (!guild) {
+        const { channel: chCheck } = await this._resolve247Channel(cleanC);
+        if (chCheck) {
+          guild = chCheck.guild ?? { id: cleanG };
+        }
+      }
       if (!guild) {
         logger.voice247(
             `[BootRecovery] Bot is not currently in guild ${cleanG} — skipping channel ${cleanC} (setting kept intact).`
@@ -738,7 +768,8 @@ class GatewayHandler {
         );
         continue;
       }
-      if (channelObj.type !== 2) {
+      const isVoice = channelObj.type === 2 || channelObj.type === 13 || channelObj.type === "voice";
+      if (!isVoice) {
         logger.warn(
             `[BootRecovery] Channel ${channelId} in guild ${guildId} is not a voice channel (type: ${channelObj.type}) — skipping.`
         );

@@ -54,10 +54,12 @@ export function get247ChannelMode(set, channelId) {
   if (!set?.get) return "off";
   const raw = set.get("stay_247");
   if (!raw || raw === "none") return "off";
+  const target = cleanId(channelId);
+  if (!target) return "off";
   const channels = Array.isArray(raw)
-    ? raw.map(id => String(id).trim()).filter(Boolean)
-    : [String(raw).trim()];
-  return channels.includes(channelId) ? "on" : "off";
+    ? raw.map(id => cleanId(id)).filter(Boolean)
+    : [cleanId(raw)].filter(Boolean);
+  return channels.includes(target) ? "on" : "off";
 }
 
 /**

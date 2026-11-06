@@ -189,7 +189,7 @@ const BotVoiceMixin = {
     }
 
     const guild = this.client?.guilds?.get?.(cleanG);
-    if (!guild) {
+    if (!guild && this.client?.guilds?.size > 0 && typeof this.client?.guilds?.fetch !== "function") {
       logger.voice247(`[247] Bot is not currently in guild ${cleanG} — skipping rejoin for ${cleanCh} (setting kept intact)`);
       return;
     }
