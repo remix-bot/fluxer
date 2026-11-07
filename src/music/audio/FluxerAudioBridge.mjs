@@ -288,16 +288,25 @@ export class FluxerAudioBridge extends EventEmitter {
           }
 
           /* Route 3d: In-process FFmpeg decode fallback for MP4, AAC, MP3, WAV, and direct media */
+          let ffmpegFailReason = null;
           try {
             return await this._playViaFfmpeg(conn, trackInfo.url, durationMs, generation);
           } catch (ffmpegErr) {
-            logger.warn("[AudioBridge] Route 3d ffmpeg playback failed: " + ffmpegErr?.message);
+            ffmpegFailReason = ffmpegErr?.message || "FFmpeg process error";
+            logger.warn("[AudioBridge] Route 3d ffmpeg playback failed: " + ffmpegFailReason);
+          }
+
+          if (loadstreamEnabled) {
+            throw new Error(
+                "[AudioBridge] Direct stream is " + routed.kind + " (MP3/AAC/PCM?) — NodeLink could not resolve an encoded track " +
+                "and in-process FFmpeg failed" + (ffmpegFailReason ? ": " + ffmpegFailReason : ". Ensure ffmpeg is installed in PATH.")
+            );
           }
 
           throw new Error(
               "[AudioBridge] Direct stream is " + routed.kind + " (MP3/AAC/PCM?) — this format needs server-side decoding or ffmpeg. " +
               "Set audio.allowLoadstream to true in config.json (requires a NodeLink exposing /v4/loadstream), " +
-              "or play a WebM/Opus source."
+              "or ensure ffmpeg is installed in PATH."
           );
         }
         if (generation !== this._playGeneration) return "stopped";
@@ -734,18 +743,25 @@ export class FluxerAudioBridge extends EventEmitter {
   async _playViaFfmpeg(conn, url, durationMs, generation) {
     logger.player("[AudioBridge] Decoding media via in-process ffmpeg: " + url.substring(0, 80));
     const { spawn } = await import("node:child_process");
-    const headers = url.includes("soundcloud.cloud")
-      ? "Origin: https://soundcloud.com\r\nReferer: https://soundcloud.com/\r\n"
-      : "Origin: https://www.youtube.com\r\nReferer: https://www.youtube.com/\r\n";
+    let headers = "";
+    if (url.includes("soundcloud.cloud") || url.includes("sndcdn.com")) {
+      headers = "Origin: https://soundcloud.com\r\nReferer: https://soundcloud.com/\r\n";
+    } else if (url.includes("googlevideo.com") || url.includes("youtube.com") || url.includes("youtu.be")) {
+      headers = "Origin: https://www.youtube.com\r\nReferer: https://www.youtube.com/\r\n";
+    }
     const isHls = url.includes(".m3u8") || /hls|m3u8/i.test(url);
     const ffmpegArgs = [
       "-re",
-      "-headers", headers,
+    ];
+    if (headers) {
+      ffmpegArgs.push("-headers", headers);
+    }
+    ffmpegArgs.push(
       "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "-reconnect", "1",
       "-reconnect_streamed", "1",
       "-reconnect_delay_max", "5",
-    ];
+    );
     if (isHls) {
       /* Start HLS live streams and DVR radios at the broadcast edge instead of starting from 0 (12h in the past) */
       ffmpegArgs.push("-live_start_index", "-3");
@@ -765,6 +781,7 @@ export class FluxerAudioBridge extends EventEmitter {
     let hasOutput = false;
     let stderrBuf = "";
     let chunkCount = 0;
+    let spawnError = null;
 
     proc.stdout.on("data", (chunk) => {
       chunkCount++;
@@ -775,6 +792,7 @@ export class FluxerAudioBridge extends EventEmitter {
     });
 
     proc.on("error", (err) => {
+      spawnError = err;
       logger.warn("[AudioBridge] FFmpeg process error: " + err.message);
     });
     proc.stderr.on("data", (chunk) => {
@@ -799,8 +817,19 @@ export class FluxerAudioBridge extends EventEmitter {
         resolve();
       };
 
+      if (spawnError && !hasOutput) {
+        doReject(spawnError);
+        return;
+      }
+
+      proc.once("error", (err) => {
+        if (!hasOutput) {
+          doReject(err);
+        }
+      });
+
       proc.once("close", (code, signal) => {
-        if ((!hasOutput || code !== 0) && !this._stopped) {
+        if (!hasOutput && code !== 0 && !this._stopped) {
           const errLine = stderrBuf.split("\n").filter(Boolean).pop() || "Process exited with code " + code;
           logger.warn("[AudioBridge] FFmpeg non-zero close (code=" + code + "): " + errLine);
           doReject(new Error("[FFmpeg] " + errLine));
