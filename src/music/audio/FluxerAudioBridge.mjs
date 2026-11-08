@@ -182,25 +182,36 @@ export class FluxerAudioBridge extends EventEmitter {
         return "stopped";
       }
 
-      // ── Route C: direct URL — only for tracks WITHOUT an encoded payload
-      // (Bilibili proxy, radio, direct links). Encoded tracks that reached
-      // this point get the explicit error below instead of fetching their
-      // source page.
+      /* ── Route C: direct URL — only for tracks WITHOUT an encoded payload
+         (Bilibili proxy, radio, direct links). Encoded tracks that reached
+         this point get the explicit error below instead of fetching their
+         source page. */
       if (!trackInfo.encoded && trackInfo.url && trackInfo.url.startsWith("http")) {
         logger.player("[AudioBridge] Route 3: Fetching directly via SafeHttp: " + trackInfo.url.substring(0, 80) + "...");
-        const { openPublicStream } = await import("./SafeHttp.mjs");
-        const { stream, req } = await openPublicStream(trackInfo.url, {
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; Bot/1.0)" },
-        });
-        this._sourceStream = stream;
-        this._sourceReq = req || null;
+        let stream = null;
+        let routed = null;
+        try {
+          const { openPublicStream } = await import("./SafeHttp.mjs");
+          const opened = await openPublicStream(trackInfo.url, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept": "*/*",
+              "Icy-MetaData": "1",
+            },
+          });
+          stream = opened.stream;
+          this._sourceStream = stream;
+          this._sourceReq = opened.req || null;
+          routed = await this._routeByMagic(stream);
+        } catch (openErr) {
+          logger.warn("[AudioBridge] Route 3 SafeHttp probe failed (" + openErr.message + "), falling back to in-process ffmpeg...");
+        }
 
-        const routed = await this._routeByMagic(stream);
-        if (routed.kind === "webm") {
+        if (routed?.kind === "webm") {
           logger.player("[AudioBridge] Route 3a: webm/opus passthrough: " + (trackInfo.title || "unknown"));
           this._stream = routed.stream;
           await conn.play(routed.stream);
-        } else if (routed.kind === "ogg") {
+        } else if (routed?.kind === "ogg") {
           logger.player("[AudioBridge] Route 3b: ogg/opus remux to webm: " + (trackInfo.title || "unknown"));
           const oggResult = await this._remuxOggToWebM(routed.stream);
           this._stream = oggResult;
@@ -230,9 +241,12 @@ export class FluxerAudioBridge extends EventEmitter {
           }
           return "stopped";
         } else {
-          stream.destroy();
-          this._sourceStream = null;
-          logger.player("[AudioBridge] Route 3c: Direct stream is " + routed.kind + " (MP3/AAC?) — resolving through Lavalink...");
+          if (stream) {
+            try { stream.destroy(); } catch (_) {}
+            this._sourceStream = null;
+          }
+          const streamKind = routed?.kind || "pcm";
+          logger.player("[AudioBridge] Route 3c: Direct stream is " + streamKind + " (MP3/AAC?) — resolving through Lavalink...");
 
           const encoded = this._lavalink
               ? await this._resolveUrlViaLavalink(trackInfo.url, trackInfo.guildId)
@@ -243,8 +257,8 @@ export class FluxerAudioBridge extends EventEmitter {
             const result3c = await this._playViaTrackstream(conn, trackInfo, { seekMs, durationMs, generation });
             if (result3c !== null) return result3c;
             if (generation !== this._playGeneration) return "stopped";
-            // Trackstream could not serve the resolved track either — fall
-            // through to loadstream when allowed, else the explicit error.
+            /* Trackstream could not serve the resolved track either — fall
+               through to loadstream when allowed, else the explicit error. */
             if (loadstreamEnabled) {
               try {
                 const loaded3c = await this._streamFromLoadstream(trackInfo, seekMs, null);
@@ -298,13 +312,13 @@ export class FluxerAudioBridge extends EventEmitter {
 
           if (loadstreamEnabled) {
             throw new Error(
-                "[AudioBridge] Direct stream is " + routed.kind + " (MP3/AAC/PCM?) — NodeLink could not resolve an encoded track " +
+                "[AudioBridge] Direct stream is " + streamKind + " (MP3/AAC/PCM?) — NodeLink could not resolve an encoded track " +
                 "and in-process FFmpeg failed" + (ffmpegFailReason ? ": " + ffmpegFailReason : ". Ensure ffmpeg is installed in PATH.")
             );
           }
 
           throw new Error(
-              "[AudioBridge] Direct stream is " + routed.kind + " (MP3/AAC/PCM?) — this format needs server-side decoding or ffmpeg. " +
+              "[AudioBridge] Direct stream is " + streamKind + " (MP3/AAC/PCM?) — this format needs server-side decoding or ffmpeg. " +
               "Set audio.allowLoadstream to true in config.json (requires a NodeLink exposing /v4/loadstream), " +
               "or ensure ffmpeg is installed in PATH."
           );

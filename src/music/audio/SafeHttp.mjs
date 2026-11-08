@@ -131,7 +131,7 @@ function requestOnce(u, { headers, lookup, connectTimeoutMs, idleTimeoutMs }) {
       method: "GET",
       agent: false,
       lookup,
-      headers: { Accept: "*/*", "Accept-Encoding": "identity", ...headers },
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", Accept: "*/*", "Accept-Encoding": "identity", ...headers },
     }, (res) => {
       settled = true;
       clearTimeout(timer);
