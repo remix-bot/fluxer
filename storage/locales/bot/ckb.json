@@ -91,7 +91,8 @@
     "pitch": "دەستکاریکردنی تۆن و ئاستی دەنگی تراکی ئێستا (0.5× بۆ 2.0×).",
     "previous": "لێدانی گۆرانی پێشوو لە مێژووی لێدان.",
     "replay": "دووبارە لێدانی گۆرانیی ئێستا لە سەرەتاوە.",
-    "skipto": "پەڕینەوەی ڕاستەوخۆ بۆ گۆرانییەکی دیاریکراو لە ڕیزبەندی."
+    "skipto": "پەڕینەوەی ڕاستەوخۆ بۆ گۆرانییەکی دیاریکراو لە ڕیزبەندی.",
+    "statustest": "تاقیکردنەوەی نوێکردنەوەکانی کەناڵی دۆخی گشتی، کارتی ڕاستەوخۆ و ڕووداوەکان."
   },
   "options": {
     "debug": {
@@ -1322,6 +1323,50 @@
       "floodTitle": "پەیامەکانی تۆمار فڕێدران",
       "floodDesc": "⚠️ **{{count}}** پەیامی زیاتری تۆمار لە کاتی قەرەباڵغیدا فڕێدران بۆ پاراستنی سنووری خێرایی API.",
       "floodFooter": "پارێزەری سنووری خێرایی • ErrorChannel"
+    },
+    "statustest": {
+      "author": "Remix · دەستنیشانکردنی کەناڵی دۆخ",
+      "disabledAuthor": "سەنتەری دۆخی Remix",
+      "disabledTitle": "کەناڵی دۆخ ناچالاکە",
+      "disabledDesc": "❌ کەناڵی دۆخ لە ئێستادا **ناچالاکە** یان `channelId` دانەنراوە.\n\nتکایە `statusChannel` لە `config.json` ڕێکبخە:\n```json\n\"statusChannel\": {\n  \"enabled\": true,\n  \"channelId\": \"ناسنامەی_کەناڵەکەت\",\n  \"mentionRoleId\": \"ناسنامەی_ڕۆڵی_ئارەزوومەندانە\",\n  \"updateIntervalSeconds\": 300\n}\n```",
+      "refreshedTitle": "✅ کارتی ڕاستەوخۆ نوێکرایەوە",
+      "refreshedDesc": "نوێکردنەوەی تێلیمیتریی ڕاستەوخۆ نێردرا بۆ <#{{channelId}}>.\nناسنامەی پەیامی کارت: `{{messageId}}`",
+      "incidentTitle": "🔴 ڕووداوی تاقیکاری دەستیپێکرد",
+      "incidentDesc": "پچڕانی ڕووداو بۆ **{{target}}** لە <#{{channelId}}> بڵاوکرایەوە.\nفەرمانی `{{prefix}}statustest resolve {{target}}` جێبەجێ بکە بۆ چارەسەرکردنی.",
+      "resolvedTitle": "✅ ڕووداوی تاقیکاری چارەسەرکرا",
+      "resolvedDesc": "چارەسەرکردنی ڕووداو بۆ **{{target}}** لە <#{{channelId}}> بڵاوکرایەوە.",
+      "helpTitle": "فەرمانەکانی کەناڵی دۆخ",
+      "helpDesc": "کەناڵی دۆخ **چالاکە** لە <#{{channelId}}>.\nکارتی ڕاستەوخۆی ئێستا: `{{cardId}}`\n\n**هەڵبژاردەکانی بەکارهێنان:**\n• `{{prefix}}statustest refresh` — نوێکردنەوەی زۆرەملێی پەیامی دۆخی ڕاستەوخۆ.\n• `{{prefix}}statustest incident <target>` — دەستپێکردنی پەیامی پچڕانی تاقیکاری.\n• `{{prefix}}statustest resolve <target>` — چارەسەرکردنی پچڕان و تۆمارکردنی کاتی وەستان.\n\n*ئامانجە دروستەکان:* `gateway`, `audioNode`, `database`, `dashboard`, `api`"
+    },
+    "statusChannel": {
+      "liveCardTitle": "دۆخی ڕاستەوخۆی سیستەم",
+      "liveCardAuthor": "Remix · تێلیمیتری و دۆخی سیستەم",
+      "operationalDesc": "🟢 **هەموو سیستەمەکان کاردەکەن**\nRemix بە شێوەیەکی باش لە هەموو سێرڤەرەکان کاردەکات.",
+      "degradedDesc": "🟡 **پچڕانی بەشەکی**\nهەندێک لە ژێر-سیستەمە لاوەکییەکان تووشی کێشە بوون.",
+      "criticalDesc": "🔴 **پچڕانی گەورە دۆزرایەوە**\nیەک یان چەند خزمەتگوزارییەکی سەرەکی لەسەر هێڵ نین.",
+      "gatewayField": "🏓 دواکەوتنی دەروازە (Gateway)",
+      "uptimeField": "⏱️ کاتی کارکردن",
+      "sessionsField": "🎵 دانیشتنە چالاکەکان",
+      "ramField": "📟 بیرگە (RAM)",
+      "cpuField": "⚙️ بەکارهێنانی CPU",
+      "guildsField": "🏰 سێرڤەرە بەشداربووەکان",
+      "subsystemsField": "🛡️ تەندروستیی ژێر-سیستەمەکان",
+      "incidentAuthor": "🔴 ڕووداو دۆزرایەوە",
+      "incidentTitle": "🔴 {{name}} لە کار کەوتووە",
+      "incidentDefaultDesc": "{{name}} تووشی پچڕان بووە. تیمەکەمان سەرقاڵی لێکۆڵینەوەیە.",
+      "resolvedAuthor": "✅ ڕووداو چارەسەرکرا",
+      "resolvedTitle": "✅ {{name}} گەڕایەوە سەر هێڵ",
+      "resolvedDefaultDesc": "پەیوەندی لەگەڵ {{name}} بە تەواوی گەڕێندرایەوە و جێگیرکرا.",
+      "downtimeField": "کاتی وەستان",
+      "startedField": "دەستپێکردن",
+      "resolvedField": "چارەسەرکرا",
+      "statusField": "دۆخ",
+      "severityField": "ئاستی مەترسی",
+      "investigating": "لێکۆڵینەوە دەکرێت",
+      "stable": "جێگیرە",
+      "operational": "کاردەکات",
+      "outage": "پچڕان",
+      "disabled": "ناچالاکە"
     }
   }
 }

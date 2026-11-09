@@ -30,6 +30,7 @@ import { GatewayHandler } from "../voice/gateway/GatewayHandler.mjs";
 import { LastFmManager } from "../services/lastfm/LastFmManager.mjs";
 import { FluxerListManager } from "../services/FluxerListManager.mjs";
 import { TrackOptionsManager } from "../services/TrackOptionsManager.mjs";
+import { StatusChannelManager } from "../services/StatusChannelManager.mjs";
 import { TrackStats } from "../music/TrackStats.mjs";
 import { configureBilibili } from "../music/bilibili/index.mjs";
 import { configureAudio } from "../music/audio/AudioSettings.mjs";
@@ -270,6 +271,7 @@ class Remix {
     this.lastfm = new LastFmManager(config.lastfm, sharedPromisePool);
     this.fluxerlist = new FluxerListManager(config.fluxerlist);
     this.trackOptions = new TrackOptionsManager(sharedPool);
+    this.statusChannel = new StatusChannelManager(this, config.statusChannel);
 
     /* Gateway activity timestamps and status tracking */
     this._lastGatewayHeartbeat = Date.now();
@@ -373,14 +375,22 @@ class Remix {
           this.lavalink = new LavalinkManager(config.nodelink ?? {}, client, { id: botId, username: client.user?.username ?? "bot" });
           this.lavalink.on("ready", () => {
             logger.lavalink("[Lavalink] Session ready");
+            this.statusChannel?.resolveIncident("audioNode");
             if (this._hasBooted) {
               this.players?.resumeAllOnNodeReconnect?.();
             }
           });
           this.lavalink.on("nodeReconnect", () => {
+            this.statusChannel?.resolveIncident("audioNode");
             if (this._hasBooted) {
               this.players?.resumeAllOnNodeReconnect?.();
             }
+          });
+          this.lavalink.on("nodeDisconnect", (node, reason) => {
+            this.statusChannel?.triggerIncident("audioNode", `Audio engine disconnected: ${reason || "Connection dropped"}`);
+          });
+          this.lavalink.on("nodeError", (node, err) => {
+            this.statusChannel?.triggerIncident("audioNode", `Audio engine error: ${err?.message || "Unreachable"}`);
           });
           await this.lavalink.init();
           this.playerContext.lavalink = this.lavalink;
@@ -388,6 +398,8 @@ class Remix {
 
         this.gatewayHandler.onReady();
         this._hasBooted = true;
+        this.statusChannel?.start();
+        this.statusChannel?.resolveIncident("gateway");
 
         this.fluxerlist?.startAutoStats?.(client);
 
@@ -802,8 +814,9 @@ class Remix {
       logger.error("[Shutdown] Failed to close Dashboard DB:", e.message);
     }
 
-    // 6. Stop 24/7 watchdog
+    /* 6. Stop 24/7 watchdog and status channel */
     try {
+      this.statusChannel?.destroy?.();
       this.gatewayHandler?.stop247Watchdog?.();
     } catch (e) {
       logger.warn("[Shutdown] Watchdog stop error:", e?.message);

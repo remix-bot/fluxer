@@ -238,6 +238,7 @@ class GatewayHandler {
             remix._lastGatewayDisconnect = 0;
 
             if (payload.t === "READY") {
+              remix.statusChannel?.resolveIncident("gateway");
               logger.player(`[Gateway] READY received (session ${payload.d?.session_id ?? "unknown"})`);
               this._lastReadyAt = Date.now();
               remix._lastGatewayHeartbeat = Date.now();
@@ -274,6 +275,7 @@ class GatewayHandler {
             }
 
             if (payload.t === "RESUMED") {
+              remix.statusChannel?.resolveIncident("gateway");
               logger.player("[Gateway] RESUMED received from gateway.");
               this._lastReadyAt = Date.now();
               remix._lastGatewayHeartbeat = Date.now();
@@ -348,6 +350,7 @@ class GatewayHandler {
           const reason = eventOrCode?.reason ?? maybeReason ?? "";
           remix._gatewayConnected = false;
           if (!remix._lastGatewayDisconnect) remix._lastGatewayDisconnect = Date.now();
+          remix.statusChannel?.triggerIncident("gateway", `Gateway WebSocket closed (code=${code}). Reconnecting...`);
           const now = Date.now();
           if (now - _wsErrorCooldown.lastLogged >= _wsErrorCooldown.COOLDOWN_MS) {
             _wsErrorCooldown.lastLogged = now;

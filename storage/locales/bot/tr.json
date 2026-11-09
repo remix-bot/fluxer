@@ -91,7 +91,8 @@
     "vote": "FluxerList üzerinde sunucunuz/botunuz için oylama bilgilerini görüntüleyin veya oy verenleri kontrol edin",
     "previous": "Oynatma geçmişindeki önceki şarkıyı çal.",
     "replay": "Çalan şarkıyı baştan başlat.",
-    "skipto": "Kuyruktaki belirli bir şarkıya doğrudan atla."
+    "skipto": "Kuyruktaki belirli bir şarkıya doğrudan atla.",
+    "statustest": "Herkese açık durum kanalı güncellemelerini, canlı kartları ve olayları test edin."
   },
   "options": {
     "debug": {
@@ -1322,6 +1323,50 @@
       "floodTitle": "Günlük Mesajları Düşürüldü",
       "floodDesc": "⚠️ API hız limitlerini korumak için taşkın sırasında fazladan **{{count}}** günlük mesajı düşürüldü.",
       "floodFooter": "Hız Limiti Koruması • ErrorChannel"
+    },
+    "statustest": {
+      "author": "Remix · Durum Kanalı Tanılama",
+      "disabledAuthor": "Remix Durum Merkezi",
+      "disabledTitle": "Durum Kanalı Devre Dışı",
+      "disabledDesc": "❌ Durum kanalı şu anda **devre dışı** veya `channelId` eksik.\n\n`config.json` içinde `statusChannel` öğesini yapılandırın:\n```json\n\"statusChannel\": {\n  \"enabled\": true,\n  \"channelId\": \"KANAL_ID_NIZ\",\n  \"mentionRoleId\": \"ISTEGE_BAGLI_ROL_ID\",\n  \"updateIntervalSeconds\": 300\n}\n```",
+      "refreshedTitle": "✅ Canlı Kart Yenilendi",
+      "refreshedDesc": "<#{{channelId}}> kanalına canlı telemetri güncellemesi gönderildi.\nKart Mesaj Kimliği: `{{messageId}}`",
+      "incidentTitle": "🔴 Test Olayı Tetiklendi",
+      "incidentDesc": "<#{{channelId}}> kanalında **{{target}}** için kesinti olayı yayınlandı.\nÇözmek için `{{prefix}}statustest resolve {{target}}` komutunu çalıştırın.",
+      "resolvedTitle": "✅ Test Olayı Çözüldü",
+      "resolvedDesc": "<#{{channelId}}> kanalında **{{target}}** için olay çözümü yayınlandı.",
+      "helpTitle": "Durum Kanalı Komutları",
+      "helpDesc": "Durum kanalı <#{{channelId}}> üzerinde **aktif**.\nGeçerli Canlı Kart: `{{cardId}}`\n\n**Kullanım Seçenekleri:**\n• `{{prefix}}statustest refresh` — Canlı durum iletisini zorla güncelle.\n• `{{prefix}}statustest incident <target>` — Test kesinti iletisi tetikle.\n• `{{prefix}}statustest resolve <target>` — Kesintiyi çöz ve kesinti süresini paylaş.\n\n*Geçerli hedefler:* `gateway`, `audioNode`, `database`, `dashboard`, `api`"
+    },
+    "statusChannel": {
+      "liveCardTitle": "Canlı Sistem Durumu",
+      "liveCardAuthor": "Remix · Sistem Telemetrisi ve Durumu",
+      "operationalDesc": "🟢 **Tüm Sistemler Çalışıyor**\nRemix tüm sunucularda sorunsuz çalışıyor.",
+      "degradedDesc": "🟡 **Kısmi Kesinti**\nBazı kritik olmayan alt sistemlerde aksamalar yaşanıyor.",
+      "criticalDesc": "🔴 **Büyük Kesinti Tespit Edildi**\nBir veya daha fazla ana servis şu anda çevrimdışı.",
+      "gatewayField": "🏓 Ağ Geçidi Gecikmesi",
+      "uptimeField": "⏱️ Çalışma Süresi",
+      "sessionsField": "🎵 Aktif Oturumlar",
+      "ramField": "📟 Bellek (RAM)",
+      "cpuField": "⚙️ CPU Kullanımı",
+      "guildsField": "🏰 Sunucu Varlığı",
+      "subsystemsField": "🛡️ Alt Sistem Sağlığı",
+      "incidentAuthor": "🔴 Olay Tespit Edildi",
+      "incidentTitle": "🔴 {{name}} çöktü",
+      "incidentDefaultDesc": "{{name}} kesinti yaşıyor. Ekibimiz olayı aktif olarak inceliyor.",
+      "resolvedAuthor": "✅ Olay Çözüldü",
+      "resolvedTitle": "✅ {{name}} tekrar çevrimiçi",
+      "resolvedDefaultDesc": "{{name}} bağlantısı tamamen geri yüklendi ve kararlı olduğu doğrulandı.",
+      "downtimeField": "Kesinti Süresi",
+      "startedField": "Başlangıç",
+      "resolvedField": "Çözüldü",
+      "statusField": "Durum",
+      "severityField": "Önem Derecesi",
+      "investigating": "İnceleniyor",
+      "stable": "Kararlı",
+      "operational": "Çalışıyor",
+      "outage": "Aksama",
+      "disabled": "Devre Dışı"
     }
   }
 }

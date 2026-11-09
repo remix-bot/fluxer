@@ -91,7 +91,8 @@
     "pitch": "Adjust the audio pitch of the current track (0.5× to 2.0×).",
     "previous": "Play the previous track from playback history.",
     "replay": "Restart the current song from the beginning.",
-    "skipto": "Skip directly to a specific track in the queue."
+    "skipto": "Skip directly to a specific track in the queue.",
+    "statustest": "Test public status channel updates, live cards, and incidents."
   },
   "options": {
     "debug": {
@@ -1322,6 +1323,50 @@
       "floodTitle": "Log Messages Dropped",
       "floodDesc": "⚠️ **{{count}}** additional log message(s) were dropped during a flood to protect API rate limits.",
       "floodFooter": "Rate Limit Guard • ErrorChannel"
+    },
+    "statustest": {
+      "author": "Remix · Status Channel Diagnostics",
+      "disabledAuthor": "Remix Status Hub",
+      "disabledTitle": "Status Channel Disabled",
+      "disabledDesc": "❌ The status channel is currently **disabled** or missing a `channelId`.\n\nConfigure `statusChannel` in `config.json`:\n```json\n\"statusChannel\": {\n  \"enabled\": true,\n  \"channelId\": \"YOUR_CHANNEL_ID\",\n  \"mentionRoleId\": \"OPTIONAL_ROLE_ID\",\n  \"updateIntervalSeconds\": 300\n}\n```",
+      "refreshedTitle": "✅ Live Card Refreshed",
+      "refreshedDesc": "Dispatched live telemetry update to <#{{channelId}}>.\nCard Message ID: `{{messageId}}`",
+      "incidentTitle": "🔴 Test Incident Triggered",
+      "incidentDesc": "Published incident outage for **{{target}}** in <#{{channelId}}>.\nRun `{{prefix}}statustest resolve {{target}}` to resolve it.",
+      "resolvedTitle": "✅ Test Incident Resolved",
+      "resolvedDesc": "Published incident resolution for **{{target}}** in <#{{channelId}}>.",
+      "helpTitle": "Status Channel Commands",
+      "helpDesc": "Status channel is **active** in <#{{channelId}}>.\nCurrent Live Card: `{{cardId}}`\n\n**Usage Options:**\n• `{{prefix}}statustest refresh` — Force-update the live status embed.\n• `{{prefix}}statustest incident <target>` — Trigger test outage embed.\n• `{{prefix}}statustest resolve <target>` — Resolve outage and post downtime.\n\n*Valid targets:* `gateway`, `audioNode`, `database`, `dashboard`, `api`"
+    },
+    "statusChannel": {
+      "liveCardTitle": "Live System Status",
+      "liveCardAuthor": "Remix · System Telemetry & Status",
+      "operationalDesc": "🟢 **All Systems Operational**\nRemix is running smoothly across all guilds.",
+      "degradedDesc": "🟡 **Partial Outage**\nSome non-critical subsystems are experiencing disruptions.",
+      "criticalDesc": "🔴 **Major Outage Detected**\nOne or more primary services are currently offline.",
+      "gatewayField": "🏓 Gateway Latency",
+      "uptimeField": "⏱️ Uptime",
+      "sessionsField": "🎵 Active Sessions",
+      "ramField": "📟 Memory (RAM)",
+      "cpuField": "⚙️ CPU Utilization",
+      "guildsField": "🏰 Guild Footprint",
+      "subsystemsField": "🛡️ Subsystem Health",
+      "incidentAuthor": "🔴 Incident Detected",
+      "incidentTitle": "🔴 {{name}} is down",
+      "incidentDefaultDesc": "{{name}} is experiencing disruptions. Our team is actively investigating the incident.",
+      "resolvedAuthor": "✅ Incident Resolved",
+      "resolvedTitle": "✅ {{name}} is back online",
+      "resolvedDefaultDesc": "{{name}} connectivity has been fully restored and verified stable.",
+      "downtimeField": "Downtime",
+      "startedField": "Started",
+      "resolvedField": "Resolved",
+      "statusField": "Status",
+      "severityField": "Severity",
+      "investigating": "Investigating",
+      "stable": "Stable",
+      "operational": "Operational",
+      "outage": "Disruptions",
+      "disabled": "Disabled"
     }
   }
 }

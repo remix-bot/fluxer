@@ -91,7 +91,8 @@
     "pitch": "Ajustar o tom (pitch) do áudio da faixa atual (0.5× a 2.0×).",
     "previous": "Tocar a faixa anterior do histórico de reprodução.",
     "replay": "Reiniciar a música atual do início.",
-    "skipto": "Pular diretamente para uma faixa específica na fila."
+    "skipto": "Pular diretamente para uma faixa específica na fila.",
+    "statustest": "Testar atualizações do canal de status público, cartões ao vivo e incidentes."
   },
   "options": {
     "debug": {
@@ -1322,6 +1323,50 @@
       "floodTitle": "Mensagens de Registro Descartadas",
       "floodDesc": "⚠️ **{{count}}** mensagem(ns) de registro adicionais foram descartadas durante uma inundação para proteger os limites de taxa da API.",
       "floodFooter": "Proteção de Limite de Taxa • ErrorChannel"
+    },
+    "statustest": {
+      "author": "Remix · Diagnóstico do Canal de Status",
+      "disabledAuthor": "Remix Status Hub",
+      "disabledTitle": "Canal de Status Desativado",
+      "disabledDesc": "❌ O canal de status está atualmente **desativado** ou sem um `channelId` configurado.\n\nConfigure `statusChannel` em `config.json`:\n```json\n\"statusChannel\": {\n  \"enabled\": true,\n  \"channelId\": \"SEU_ID_DE_CANAL\",\n  \"mentionRoleId\": \"ID_DO_CARGO_OPCIONAL\",\n  \"updateIntervalSeconds\": 300\n}\n```",
+      "refreshedTitle": "✅ Cartão ao Vivo Atualizado",
+      "refreshedDesc": "Atualização de telemetria ao vivo enviada para <#{{channelId}}>.\nID da Mensagem do Cartão: `{{messageId}}`",
+      "incidentTitle": "🔴 Incidente de Teste Disparado",
+      "incidentDesc": "Interrupção por incidente publicada para **{{target}}** em <#{{channelId}}>.\nExecute `{{prefix}}statustest resolve {{target}}` para resolver.",
+      "resolvedTitle": "✅ Incidente de Teste Resolvido",
+      "resolvedDesc": "Resolução de incidente publicada para **{{target}}** em <#{{channelId}}>.",
+      "helpTitle": "Comandos do Canal de Status",
+      "helpDesc": "O canal de status está **ativo** em <#{{channelId}}>.\nCartão ao Vivo Atual: `{{cardId}}`\n\n**Opções de Uso:**\n• `{{prefix}}statustest refresh` — Forçar atualização da mensagem de status ao vivo.\n• `{{prefix}}statustest incident <target>` — Disparar mensagem de interrupção de teste.\n• `{{prefix}}statustest resolve <target>` — Resolver interrupção e registrar tempo de inatividade.\n\n*Alvos válidos:* `gateway`, `audioNode`, `database`, `dashboard`, `api`"
+    },
+    "statusChannel": {
+      "liveCardTitle": "Status do Sistema ao Vivo",
+      "liveCardAuthor": "Remix · Telemetria e Status do Sistema",
+      "operationalDesc": "🟢 **Todos os Sistemas Operacionais**\nO Remix está funcionando perfeitamente em todos os servidores.",
+      "degradedDesc": "🟡 **Interrupção Parcial**\nAlguns subsistemas não críticos estão enfrentando instabilidades.",
+      "criticalDesc": "🔴 **Interrupção Crítica Detectada**\nUm ou mais serviços principais estão offline no momento.",
+      "gatewayField": "🏓 Latência do Gateway",
+      "uptimeField": "⏱️ Tempo de Atividade",
+      "sessionsField": "🎵 Sessões Ativas",
+      "ramField": "📟 Memória (RAM)",
+      "cpuField": "⚙️ Uso de CPU",
+      "guildsField": "🏰 Servidores Conectados",
+      "subsystemsField": "🛡️ Saúde dos Subsistemas",
+      "incidentAuthor": "🔴 Incidente Detectado",
+      "incidentTitle": "🔴 {{name}} está fora do ar",
+      "incidentDefaultDesc": "{{name}} está enfrentando instabilidades. Nossa equipe está investigando o incidente.",
+      "resolvedAuthor": "✅ Incidente Resolvido",
+      "resolvedTitle": "✅ {{name}} está online novamente",
+      "resolvedDefaultDesc": "A conectividade com {{name}} foi totalmente restabelecida e verificada como estável.",
+      "downtimeField": "Tempo de Inatividade",
+      "startedField": "Iniciado",
+      "resolvedField": "Resolvido",
+      "statusField": "Status",
+      "severityField": "Gravidade",
+      "investigating": "Investigando",
+      "stable": "Estável",
+      "operational": "Operacional",
+      "outage": "Instabilidade",
+      "disabled": "Desativado"
     }
   }
 }

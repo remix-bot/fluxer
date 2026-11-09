@@ -91,7 +91,8 @@
     "pitch": "Tonhöhe (Pitch) des aktuellen Tracks anpassen (0.5× bis 2.0×).",
     "previous": "Den vorherigen Titel aus dem Wiedergabeverlauf abspielen.",
     "replay": "Den aktuellen Titel von vorne starten.",
-    "skipto": "Direkt zu einem bestimmten Titel in der Warteschlange springen."
+    "skipto": "Direkt zu einem bestimmten Titel in der Warteschlange springen.",
+    "statustest": "Öffentliche Statuskanal-Aktualisierungen, Live-Karten und Vorfälle testen."
   },
   "options": {
     "debug": {
@@ -1322,6 +1323,50 @@
       "floodTitle": "Protokollnachrichten verworfen",
       "floodDesc": "⚠️ **{{count}}** zusätzliche Protokollnachricht(en) wurden während einer Flut verworfen, um API-Ratenbegrenzungen zu schützen.",
       "floodFooter": "Ratenbegrenzungsschutz • ErrorChannel"
+    },
+    "statustest": {
+      "author": "Remix · Statuskanal-Diagnose",
+      "disabledAuthor": "Remix Status-Hub",
+      "disabledTitle": "Statuskanal deaktiviert",
+      "disabledDesc": "❌ Der Statuskanal ist derzeit **deaktiviert** oder es fehlt eine `channelId`.\n\nKonfiguriere `statusChannel` in `config.json`:\n```json\n\"statusChannel\": {\n  \"enabled\": true,\n  \"channelId\": \"DEINE_KANAL_ID\",\n  \"mentionRoleId\": \"OPTIONALE_ROLLEN_ID\",\n  \"updateIntervalSeconds\": 300\n}\n```",
+      "refreshedTitle": "✅ Live-Karte aktualisiert",
+      "refreshedDesc": "Live-Telemetrie-Update an <#{{channelId}}> gesendet.\nKarten-Nachrichten-ID: `{{messageId}}`",
+      "incidentTitle": "🔴 Test-Vorfall ausgelöst",
+      "incidentDesc": "Vorfallsausfall für **{{target}}** in <#{{channelId}}> veröffentlicht.\nFühre `{{prefix}}statustest resolve {{target}}` aus, um ihn zu beheben.",
+      "resolvedTitle": "✅ Test-Vorfall behoben",
+      "resolvedDesc": "Vorfallsbehebung für **{{target}}** in <#{{channelId}}> veröffentlicht.",
+      "helpTitle": "Statuskanal-Befehle",
+      "helpDesc": "Statuskanal ist **aktiv** in <#{{channelId}}>.\nAktuelle Live-Karte: `{{cardId}}`\n\n**Nutzungsoptionen:**\n• `{{prefix}}statustest refresh` — Live-Status-Embed erzwingen.\n• `{{prefix}}statustest incident <target>` — Test-Ausfall-Embed auslösen.\n• `{{prefix}}statustest resolve <target>` — Ausfall beheben und Ausfallzeit posten.\n\n*Gültige Ziele:* `gateway`, `audioNode`, `database`, `dashboard`, `api`"
+    },
+    "statusChannel": {
+      "liveCardTitle": "Live-Systemstatus",
+      "liveCardAuthor": "Remix · System-Telemetrie & Status",
+      "operationalDesc": "🟢 **Alle Systeme betriebsbereit**\nRemix läuft auf allen Servern reibungslos.",
+      "degradedDesc": "🟡 **Teilausfall**\nEinige unkritische Subsysteme weisen Störungen auf.",
+      "criticalDesc": "🔴 **Schwerer Ausfall festgestellt**\nEin oder mehrere Hauptdienste sind offline.",
+      "gatewayField": "🏓 Gateway-Latenz",
+      "uptimeField": "⏱️ Betriebszeit",
+      "sessionsField": "🎵 Aktive Sitzungen",
+      "ramField": "📟 Arbeitsspeicher (RAM)",
+      "cpuField": "⚙️ CPU-Auslastung",
+      "guildsField": "🏰 Server-Präsenz",
+      "subsystemsField": "🛡️ Subsystem-Status",
+      "incidentAuthor": "🔴 Vorfall festgestellt",
+      "incidentTitle": "🔴 {{name}} ist ausgefallen",
+      "incidentDefaultDesc": "{{name}} weist Störungen auf. Unser Team untersucht den Vorfall.",
+      "resolvedAuthor": "✅ Vorfall behoben",
+      "resolvedTitle": "✅ {{name}} ist wieder online",
+      "resolvedDefaultDesc": "Die Verbindung zu {{name}} wurde vollständig wiederhergestellt und als stabil verifiziert.",
+      "downtimeField": "Ausfallzeit",
+      "startedField": "Begonnen",
+      "resolvedField": "Behoben",
+      "statusField": "Status",
+      "severityField": "Schweregrad",
+      "investigating": "Untersuchung läuft",
+      "stable": "Stabil",
+      "operational": "Betriebsbereit",
+      "outage": "Störungen",
+      "disabled": "Deaktiviert"
     }
   }
 }

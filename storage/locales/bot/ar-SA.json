@@ -91,7 +91,8 @@
     "pitch": "تعديل طبقة الصوت (النغمة) للمقطع الصوتي الحالي (0.5× إلى 2.0×).",
     "previous": "تشغيل الأغنية السابقة من سجل التشغيل.",
     "replay": "إعادة تشغيل الأغنية الحالية من البداية.",
-    "skipto": "التخطي مباشرة إلى أغنية معينة في قائمة الانتظار."
+    "skipto": "التخطي مباشرة إلى أغنية معينة في قائمة الانتظار.",
+    "statustest": "اختبار تحديثات قناة الحالة العامة والبطاقات المباشرة والحوادث."
   },
   "options": {
     "debug": {
@@ -1322,6 +1323,50 @@
       "floodTitle": "تم إسقاط رسائل السجل",
       "floodDesc": "⚠️ تم إسقاط **{{count}}** رسالة سجل إضافية أثناء الفيضان لحماية قيود معدل واجهة برمجة التطبيقات.",
       "floodFooter": "حارس حد المعدل • ErrorChannel"
+    },
+    "statustest": {
+      "author": "Remix · تشخيص قناة الحالة",
+      "disabledAuthor": "مركز حالة Remix",
+      "disabledTitle": "قناة الحالة معطلة",
+      "disabledDesc": "❌ قناة الحالة **معطلة** حالياً أو لا يوجد `channelId` محدد.\n\nقم بتهيئة `statusChannel` في ملف `config.json`:\n```json\n\"statusChannel\": {\n  \"enabled\": true,\n  \"channelId\": \"معرف_القناة_الخاص_بك\",\n  \"mentionRoleId\": \"معرف_الرتبة_الاختياري\",\n  \"updateIntervalSeconds\": 300\n}\n```",
+      "refreshedTitle": "✅ تم تحديث البطاقة المباشرة",
+      "refreshedDesc": "تم إرسال تحديث القياس المباشر إلى <#{{channelId}}>.\nمعرف رسالة البطاقة: `{{messageId}}`",
+      "incidentTitle": "🔴 تم إطلاق حادث اختبار",
+      "incidentDesc": "تم نشر انقطاع الحادث لـ **{{target}}** في <#{{channelId}}>.\nقم بتشغيل `{{prefix}}statustest resolve {{target}}` لحله.",
+      "resolvedTitle": "✅ تم حل حادث الاختبار",
+      "resolvedDesc": "تم نشر حل الحادث لـ **{{target}}** في <#{{channelId}}>.",
+      "helpTitle": "أوامر قناة الحالة",
+      "helpDesc": "قناة الحالة **نشطة** في <#{{channelId}}>.\nالبطاقة المباشرة الحالية: `{{cardId}}`\n\n**خيارات الاستخدام:**\n• `{{prefix}}statustest refresh` — فرض تحديث رسالة الحالة المباشرة.\n• `{{prefix}}statustest incident <target>` — إطلاق رسالة انقطاع تجريبية.\n• `{{prefix}}statustest resolve <target>` — حل الانقطاع وتسجيل وقت التوقف.\n\n*الأهداف الصالحة:* `gateway`, `audioNode`, `database`, `dashboard`, `api`"
+    },
+    "statusChannel": {
+      "liveCardTitle": "حالة النظام المباشرة",
+      "liveCardAuthor": "Remix · القياس عن بُعد وحالة النظام",
+      "operationalDesc": "🟢 **جميع الأنظمة تعمل بكفاءة**\nيعمل Remix بسلاسة عبر جميع السيرفرات.",
+      "degradedDesc": "🟡 **انقطاع جزئي**\nبعض الأنظمة الفرعية غير الحرجة تواجه اضطرابات.",
+      "criticalDesc": "🔴 **تم اكتشاف انقطاع كبير**\nإحدى الخدمات الرئيسية أو أكثر غير متصلة حالياً.",
+      "gatewayField": "🏓 زمن استجابة البوابة (Gateway)",
+      "uptimeField": "⏱️ وقت التشغيل",
+      "sessionsField": "🎵 الجلسات النشطة",
+      "ramField": "📟 الذاكرة (RAM)",
+      "cpuField": "⚙️ استهلاك المعالج",
+      "guildsField": "🏰 تواجد السيرفرات",
+      "subsystemsField": "🛡️ صحة الأنظمة الفرعية",
+      "incidentAuthor": "🔴 تم اكتشاف حادث",
+      "incidentTitle": "🔴 {{name}} متوقف حالياً",
+      "incidentDefaultDesc": "تواجه خدمة {{name}} اضطرابات. فريقنا يحقق في المشكلة بنشاط.",
+      "resolvedAuthor": "✅ تم حل الحادث",
+      "resolvedTitle": "✅ عاد {{name}} للعمل مجدداً",
+      "resolvedDefaultDesc": "تمت استعادة الاتصال بـ {{name}} بالكامل والتحقق من استقراره.",
+      "downtimeField": "مدة التوقف",
+      "startedField": "البداية",
+      "resolvedField": "تم الحل",
+      "statusField": "الحالة",
+      "severityField": "مستوى الخطورة",
+      "investigating": "قيد التحقيق",
+      "stable": "مستقر",
+      "operational": "يعمل",
+      "outage": "اضطرابات",
+      "disabled": "معطل"
     }
   }
 }
