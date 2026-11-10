@@ -1,8 +1,8 @@
 /**
  * @module src/ui/HelpCommand
  * @description The rich tabbed help command (Home / Music / Utilities /
- * Support) rendered through RichPaginator, plus interception of plain-text
- * help aliases so both styles coexist.
+ * Support) rendered through RichPaginator, with full i18n support and
+ * interception of plain-text help aliases.
  */
 
 import { RichPaginator } from "./Paginators.mjs";
@@ -15,77 +15,45 @@ const HELP_SESSION_MS    = 30 * 1000;
 /** @type {object[]} Tab definitions for the rich help. */
 const HELP_TABS = [
   {
-    emoji:  "🏠",
-    title:  "Home",
-    header: "Home Page",
-    static: true,
+    key:        "home",
+    emoji:      "🏠",
+    titleKey:   "cmdHandler.help.tabHome",
+    headerKey:  "cmdHandler.help.tabHomeHeader",
+    static:     true,
   },
   {
+    key:        "music",
     emoji:      "🎵",
-    title:      "Music",
-    header:     "Music Commands",
+    titleKey:   "cmdHandler.help.tabMusic",
+    headerKey:  "cmdHandler.help.tabMusicHeader",
     categories: ["music"],
   },
   {
+    key:        "util",
     emoji:      "🔧",
-    title:      "Utilities",
-    header:     "Utility Commands",
+    titleKey:   "cmdHandler.help.tabUtil",
+    headerKey:  "cmdHandler.help.tabUtilHeader",
     categories: ["util", "default"],
   },
   {
-    emoji:  "ℹ️",
-    title:  "Support",
-    header: "Support Info",
-    static: true,
+    key:        "support",
+    emoji:      "ℹ️",
+    titleKey:   "cmdHandler.help.tabSupport",
+    headerKey:  "cmdHandler.help.tabSupportHeader",
+    static:     true,
   },
 ];
 
 /**
- * @private
- * @param {string} prefix
- * @returns {string}
- */
-function _helpHomeContent(prefix) {
-  return (
-    "**Remix** is a high-fidelity 24/7 music bot supporting YouTube, Spotify, SoundCloud, Deezer, and more.\n\n" +
-    "**✨ Core Highlights**\n" +
-    "• **48kHz Hi-Fi Audio** — Crystal-clear audio stream pipeline\n" +
-    "• **30+ Audio Filters** — Bassboost, 8D, Nightcore, Vaporwave, Equalizer\n" +
-    "• **Dynamic Normalizer** — EBU R128 loudness leveling across music sources\n" +
-    "• **24/7 Web Radio** — Over 30,000 global live radio stations\n\n" +
-    "**📂 Command Categories**\n" +
-    "🏠 • **Home** — Quick bot overview & status\n" +
-    "🎵 • **Music** — Playback, queue, search, filters (`" + prefix + "play`, `" + prefix + "skip`, `" + prefix + "queue`)\n" +
-    "🔧 • **Utility** — Settings, 24/7 voice, ping, vote (`" + prefix + "settings`, `" + prefix + "ping`)\n" +
-    "ℹ️ • **Support** — Community server & assistance\n\n" +
-    "💡 **Tip:** Click the tab emojis below to switch sections, or use `" + prefix + "help <command>` for detailed info."
-  );
-}
-
-/**
- * @private
- * @returns {string}
- */
-function _helpSupportContent() {
-  return (
-    "Need help, want to report a bug, or suggest new features?\n\n" +
-    "💬 **[Join Remix Support Server](https://fluxer.gg/remix)**\n\n" +
-    "**Team & Maintainers:**\n" +
-    "• **Fantic** — Community Manager\n" +
-    "• **Shadow** — Lead Developer\n" +
-    "• **NoLogicAlan** — Lead Developer\n\n" +
-    "You can also use `%invite` to add Remix to your server."
-  );
-}
-
-/**
- * @private Build paginated content for a help category tab.
+ * @private Build paginated content for a help category tab using localized strings.
  * @param {object} tab
  * @param {Array} allCmds
  * @param {string} prefix
+ * @param {string|null} guildId
+ * @param {import('../commands/CommandHandler.mjs').CommandHandler} commandHandler
  * @returns {string[]}
  */
-function _helpBuildCategoryPages(tab, allCmds, prefix) {
+function _helpBuildCategoryPages(tab, allCmds, prefix, guildId, commandHandler) {
   const cmds = allCmds
       .filter(cmd => {
         if (cmd.requirements?.some(r => r.ownerOnly)) return false;
@@ -93,19 +61,23 @@ function _helpBuildCategoryPages(tab, allCmds, prefix) {
       })
       .sort((a, b) => a.name.localeCompare(b.name));
 
-  if (cmds.length === 0) return ["_No commands available._"];
+  if (cmds.length === 0) {
+    return [commandHandler.t(guildId, "cmdHandler.help.noCommands")];
+  }
 
   const pages = [];
   for (let i = 0; i < cmds.length; i += HELP_CMDS_PER_PAGE) {
     const slice = cmds.slice(i, i + HELP_CMDS_PER_PAGE);
     let   page  = "";
-    slice.forEach((cmd, j) => {
-      const d = (cmd.description || "No description.").split("\n")[0];
+    slice.forEach((cmd) => {
+      const translated = commandHandler.t(guildId, "commands." + cmd.name);
+      const d = (translated && translated !== "commands." + cmd.name ? translated : (cmd.description || "No description.")).split("\n")[0];
       page += `\`${prefix}${cmd.name}\` — ${d}\n`;
     });
-    page += `\nTo learn more about a command, run \`${prefix}help <command name>\`!`;
-    if (cmds.length > HELP_CMDS_PER_PAGE)
-      page += `\n\n**Tip:** Use ⬅️ ➡️ to scroll between pages.`;
+    page += commandHandler.t(guildId, "cmdHandler.help.learnMore");
+    if (cmds.length > HELP_CMDS_PER_PAGE) {
+      page += commandHandler.t(guildId, "cmdHandler.help.subpageTip");
+    }
     pages.push(page);
   }
   return pages;
@@ -144,21 +116,19 @@ export class HelpCommand {
 
     const _reply = this._commands.replyHandler.bind(this._commands);
     this._commands.replyHandler = (message, msg) => {
-      if (typeof message === "string" && message.toLowerCase().includes("unknown command")) {
-        const content = msg?.content ?? msg?.message?.content ?? "";
-        const guildId = msg?.channel?.channel?.guildId ?? msg?.message?.guildId;
-        const prefix  = this._commands.getPrefix(guildId);
-        const botId   = this._commands.client.user?.id;
-        const ping     = `<@${botId}>`;
-        const pingBang = `<@!${botId}>`;
-        let body = null;
-        if (content.startsWith(prefix))       body = content.slice(prefix.length).trim();
-        else if (content.startsWith(pingBang)) body = content.slice(pingBang.length).trim();
-        else if (content.startsWith(ping))     body = content.slice(ping.length).trim();
-        if (body !== null) {
-          const first = body.split(/\s+/)[0]?.toLowerCase();
-          if (HELP_ALIASES.includes(first)) return;
-        }
+      const content = msg?.content ?? msg?.message?.content ?? "";
+      const guildId = msg?.channel?.channel?.guildId ?? msg?.message?.guildId;
+      const prefix  = this._commands.getPrefix(guildId);
+      const botId   = this._commands.client.user?.id;
+      const ping     = `<@${botId}>`;
+      const pingBang = `<@!${botId}>`;
+      let body = null;
+      if (content.startsWith(prefix))       body = content.slice(prefix.length).trim();
+      else if (content.startsWith(pingBang)) body = content.slice(pingBang.length).trim();
+      else if (content.startsWith(ping))     body = content.slice(ping.length).trim();
+      if (body !== null) {
+        const first = body.split(/\s+/)[0]?.toLowerCase();
+        if (HELP_ALIASES.includes(first)) return;
       }
       return _reply(message, msg);
     };
@@ -212,6 +182,7 @@ export class HelpCommand {
   _handle(msg, args, prefix) {
     const allCmds = this._commands.commands;
     const query   = (args[0] ?? "").trim();
+    const guildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
 
     if (query && isNaN(Number(query))) {
       let currCmd = null;
@@ -221,7 +192,6 @@ export class HelpCommand {
             c.aliases.some(a => a.toLowerCase() === word.toLowerCase())
         );
         if (!found) {
-          const guildId = msg.channel?.channel?.guildId ?? msg.message?.guildId;
           msg.reply(this._commands.t(guildId, "cmdHandler.help.unknownCommand", { command: word, prefix }));
           return;
         }
@@ -242,14 +212,17 @@ export class HelpCommand {
         .setStartTab(startTab);
 
     for (const tab of HELP_TABS) {
+      const title  = this._commands.t(guildId, tab.titleKey);
+      const header = this._commands.t(guildId, tab.headerKey);
       if (tab.static) {
-        const content = tab.title === "Home"
-            ? _helpHomeContent(prefix)
-            : _helpSupportContent();
-        paginator.addTab({ emoji: tab.emoji, title: tab.title, header: tab.header, content });
+        const contentKey = tab.key === "home"
+            ? "cmdHandler.help.homeContent"
+            : "cmdHandler.help.supportContent";
+        const content = this._commands.t(guildId, contentKey);
+        paginator.addTab({ emoji: tab.emoji, title, header, content });
       } else {
-        const pages = _helpBuildCategoryPages(tab, allCmds, prefix);
-        paginator.addTab({ emoji: tab.emoji, title: tab.title, header: tab.header, pages });
+        const pages = _helpBuildCategoryPages(tab, allCmds, prefix, guildId, this._commands);
+        paginator.addTab({ emoji: tab.emoji, title, header, pages });
       }
     }
 
