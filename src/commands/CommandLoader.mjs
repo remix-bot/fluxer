@@ -49,6 +49,15 @@ export class CommandLoader {
                err?.code === "COMMUNICATION_DISABLED" ||
                err?.statusCode === 403;
       };
+      const isNetworkError = (err) => {
+        if (!err) return false;
+        const status = Number(err.statusCode ?? err.status);
+        if (status === 502 || status === 503 || status === 504 || status === 520 || status === 521 || status === 522 || status === 524) return true;
+        const code = err.code || err.cause?.code || err.cause?.cause?.code;
+        if (code === "UND_ERR_SOCKET" || code === "ECONNRESET" || code === "ETIMEDOUT") return true;
+        const str = `${err.message || ""} ${err.cause?.message || ""}`.toLowerCase();
+        return str.includes("other side closed") || str.includes("fetch failed");
+      };
       const sendErrorReply = (id) => {
         Promise.resolve(data.message.reply("An error occurred. Error id: `#" + id + "`"))
           .catch(err => logger.warn("[CommandHandler] Failed to send error-reply; error id #" + id + ":", err?.message));
@@ -56,6 +65,10 @@ export class CommandLoader {
       const handleCmdError = (e) => {
         if (isPermError(e)) {
           logger.warn(`[CommandHandler] Missing permissions in channel ${data.message?.channelId ?? data.message?.channel?.id}: ${e.code ?? e.message}`);
+          return;
+        }
+        if (isNetworkError(e)) {
+          logger.warn(`[CommandHandler] Transient network or socket closure during command '${data.command?.name ?? "unknown"}': ${e.code ?? e.message}`);
           return;
         }
         const id = Utils.uid();

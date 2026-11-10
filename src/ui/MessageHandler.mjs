@@ -381,6 +381,46 @@ export class MessageHandler {
   }
 
   /**
+   * Determine if an error is a transient socket, connection, or gateway HTTP failure.
+   * @param {Error|object} err
+   * @returns {boolean}
+   */
+  isTransientNetworkError(err) {
+    if (!err) return false;
+    const status = Number(err.statusCode ?? err.status);
+    if (status === 502 || status === 503 || status === 504 || status === 520 || status === 521 || status === 522 || status === 524) {
+      return true;
+    }
+    const codes = new Set([
+      "UND_ERR_SOCKET",
+      "UND_ERR_CONNECT_TIMEOUT",
+      "UND_ERR_HEADERS_TIMEOUT",
+      "UND_ERR_BODY_TIMEOUT",
+      "ECONNRESET",
+      "ETIMEDOUT",
+      "EPIPE",
+      "EAI_AGAIN",
+      "ENOTFOUND",
+      "ECONNREFUSED",
+    ]);
+    if (
+      codes.has(err.code) ||
+      codes.has(err.cause?.code) ||
+      codes.has(err.cause?.cause?.code)
+    ) {
+      return true;
+    }
+    const full = `${err.message || ""} ${err.cause?.message || ""} ${err.cause?.cause?.message || ""}`.toLowerCase();
+    return (
+      full.includes("other side closed") ||
+      full.includes("fetch failed") ||
+      full.includes("socket hung up") ||
+      full.includes("network socket disconnected") ||
+      full.includes("econnreset")
+    );
+  }
+
+  /**
    * @async Reply to a message with permission checks.
    * @param {object} replyingTo
    * @param {string|object} message
@@ -395,28 +435,58 @@ export class MessageHandler {
     } else {
       opts = { ...message };
     }
-    try {
-      return new Message(await replyingTo.reply(opts, { ping: false }), this);
-    } catch (err) {
-      if (err.code === ErrorCodes.MessageNotFound || err.code === "UNKNOWN_MESSAGE" || err.statusCode === 404 || String(err?.message ?? "").includes("Message wasn't found")) {
-        /* Referenced message was deleted before reply arrived — fall back to channel send */
-        try {
-          const ch = replyingTo.channel ?? (typeof this.getChannel === "function" ? this.getChannel(replyingTo.channelId) : null);
-          if (ch && typeof ch.send === "function") {
-            return new Message(await ch.send(opts), this);
+
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 250;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        return new Message(await replyingTo.reply(opts, { ping: false }), this);
+      } catch (err) {
+        if (err.code === ErrorCodes.MessageNotFound || err.code === "UNKNOWN_MESSAGE" || err.statusCode === 404 || String(err?.message ?? "").includes("Message wasn't found")) {
+          /* Referenced message was deleted before reply arrived — fall back to channel send */
+          try {
+            const ch = replyingTo.channel ?? (typeof this.getChannel === "function" ? this.getChannel(replyingTo.channelId) : null);
+            if (ch && typeof ch.send === "function") {
+              return new Message(await ch.send(opts), this);
+            }
+          } catch (fallbackErr) {
+            logger.warn(`[MessageHandler] Fallback channel send failed in ${replyingTo.channelId ?? replyingTo.channel?.id}: ${fallbackErr.code ?? fallbackErr.message}`);
+            return null;
           }
-        } catch (fallbackErr) {
-          logger.warn(`[MessageHandler] Fallback channel send failed in ${replyingTo.channelId ?? replyingTo.channel?.id}: ${fallbackErr.code ?? fallbackErr.message}`);
           return null;
         }
-        return null;
+
+        if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
+          logger.warn(`[MessageHandler] Cannot reply in channel ${replyingTo.channelId ?? replyingTo.channel?.id}: ${err.code ?? err.message}`);
+          return null;
+        }
+
+        if (this.isTransientNetworkError(err) && attempt < MAX_ATTEMPTS) {
+          logger.warn(`[MessageHandler] reply: transient network error (${err.code ?? err.message}) on attempt ${attempt}/${MAX_ATTEMPTS}, retrying in ${RETRY_DELAY_MS * attempt}ms…`);
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
+          continue;
+        }
+
+        /* If socket closed persistently on reply, try fallback channel send before failing */
+        if (this.isTransientNetworkError(err)) {
+          try {
+            const ch = replyingTo.channel ?? (typeof this.getChannel === "function" ? this.getChannel(replyingTo.channelId) : null);
+            if (ch && typeof ch.send === "function") {
+              logger.warn(`[MessageHandler] reply: socket closed on reply, attempting fallback channel send in ${replyingTo.channelId ?? replyingTo.channel?.id}`);
+              return new Message(await ch.send(opts), this);
+            }
+          } catch (fallbackErr) {
+            logger.warn(`[MessageHandler] Fallback channel send failed: ${fallbackErr.code ?? fallbackErr.message}`);
+          }
+          logger.warn(`[MessageHandler] reply: network socket unavailable after ${MAX_ATTEMPTS} attempts: ${err.code ?? err.message}`);
+          return null;
+        }
+
+        throw err;
       }
-      if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
-        logger.warn(`[MessageHandler] Cannot reply in channel ${replyingTo.channelId ?? replyingTo.channel?.id}: ${err.code ?? err.message}`);
-        return null;
-      }
-      throw err;
     }
+    return null;
   }
 
   /**
@@ -429,16 +499,36 @@ export class MessageHandler {
   async replyEmbed(replyingTo, message, options = {}) {
     if (!(await this.assertPermissions(["SendMessages", "EmbedLinks"], replyingTo))) return null;
 
+    let payload;
     if (typeof message === "object" && Array.isArray(message.embeds)) {
+      payload = message;
+    } else {
+      options = {
+        mention: false,
+        embed: {},
+        ...options
+      };
+      const content = (typeof message === "object") ? message.embedText : message;
+      payload = this.#createEmbed(content, options.embed);
+      if (typeof message === "object") {
+        const { embedText, ...rest } = message;
+        payload = { ...payload, ...rest };
+      }
+    }
+
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 250;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        return new Message(await replyingTo.reply(message, { ping: false }), this);
+        return new Message(await replyingTo.reply(payload, { ping: false }), this);
       } catch (err) {
         if (err.code === ErrorCodes.MessageNotFound || err.code === "UNKNOWN_MESSAGE" || err.statusCode === 404 || String(err?.message ?? "").includes("Message wasn't found")) {
           /* Referenced message was deleted before reply arrived — fall back to channel send */
           try {
             const ch = replyingTo.channel ?? (typeof this.getChannel === "function" ? this.getChannel(replyingTo.channelId) : null);
             if (ch && typeof ch.send === "function") {
-              return new Message(await ch.send(message), this);
+              return new Message(await ch.send(payload), this);
             }
           } catch (fallbackErr) {
             logger.warn(`[MessageHandler] Fallback channel send failed in ${replyingTo.channelId ?? replyingTo.channel?.id}: ${fallbackErr.code ?? fallbackErr.message}`);
@@ -446,47 +536,36 @@ export class MessageHandler {
           }
           return null;
         }
+
         if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
           logger.warn(`[MessageHandler] Cannot replyEmbed in channel ${replyingTo.channelId ?? replyingTo.channel?.id}: ${err.code ?? err.message}`);
           return null;
         }
+
+        if (this.isTransientNetworkError(err) && attempt < MAX_ATTEMPTS) {
+          logger.warn(`[MessageHandler] replyEmbed: transient network error (${err.code ?? err.message}) on attempt ${attempt}/${MAX_ATTEMPTS}, retrying in ${RETRY_DELAY_MS * attempt}ms…`);
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
+          continue;
+        }
+
+        if (this.isTransientNetworkError(err)) {
+          try {
+            const ch = replyingTo.channel ?? (typeof this.getChannel === "function" ? this.getChannel(replyingTo.channelId) : null);
+            if (ch && typeof ch.send === "function") {
+              logger.warn(`[MessageHandler] replyEmbed: socket closed on reply, attempting fallback channel send in ${replyingTo.channelId ?? replyingTo.channel?.id}`);
+              return new Message(await ch.send(payload), this);
+            }
+          } catch (fallbackErr) {
+            logger.warn(`[MessageHandler] Fallback channel send failed: ${fallbackErr.code ?? fallbackErr.message}`);
+          }
+          logger.warn(`[MessageHandler] replyEmbed: network socket unavailable after ${MAX_ATTEMPTS} attempts: ${err.code ?? err.message}`);
+          return null;
+        }
+
         throw err;
       }
     }
-
-    options = {
-      mention: false,
-      embed: {},
-      ...options
-    };
-    const content = (typeof message === "object") ? message.embedText : message;
-    let payload = this.#createEmbed(content, options.embed);
-    if (typeof message === "object") {
-      const { embedText, ...rest } = message;
-      payload = { ...payload, ...rest };
-    }
-    try {
-      return new Message(await replyingTo.reply(payload, { ping: false }), this);
-    } catch (err) {
-      if (err.code === ErrorCodes.MessageNotFound || err.code === "UNKNOWN_MESSAGE" || err.statusCode === 404 || String(err?.message ?? "").includes("Message wasn't found")) {
-        /* Referenced message was deleted before reply arrived — fall back to channel send */
-        try {
-          const ch = replyingTo.channel ?? (typeof this.getChannel === "function" ? this.getChannel(replyingTo.channelId) : null);
-          if (ch && typeof ch.send === "function") {
-            return new Message(await ch.send(payload), this);
-          }
-        } catch (fallbackErr) {
-          logger.warn(`[MessageHandler] Fallback channel send failed in ${replyingTo.channelId ?? replyingTo.channel?.id}: ${fallbackErr.code ?? fallbackErr.message}`);
-          return null;
-        }
-        return null;
-      }
-      if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
-        logger.warn(`[MessageHandler] Cannot replyEmbed in channel ${replyingTo.channelId ?? replyingTo.channel?.id}: ${err.code ?? err.message}`);
-        return null;
-      }
-      throw err;
-    }
+    return null;
   }
 
   /**
@@ -506,15 +585,31 @@ export class MessageHandler {
     } else {
       opts = message;
     }
-    try {
-      return new Message(await channel.send(opts), this);
-    } catch (err) {
-      if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
-        logger.warn(`[MessageHandler] Cannot sendMessage in channel ${channel.id}: ${err.code ?? err.message}`);
-        return null;
+
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 250;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        return new Message(await channel.send(opts), this);
+      } catch (err) {
+        if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
+          logger.warn(`[MessageHandler] Cannot sendMessage in channel ${channel.id}: ${err.code ?? err.message}`);
+          return null;
+        }
+        if (this.isTransientNetworkError(err) && attempt < MAX_ATTEMPTS) {
+          logger.warn(`[MessageHandler] sendMessage: transient network error (${err.code ?? err.message}) on attempt ${attempt}/${MAX_ATTEMPTS}, retrying in ${RETRY_DELAY_MS * attempt}ms…`);
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
+          continue;
+        }
+        if (this.isTransientNetworkError(err)) {
+          logger.warn(`[MessageHandler] sendMessage: network socket unavailable in channel ${channel.id} after ${MAX_ATTEMPTS} attempts: ${err.code ?? err.message}`);
+          return null;
+        }
+        throw err;
       }
-      throw err;
     }
+    return null;
   }
 
   /**
@@ -528,32 +623,42 @@ export class MessageHandler {
     if (this.checkPermissions(["SendMessages", "EmbedLinks"], channel).length !== 0) {
       return this.sendMessage(channel, typeof content === "string" ? content : content?.embedText ?? "");
     }
+    let payload;
     if (typeof content === "object" && Array.isArray(content.embeds)) {
+      payload = content;
+    } else {
+      const text = (typeof content === "object") ? content.embedText : content;
+      payload = this.#createEmbed(text, embedOptions);
+      if (typeof content === "object") {
+        const { embedText, ...rest } = content;
+        Object.assign(payload, rest);
+      }
+    }
+
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 250;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        return new Message(await channel.send(content), this);
+        return new Message(await channel.send(payload), this);
       } catch (err) {
         if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
           logger.warn(`[MessageHandler] Cannot sendEmbed in channel ${channel.id}: ${err.code ?? err.message}`);
           return null;
         }
+        if (this.isTransientNetworkError(err) && attempt < MAX_ATTEMPTS) {
+          logger.warn(`[MessageHandler] sendEmbed: transient network error (${err.code ?? err.message}) on attempt ${attempt}/${MAX_ATTEMPTS}, retrying in ${RETRY_DELAY_MS * attempt}ms…`);
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
+          continue;
+        }
+        if (this.isTransientNetworkError(err)) {
+          logger.warn(`[MessageHandler] sendEmbed: network socket unavailable in channel ${channel.id} after ${MAX_ATTEMPTS} attempts: ${err.code ?? err.message}`);
+          return null;
+        }
         throw err;
       }
     }
-    const text = (typeof content === "object") ? content.embedText : content;
-    const payload = this.#createEmbed(text, embedOptions);
-    if (typeof content === "object") {
-      const { embedText, ...rest } = content;
-      Object.assign(payload, rest);
-    }
-    try {
-      return new Message(await channel.send(payload), this);
-    } catch (err) {
-      if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
-        logger.warn(`[MessageHandler] Cannot sendEmbed in channel ${channel.id}: ${err.code ?? err.message}`);
-        return null;
-      }
-      throw err;
-    }
+    return null;
   }
 
   /**
@@ -595,10 +700,15 @@ export class MessageHandler {
           return null;
         }
 
-        if (RETRYABLE.has(err.statusCode) && attempt < MAX_ATTEMPTS) {
-          logger.warn(`[MessageHandler] editEmbed: ${err.statusCode} on attempt ${attempt}/${MAX_ATTEMPTS}, retrying in ${RETRY_DELAY_MS}ms…`);
+        if ((RETRYABLE.has(err.statusCode) || this.isTransientNetworkError(err)) && attempt < MAX_ATTEMPTS) {
+          logger.warn(`[MessageHandler] editEmbed: ${err.statusCode ?? err.code ?? err.message} on attempt ${attempt}/${MAX_ATTEMPTS}, retrying in ${RETRY_DELAY_MS}ms…`);
           await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
           continue;
+        }
+
+        if (this.isTransientNetworkError(err)) {
+          logger.warn(`[MessageHandler] editEmbed: network socket unavailable after ${MAX_ATTEMPTS} attempts: ${err.code ?? err.message}`);
+          return null;
         }
 
         throw err;
