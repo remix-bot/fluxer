@@ -224,6 +224,8 @@ Remix automatically adapts to each server's configured locale (`%settings set lo
 | `tr` | Turkish | Türkçe |
 | `de-DE` | German | Deutsch |
 | `pt-BR` | Portuguese (Brazil) | Português Brasileiro |
+| `zh-CN` | Simplified Chinese | 简体中文 |
+| `zh-TW` | Traditional Chinese | 繁體中文 |
 
 ---
 
