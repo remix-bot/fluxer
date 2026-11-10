@@ -763,7 +763,6 @@ export class FluxerAudioBridge extends EventEmitter {
     } else if (url.includes("googlevideo.com") || url.includes("youtube.com") || url.includes("youtu.be")) {
       headers = "Origin: https://www.youtube.com\r\nReferer: https://www.youtube.com/\r\n";
     }
-    const isHls = url.includes(".m3u8") || /hls|m3u8/i.test(url);
     const ffmpegArgs = [
       "-re",
     ];
@@ -776,10 +775,6 @@ export class FluxerAudioBridge extends EventEmitter {
       "-reconnect_streamed", "1",
       "-reconnect_delay_max", "5",
     );
-    if (isHls) {
-      /* Start HLS live streams and DVR radios at the broadcast edge instead of starting from 0 (12h in the past) */
-      ffmpegArgs.push("-live_start_index", "-3");
-    }
     ffmpegArgs.push(
       "-i", url,
       "-vn",
