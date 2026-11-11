@@ -21,6 +21,7 @@ import { resolveIsBotUser } from "../voice/VoiceStateResolver.mjs";
 import * as ShardingUtils from "../utils/ShardingUtils.mjs";
 import { RemoteSettingsManager } from "../db/Settings.mjs";
 import { PlayerStateStore } from "../db/PlayerStateStore.mjs";
+import { RedisManager } from "../db/RedisManager.mjs";
 import { getSharedMysqlPool, getSharedPromisePool, closeSharedMysqlPool } from "../db/PoolManager.mjs";
 import { PlayerManager } from "../music/PlayerManager.mjs";
 import { LavalinkManager } from "../music/LavalinkManager.mjs";
@@ -144,12 +145,21 @@ class Remix {
 
     TrackStats.setPool(sharedPromisePool);
 
+    const redisConfig = config.redis ?? (config.dashboard?.enabled ? config.dashboard?.redis : null);
+    this.redis = new RedisManager(this, redisConfig);
+    if (this.redis.enabled) {
+      this.redis.connect().catch((err) => {
+        logger.warn("[Redis] Startup connection error:", err?.message);
+      });
+      TrackStats.setRedis(this.redis);
+    }
+
     this.dashboard = new Dashboard(this, {
       enabled: config.dashboard?.enabled,
-      redis: config.dashboard?.redis,
+      redis: config.dashboard?.redis ?? (this.redis.enabled ? this.redis.config : null),
       mysql: sharedPromisePool,
     });
-    if (this.dashboard?.redis) {
+    if (!this.redis.enabled && this.dashboard?.redis) {
       TrackStats.setRedis(this.dashboard.redis);
     }
 
@@ -209,6 +219,9 @@ class Remix {
     this.settingsMgr  = settings;
 
     this.playerState  = new PlayerStateStore(sharedPool);
+    if (this.redis?.enabled) {
+      this.playerState.setRedis(this.redis);
+    }
 
     const configPrefix = config.prefix ?? null;
     if (configPrefix && settings.defaults) {
@@ -373,6 +386,7 @@ class Remix {
         if (!lavalinkInitialised) {
           lavalinkInitialised = true;
           this.lavalink = new LavalinkManager(config.nodelink ?? {}, client, { id: botId, username: client.user?.username ?? "bot" });
+          this.lavalink.remix = this;
           this.lavalink.on("ready", () => {
             logger.lavalink("[Lavalink] Session ready");
             this.statusChannel?.resolveIncident("audioNode");
@@ -431,6 +445,7 @@ class Remix {
       config,
       player: this.playerContext,
       dashboard: this.dashboard,
+      redis: this.redis,
       locale: this.locale,
       timers: this.T,
       trackOptions: this.trackOptions,
@@ -796,9 +811,11 @@ class Remix {
       TrackStats.save();
     } catch (_) {}
 
-    // 4. Close Redis if dashboard enabled
+    /* 4. Close Redis */
     try {
-      if (this.dashboard?.redis?.destroy) {
+      if (this.redis?.destroy) {
+        await this.redis.destroy();
+      } else if (this.dashboard?.redis?.destroy) {
         await this.dashboard.redis.destroy();
       }
     } catch (e) {

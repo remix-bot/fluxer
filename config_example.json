@@ -110,6 +110,13 @@
     "connectionLimit": 15,
     "connectionLimit-Comment": "Maximum simultaneous MySQL connections shared across all bot services (default: 15). Prevents connection pool exhaustion in multi-shard deployments."
   },
+  "redis": {
+    "enabled": false,
+    "url": "redis://127.0.0.1:6379",
+    "password": null,
+    "searchTtlSeconds": 86400,
+    "Comment": "Centralized Redis service for ultra-fast track search caching (<1ms repeat lookups), 24/7 session restoration across bot reboots, and cross-shard atomic playback statistics. If disabled or omitted, searches fall back to direct Lavalink/NodeLink queries and sessions fall back to MySQL."
+  },
   "dashboard": {
     "enabled": false,
     "redis": {

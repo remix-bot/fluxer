@@ -451,43 +451,59 @@ export class LavalinkManager extends EventEmitter {
   }
 /** @async Search for tracks on the Lavalink node. Tries player-based search first, then falls back to direct node lookup. @param {string} query - The search query string or URL. @param {object} [options] - Search options. @param {string} [options.source] - Lavalink source identifier (e.g. 'ytmsearch'). @param {string} [options.requester] - Requester identifier. @returns {Promise<object>} Lavalink search result with tracks array. @throws {Error} If no connected node is available. */
   async search(query, options = {}) {
-    try {
-      const players = this.lavalink?.players;
-      if (players?.size > 0) {
-        const firstPlayer = players.values?.().next?.().value;
-        if (firstPlayer?.node) {
-          logger.lavalink("[Lavalink] search via player.node for guild " + firstPlayer.guildId);
-          if (options.source) {
-            return firstPlayer.node.search({ query, source: options.source });
-          }
-          return firstPlayer.node.search(query);
-        }
+    const redis = this.remix?.redis;
+    if (redis?.isReady() && typeof query === "string") {
+      const cached = await redis.getCachedSearch(query, options?.source);
+      if (cached && (cached.tracks?.length > 0 || cached.loadType === "track" || cached.loadType === "playlist" || cached.loadType === "search")) {
+        return cached;
       }
-    } catch (_) { /* fall through to node-based search */ }
-
-    const node = this._getConnectedNode();
-    if (node) {
-      logger.lavalink("[Lavalink] search via _getConnectedNode()");
-      if (options.source) {
-        return node.search({ query, source: options.source });
-      }
-      return node.search(query);
     }
 
-    try {
-      const nodes = this.lavalink?.nodes;
-      const nodeId = this._nodeCfg?.id ?? "main";
-      const node = nodes?.get?.(nodeId) ?? nodes?.cache?.get?.(nodeId);
-      if (node) {
-        logger.lavalink("[Lavalink] search via fallback node.get()");
-        if (options.source) {
-          return node.search({ query, source: options.source });
+    const executeSearch = async () => {
+      try {
+        const players = this.lavalink?.players;
+        if (players?.size > 0) {
+          const firstPlayer = players.values?.().next?.().value;
+          if (firstPlayer?.node) {
+            logger.lavalink("[Lavalink] search via player.node for guild " + firstPlayer.guildId);
+            if (options.source) {
+              return await firstPlayer.node.search({ query, source: options.source });
+            }
+            return await firstPlayer.node.search(query);
+          }
         }
-        return node.search(query);
-      }
-    } catch (_) {}
+      } catch (_) { /* fall through to node-based search */ }
 
-    throw new Error("No connected Lavalink node available for search");
+      const node = this._getConnectedNode();
+      if (node) {
+        logger.lavalink("[Lavalink] search via _getConnectedNode()");
+        if (options.source) {
+          return await node.search({ query, source: options.source });
+        }
+        return await node.search(query);
+      }
+
+      try {
+        const nodes = this.lavalink?.nodes;
+        const nodeId = this._nodeCfg?.id ?? "main";
+        const fallbackNode = nodes?.get?.(nodeId) ?? nodes?.cache?.get?.(nodeId);
+        if (fallbackNode) {
+          logger.lavalink("[Lavalink] search via fallback node.get()");
+          if (options.source) {
+            return await fallbackNode.search({ query, source: options.source });
+          }
+          return await fallbackNode.search(query);
+        }
+      } catch (_) {}
+
+      throw new Error("No connected Lavalink node available for search");
+    };
+
+    const result = await executeSearch();
+    if (redis?.isReady() && result && (result.tracks?.length > 0 || result.loadType === "track" || result.loadType === "playlist")) {
+      redis.cacheSearch(query, options?.source, result).catch(() => {});
+    }
+    return result;
   }
 
 /** Get the Lavalink player for a guild. @param {string} guildId - The guild ID. @returns {object|null} The Lavalink player, or null if not found. */

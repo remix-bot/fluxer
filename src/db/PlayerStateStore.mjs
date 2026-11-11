@@ -75,11 +75,22 @@ export class PlayerStateStore {
   /** @private @type {Promise<void>|null} Memoized CREATE TABLE promise. */
   _tableReady = null;
 
+  /** @private @type {object|null} Optional Redis manager for caching player sessions. */
+  redis = null;
+
   /**
    * @param {object|null} pool - mysql2 callback pool (RemoteSettingsManager.db).
    */
   constructor(pool) {
     this.db = pool ?? null;
+  }
+
+  /**
+   * Attach the Redis manager for ultra-fast session cache and recovery.
+   * @param {object|null} redisManager - RedisManager instance.
+   */
+  setRedis(redisManager) {
+    this.redis = redisManager ?? null;
   }
 
   /**
@@ -173,6 +184,10 @@ export class PlayerStateStore {
        ON DUPLICATE KEY UPDATE data = VALUES(data), position_ms = VALUES(position_ms)`,
       [this.botId, guildId, JSON.stringify(payload), positionMs]
     );
+
+    if (this.redis?.isReady()) {
+      this.redis.savePlayerSession(guildId, payload).catch(() => {});
+    }
   }
 
   /**
@@ -198,7 +213,11 @@ export class PlayerStateStore {
    */
   async clearSnapshot(guildId) {
     const gId = cleanId(guildId);
-    if (!gId || !this.db) return;
+    if (!gId) return;
+    if (this.redis?.isReady()) {
+      this.redis.deletePlayerSession(gId).catch(() => {});
+    }
+    if (!this.db) return;
     try {
       await this.init();
       await this._exec(`DELETE FROM player_state WHERE bot_id = ? AND guild_id = ?`, [this.botId, gId]);
@@ -210,6 +229,16 @@ export class PlayerStateStore {
   async load(guildId) {
     const gId = cleanId(guildId);
     if (!gId) return null;
+
+    if (this.redis?.isReady()) {
+      try {
+        const cached = await this.redis.getPlayerSession(gId);
+        if (cached && cached.channelId) {
+          return { guildId: gId, data: cached, positionMs: Number(cached.positionMs) || 0 };
+        }
+      } catch (_) { /* fallback to database lookup */ }
+    }
+
     await this.init();
     const rows = await this._exec(
       `SELECT guild_id, data, position_ms FROM player_state WHERE bot_id = ? AND guild_id = ?`,
