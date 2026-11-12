@@ -49,6 +49,12 @@ export class CommandLoader {
                err?.code === "COMMUNICATION_DISABLED" ||
                err?.statusCode === 403;
       };
+      const isRateLimitError = (err) => {
+        if (!err) return false;
+        if (err.name === "RateLimitError" || Number(err.statusCode ?? err.status) === 429) return true;
+        const msg = String(err.message || "").toLowerCase();
+        return msg.includes("rate limit");
+      };
       const isNetworkError = (err) => {
         if (!err) return false;
         const status = Number(err.statusCode ?? err.status);
@@ -60,11 +66,18 @@ export class CommandLoader {
       };
       const sendErrorReply = (id) => {
         Promise.resolve(data.message.reply("An error occurred. Error id: `#" + id + "`"))
-          .catch(err => logger.warn("[CommandHandler] Failed to send error-reply; error id #" + id + ":", err?.message));
+          .catch(err => {
+            if (isRateLimitError(err) || isPermError(err) || isNetworkError(err)) return;
+            logger.warn("[CommandHandler] Failed to send error-reply; error id #" + id + ":", err?.message || err?.code || err);
+          });
       };
       const handleCmdError = (e) => {
         if (isPermError(e)) {
           logger.warn(`[CommandHandler] Missing permissions in channel ${data.message?.channelId ?? data.message?.channel?.id}: ${e.code ?? e.message}`);
+          return;
+        }
+        if (isRateLimitError(e)) {
+          logger.warn(`[CommandHandler] Command '${data.command?.name ?? "unknown"}' rate limited by Fluxer API: ${e.message}`);
           return;
         }
         if (isNetworkError(e)) {

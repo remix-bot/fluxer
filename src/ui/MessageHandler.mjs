@@ -421,6 +421,34 @@ export class MessageHandler {
   }
 
   /**
+   * Determine if an error is a Fluxer API rate limit (429 / RATE_LIMITED).
+   * @param {Error|object} err
+   * @returns {boolean}
+   */
+  isRateLimitError(err) {
+    if (!err) return false;
+    if (err.name === "RateLimitError" || err.code === "RATE_LIMITED" || Number(err.statusCode ?? err.status) === 429) {
+      return true;
+    }
+    const msg = String(err.message || "").toLowerCase();
+    return msg.includes("rate limited") || msg.includes("rate_limited");
+  }
+
+  /**
+   * Calculate a backoff delay in ms based on rate-limit headers or defaults.
+   * @param {Error|object} err
+   * @param {number} attempt
+   * @returns {number}
+   */
+  getRateLimitDelayMs(err, attempt) {
+    const retrySec = Number(err?.retryAfter ?? err?.rawBody?.retry_after ?? err?.headers?.get?.("retry-after"));
+    if (Number.isFinite(retrySec) && retrySec > 0) {
+      return Math.min(Math.ceil(retrySec * 1000) + 100, 5000);
+    }
+    return 300 * attempt;
+  }
+
+  /**
    * @async Reply to a message with permission checks.
    * @param {object} replyingTo
    * @param {string|object} message
@@ -459,6 +487,17 @@ export class MessageHandler {
 
         if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
           logger.warn(`[MessageHandler] Cannot reply in channel ${replyingTo.channelId ?? replyingTo.channel?.id}: ${err.code ?? err.message}`);
+          return null;
+        }
+
+        if (this.isRateLimitError(err)) {
+          if (attempt < MAX_ATTEMPTS) {
+            const delay = this.getRateLimitDelayMs(err, attempt);
+            logger.warn(`[MessageHandler] reply: rate limited (429) in ${replyingTo.channelId ?? replyingTo.channel?.id}, retrying in ${delay}ms (attempt ${attempt}/${MAX_ATTEMPTS})`);
+            await new Promise((r) => setTimeout(r, delay));
+            continue;
+          }
+          logger.warn(`[MessageHandler] reply: rate limited after ${MAX_ATTEMPTS} attempts in ${replyingTo.channelId ?? replyingTo.channel?.id}`);
           return null;
         }
 
@@ -542,6 +581,17 @@ export class MessageHandler {
           return null;
         }
 
+        if (this.isRateLimitError(err)) {
+          if (attempt < MAX_ATTEMPTS) {
+            const delay = this.getRateLimitDelayMs(err, attempt);
+            logger.warn(`[MessageHandler] replyEmbed: rate limited (429) in ${replyingTo.channelId ?? replyingTo.channel?.id}, retrying in ${delay}ms (attempt ${attempt}/${MAX_ATTEMPTS})`);
+            await new Promise((r) => setTimeout(r, delay));
+            continue;
+          }
+          logger.warn(`[MessageHandler] replyEmbed: rate limited after ${MAX_ATTEMPTS} attempts in ${replyingTo.channelId ?? replyingTo.channel?.id}`);
+          return null;
+        }
+
         if (this.isTransientNetworkError(err) && attempt < MAX_ATTEMPTS) {
           logger.warn(`[MessageHandler] replyEmbed: transient network error (${err.code ?? err.message}) on attempt ${attempt}/${MAX_ATTEMPTS}, retrying in ${RETRY_DELAY_MS * attempt}ms…`);
           await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
@@ -597,6 +647,16 @@ export class MessageHandler {
           logger.warn(`[MessageHandler] Cannot sendMessage in channel ${channel.id}: ${err.code ?? err.message}`);
           return null;
         }
+        if (this.isRateLimitError(err)) {
+          if (attempt < MAX_ATTEMPTS) {
+            const delay = this.getRateLimitDelayMs(err, attempt);
+            logger.warn(`[MessageHandler] sendMessage: rate limited (429) in channel ${channel.id}, retrying in ${delay}ms (attempt ${attempt}/${MAX_ATTEMPTS})`);
+            await new Promise((r) => setTimeout(r, delay));
+            continue;
+          }
+          logger.warn(`[MessageHandler] sendMessage: rate limited after ${MAX_ATTEMPTS} attempts in channel ${channel.id}`);
+          return null;
+        }
         if (this.isTransientNetworkError(err) && attempt < MAX_ATTEMPTS) {
           logger.warn(`[MessageHandler] sendMessage: transient network error (${err.code ?? err.message}) on attempt ${attempt}/${MAX_ATTEMPTS}, retrying in ${RETRY_DELAY_MS * attempt}ms…`);
           await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
@@ -644,6 +704,16 @@ export class MessageHandler {
       } catch (err) {
         if (err.code === "MISSING_PERMISSIONS" || err.code === "COMMUNICATION_DISABLED" || err.statusCode === 403) {
           logger.warn(`[MessageHandler] Cannot sendEmbed in channel ${channel.id}: ${err.code ?? err.message}`);
+          return null;
+        }
+        if (this.isRateLimitError(err)) {
+          if (attempt < MAX_ATTEMPTS) {
+            const delay = this.getRateLimitDelayMs(err, attempt);
+            logger.warn(`[MessageHandler] sendEmbed: rate limited (429) in channel ${channel.id}, retrying in ${delay}ms (attempt ${attempt}/${MAX_ATTEMPTS})`);
+            await new Promise((r) => setTimeout(r, delay));
+            continue;
+          }
+          logger.warn(`[MessageHandler] sendEmbed: rate limited after ${MAX_ATTEMPTS} attempts in channel ${channel.id}`);
           return null;
         }
         if (this.isTransientNetworkError(err) && attempt < MAX_ATTEMPTS) {
