@@ -619,6 +619,7 @@ export async function run(msg, data) {
   if (p._autoplay) {
     p._autoplayHistory = p._autoplayHistory ?? [];
     attachAutoplay(p, this);
+    this.playerState?.saveSnapshot?.(p)?.catch?.(() => {});
 
     if (!p.queue.getCurrent() && p.queue.isEmpty() && p._lastPlayedTrack) {
       p._autoplayHandler().catch(() => {});
@@ -634,6 +635,7 @@ export async function run(msg, data) {
     return msg.reply({ embeds: [embed] });
   } else {
     detachAutoplay(p);
+    this.playerState?.saveSnapshot?.(p)?.catch?.(() => {});
     p._autoplayHistory = [];
     p._autoplayMixPools?.clear();
     p._autoplayPreferredPoolVid = null;

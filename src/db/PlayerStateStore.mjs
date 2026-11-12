@@ -153,7 +153,7 @@ export class PlayerStateStore {
 
     const current = player.queue?.getCurrent?.() ?? null;
     const queued  = Array.isArray(player.queue?.data) ? player.queue.data : [];
-    if (!current && queued.length === 0) {
+    if (!current && queued.length === 0 && !player._autoplay) {
       return this.clearSnapshot(guildId);
     }
 
@@ -172,6 +172,9 @@ export class PlayerStateStore {
       volume: Number.isFinite(player.preferredVolume) ? player.preferredVolume : null,
       loop:     !!player.queue?.loop,
       songLoop: !!player.queue?.songLoop,
+      autoplay: !!player._autoplay,
+      autoplayHistory: Array.isArray(player._autoplayHistory) ? player._autoplayHistory.slice(-20) : [],
+      lastTrack: slimTrack(player._lastPlayedTrack),
       current:  slimTrack(current),
       positionMs,
       queue:    queued.slice(0, MAX_PERSISTED_TRACKS).map(slimTrack).filter(Boolean),

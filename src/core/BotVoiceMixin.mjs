@@ -446,6 +446,22 @@ const BotVoiceMixin = {
     player.queue.loop     = !!snap.loop;
     player.queue.songLoop = !!snap.songLoop;
 
+    if (snap.autoplay) {
+      player._autoplay = true;
+      if (Array.isArray(snap.autoplayHistory)) {
+        player._autoplayHistory = [...snap.autoplayHistory];
+      }
+      if (snap.lastTrack && !player._lastPlayedTrack) {
+        player._lastPlayedTrack = snap.lastTrack;
+      }
+      try {
+        const { attachAutoplay } = await import("../../commands/autoplay.mjs");
+        attachAutoplay(player, this);
+      } catch (e) {
+        logger.warn(`[Restore] Autoplay re-attach failed for guild ${player._guildId}:`, e?.message);
+      }
+    }
+
     const restoredQueue = (Array.isArray(snap.queue) ? snap.queue : [])
         .filter((t) => t && (t.url || t.encoded));
 
@@ -457,12 +473,22 @@ const BotVoiceMixin = {
       else current = null;
     }
 
+    if (current && !player._lastPlayedTrack) {
+      player._lastPlayedTrack = current;
+    }
+
     player.queue.data = [];
     if (current) player.queue.data.push(current);
     for (const t of restoredQueue) player.queue.data.push(t);
 
     const count = player.queue.data.length;
-    if (!count) return { count: 0, pos };
+    if (!count) {
+      if (snap.autoplay && player._autoplayHandler && player._lastPlayedTrack) {
+        player._autoplayHandler().catch((e) => logger.warn(`[Restore] Autoplay pick failed for guild ${player._guildId}:`, e?.message));
+        return { count: 1, pos: 0 };
+      }
+      return { count: 0, pos };
+    }
 
     if (announce) {
       const restoreEmbed = new EmbedBuilder()
