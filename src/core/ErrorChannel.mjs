@@ -288,6 +288,8 @@ function _forward(level, tag, args) {
     if (typeof tag !== "string") return;
     if (tag.startsWith("[ErrorChannel]") || tag.startsWith("[Error_Handling]")) return;
     const body = _formatArgs(args);
+    /* Suppress expected external not-found lookups from generating alarmist telemetry warnings */
+    if (tag.includes("[LastFm]") && (/not found|error 6:/i.test(body) || /Track not found/i.test(body))) return;
     const now = Date.now();
     const key = `${level}|${tag}|${(body || tag).slice(0, 200)}`;
     const last = _forwardDedup.get(key);

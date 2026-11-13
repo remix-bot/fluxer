@@ -64,6 +64,20 @@ function isLastFmUserNotFound(err) {
 }
 
 /**
+ * Check whether a Last.fm error is an expected "Not Found" response (track, artist, album, tag, or user not found, code 6).
+ * Common when querying streams, YouTube videos, or uncataloged tracks that do not exist in Last.fm's database.
+ * @param {Error|object} err
+ * @returns {boolean}
+ */
+function isLastFmNotFound(err) {
+  if (!err) return false;
+  const msg = String(err?.message ?? err ?? "");
+  const code = Number(err?.code) || 0;
+  return code === 6
+    || /track not found|artist not found|album not found|user not found|tag not found|could not be found/i.test(msg);
+}
+
+/**
  * Check whether an error means the stored Last.fm link is unrecoverable —
  * the linked account no longer exists or its session was revoked. Deliberately
  * distinct from transient failures (timeouts, 5xx, network errors), which must
@@ -164,4 +178,4 @@ async function apiCall(params, apiSecret, post = false) {
   return data;
 }
 
-export { BASE_URL, normalizeTrackText, buildSignature, apiCall, LastFmApiError, isLastFmUserNotFound, isLastFmFatalLinkError, noteStaleUser, clearStaleUserFlag };
+export { BASE_URL, normalizeTrackText, buildSignature, apiCall, LastFmApiError, isLastFmUserNotFound, isLastFmNotFound, isLastFmFatalLinkError, noteStaleUser, clearStaleUserFlag };

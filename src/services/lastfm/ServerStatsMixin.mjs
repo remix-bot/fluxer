@@ -7,7 +7,17 @@
  */
 
 import { logger } from "../../core/Logger.mjs";
-import { isLastFmUserNotFound, noteStaleUser } from "./constants.mjs";
+import { isLastFmUserNotFound, isLastFmNotFound, noteStaleUser } from "./constants.mjs";
+
+/**
+ * @private
+ * Log failure only if it is an unexpected error, suppressing expected Last.fm not-found responses.
+ * @param {Error} e
+ */
+function logStatsWarning(e) {
+  if (isLastFmNotFound(e)) return;
+  logger.warn("[LastFm] Error:", e?.message);
+}
 
 /**
  * @type {object}
@@ -51,7 +61,7 @@ const ServerStatsMixin = {
                 }
                 return null;
               }
-              logger.warn("[LastFm] Error:", e?.message);
+              logStatsWarning(e);
               return {
               userId:    uid,
               username:  user.username,
@@ -110,7 +120,7 @@ const ServerStatsMixin = {
                 }
                 return null;
               }
-              logger.warn("[LastFm] Error:", e?.message);
+              logStatsWarning(e);
               return {
               userId: uid,
               username: user.username,
@@ -169,7 +179,7 @@ const ServerStatsMixin = {
                 }
                 return null;
               }
-              logger.warn("[LastFm] Error:", e?.message);
+              logStatsWarning(e);
               return {
               userId: uid,
               username: user.username,
@@ -240,7 +250,7 @@ const ServerStatsMixin = {
         matchPercentage,
       };
     } catch (e) {
-        logger.warn("[LastFm] Error:", e?.message);
+        logStatsWarning(e);
         return null;
     }
   },
@@ -340,7 +350,7 @@ const ServerStatsMixin = {
       );
       return Number(rows[0]?.linked_users ?? 0);
     } catch (e) {
-        logger.warn("[LastFm] Error:", e?.message);
+        logStatsWarning(e);
         return 0;
     }
   },
@@ -506,7 +516,7 @@ const ServerStatsMixin = {
                 }
                 return null;
               }
-              logger.warn("[LastFm] Error:", e?.message);
+              logStatsWarning(e);
               return null;
           }
         })
@@ -586,7 +596,7 @@ const ServerStatsMixin = {
 
       crowns.sort((a, b) => b.userPlaycount - a.userPlaycount);
       return crowns;
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logStatsWarning(e); return []; }
   }
 };
 

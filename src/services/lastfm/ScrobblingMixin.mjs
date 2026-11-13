@@ -7,7 +7,7 @@
  */
 
 import { logger } from "../../core/Logger.mjs";
-import { apiCall, isLastFmFatalLinkError, isLastFmUserNotFound, noteStaleUser } from "./constants.mjs";
+import { apiCall, isLastFmFatalLinkError, isLastFmUserNotFound, isLastFmNotFound, noteStaleUser } from "./constants.mjs";
 
 /**
  * @type {object}
@@ -48,6 +48,7 @@ const ScrobblingMixin = {
         }
         return;
       }
+      if (isLastFmNotFound(err)) return;
       logger.warn(`[LastFm] updateNowPlaying failed for ${userId}: ${err.message}`);
     }
   },
@@ -89,6 +90,7 @@ const ScrobblingMixin = {
         }
         return;
       }
+      if (isLastFmNotFound(err)) return;
       logger.warn(`[LastFm] Scrobble failed for ${userId}: ${err.message}`);
     }
   },
@@ -124,7 +126,7 @@ const ScrobblingMixin = {
         }
         return 0;
       }
-      if (!e?.message?.includes("fetch failed")) {
+      if (!isLastFmNotFound(e) && !e?.message?.includes("fetch failed")) {
         logger.warn("[LastFm] Error:", e?.message);
       }
       return 0;

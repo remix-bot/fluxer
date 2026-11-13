@@ -7,7 +7,17 @@
  */
 
 import { logger } from "../../core/Logger.mjs";
-import { apiCall, normalizeTrackText } from "./constants.mjs";
+import { apiCall, normalizeTrackText, isLastFmNotFound } from "./constants.mjs";
+
+/**
+ * @private
+ * Log query failure only if it is an unexpected error, suppressing expected Last.fm not-found responses.
+ * @param {Error} e
+ */
+function logQueryWarning(e) {
+  if (isLastFmNotFound(e)) return;
+  logger.warn("[LastFm] Error:", e?.message);
+}
 
 /**
  * @type {object}
@@ -34,7 +44,7 @@ const TrackQueriesMixin = {
       const data = await apiCall(params, this.apiSecret);
       return data.track;
     } catch (e) {
-        logger.warn("[LastFm] Error:", e?.message);
+        logQueryWarning(e);
         return null;
     }
   },
@@ -226,7 +236,7 @@ const TrackQueriesMixin = {
         url:    t.url ?? "",
         match:  parseFloat(t.match ?? 0),
       })).filter(t => t.match > 0.1);
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -273,7 +283,7 @@ const TrackQueriesMixin = {
         userplaycount: a.stats?.userplaycount ? Number(a.stats.userplaycount) : null,
       };
     } catch (e) {
-        logger.warn("[LastFm] Error:", e?.message);
+        logQueryWarning(e);
         return null;
     }
   },
@@ -321,7 +331,7 @@ const TrackQueriesMixin = {
         userplaycount: a.userplaycount ? Number(a.userplaycount) : null,
       };
     } catch (e) {
-        logger.warn("[LastFm] Error:", e?.message);
+        logQueryWarning(e);
         return null;
     }
   },
@@ -354,7 +364,7 @@ const TrackQueriesMixin = {
         playcount:  Number(t.playcount ?? 0),
         image:      t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -385,7 +395,7 @@ const TrackQueriesMixin = {
         playcount: Number(a.playcount ?? 0),
         image:     a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -415,7 +425,7 @@ const TrackQueriesMixin = {
         image:   a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
         match:   parseFloat(a.match ?? 0),
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -448,7 +458,7 @@ const TrackQueriesMixin = {
         summary: t.wiki?.summary ?? "",
       };
     } catch (e) {
-        logger.warn("[LastFm] Error:", e?.message);
+        logQueryWarning(e);
         return null;
     }
   },
@@ -481,7 +491,7 @@ const TrackQueriesMixin = {
         playcount:  Number(t.playcount ?? 0),
         image:      t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -511,7 +521,7 @@ const TrackQueriesMixin = {
         playcount: Number(a.playcount ?? 0),
         image:     a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -548,7 +558,7 @@ const TrackQueriesMixin = {
         image:   a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
         listeners: Number(a.listeners ?? 0),
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -585,7 +595,7 @@ const TrackQueriesMixin = {
         url:       a.url ?? "",
         image:     a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -609,7 +619,7 @@ const TrackQueriesMixin = {
         url: t.url ?? "",
         count: Number(t.count ?? 0),
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -635,7 +645,7 @@ const TrackQueriesMixin = {
         url: t.url ?? "",
         count: Number(t.count ?? 0),
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -661,7 +671,7 @@ const TrackQueriesMixin = {
         url: t.url ?? "",
         count: Number(t.count ?? 0),
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -687,7 +697,7 @@ const TrackQueriesMixin = {
         playcount: Number(a.playcount ?? 0),
         image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -712,7 +722,7 @@ const TrackQueriesMixin = {
         listeners: Number(a.listeners ?? 0),
         image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -738,7 +748,7 @@ const TrackQueriesMixin = {
         listeners: Number(t.listeners ?? 0),
         image: t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -763,7 +773,7 @@ const TrackQueriesMixin = {
         playcount: Number(t.playcount ?? 0),
         image: t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -787,7 +797,7 @@ const TrackQueriesMixin = {
         playcount: Number(a.playcount ?? 0),
         image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   }
 };
 

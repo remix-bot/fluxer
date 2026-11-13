@@ -7,7 +7,17 @@
  */
 
 import { logger } from "../../core/Logger.mjs";
-import { apiCall } from "./constants.mjs";
+import { apiCall, isLastFmNotFound } from "./constants.mjs";
+
+/**
+ * @private
+ * Log query failure only if it is an unexpected error, suppressing expected Last.fm not-found responses.
+ * @param {Error} e
+ */
+function logQueryWarning(e) {
+  if (isLastFmNotFound(e)) return;
+  logger.warn("[LastFm] Error:", e?.message);
+}
 
 /**
  * @type {object}
@@ -115,7 +125,7 @@ const UserQueriesMixin = {
         url:   t.url ?? "",
         count: Number(t.count ?? 0),
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -144,7 +154,7 @@ const UserQueriesMixin = {
         from: Number(c.from ?? 0),
         to:   Number(c.to ?? 0),
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -442,7 +452,7 @@ const UserQueriesMixin = {
                   query: `${t.name} ${t.artist ?? ar.name}`,
                   image: t.image ?? ar.image ?? "",
                 }));
-              } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+              } catch (e) { logQueryWarning(e); return []; }
             })
           );
           for (const r of artistResults) {
@@ -495,7 +505,7 @@ const UserQueriesMixin = {
         realname: f.realname ?? "",
         country: f.country ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -525,7 +535,7 @@ const UserQueriesMixin = {
         playcount: Number(a.playcount ?? 0),
         image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -556,7 +566,7 @@ const UserQueriesMixin = {
         playcount: Number(t.playcount ?? 0),
         image: t.image?.[2]?.["#text"] ?? t.image?.[1]?.["#text"] ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   },
 
   /**
@@ -587,7 +597,7 @@ const UserQueriesMixin = {
         playcount: Number(a.playcount ?? 0),
         image: a.image?.[2]?.["#text"] ?? a.image?.[1]?.["#text"] ?? "",
       }));
-    } catch (e) { logger.warn("[LastFm] Error:", e?.message); return []; }
+    } catch (e) { logQueryWarning(e); return []; }
   }
 };
 
