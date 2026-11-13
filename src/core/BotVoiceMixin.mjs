@@ -739,7 +739,7 @@ const BotVoiceMixin = {
         name:   guild.name,
         id:     guild.id,
         icon:   guild.icon
-            ? `https://cdn.fluxer.app/icons/${guild.id}/${guild.icon}.webp`
+            ? `https://fluxerusercontent.com/icons/${guild.id}/${guild.icon}.webp`
             : null,
         description: guild.description ?? null,
         ownerId: guild.ownerId ?? null,

@@ -200,9 +200,10 @@ export async function run(message, data) {
     const d         = set.getAll();
     const guildName = getGuildName(message);
     const rawGuild  = message.message?.guild;
-    const iconUrl   = rawGuild?.icon
-        ? "https://cdn.fluxer.app/icons/" + rawGuild.id + "/" + rawGuild.icon + ".webp"
-        : null;
+    const iconUrl   = rawGuild?.iconURL?.()
+        ?? (rawGuild?.icon
+            ? "https://fluxerusercontent.com/icons/" + rawGuild.id + "/" + rawGuild.icon + ".webp"
+            : null);
 
     const channels = get247Channels(set);
 

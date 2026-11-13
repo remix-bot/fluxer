@@ -17,7 +17,7 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { logger } from "../core/Logger.mjs";
 
 /** @type {string} Default API endpoint for direct REST fallback */
-const DEFAULT_API_BASE = "https://api.fluxer.app/v1";
+const DEFAULT_API_BASE = "https://fluxer.com/api/v1";
 
 /**
  * @class StatusChannelManager

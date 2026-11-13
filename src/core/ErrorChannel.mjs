@@ -32,7 +32,7 @@ import util from "node:util";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { logger } from "./Logger.mjs";
 
-const DEFAULT_API_BASE = "https://api.fluxer.app/v1";
+const DEFAULT_API_BASE = "https://fluxer.com/api/v1";
 const SEND_TIMEOUT_MS = 5_000;
 const CRASH_SEND_BUDGET_MS = 3_500;
 const FORWARD_DEDUP_MS = 60_000;
