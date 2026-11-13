@@ -83,7 +83,7 @@
     "remove": "Remove a specific song from the queue.",
     "resume": "Resume the playback in your voice channel.",
     "search": "Display search results for a query and pick one to play.\nSupports all providers — use inline prefix e.g. `sp: song` or `-p dz`.",
-    "servers": "Fetch a list of servers the bot is in.",
+    "servers": "Fetch a list of communities the bot is in.",
     "settings": "Change/Get settings in the current server.",
     "shuffle": "Re-orders the queue randomly.",
     "skip": "Skip the current playing song.",
@@ -883,14 +883,14 @@
       "cancelOption": "Cancel"
     },
     "servers": {
-      "noServers": "_No servers found._",
-      "title": "🌐 Servers ({{count}})",
-      "pageTitle": "🌐 Servers ({{count}}) - Page {{page}}/{{total}}",
+      "noServers": "_No communities found._",
+      "title": "🌐 Communities ({{count}})",
+      "pageTitle": "🌐 Communities ({{count}}) - Page {{page}}/{{total}}",
       "listComplete": "List complete",
       "serversAuthor": "🌐 Network Topology",
-      "serversTitle": "Connected Guild Directory",
-      "serversActiveBadge": "{{count}} Guilds Active",
-      "serversTelemetryFooter": "Real-time guild telemetry • Page {{page}}/{{total}}"
+      "serversTitle": "Connected Community Directory",
+      "serversActiveBadge": "{{count}} Communities Active",
+      "serversTelemetryFooter": "Real-time community telemetry • Page {{page}}/{{total}}"
     },
     "settings": {
       "unknownSetting": "❌ Unknown setting `{{setting}}`.",
@@ -1058,7 +1058,7 @@
       "categoryMusic": "🎧 Music Activity",
       "categoryLastfm": "🎵 Last.fm",
       "categoryPerformance": "⚡ System & Network",
-      "servers": "📂  **Servers**",
+      "servers": "📂  **Communities**",
       "users": "👥  **Users**",
       "players": "🎧  **Players**",
       "playersWithPlaying": "{{total}} ({{playing}} playing)",
@@ -1362,7 +1362,7 @@
       "sessionsField": "🎵 Active Sessions",
       "ramField": "📟 Memory (RAM)",
       "cpuField": "⚙️ CPU Utilization",
-      "guildsField": "🏰 Guild Footprint",
+      "guildsField": "🏰 Community Footprint",
       "subsystemsField": "🛡️ Subsystem Health",
       "incidentAuthor": "🔴 Incident Detected",
       "incidentTitle": "🔴 {{name}} is down",

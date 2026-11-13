@@ -83,7 +83,7 @@
     "remove": "Kuyruktan belirli bir şarkıyı kaldırın.",
     "resume": "Ses kanalınızdaki çalmayı devam ettirin.",
     "search": "Bir sorgu için arama sonuçlarını görüntüleyin ve çalmak için birini seçin.\nTüm sağlayıcıları destekler — `sp: şarkı` gibi satır içi önek veya `-p dz` kullanın.",
-    "servers": "Botun bulunduğu sunucuların listesini alın.",
+    "servers": "Botun bulunduğu toplulukların listesini alın.",
     "settings": "Mevcut sunucudaki ayarları değiştirin/görüntüleyin.",
     "shuffle": "Kuyruğu rastgele yeniden sıralar.",
     "skip": "Şu an çalan şarkıyı atlayın.",
@@ -872,14 +872,14 @@
       "cancelOption": "İptal"
     },
     "servers": {
-      "noServers": "_Sunucu bulunamadı._",
-      "title": "🌐 Sunucular ({{count}})",
-      "pageTitle": "🌐 Sunucular ({{count}}) - Sayfa {{page}}/{{total}}",
+      "noServers": "_Topluluk bulunamadı._",
+      "title": "🌐 Topluluklar ({{count}})",
+      "pageTitle": "🌐 Topluluklar ({{count}}) - Sayfa {{page}}/{{total}}",
       "listComplete": "Liste tamamlandı",
       "serversAuthor": "🌐 Ağ Topolojisi",
-      "serversTitle": "Bağlı Sunucu Rehberi",
-      "serversActiveBadge": "{{count}} Aktif Sunucu",
-      "serversTelemetryFooter": "Gerçek zamanlı sunucu telemetrisi • Sayfa {{page}}/{{total}}"
+      "serversTitle": "Bağlı Topluluk Rehberi",
+      "serversActiveBadge": "{{count}} Aktif Topluluk",
+      "serversTelemetryFooter": "Gerçek zamanlı topluluk telemetrisi • Sayfa {{page}}/{{total}}"
     },
     "settings": {
       "unknownSetting": "❌ Bilinmeyen ayar `{{setting}}`.",
@@ -1047,7 +1047,7 @@
       "categoryMusic": "🎧 Müzik Aktivitesi",
       "categoryLastfm": "🎵 Last.fm",
       "categoryPerformance": "⚡ Sistem ve Ağ",
-      "servers": "📂  **Sunucular**",
+      "servers": "📂  **Topluluklar**",
       "users": "👥  **Kullanıcılar**",
       "players": "🎧  **Oynatıcılar**",
       "playersWithPlaying": "{{total}} ({{playing}} çalıyor)",
@@ -1362,7 +1362,7 @@
       "sessionsField": "🎵 Aktif Oturumlar",
       "ramField": "📟 Bellek (RAM)",
       "cpuField": "⚙️ CPU Kullanımı",
-      "guildsField": "🏰 Sunucu Varlığı",
+      "guildsField": "🏰 Topluluk Varlığı",
       "subsystemsField": "🛡️ Alt Sistem Sağlığı",
       "incidentAuthor": "🔴 Olay Tespit Edildi",
       "incidentTitle": "🔴 {{name}} çöktü",

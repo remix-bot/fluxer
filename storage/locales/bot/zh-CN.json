@@ -83,7 +83,7 @@
     "remove": "从队列中移除指定的歌曲。",
     "resume": "恢复当前语音频道的音乐播放。",
     "search": "搜索音乐并选择一首加入播放队列。\n支持所有音源平台 — 使用行内前缀如 `sp: 歌名` 或 `-p dz`。",
-    "servers": "获取机器人当前所在的服务器列表。",
+    "servers": "获取机器人当前所在的社区列表。",
     "settings": "修改或查看当前服务器的设置。",
     "shuffle": "随机打乱播放队列的顺序。",
     "skip": "跳过当前正在播放的歌曲。",
@@ -883,14 +883,14 @@
       "cancelOption": "取消"
     },
     "servers": {
-      "noServers": "_未找到服务器。_",
-      "title": "🌐 服务器列表 ({{count}})",
-      "pageTitle": "🌐 服务器列表 ({{count}}) - 第 {{page}}/{{total}} 页",
+      "noServers": "_未找到社区。_",
+      "title": "🌐 社区列表 ({{count}})",
+      "pageTitle": "🌐 社区列表 ({{count}}) - 第 {{page}}/{{total}} 页",
       "listComplete": "列表加载完毕",
       "serversAuthor": "🌐 网络拓扑",
-      "serversTitle": "已连接服务器目录",
-      "serversActiveBadge": "{{count}} 个服务器活跃中",
-      "serversTelemetryFooter": "实时服务器遥测 • 第 {{page}}/{{total}} 页"
+      "serversTitle": "已连接社区目录",
+      "serversActiveBadge": "{{count}} 个社区活跃中",
+      "serversTelemetryFooter": "实时社区遥测 • 第 {{page}}/{{total}} 页"
     },
     "settings": {
       "unknownSetting": "❌ 未知设置项 `{{setting}}`。",
@@ -1058,7 +1058,7 @@
       "categoryMusic": "🎧 音乐动态",
       "categoryLastfm": "🎵 Last.fm",
       "categoryPerformance": "⚡ 系统与网络",
-      "servers": "📂  **服务器数**",
+      "servers": "📂  **社区数**",
       "users": "👥  **用户数**",
       "players": "🎧  **播放器数**",
       "playersWithPlaying": "{{total}} 个（{{playing}} 个正在播放）",
@@ -1362,7 +1362,7 @@
       "sessionsField": "🎵 活跃会话",
       "ramField": "📟 内存 (RAM)",
       "cpuField": "⚙️ CPU 利用率",
-      "guildsField": "🏰 服务器规模",
+      "guildsField": "🏰 社区规模",
       "subsystemsField": "🛡️ 子系统健康状态",
       "incidentAuthor": "🔴 检测到故障事件",
       "incidentTitle": "🔴 {{name}} 发生故障",

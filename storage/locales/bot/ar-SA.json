@@ -82,7 +82,7 @@
     "remove": "أزل أغنية محددة من قائمة الانتظار.",
     "resume": "استئناف التشغيل في قناتك الصوتية.",
     "search": "اعرض نتائج البحث عن استعلام واختر واحدة لتشغيلها.\nيدعم جميع المزودين — استخدم بادئة مضمنة مثل `sp: أغنية` أو `-p dz`.",
-    "servers": "احصل على قائمة بالخوادم الموجود فيها البوت.",
+    "servers": "احصل على قائمة بالمجتمعات الموجود فيها البوت.",
     "settings": "تغيير/عرض الإعدادات في الخادم الحالي.",
     "shuffle": "أعد ترتيب قائمة الانتظار بشكل عشوائي.",
     "skip": "تخطي الأغنية التي يتم تشغيلها حالياً.",
@@ -668,14 +668,14 @@
       "cancelOption": "إلغاء"
     },
     "servers": {
-      "noServers": "_لم يتم العثور على خوادم._",
-      "title": "🌐 الخوادم ({{count}})",
-      "pageTitle": "🌐 الخوادم ({{count}}) - صفحة {{page}}/{{total}}",
+      "noServers": "_لم يتم العثور على مجتمعات._",
+      "title": "🌐 المجتمعات ({{count}})",
+      "pageTitle": "🌐 المجتمعات ({{count}}) - صفحة {{page}}/{{total}}",
       "listComplete": "اكتملت القائمة",
       "serversAuthor": "🌐 هيكلية الشبكة",
-      "serversTitle": "دليل السيرفرات المتصلة",
-      "serversActiveBadge": "{{count}} سيرفر نشط",
-      "serversTelemetryFooter": "بيانات السيرفرات في الوقت الفعلي • صفحة {{page}}/{{total}}"
+      "serversTitle": "دليل المجتمعات المتصلة",
+      "serversActiveBadge": "{{count}} مجتمع نشط",
+      "serversTelemetryFooter": "بيانات المجتمعات في الوقت الفعلي • صفحة {{page}}/{{total}}"
     },
     "settings": {
       "unknownSetting": "❌ إعداد غير معروف `{{setting}}`.",
@@ -843,7 +843,7 @@
       "categoryMusic": "🎧 النشاط الموسيقي",
       "categoryLastfm": "🎵 Last.fm",
       "categoryPerformance": "⚡ النظام والشبكة",
-      "servers": "📂  **الخوادم**",
+      "servers": "📂  **المجتمعات**",
       "users": "👥  **المستخدمون**",
       "players": "🎧  **المشغّلات**",
       "playersWithPlaying": "{{total}} ({{playing}} قيد التشغيل)",
@@ -1362,7 +1362,7 @@
       "sessionsField": "🎵 الجلسات النشطة",
       "ramField": "📟 الذاكرة (RAM)",
       "cpuField": "⚙️ استهلاك المعالج",
-      "guildsField": "🏰 تواجد السيرفرات",
+      "guildsField": "🏰 تواجد المجتمعات",
       "subsystemsField": "🛡️ صحة الأنظمة الفرعية",
       "incidentAuthor": "🔴 تم اكتشاف حادث",
       "incidentTitle": "🔴 {{name}} متوقف حالياً",

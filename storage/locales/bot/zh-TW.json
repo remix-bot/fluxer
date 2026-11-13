@@ -83,7 +83,7 @@
     "remove": "從佇列中移除指定的歌曲。",
     "resume": "繼續當前語音頻道的音樂播放。",
     "search": "搜尋音樂並選擇一首加入播放佇列。\n支援所有音樂來源平台 — 使用行內前綴如 `sp: 歌名` 或 `-p dz`。",
-    "servers": "取得機器人目前所在的伺服器清單。",
+    "servers": "取得機器人目前所在的社群清單。",
     "settings": "修改或查看當前伺服器的設定。",
     "shuffle": "隨機打亂播放佇列的順序。",
     "skip": "跳過當前正在播放的歌曲。",
@@ -883,14 +883,14 @@
       "cancelOption": "取消"
     },
     "servers": {
-      "noServers": "_找不到伺服器。_",
-      "title": "🌐 伺服器清單 ({{count}})",
-      "pageTitle": "🌐 伺服器清單 ({{count}}) - 第 {{page}}/{{total}} 頁",
+      "noServers": "_找不到社群。_",
+      "title": "🌐 社群清單 ({{count}})",
+      "pageTitle": "🌐 社群清單 ({{count}}) - 第 {{page}}/{{total}} 頁",
       "listComplete": "清單載入完畢",
       "serversAuthor": "🌐 網路拓撲",
-      "serversTitle": "已連線伺服器目錄",
-      "serversActiveBadge": "{{count}} 個伺服器活躍中",
-      "serversTelemetryFooter": "即時伺服器遙測 • 第 {{page}}/{{total}} 頁"
+      "serversTitle": "已連線社群目錄",
+      "serversActiveBadge": "{{count}} 個社群活躍中",
+      "serversTelemetryFooter": "即時社群遙測 • 第 {{page}}/{{total}} 頁"
     },
     "settings": {
       "unknownSetting": "❌ 未知設定項目 `{{setting}}`。",
@@ -1058,7 +1058,7 @@
       "categoryMusic": "🎧 音樂動態",
       "categoryLastfm": "🎵 Last.fm",
       "categoryPerformance": "⚡ 系統與網路",
-      "servers": "📂  **伺服器數**",
+      "servers": "📂  **社群數**",
       "users": "👥  **使用者數**",
       "players": "🎧  **播放器數**",
       "playersWithPlaying": "{{total}} 個（{{playing}} 個正在播放）",
@@ -1362,7 +1362,7 @@
       "sessionsField": "🎵 活躍工作階段",
       "ramField": "📟 記憶體 (RAM)",
       "cpuField": "⚙️ CPU 使用率",
-      "guildsField": "🏰 伺服器涵蓋度",
+      "guildsField": "🏰 社群涵蓋度",
       "subsystemsField": "🛡️ 子系統健全狀態",
       "incidentAuthor": "🔴 偵測到服務中斷事故",
       "incidentTitle": "🔴 {{name}} 發生中斷",

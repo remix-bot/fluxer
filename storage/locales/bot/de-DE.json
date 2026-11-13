@@ -82,7 +82,7 @@
     "remove": "Entferne einen bestimmten Song aus der Warteschlange.",
     "resume": "Setze die Wiedergabe in deinem Sprachkanal fort.",
     "search": "Zeige Suchergebnisse für eine Anfrage an und wähle einen zum Abspielen.\nUnterstützt alle Anbieter — nutze Inline-Präfix wie `sp: song` oder `-p dz`.",
-    "servers": "Rufe eine Liste der Server ab, in denen der Bot ist.",
+    "servers": "Rufe eine Liste der Communities ab, in denen der Bot ist.",
     "settings": "Ändere/Rufe Einstellungen im aktuellen Server ab.",
     "shuffle": "Ordne die Warteschlange zufällig neu.",
     "skip": "Überspringe den aktuell spielenden Song.",
@@ -668,14 +668,14 @@
       "cancelOption": "Abbrechen"
     },
     "servers": {
-      "noServers": "_Keine Server gefunden._",
-      "title": "🌐 Server ({{count}})",
-      "pageTitle": "🌐 Server ({{count}}) - Seite {{page}}/{{total}}",
+      "noServers": "_Keine Communities gefunden._",
+      "title": "🌐 Communities ({{count}})",
+      "pageTitle": "🌐 Communities ({{count}}) - Seite {{page}}/{{total}}",
       "listComplete": "Liste vollständig",
       "serversAuthor": "🌐 Netzwerktopologie",
-      "serversTitle": "Verzeichnis verbundener Server",
-      "serversActiveBadge": "{{count}} Server aktiv",
-      "serversTelemetryFooter": "Echtzeit-Servertelemetrie • Seite {{page}}/{{total}}"
+      "serversTitle": "Verzeichnis verbundener Communities",
+      "serversActiveBadge": "{{count}} Communities aktiv",
+      "serversTelemetryFooter": "Echtzeit-Communitytelemetrie • Seite {{page}}/{{total}}"
     },
     "settings": {
       "unknownSetting": "❌ Unbekannte Einstellung `{{setting}}`.",
@@ -843,7 +843,7 @@
       "categoryMusic": "🎧 Musik-Aktivität",
       "categoryLastfm": "🎵 Last.fm",
       "categoryPerformance": "⚡ System & Netzwerk",
-      "servers": "📂  **Server**",
+      "servers": "📂  **Communities**",
       "users": "👥  **Benutzer**",
       "players": "🎧  **Player**",
       "playersWithPlaying": "{{total}} ({{playing}} aktiv)",
@@ -1362,7 +1362,7 @@
       "sessionsField": "🎵 Aktive Sitzungen",
       "ramField": "📟 Arbeitsspeicher (RAM)",
       "cpuField": "⚙️ CPU-Auslastung",
-      "guildsField": "🏰 Server-Präsenz",
+      "guildsField": "🏰 Community-Präsenz",
       "subsystemsField": "🛡️ Subsystem-Status",
       "incidentAuthor": "🔴 Vorfall festgestellt",
       "incidentTitle": "🔴 {{name}} ist ausgefallen",

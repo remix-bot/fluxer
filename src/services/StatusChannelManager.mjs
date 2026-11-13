@@ -319,7 +319,7 @@ export class StatusChannelManager {
         { name: this.t("responses.statusChannel.sessionsField"),  value: `${activePlayers} active (${totalListeners} listeners)`, inline: true },
         { name: this.t("responses.statusChannel.ramField"),       value: `\`${ramBar}\` ${mem.systemPct}%\n${mem.rssMb} MB / ${mem.totalMemMb} MB`, inline: true },
         { name: this.t("responses.statusChannel.cpuField"),       value: `\`${cpuBar}\` ${cpuPct}%\n${cpuCores} cores available`, inline: true },
-        { name: this.t("responses.statusChannel.guildsField"),    value: `${guildCount.toLocaleString()} servers`, inline: true },
+        { name: this.t("responses.statusChannel.guildsField"),    value: `${guildCount.toLocaleString()} communities`, inline: true },
         {
           name: this.t("responses.statusChannel.subsystemsField"),
           value: subsystems.map((s) => `• **${s.name}**: ${s.status}`).join("\n"),

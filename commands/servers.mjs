@@ -12,9 +12,10 @@ import { logger } from "../src/core/Logger.mjs";
 /** @type {CommandBuilder} @description Command definition for the servers command (owner-only). */
 export const command = new CommandBuilder()
     .setName("servers")
-    .setDescription("Fetch a list of servers the bot is in")
+    .setDescription("Fetch a list of communities the bot is in")
     .setRequirement(r => r.setOwnerOnly(true))
-    .setCategory("util");
+    .setCategory("util")
+    .addAliases("communities");
 
 
 /**
