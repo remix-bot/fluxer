@@ -382,7 +382,9 @@ const SearchMixin = {
           return res;
         }
       } catch (err) {
-        logger.warn(`[Player] Free text search candidate "${candidate}" failed (${source}):`, err?.message);
+        /* Search candidate exploration is a normal fallback mechanism; log as player diagnostic */
+        const errMsg = err?.message || err?.error || (typeof err === "string" ? err : "") || "unknown error";
+        logger.player(`[Player] Free text search candidate "${candidate}" failed (${source}):`, errMsg);
       }
     }
     return null;
@@ -650,7 +652,7 @@ const SearchMixin = {
     try {
       const source = this._getSource(provider);
       const result = await this._searchFreeText(query, source);
-      return result.tracks || [];
+      return result?.tracks || [];
     } catch (e) {
       logger.error(`[Player] lavalink search error:`, e?.message);
       return [];
