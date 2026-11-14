@@ -20,6 +20,22 @@ import { logger } from "../core/Logger.mjs";
 const DEFAULT_API_BASE = "https://fluxer.com/api/v1";
 
 /**
+ * @private
+ * Detect transient network or socket reset errors that can be retried.
+ * @param {Error|object} err
+ * @returns {boolean}
+ */
+function isTransientNetworkError(err) {
+  if (!err) return false;
+  const msg = String(err?.message ?? err);
+  const cause = String(err?.cause?.message ?? err?.cause ?? "");
+  return (
+    /other side closed|fetch failed|ECONNRESET|ETIMEDOUT|ECONNREFUSED|UND_ERR_SOCKET|socket hang up/i.test(msg) ||
+    /other side closed|ECONNRESET|ETIMEDOUT|ECONNREFUSED|UND_ERR_SOCKET/i.test(cause)
+  );
+}
+
+/**
  * @class StatusChannelManager
  * @description Oversees public status notifications and live health telemetry.
  */
@@ -233,15 +249,21 @@ export class StatusChannelManager {
       if (this.liveMessageId) {
         try {
           await this._patchMessage(this.liveMessageId, { embeds: [embed] });
+          this._consecutivePatchFailures = 0;
           return;
         } catch (err) {
           const status = err?.statusCode ?? err?.status;
           /* If message was deleted (404), fall through to post a fresh one */
-          if (status !== 404) {
-            logger.warn("[StatusChannel] Failed to patch status card:", err?.message);
+          if (status === 404) {
+            this.liveMessageId = null;
+          } else {
+            this._consecutivePatchFailures = (this._consecutivePatchFailures || 0) + 1;
+            /* Only log warning if not a transient network drop or if failing repeatedly */
+            if (!isTransientNetworkError(err) || this._consecutivePatchFailures >= 3) {
+              logger.warn("[StatusChannel] Failed to patch status card:", err?.message);
+            }
             return;
           }
-          this.liveMessageId = null;
         }
       }
 
@@ -504,50 +526,72 @@ export class StatusChannelManager {
   }
 
   /**
-   * Post a message to the status channel with raw fetch fallback.
+   * Post a message to the status channel with raw fetch fallback and transient retry.
    * @private
    * @param {object} payload
+   * @param {number} [retries=2]
    * @returns {Promise<object>}
    */
-  async _postMessage(payload) {
+  async _postMessage(payload, retries = 2) {
     const body = this._normalizePayload(payload);
-    const rest = this.client?.rest;
-    if (typeof rest?.post === "function") {
-      return await rest.post(`/channels/${this.channelId}/messages`, { body });
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const rest = this.client?.rest;
+        if (typeof rest?.post === "function") {
+          return await rest.post(`/channels/${this.channelId}/messages`, { body });
+        }
+        const token = this.client?.token || this.remix.config?.token;
+        const res = await fetch(`${this.apiBase}/channels/${this.channelId}/messages`, {
+          method: "POST",
+          headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return await res.json().catch(() => ({}));
+      } catch (err) {
+        if (attempt < retries && isTransientNetworkError(err)) {
+          await new Promise((res) => setTimeout(res, 1_000 * (attempt + 1)));
+          continue;
+        }
+        throw err;
+      }
     }
-    const token = this.client?.token || this.remix.config?.token;
-    const res = await fetch(`${this.apiBase}/channels/${this.channelId}/messages`, {
-      method: "POST",
-      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    return await res.json().catch(() => ({}));
   }
 
   /**
-   * Patch an existing message in the status channel with raw fetch fallback.
+   * Patch an existing message in the status channel with raw fetch fallback and transient retry.
    * @private
    * @param {string} messageId
    * @param {object} payload
+   * @param {number} [retries=2]
    * @returns {Promise<object>}
    */
-  async _patchMessage(messageId, payload) {
+  async _patchMessage(messageId, payload, retries = 2) {
     const body = this._normalizePayload(payload);
-    const rest = this.client?.rest;
-    if (typeof rest?.patch === "function") {
-      return await rest.patch(`/channels/${this.channelId}/messages/${messageId}`, { body });
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const rest = this.client?.rest;
+        if (typeof rest?.patch === "function") {
+          return await rest.patch(`/channels/${this.channelId}/messages/${messageId}`, { body });
+        }
+        const token = this.client?.token || this.remix.config?.token;
+        const res = await fetch(`${this.apiBase}/channels/${this.channelId}/messages/${messageId}`, {
+          method: "PATCH",
+          headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return await res.json().catch(() => ({}));
+      } catch (err) {
+        if (attempt < retries && isTransientNetworkError(err)) {
+          await new Promise((res) => setTimeout(res, 1_000 * (attempt + 1)));
+          continue;
+        }
+        throw err;
+      }
     }
-    const token = this.client?.token || this.remix.config?.token;
-    const res = await fetch(`${this.apiBase}/channels/${this.channelId}/messages/${messageId}`, {
-      method: "PATCH",
-      headers: { Authorization: `Bot ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    return await res.json().catch(() => ({}));
   }
 
   /**
