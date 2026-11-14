@@ -394,6 +394,13 @@ class Remix {
               this.players?.resumeAllOnNodeReconnect?.();
             }
           });
+          this.lavalink.on("nodeConnect", (node) => {
+            logger.lavalink("[Lavalink] Node connected: " + (node?.id ?? "main"));
+            this.statusChannel?.resolveIncident("audioNode");
+            if (this._hasBooted) {
+              this.players?.resumeAllOnNodeReconnect?.();
+            }
+          });
           this.lavalink.on("nodeReconnect", () => {
             this.statusChannel?.resolveIncident("audioNode");
             if (this._hasBooted) {
@@ -426,6 +433,9 @@ class Remix {
           });
           await this.lavalink.init();
           this.playerContext.lavalink = this.lavalink;
+          if (this.lavalink?._nodeConnected || Boolean(this.lavalink?.getNode?.())) {
+            this.statusChannel?.resolveIncident("audioNode");
+          }
         }
 
         this.gatewayHandler.onReady();

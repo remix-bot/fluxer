@@ -369,6 +369,14 @@ export class StatusChannelManager {
         list.push({ name: inc.name, status: `⚪ ${this.t("responses.statusChannel.disabled")}` });
         continue;
       }
+      if (key === "audioNode" && inc.down && (this.remix.lavalink?._nodeConnected || Boolean(this.remix.lavalink?.getNode?.()))) {
+        /* Self-heal: audio engine node is connected and operational */
+        this.resolveIncident("audioNode", "Audio engine reconnected successfully").catch?.(() => {});
+      }
+      if (key === "gateway" && inc.down && this.remix._gatewayConnected) {
+        /* Self-heal: gateway connection is operational */
+        this.resolveIncident("gateway", "Fluxer Gateway reconnected").catch?.(() => {});
+      }
       if (inc.down) {
         list.push({ name: inc.name, status: `🔴 ${this.t("responses.statusChannel.outage")}` });
         if (inc.impact === "Critical") hasCriticalDown = true;
