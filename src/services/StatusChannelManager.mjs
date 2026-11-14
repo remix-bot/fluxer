@@ -182,7 +182,7 @@ export class StatusChannelManager {
 
     try {
       await this._postMessage(payload);
-      logger.warn(`[StatusChannel] Incident published for ${inc.name}: ${desc}`);
+      logger.info(`[StatusChannel] Incident published for ${inc.name}: ${desc}`);
     } catch (err) {
       logger.warn(`[StatusChannel] Failed to post incident for ${inc.name}:`, err?.message);
     }
@@ -394,14 +394,26 @@ export class StatusChannelManager {
 
     const probe = async () => {
       try {
-        const port = this.remix.dashboard?.port || 3000;
-        const res = await fetch(`http://127.0.0.1:${port}/`, {
-          signal: AbortSignal.timeout(4000),
-        });
-        if (res.ok || res.status === 401 || res.status === 403 || res.status === 302) {
-          this.resolveIncident("dashboard");
-        } else {
-          this.triggerIncident("dashboard", `Dashboard HTTP check returned status ${res.status}`);
+        const rawUrl = this.remix.config?.dashboard?.url;
+        const port = this.remix.config?.dashboard?.port || this.remix.dashboard?.port;
+        const targetUrl = rawUrl || (port ? `http://127.0.0.1:${port}/` : null);
+
+        if (targetUrl) {
+          const res = await fetch(targetUrl, {
+            signal: AbortSignal.timeout(4000),
+          });
+          if (res.ok || res.status === 401 || res.status === 403 || res.status === 302) {
+            this.resolveIncident("dashboard");
+          } else {
+            this.triggerIncident("dashboard", `Dashboard HTTP check returned status ${res.status}`);
+          }
+        } else if (this.remix.dashboard?.redis) {
+          /* When dashboard runs as decoupled service via Redis pub/sub, verify Redis IPC */
+          if (typeof this.remix.dashboard.redis.isReady === "function" && this.remix.dashboard.redis.isReady()) {
+            this.resolveIncident("dashboard");
+          } else {
+            this.triggerIncident("dashboard", "Dashboard Redis bridge disconnected");
+          }
         }
       } catch (err) {
         this.triggerIncident("dashboard", `Dashboard is unreachable (${err?.message})`);

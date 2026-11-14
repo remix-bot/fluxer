@@ -80,7 +80,10 @@ const HttpStreams = {
       });
 
       req.on("socket", (socket) => {
-        socket.on("error", () => {});
+        if (!socket._hasRemixErrorHandler) {
+          socket._hasRemixErrorHandler = true;
+          socket.on("error", () => {});
+        }
       });
       req.on("error", reject);
       req.setTimeout(timeoutMs, () => {
@@ -170,7 +173,10 @@ const HttpStreams = {
       });
 
       req.on("socket", (socket) => {
-        socket.on("error", () => {});
+        if (!socket._hasRemixErrorHandler) {
+          socket._hasRemixErrorHandler = true;
+          socket.on("error", () => {});
+        }
       });
 
       req.on("error", (err) => {

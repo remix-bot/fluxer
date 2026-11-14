@@ -401,7 +401,25 @@ class Remix {
             }
           });
           this.lavalink.on("nodeDisconnect", (node, reason) => {
-            this.statusChannel?.triggerIncident("audioNode", `Audio engine disconnected: ${reason || "Connection dropped"}`);
+            let reasonStr = "Connection dropped";
+            if (typeof reason === "string" && reason.trim()) {
+              reasonStr = reason.trim();
+            } else if (typeof reason === "object" && reason !== null) {
+              const text = reason.reason || reason.message;
+              const code = reason.code ? ` (code ${reason.code})` : "";
+              if (text) {
+                reasonStr = `${text}${code}`;
+              } else if (reason.code) {
+                reasonStr = `Socket closed (code ${reason.code})`;
+              } else {
+                try {
+                  reasonStr = JSON.stringify(reason);
+                } catch (_) {
+                  reasonStr = "Connection dropped";
+                }
+              }
+            }
+            this.statusChannel?.triggerIncident("audioNode", `Audio engine disconnected: ${reasonStr}`);
           });
           this.lavalink.on("nodeError", (node, err) => {
             this.statusChannel?.triggerIncident("audioNode", `Audio engine error: ${err?.message || "Unreachable"}`);

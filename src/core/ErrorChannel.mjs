@@ -290,8 +290,8 @@ function _forward(level, tag, args) {
     const body = _formatArgs(args);
     /* Suppress expected external not-found lookups from generating alarmist telemetry warnings */
     if (tag.includes("[LastFm]") && (/not found|error 6:/i.test(body) || /Track not found/i.test(body))) return;
-    /* Suppress transient socket drops from routine status channel updates */
-    if (tag.includes("[StatusChannel]") && (/other side closed/i.test(body) || /fetch failed/i.test(body))) return;
+    /* Suppress status card incident publications and transient socket drops from creating telemetry warnings */
+    if (tag.includes("[StatusChannel]") && (/Incident published for/i.test(tag) || /Incident published for/i.test(body) || /other side closed/i.test(body) || /fetch failed/i.test(body))) return;
     /* Suppress benign search fallback and candidate exploration warnings */
     if (tag.includes("[Player]") && (/Free text search candidate/i.test(tag) || /search candidate.*failed/i.test(tag))) return;
     const now = Date.now();

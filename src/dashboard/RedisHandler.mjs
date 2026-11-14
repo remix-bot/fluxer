@@ -172,6 +172,14 @@ export class RedisHandler {
   }
 
   /**
+   * Check whether Redis clients are connected and ready.
+   * @returns {boolean}
+   */
+  isReady() {
+    return Boolean(!this._destroyed && this.client?.isReady);
+  }
+
+  /**
    * Publish a message to a Redis channel.
    * No-op if the handler is destroyed or the client is not ready.
    * @param {string} channel - The Redis channel to publish to.
