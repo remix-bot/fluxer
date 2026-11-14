@@ -107,7 +107,7 @@ export class RedisHandler {
       .then(() => {
         if (this._destroyed) return;
         logger.redis("[Redis/Main] Connected");
-        this.readyMessage();
+        this.readyMessage(true);
       })
       .catch((e) => {
         logger.error("[Redis/Main] Initial connection failed:", e.message);
@@ -117,6 +117,8 @@ export class RedisHandler {
       .then(() => {
         if (this._destroyed) return;
         logger.redis("[Redis/Subscriber] Connected");
+        this.readyMessage(true);
+        this.send(this.platform + ":ping", "" + Date.now());
 
         this.subscriber.subscribe("request", async (m) => {
           if (this._destroyed) return;
@@ -155,20 +157,26 @@ export class RedisHandler {
   }
 
   /**
-   * Send a "connected" info message to the dashboard after a 5-second debounce.
+   * Send a "connected" info message to the dashboard.
+   * @param {boolean} [immediate=false]
    * @returns {void}
    */
-  readyMessage() {
+  readyMessage(immediate = false) {
     if (this._destroyed) return;
     if (this._readyTimer) clearTimeout(this._readyTimer);
-    this._readyTimer = setTimeout(() => {
+    const announce = () => {
       this._readyTimer = null;
       if (this._destroyed) return;
       this.send("info", JSON.stringify({
         platform: this.platform,
         type: "connected",
       }));
-    }, 5000);
+    };
+    if (immediate) {
+      announce();
+    } else {
+      this._readyTimer = setTimeout(announce, 1500);
+    }
   }
 
   /**
