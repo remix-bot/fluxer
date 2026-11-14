@@ -41,6 +41,7 @@ export class LavalinkManager extends EventEmitter {
           authorization:nodeCfg.password ?? "youshallnotpass",
           secure:       nodeCfg.secure   ?? false,
           nodeType:     NodeType.NodeLink,
+          heartBeatInterval: Number(nodeCfg.heartBeatInterval ?? 60_000),
           requestSignalTimeoutMS: Number.isFinite(requestSignalTimeoutMS) ? requestSignalTimeoutMS : 60_000,
         },
       ],
@@ -68,7 +69,12 @@ export class LavalinkManager extends EventEmitter {
     if (nodeMgr) {
       try {
         nodeMgr.on("error", (node, err) => {
-          logger.error("[Lavalink] NodeManager error:", node?.id, err?.message ?? err);
+          const msg = err?.message ?? String(err ?? "");
+          if (!this._nodeConnected && /ECONNREFUSED|ETIMEDOUT|ENOTFOUND/i.test(msg)) {
+            logger.lavalink("[Lavalink] Node reconnect attempt:", node?.id, msg);
+            return;
+          }
+          logger.error("[Lavalink] NodeManager error:", node?.id, msg);
         });
         nodeMgr.on("connect", (node) => {
           this._nodeConnected = true;
@@ -111,7 +117,12 @@ export class LavalinkManager extends EventEmitter {
     });
 
     this.lavalink.on("nodeError", (node, err) => {
-      logger.error("[Lavalink] Node error (manager):", node.id, err?.message ?? err);
+      const msg = err?.message ?? String(err ?? "");
+      if (!this._nodeConnected && /ECONNREFUSED|ETIMEDOUT|ENOTFOUND/i.test(msg)) {
+        logger.lavalink("[Lavalink] Node reconnect attempt (manager):", node?.id ?? node, msg);
+        return;
+      }
+      logger.error("[Lavalink] Node error (manager):", node?.id ?? node, msg);
     });
 
 

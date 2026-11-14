@@ -765,7 +765,7 @@ class GatewayHandler {
         continue;
       }
       if (!channelObj && !definitive) {
-        logger.warn(
+        logger.voice247(
             `[BootRecovery] Channel ${channelId} could not be resolved (cache miss + REST failure) — ` +
             `keeping the 24/7 setting; the watchdog will retry later.`
         );

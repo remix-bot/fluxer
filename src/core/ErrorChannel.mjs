@@ -294,6 +294,10 @@ function _forward(level, tag, args) {
     if (tag.includes("[StatusChannel]") && (/Incident published for/i.test(tag) || /Incident published for/i.test(body) || /other side closed/i.test(body) || /fetch failed/i.test(body))) return;
     /* Suppress benign search fallback and candidate exploration warnings */
     if (tag.includes("[Player]") && (/Free text search candidate/i.test(tag) || /search candidate.*failed/i.test(tag))) return;
+    /* Suppress transient node reconnect retry connection refused errors while audio engine boots */
+    if (tag.includes("[Lavalink]") && /ECONNREFUSED/i.test(body)) return;
+    /* Suppress routine boot recovery deferred resolution warnings */
+    if (tag.includes("[BootRecovery]") && /keeping the 24\/7 setting/i.test(body)) return;
     const now = Date.now();
     const key = `${level}|${tag}|${(body || tag).slice(0, 200)}`;
     const last = _forwardDedup.get(key);
