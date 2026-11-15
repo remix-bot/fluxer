@@ -220,7 +220,7 @@ Remix automatically adapts to each server's configured locale (`%settings set lo
 | :---: | :--- | :--- |
 | `en` | English | English (Default) |
 | `ar-SA` | Arabic | العربية |
-| `ckb` | Kurdish (Sorani) | کوردیی ناوەندی |
+| `ckb` | Central Kurdish (Sorani) | کوردیی ناوەندی |
 | `tr` | Turkish | Türkçe |
 | `de-DE` | German | Deutsch |
 | `pt-BR` | Portuguese (Brazil) | Português Brasileiro |
