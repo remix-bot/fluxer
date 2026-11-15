@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://web.fluxer.app/oauth2/authorize?client_id=1478084469635211806&scope=bot&permissions=3206208">Invite Remix</a> &middot;
+  <a href="https://fluxer.com/oauth2/authorize?client_id=1478084469635211806&scope=bot&permissions=3206208">Invite Remix</a> &middot;
   <a href="https://fluxer.gg/remix">Join Support Server</a> &middot;
   <a href="https://github.com/remix-bot/fluxer/issues">Report an Issue</a>
 </p>
