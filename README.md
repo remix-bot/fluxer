@@ -29,7 +29,7 @@
 
 ## 🌟 Overview
 
-**Remix** is a feature-rich, self-hostable music bot built specifically for [Fluxer](https://fluxer.app). Built on [`@fluxerjs/core`](https://github.com/fluxerjs/core) and [`@fluxerjs/voice`](https://github.com/fluxerjs/voice), it streams ultra-low-latency Opus audio directly to LiveKit voice channels using an optimized [NodeLink](https://github.com/PerformanC/NodeLink) backend.
+**Remix** is a feature-rich, self-hostable music bot built specifically for [Fluxer](https://fluxer.com). Built on [`@fluxerjs/core`](https://github.com/fluxerjs/core) and [`@fluxerjs/voice`](https://github.com/fluxerjs/voice), it streams ultra-low-latency Opus audio directly to LiveKit voice channels using an optimized [NodeLink](https://github.com/PerformanC/NodeLink) backend.
 
 We believe essential music features should never be locked behind a paywall — **every feature on Remix is 100% free and open-source.**
 
@@ -55,7 +55,7 @@ We believe essential music features should never be locked behind a paywall — 
 ## 🚀 Getting Started
 
 ### Invite to Your Server
-1. Click here to **[Invite Remix](https://web.fluxer.app/oauth2/authorize?client_id=1478084469635211806&scope=bot&permissions=3206208)** to your Fluxer server.
+1. Click here to **[Invite Remix](https://fluxer.com/oauth2/authorize?client_id=1478084469635211806&scope=bot&permissions=3206208)** to your Fluxer server.
 2. Join any voice channel.
 3. Type `%play <song title or URL>` to start listening!
 
