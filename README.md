@@ -216,16 +216,16 @@ User (%play) ──► Command Handler ──► LavalinkManager (NodeLink Searc
 
 Remix automatically adapts to each server's configured locale (`%settings set locale <code>`):
 
-| Code | Language | Native Name |
-| :---: | :--- | :--- |
-| `en` | English | English (Default) |
-| `ar-SA` | Arabic | العربية |
-| `ckb` | Central Kurdish (Sorani) | کوردیی ناوەندی |
-| `tr` | Turkish | Türkçe |
-| `de-DE` | German | Deutsch |
-| `pt-BR` | Portuguese (Brazil) | Português Brasileiro |
-| `zh-CN` | Simplified Chinese | 简体中文 |
-| `zh-TW` | Traditional Chinese | 繁體中文 |
+| Flag | Code | Language | Native Name |
+| :---:| :---: | :--- | :--- |
+|<img width="40" height="40" alt="image" src="https://github.com/user-attachments/assets/bcbcbdfb-8bbf-4fcf-a778-5d324ad47c9f" />| `en` | English | English (Default) |
+|<img width="40" height="40" alt="image" src="https://github.com/user-attachments/assets/2e3cc42a-47e5-4d6e-9b99-c6f5534cee87" />| `ar-SA` | Arabic | العربية |
+|<img width="40" height="40" alt="image" src="https://github.com/user-attachments/assets/44bc9ba4-0bee-4141-96b6-d144e4c5089a" />| `ckb` | Central Kurdish (Sorani) | کوردیی ناوەندی |
+|<img width="40" height="40" alt="image" src="https://github.com/user-attachments/assets/6dddb041-52ec-4dca-ab37-22d1ef3cc78d" />| `tr` | Turkish | Türkçe |
+|<img width="40" height="40" alt="image" src="https://github.com/user-attachments/assets/558a97e5-579e-4bca-8cbb-a684a5678a1a" />| `de-DE` | German | Deutsch |
+|<img width="40" height="40" alt="image" src="https://github.com/user-attachments/assets/d7177647-d53c-418e-b4c1-cb16aaa77323" />| `pt-BR` | Portuguese (Brazil) | Português Brasileiro |
+|<img width="40" height="40" alt="image" src="https://github.com/user-attachments/assets/53d34c41-6a4c-4f69-88e7-32a09d6f4945" />| `zh-CN` | Simplified Chinese | 简体中文 |
+|<img width="40" height="40" alt="image" src="https://github.com/user-attachments/assets/4ee1d3a2-c047-442f-9710-0e43cdb2baf7" />| `zh-TW` | Traditional Chinese | 繁體中文 |
 
 ---
 
