@@ -9,7 +9,7 @@
  */
 
 import { EmbedBuilder } from "@fluxerjs/core";
-import { Utils } from "../../utils/Utils.mjs";
+import { Utils, cleanId } from "../../utils/Utils.mjs";
 import { logger } from "../../core/Logger.mjs";
 import meta from "../probe.mjs";
 
