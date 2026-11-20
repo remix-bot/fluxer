@@ -68,25 +68,35 @@ export async function run(message, data) {
     }
   }
 
-  const { tracks, topArtist } = isGlobal
+  let { tracks, topArtist } = isGlobal
     ? await GuildStats.getGlobalTopTracks(MAX_TRACKS)
     : await GuildStats.getTopTracks(guildId, timeframe, MAX_TRACKS);
 
-  const authorName = isGlobal
+  let fallbackGlobal = false;
+  if ((!tracks || tracks.length === 0) && !isGlobal) {
+    const globalRes = await GuildStats.getGlobalTopTracks(MAX_TRACKS);
+    if (globalRes?.tracks && globalRes.tracks.length > 0) {
+      tracks = globalRes.tracks;
+      topArtist = globalRes.topArtist;
+      fallbackGlobal = true;
+    }
+  }
+
+  const authorName = (isGlobal || fallbackGlobal)
     ? `🌐 ${this.t(message, "responses.top.globalAuthor")}`
     : `🏆 ${this.t(message, "responses.top.topAuthor")}`;
 
-  const timeframeLabel = isGlobal
+  const timeframeLabel = (isGlobal || fallbackGlobal)
     ? "Global"
     : (timeframe === "week"
       ? this.t(message, "responses.top.timeframeWeek")
       : (timeframe === "all" ? this.t(message, "responses.top.timeframeAll") : this.t(message, "responses.top.timeframeMonth")));
 
-  const titleName = isGlobal
+  const titleName = (isGlobal || fallbackGlobal)
     ? this.t(message, "responses.top.globalTitle")
     : this.t(message, "responses.top.topTitle", { timeframe: timeframeLabel });
 
-  const baseFooter = isGlobal
+  const baseFooter = (isGlobal || fallbackGlobal)
     ? this.t(message, "responses.top.globalFooter", { prefix })
     : this.t(message, "responses.top.topFooter", { prefix });
 
@@ -120,6 +130,13 @@ export async function run(message, data) {
     });
 
     let desc = lines.join("\n\n");
+    if (fallbackGlobal && safePage === 1) {
+      const note = this.t(message, "responses.top.serverFallbackNote");
+      if (note) {
+        desc = `${note}\n\n${desc}`;
+      }
+    }
+
     if (topArtist && safePage === 1) {
       desc += `\n\n⭐ **Top Artist:** **${topArtist.name}** (\`${topArtist.count} ${playsLabel}\`)`;
     }

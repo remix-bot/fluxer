@@ -1405,7 +1405,8 @@
       "globalAuthor": "Classificação Global • Todos os Servidores",
       "globalTitle": "Músicas Mais Tocadas em Todos os Servidores",
       "globalFooter": "Filtrar com: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
-      "pageFooter": "Página {{page}}/{{totalPages}} • {{timeframe}}"
+      "pageFooter": "Página {{page}}/{{totalPages}} • {{timeframe}}",
+      "serverFallbackNote": "ℹ️ _Nenhuma música tocada neste servidor ainda — exibindo paradas globais da rede:_"
     },
     "wrapped": {
       "wrappedAuthor": "Retrospectiva Musical da Comunidade",

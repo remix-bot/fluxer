@@ -1405,7 +1405,8 @@
       "globalAuthor": "Global Leaderboard • All Servers",
       "globalTitle": "Top Played Tracks Across All Servers",
       "globalFooter": "Filter with: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
-      "pageFooter": "Page {{page}}/{{totalPages}} • {{timeframe}}"
+      "pageFooter": "Page {{page}}/{{totalPages}} • {{timeframe}}",
+      "serverFallbackNote": "ℹ️ _No tracks played in this server yet — showing Global Network charts:_"
     },
     "wrapped": {
       "wrappedAuthor": "Community Music Wrapped",

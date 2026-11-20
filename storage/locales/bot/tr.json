@@ -1405,7 +1405,8 @@
       "globalAuthor": "Küresel Lider Tablosu • Tüm Sunucular",
       "globalTitle": "Tüm Sunucularda En Çok Çalınan Şarkılar",
       "globalFooter": "Filtrele: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
-      "pageFooter": "Sayfa {{page}}/{{totalPages}} • {{timeframe}}"
+      "pageFooter": "Sayfa {{page}}/{{totalPages}} • {{timeframe}}",
+      "serverFallbackNote": "ℹ️ _Bu sunucuda henüz şarkı çalınmadı — Küresel Ağ listeleri gösteriliyor:_"
     },
     "wrapped": {
       "wrappedAuthor": "Topluluk Müzik Özeti",

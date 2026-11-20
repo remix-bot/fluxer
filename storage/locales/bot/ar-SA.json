@@ -1405,7 +1405,8 @@
       "globalAuthor": "لوحة المتصدرين العالمية • كل السيرفرات",
       "globalTitle": "أكثر الأغاني تشغيلاً عبر كل السيرفرات",
       "globalFooter": "تصفية بـ: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
-      "pageFooter": "الصفحة {{page}}/{{totalPages}} • {{timeframe}}"
+      "pageFooter": "الصفحة {{page}}/{{totalPages}} • {{timeframe}}",
+      "serverFallbackNote": "ℹ️ _لم يتم تشغيل أي أغانٍ في هذا السيرفر بعد — عرض مخططات الشبكة العالمية:_"
     },
     "wrapped": {
       "wrappedAuthor": "ملخص موسيقى المجتمع",

@@ -1405,7 +1405,8 @@
       "globalAuthor": "Globale Bestenliste • Alle Server",
       "globalTitle": "Meistgespielte Songs auf allen Servern",
       "globalFooter": "Filtern mit: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
-      "pageFooter": "Seite {{page}}/{{totalPages}} • {{timeframe}}"
+      "pageFooter": "Seite {{page}}/{{totalPages}} • {{timeframe}}",
+      "serverFallbackNote": "ℹ️ _Noch keine Tracks auf diesem Server gespielt — globale Charts werden angezeigt:_"
     },
     "wrapped": {
       "wrappedAuthor": "Community Music Wrapped",

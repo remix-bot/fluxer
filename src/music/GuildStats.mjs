@@ -292,7 +292,19 @@ class GuildStatsManager {
           params = [guildId, lim];
         }
 
-        const [rows] = await this._pool.execute(sql, params);
+        let [rows] = await this._pool.execute(sql, params);
+        if ((!rows || rows.length === 0) && (timeframe === "month" || timeframe === "week")) {
+          const [allRows] = await this._pool.execute(`
+            SELECT \`title\`, \`artist\`, \`play_count\` as count, \`duration_ms\` as durationMs
+            FROM \`guild_song_counts\`
+            WHERE \`guild_id\` = ?
+            ORDER BY count DESC
+            LIMIT ?;
+          `, [guildId, lim]);
+          if (allRows && allRows.length > 0) {
+            rows = allRows;
+          }
+        }
         if (rows && rows.length > 0) {
           const artistMap = {};
           const tracks = rows.map((r) => {
@@ -347,9 +359,19 @@ class GuildStatsManager {
       }
     }
 
-    const tracks = Object.values(trackMap)
+    let tracks = Object.values(trackMap)
       .sort((a, b) => b.count - a.count)
       .slice(0, lim);
+
+    if (tracks.length === 0 && Object.keys(data.songs || {}).length > 0) {
+      trackMap = data.songs;
+      for (const item of Object.values(trackMap)) {
+        artistMap[item.artist] = (artistMap[item.artist] || 0) + item.count;
+      }
+      tracks = Object.values(trackMap)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, lim);
+    }
 
     let topArtist = null;
     const sortedArtists = Object.entries(artistMap).sort((a, b) => b[1] - a[1]);

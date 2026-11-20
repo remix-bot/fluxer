@@ -1405,7 +1405,8 @@
       "globalAuthor": "全球排行榜 • 所有服务器",
       "globalTitle": "所有服务器中最多播放的曲目",
       "globalFooter": "筛选方式：{{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
-      "pageFooter": "第 {{page}}/{{totalPages}} 页 • {{timeframe}}"
+      "pageFooter": "第 {{page}}/{{totalPages}} 页 • {{timeframe}}",
+      "serverFallbackNote": "ℹ️ _此服务器尚未播放任何曲目 — 显示全球网络排行榜：_"
     },
     "wrapped": {
       "wrappedAuthor": "社区年度音乐回顾",

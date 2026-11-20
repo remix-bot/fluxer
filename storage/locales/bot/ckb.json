@@ -1405,7 +1405,8 @@
       "globalAuthor": "ڕیزبەندی جیهانی • هەموو سێرڤەرەکان",
       "globalTitle": "زۆرترین گۆرانی لێدراو لە هەموو سێرڤەرەکاندا",
       "globalFooter": "فلتەر بکە بە: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
-      "pageFooter": "پەڕەی {{page}}/{{totalPages}} • {{timeframe}}"
+      "pageFooter": "پەڕەی {{page}}/{{totalPages}} • {{timeframe}}",
+      "serverFallbackNote": "ℹ️ _تا ئێستا هیچ گۆرانییەک لەم سێرڤەرە لێنەدراوە — پیشاندانی ڕیزبەندیی تۆڕی جیهانی:_"
     },
     "wrapped": {
       "wrappedAuthor": "پوختەی مۆسیقای کۆمەڵگە",
