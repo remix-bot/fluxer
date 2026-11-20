@@ -560,7 +560,8 @@ class Player extends EventEmitter {
           const check = () => {
             try {
               if (voiceConn.isConnected()) { clearTimeout(timeout); return resolve(); }
-              if (voiceConn.connectionState === 0) { clearTimeout(timeout); return resolve(); }
+              const cs = voiceConn.connectionState;
+              if (cs === 2 || cs === "connected" || cs === "CONN_CONNECTED") { clearTimeout(timeout); return resolve(); }
             } catch (_) { clearTimeout(timeout); return resolve(); }
             setTimeout(check, 200);
           };

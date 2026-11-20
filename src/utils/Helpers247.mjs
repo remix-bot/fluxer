@@ -25,14 +25,18 @@ export function isPlayerConnectionDead(player) {
   const conn = player._voiceConn ?? player.connection ?? null;
   if (!conn) return true;
 
-  const room = conn.room ?? null;
-  if (!room) {
-    try { return conn.isConnected?.() === false; } catch (_) { return false; }
+  if (typeof conn.isConnected === "function") {
+    try {
+      if (!conn.isConnected()) return true;
+    } catch (_) {}
   }
-  if (room.isConnected === false) return true;
 
-  const cs = room.connectionState;
-  if (cs === 0 || cs === "CONN_DISCONNECTED") return true;
+  const room = conn.room ?? null;
+  if (room) {
+    if (room.isConnected === false || room.isClosed === true) return true;
+    const cs = (room.state ?? room.connectionState ?? "").toString().toLowerCase();
+    if (cs === "disconnected" || cs === "0" || cs === "conn_disconnected") return true;
+  }
 
   return false;
 }
