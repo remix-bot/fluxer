@@ -105,7 +105,9 @@
     "previous": "Tocar a faixa anterior do histórico de reprodução.",
     "replay": "Reiniciar a música atual do início.",
     "skipto": "Pular diretamente para uma faixa específica na fila.",
-    "statustest": "Testar atualizações do canal de status público, cartões ao vivo e incidentes."
+    "statustest": "Testar atualizações do canal de status público, cartões ao vivo e incidentes.",
+    "top": "Veja as músicas e os artistas mais tocados neste servidor.",
+    "wrapped": "Gere uma retrospectiva musical e estatísticas da comunidade."
   },
   "options": {
     "debug": {
@@ -204,6 +206,9 @@
     },
     "skipto": {
       "position": "O número da faixa na fila para onde pular."
+    },
+    "top": {
+      "timeframe": "Filtrar período: week, month ou all."
     }
   },
   "pagination": {
@@ -1383,6 +1388,26 @@
       "operational": "Operacional",
       "outage": "Instabilidade",
       "disabled": "Desativado"
+    },
+    "top": {
+      "topAuthor": "Classificação do Servidor",
+      "topTitle": "Músicas Mais Tocadas ({{timeframe}})",
+      "noData": "Nenhuma música foi tocada neste servidor ainda. Comece com {{prefix}}play <música>!",
+      "timeframeWeek": "Esta Semana",
+      "timeframeMonth": "Este Mês",
+      "timeframeAll": "Todo o Período",
+      "topFooter": "Filtrar com: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
+      "plays": "reproduções"
+    },
+    "wrapped": {
+      "wrappedAuthor": "Retrospectiva Musical da Comunidade",
+      "wrappedTitle": "Personalidade Musical do Servidor",
+      "totalStreamed": "Total Transmitido",
+      "tracksQueued": "Faixas na Fila",
+      "peakHour": "Horário de Pico",
+      "topDJ": "Principal DJ da Comunidade",
+      "topSongs": "Melhores Músicas",
+      "wrappedFooter": "Desenvolvido por Remix Music • Toque música com {{prefix}}play"
     }
   }
 }

@@ -105,7 +105,9 @@
     "previous": "Oynatma geçmişindeki önceki şarkıyı çal.",
     "replay": "Çalan şarkıyı baştan başlat.",
     "skipto": "Kuyruktaki belirli bir şarkıya doğrudan atla.",
-    "statustest": "Herkese açık durum kanalı güncellemelerini, canlı kartları ve olayları test edin."
+    "statustest": "Herkese açık durum kanalı güncellemelerini, canlı kartları ve olayları test edin.",
+    "top": "Bu sunucuda en çok çalınan şarkıları ve en popüler sanatçıları görüntüleyin.",
+    "wrapped": "Bir topluluk müzik özeti ve dinleme istatistikleri oluşturun."
   },
   "options": {
     "debug": {
@@ -204,6 +206,9 @@
     },
     "skipto": {
       "position": "Atlanacak şarkının kuyruktaki sıra numarası."
+    },
+    "top": {
+      "timeframe": "Zaman aralığını filtrele: week, month veya all."
     }
   },
   "pagination": {
@@ -1383,6 +1388,26 @@
       "operational": "Çalışıyor",
       "outage": "Aksama",
       "disabled": "Devre Dışı"
+    },
+    "top": {
+      "topAuthor": "Sunucu Lider Tablosu",
+      "topTitle": "En Çok Çalınan Şarkılar ({{timeframe}})",
+      "noData": "Bu sunucuda henüz hiç şarkı çalınmadı. {{prefix}}play <şarkı> ile çalmaya başlayın!",
+      "timeframeWeek": "Bu Hafta",
+      "timeframeMonth": "Bu Ay",
+      "timeframeAll": "Tüm Zamanlar",
+      "topFooter": "Filtrele: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
+      "plays": "çalma"
+    },
+    "wrapped": {
+      "wrappedAuthor": "Topluluk Müzik Özeti",
+      "wrappedTitle": "Sunucunun Müzik Kişiliği",
+      "totalStreamed": "Toplam Akış",
+      "tracksQueued": "Kuyruğa Eklenen Şarkılar",
+      "peakHour": "En Çok Dinlenen Saat",
+      "topDJ": "En İyi Topluluk DJ'i",
+      "topSongs": "En İyi Şarkılar",
+      "wrappedFooter": "Remix Music ile güçlendirilmiştir • {{prefix}}play ile müzik çalın"
     }
   }
 }

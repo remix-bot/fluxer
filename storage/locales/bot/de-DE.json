@@ -105,7 +105,9 @@
     "previous": "Den vorherigen Titel aus dem Wiedergabeverlauf abspielen.",
     "replay": "Den aktuellen Titel von vorne starten.",
     "skipto": "Direkt zu einem bestimmten Titel in der Warteschlange springen.",
-    "statustest": "Öffentliche Statuskanal-Aktualisierungen, Live-Karten und Vorfälle testen."
+    "statustest": "Öffentliche Statuskanal-Aktualisierungen, Live-Karten und Vorfälle testen.",
+    "top": "Zeige die meistgespielten Songs und Top-Künstler dieses Servers an.",
+    "wrapped": "Erstelle einen Community-Musikrückblick und Hörstatistiken."
   },
   "options": {
     "debug": {
@@ -204,6 +206,9 @@
     },
     "skipto": {
       "position": "Die Nummer des Titels in der Warteschlange, zu dem gesprungen werden soll."
+    },
+    "top": {
+      "timeframe": "Zeitraum filtern: week, month oder all."
     }
   },
   "pagination": {
@@ -1383,6 +1388,26 @@
       "operational": "Betriebsbereit",
       "outage": "Störungen",
       "disabled": "Deaktiviert"
+    },
+    "top": {
+      "topAuthor": "Server-Bestenliste",
+      "topTitle": "Meistgespielte Songs ({{timeframe}})",
+      "noData": "Auf diesem Server wurden noch keine Songs gespielt. Starte mit {{prefix}}play <Song>!",
+      "timeframeWeek": "Diese Woche",
+      "timeframeMonth": "Dieser Monat",
+      "timeframeAll": "Gesamte Zeit",
+      "topFooter": "Filtern mit: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
+      "plays": "Wiedergaben"
+    },
+    "wrapped": {
+      "wrappedAuthor": "Community Music Wrapped",
+      "wrappedTitle": "Musik-Persönlichkeit des Servers",
+      "totalStreamed": "Gesamt gestreamt",
+      "tracksQueued": "Songs in der Warteschlange",
+      "peakHour": "Spitzen-Hörzeit",
+      "topDJ": "Bester Community-DJ",
+      "topSongs": "Top-Songs",
+      "wrappedFooter": "Bereitgestellt von Remix Music • Spiele Musik mit {{prefix}}play"
     }
   }
 }

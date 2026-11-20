@@ -14,6 +14,7 @@ import { cleanId } from "../utils/Utils.mjs";
 import { getMessageGuildId } from "../ui/index.mjs";
 import { Dashboard } from "../dashboard/Dashboard.mjs";
 import { TrackStats } from "./TrackStats.mjs";
+import { GuildStats } from "./GuildStats.mjs";
 
 /** @private @param {Player} player @param {object|null} [fallbackChannel=null] @returns {string} Cleaned guild ID. */
 function getPlayerGuildId(player, fallbackChannel = null) {
@@ -103,6 +104,13 @@ const PlayerEventsMixin = {
           if (humans.length === 1) userId = humans[0];
         }
         TrackStats.increment(userId);
+        if (player._guildId && song) {
+          GuildStats.recordPlay({
+            guildId: cleanId(player._guildId),
+            track: song,
+            userId,
+          });
+        }
       }
 
       if (this._lastfm?.enabled && song) {

@@ -105,7 +105,9 @@
     "previous": "Play the previous track from playback history.",
     "replay": "Restart the current song from the beginning.",
     "skipto": "Skip directly to a specific track in the queue.",
-    "statustest": "Test public status channel updates, live cards, and incidents."
+    "statustest": "Test public status channel updates, live cards, and incidents.",
+    "top": "View the most played songs and top artists in this server.",
+    "wrapped": "Generate a community music recap and listening statistics."
   },
   "options": {
     "debug": {
@@ -204,6 +206,9 @@
     },
     "skipto": {
       "position": "The track number in the queue to jump to."
+    },
+    "top": {
+      "timeframe": "Filter timeframe: week, month, or all."
     }
   },
   "pagination": {
@@ -1383,6 +1388,26 @@
       "operational": "Operational",
       "outage": "Disruptions",
       "disabled": "Disabled"
+    },
+    "top": {
+      "topAuthor": "Server Leaderboard",
+      "topTitle": "Top Played Tracks ({{timeframe}})",
+      "noData": "No tracks have been played in this server yet. Start playing with {{prefix}}play <song>!",
+      "timeframeWeek": "This Week",
+      "timeframeMonth": "This Month",
+      "timeframeAll": "All Time",
+      "topFooter": "Filter with: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
+      "plays": "plays"
+    },
+    "wrapped": {
+      "wrappedAuthor": "Community Music Wrapped",
+      "wrappedTitle": "Server Music Personality",
+      "totalStreamed": "Total Streamed",
+      "tracksQueued": "Tracks Queued",
+      "peakHour": "Peak Listening Hour",
+      "topDJ": "Top Community DJ",
+      "topSongs": "Top Songs",
+      "wrappedFooter": "Powered by Remix Music • Play music with {{prefix}}play"
     }
   }
 }

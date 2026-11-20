@@ -105,7 +105,9 @@
     "previous": "播放播放歷史記錄中的上一首曲目。",
     "replay": "從頭重新播放當前歌曲。",
     "skipto": "直接跳轉至佇列中的指定曲目播放。",
-    "statustest": "測試公開狀態頻道更新、即時卡片與事件報告。"
+    "statustest": "測試公開狀態頻道更新、即時卡片與事件報告。",
+    "top": "檢視此伺服器中播放次數最多的歌曲和熱門演出者。",
+    "wrapped": "產生社群音樂回顧和收聽統計資料。"
   },
   "options": {
     "debug": {
@@ -204,6 +206,9 @@
     },
     "skipto": {
       "position": "要跳轉到的佇列曲目序號。"
+    },
+    "top": {
+      "timeframe": "篩選時間範圍：week、month 或 all。"
     }
   },
   "pagination": {
@@ -1383,6 +1388,26 @@
       "operational": "正常運作",
       "outage": "服務中斷",
       "disabled": "已停用"
+    },
+    "top": {
+      "topAuthor": "伺服器排行榜",
+      "topTitle": "最多播放曲目 ({{timeframe}})",
+      "noData": "此伺服器中尚未播放任何曲目。使用 {{prefix}}play <歌曲> 開始播放！",
+      "timeframeWeek": "本週",
+      "timeframeMonth": "本月",
+      "timeframeAll": "全部時間",
+      "topFooter": "篩選方式：{{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
+      "plays": "次播放"
+    },
+    "wrapped": {
+      "wrappedAuthor": "社區年度音樂回顧",
+      "wrappedTitle": "伺服器音樂個性",
+      "totalStreamed": "累計播放時長",
+      "tracksQueued": "點播曲目總數",
+      "peakHour": "最高峰收聽時段",
+      "topDJ": "最活躍點歌達人",
+      "topSongs": "最熱曲目",
+      "wrappedFooter": "由 Remix Music 驅動 • 使用 {{prefix}}play 暢享音樂"
     }
   }
 }
