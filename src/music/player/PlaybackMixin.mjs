@@ -14,6 +14,7 @@ import { Utils, cleanId } from "../../utils/Utils.mjs";
 import { isPlayerConnectionDead } from "../../utils/Helpers247.mjs";
 import { logger } from "../../core/Logger.mjs";
 import { getBilibiliStreamUrl } from "../bilibili/index.mjs";
+import { fetchRadioStreamTitle } from "../audio/RadioMetadata.mjs";
 
 /**
  * @type {object}
@@ -33,6 +34,7 @@ const PlaybackMixin = {
     this._clearTrackEndTimer();
 
     if (songData.type === "radio") {
+      this._stopRadioTitlePolling();
       logger.player(`[Player] Radio track ended: ${songData.title}`);
       this._lastPlayedTrack = this.queue.getCurrent() ?? songData;
       this.queue.current = null;
@@ -235,7 +237,10 @@ const PlaybackMixin = {
       if (!dup) this.announceSong(songData);
       else logger.player(`[Player:${this._guildId}] Suppressed duplicate now-playing for: ${songData.title}`);
       this._lastAnnounce = { key: songData.url || songData.title, at: now };
-      if (songData.type === "radio") this._radioAnnounced = true;
+      if (songData.type === "radio") {
+        this._radioAnnounced = true;
+        this._startRadioTitlePolling(songData);
+      }
     }
     this._skipVotes.clear();
     this.emit("startplay", songData);
@@ -506,6 +511,51 @@ const PlaybackMixin = {
       this.queue.add(track);
       this.playNext().catch(e => logger.error("[Player] Radio reconnect playNext error:", e.message));
     }, 3_000).unref?.();
+  },
+
+  /**
+   * Start polling out-of-band ICY and Icecast metadata for live radio stations.
+   * Updates songData.currentStreamTitle when changed and triggers dashboard update.
+   * @param {object} songData
+   * @private
+   */
+  _startRadioTitlePolling(songData) {
+    this._stopRadioTitlePolling();
+    if (!songData || songData.type !== "radio" || !songData.url) return;
+
+    const poll = async () => {
+      try {
+        const current = this.queue.getCurrent();
+        if (!current || current.type !== "radio" || current.url !== songData.url) {
+          this._stopRadioTitlePolling();
+          return;
+        }
+        const liveTitle = await fetchRadioStreamTitle(songData.url);
+        if (liveTitle && liveTitle !== current.currentStreamTitle) {
+          current.currentStreamTitle = liveTitle;
+          songData.currentStreamTitle = liveTitle;
+          logger.player(`[Player:${this._guildId}] Radio live title updated: ${liveTitle}`);
+          this.emit("radioTitleUpdate", { track: current, title: liveTitle });
+          this.dashboard?.playerUpdate?.({ type: "update" }, this);
+        }
+      } catch (e) {
+        logger.player(`[Player:${this._guildId}] Radio metadata poll error: ${e?.message}`);
+      }
+    };
+
+    poll();
+    this._radioPollInterval = setInterval(poll, 25_000);
+  },
+
+  /**
+   * Stop the active radio metadata polling timer.
+   * @private
+   */
+  _stopRadioTitlePolling() {
+    if (this._radioPollInterval) {
+      clearInterval(this._radioPollInterval);
+      this._radioPollInterval = null;
+    }
   },
 
   /**

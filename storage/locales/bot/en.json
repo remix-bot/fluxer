@@ -373,7 +373,10 @@
       "autoLeaveFooter": "Keep bot in voice 24/7 with {{prefix}}247",
       "joinFailedAuthor": "🔊 Voice Connection Error",
       "joinFailedTitle": "Failed to Connect",
-      "joinFailedFooter": "Check voice channel permissions and retry with {{prefix}}join"
+      "joinFailedFooter": "Check voice channel permissions and retry with {{prefix}}join",
+      "inactivityWarningTitle": "Leaving Voice Soon",
+      "inactivityWarningDesc": "Voice session is currently inactive. Disconnecting from <#{{channel}}> in **{{minutes}} minute(s)**.\n\nUse {{prefix}}247 to keep me in voice 24/7!",
+      "inactivityWarningFooter": "Play a song with {{prefix}}play to resume"
     },
     "leave": {
       "noVoiceChannel": "⚠️ I can't find you in a voice channel. Please join one, or if you're already in one, make sure I have **View Channel** and **Connect** permissions. You can also specify a channel: `{{prefix}}leave <#channel>`",

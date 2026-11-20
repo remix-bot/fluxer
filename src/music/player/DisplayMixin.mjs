@@ -217,14 +217,18 @@ const DisplayMixin = {
     let radioLiveTitle = null;
 
     if (current.type === "radio") {
-      try {
-        const data = await meta(current.url);
-        radioLiveTitle = data?.title || null;
-        textMsg = `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n${current.description || ""}\n\n🎵 Now playing: ${radioLiveTitle || "Unknown"}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`;
-      } catch (_) {
-        /* Radio live metadata probe is optional — gracefully fall back to station display */
-        textMsg = `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`;
+      radioLiveTitle = current.currentStreamTitle || null;
+      if (!radioLiveTitle) {
+        try {
+          const data = await meta(current.url);
+          radioLiveTitle = data?.title || null;
+        } catch (_) {
+          /* Radio live metadata probe is optional — gracefully fall back to station display */
+        }
       }
+      if (radioLiveTitle) current.currentStreamTitle = radioLiveTitle;
+      const titleLine = radioLiveTitle ? `\n\n🎵 Now playing: ${radioLiveTitle}` : "";
+      textMsg = `${vcLine}📻 **[${current.title}](${current.author?.url || current.url})**\n${current.description || ""}${titleLine}\n\n🔉 ${vol} │ ${loopqueue} Queue │ ${songloop} Song │ ${autoplay} Autoplay`;
     } else if (current.type === "external" || current.type === "stream" || current.type === "attachment") {
       const totalMs = this._getTrackDurationMs(current);
       const progressLine = totalMs > 0 ? `\n${this._createProgressBar(20)}` : "";
@@ -428,12 +432,13 @@ const DisplayMixin = {
     const prefix = this._getPrefix?.(this._guildId) ?? "%";
 
     if (s.type === "radio") {
+      const liveTitle = s.currentStreamTitle ? `🎶 **Now Playing:** ${s.currentStreamTitle}\n\n` : "";
       const embed = new EmbedBuilder()
         .setColor(0xe9196c)
         .setAuthor({ name: `📻 ${this._t("responses.play.autoNowPlaying")}` })
         .setTitle(Utils.truncate(s.title || this._t("responses.play.sourceRadio"), 250))
         .setURL(s.author?.url || s.url || undefined)
-        .setDescription(`🎵 **${s.description || this._t("responses.play.liveBroadcast")}**\n\n🔊 <#${this._channelId}>`)
+        .setDescription(`${liveTitle}🎵 **${s.description || this._t("responses.play.liveBroadcast")}**\n\n🔊 <#${this._channelId}>`)
         .setFooter({ text: this._t("responses.play.controlsHint", { prefix }) });
       if (s.thumbnail) embed.setThumbnail(s.thumbnail);
       this.emit("message", { embeds: [embed] });

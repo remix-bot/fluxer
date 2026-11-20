@@ -373,7 +373,10 @@
       "autoLeaveFooter": "使用 {{prefix}}247 让机器人全天候保持在语音中",
       "joinFailedAuthor": "🔊 语音连接错误",
       "joinFailedTitle": "连接失败",
-      "joinFailedFooter": "检查语音频道权限并使用 {{prefix}}join 重试"
+      "joinFailedFooter": "检查语音频道权限并使用 {{prefix}}join 重试",
+      "inactivityWarningTitle": "即将退出语音频道",
+      "inactivityWarningDesc": "语音会话当前处于空闲状态。将在 **{{minutes}} 分钟** 后从 <#{{channel}}> 断开连接。\n\n使用 {{prefix}}247 让我保持全天候在线！",
+      "inactivityWarningFooter": "使用 {{prefix}}play 播放歌曲以继续"
     },
     "leave": {
       "noVoiceChannel": "⚠️ 我未在语音频道中找到你。请加入一个频道；如果你已经在频道中，请确保我拥有**查看频道**和**连接**权限。你也可以指定频道：`{{prefix}}leave <#频道>`",

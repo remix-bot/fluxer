@@ -413,6 +413,40 @@ const PlayerLifecycleMixin = {
       guildId: cleanId(channel.guildId ?? getMessageGuildId(message)),
     });
 
+    player.on("inactivityWarning", ({ timeoutMs }) => {
+      const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;
+      const ch = player.textChannel;
+      const guildId = cleanId(player._guildId ?? ch?.guildId ?? ch?.guild?.id ?? getMessageGuildId({ channel: ch }));
+      const prefix = this.commands.getPrefix(guildId);
+      const minutes = Math.max(1, Math.round((timeoutMs || 180000) / 60000));
+      const autoleaveChMgr = this.commands?.client?.channels ?? null;
+      let targetCh = (ch && typeof ch === "object" && typeof ch.send !== "function" && ch.id &&
+          autoleaveChMgr && typeof autoleaveChMgr.send === "function")
+        ? (() => { const t = { id: ch.id, type: ch.type }; t.send = (o) => autoleaveChMgr.send(ch.id, o); return t; })()
+        : ch;
+      if (typeof targetCh?.send === "function") {
+        const title = this.locale?.translate(guildId, "responses.join.inactivityWarningTitle") ?? "Leaving Voice Soon";
+        const desc = this.locale?.translate(guildId, "responses.join.inactivityWarningDesc", {
+          channel: activeChannelId,
+          minutes,
+          prefix,
+        }) ?? `Voice session is currently inactive. Disconnecting from <#${activeChannelId}> in **${minutes} minute(s)**.\n\nUse \`${prefix}247\` to keep me in voice 24/7!`;
+        const footer = this.locale?.translate(guildId, "responses.join.inactivityWarningFooter", { prefix }) ?? `Play a song with ${prefix}play to resume`;
+
+        const warnEmbed = new EmbedBuilder()
+          .setColor(getGlobalColor())
+          .setAuthor({ name: this.locale?.translate(guildId, "responses.join.autoLeaveAuthor") ?? "⏱️ Voice Watchdog • Session Inactive" })
+          .setTitle(title)
+          .setDescription(desc)
+          .setFooter({ text: footer });
+        targetCh.send({ embeds: [warnEmbed], allowedMentions: { parse: [] } }).catch(err => {
+          if (err.code === "MISSING_PERMISSIONS" || err.statusCode === 403) {
+            logger.warn(`[PlayerManager] Cannot send inactivity warning message in channel ${targetCh.id} — missing permissions`);
+          }
+        });
+      }
+    });
+
     player.on("autoleave", () => {
       const activeChannelId = getPlayerChannelId(player, cleanChannelId) || cleanChannelId;
       const homeChannelId = cleanId(player._home247Channel) || activeChannelId;

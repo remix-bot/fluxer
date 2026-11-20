@@ -370,7 +370,10 @@
       "autoLeaveFooter": "Halte den Bot rund um die Uhr mit {{prefix}}247 im Sprachkanal",
       "joinFailedAuthor": "🔊 Sprachverbindungsfehler",
       "joinFailedTitle": "Verbindung fehlgeschlagen",
-      "joinFailedFooter": "Überprüfe die Kanalberechtigungen und versuche es erneut mit {{prefix}}join"
+      "joinFailedFooter": "Überprüfe die Kanalberechtigungen und versuche es erneut mit {{prefix}}join",
+      "inactivityWarningTitle": "Sprachkanal wird bald verlassen",
+      "inactivityWarningDesc": "Sprachkanal ist derzeit inaktiv. Verbindung zu <#{{channel}}> wird in **{{minutes}} Minute(n)** getrennt.\n\nNutze {{prefix}}247, um mich rund um die Uhr im Sprachkanal zu halten!",
+      "inactivityWarningFooter": "Spiele einen Song mit {{prefix}}play, um fortzufahren"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Bitte trete zuerst einem Sprachkanal bei oder gib einen an: `{{prefix}}leave <#channel>`",

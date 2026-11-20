@@ -348,6 +348,10 @@ class Player extends EventEmitter {
     }
 
     logger.inactivity(`[Player] Starting inactivity timer for guild ${this._guildId} (${this._inactivityLimit / 1000}s)`);
+    if (!this._inactivityWarned) {
+      this._inactivityWarned = true;
+      this.emit("inactivityWarning", { timeoutMs: this._inactivityLimit });
+    }
     this._inactivityTimer = setTimeout(() => {
       const currentMode = this._get247Mode();
       if (currentMode === "on") {
@@ -370,6 +374,7 @@ class Player extends EventEmitter {
   /** Clear the inactivity timer if running. */
   _stopInactivityTimer() {
     this._pendingInactivityCheck = false;
+    this._inactivityWarned = false;
     if (this._inactivityTimer) {
       logger.inactivity(`[Player] Stopping inactivity timer for guild ${this._guildId}`);
       clearTimeout(this._inactivityTimer);
@@ -735,6 +740,8 @@ class Player extends EventEmitter {
     if (this._stateHeartbeat) { clearInterval(this._stateHeartbeat); this._stateHeartbeat = null; }
 
     this._clearTrackEndTimer();
+    this._stopRadioTitlePolling?.();
+    this._inactivityWarned = false;
     this._activeTrackOpt = null;
 
     try {
@@ -1087,6 +1094,7 @@ class Player extends EventEmitter {
   _bridgeStop() {
     this._playSessionGen = (this._playSessionGen ?? 0) + 1;
     this._clearPrefetchTimer?.();
+    this._stopRadioTitlePolling?.();
     if (this._audioBridge) {
       try { this._audioBridge.stop(); } catch (_) {}
     }

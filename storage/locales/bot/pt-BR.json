@@ -370,7 +370,10 @@
       "autoLeaveFooter": "Mantenha o bot no canal de voz 24/7 com {{prefix}}247",
       "joinFailedAuthor": "🔊 Erro de Conexão de Voz",
       "joinFailedTitle": "Falha ao Conectar",
-      "joinFailedFooter": "Verifique as permissões do canal de voz e tente novamente com {{prefix}}join"
+      "joinFailedFooter": "Verifique as permissões do canal de voz e tente novamente com {{prefix}}join",
+      "inactivityWarningTitle": "Saindo do canal de voz em breve",
+      "inactivityWarningDesc": "A sessão de voz está inativa. Desconectando de <#{{channel}}> em **{{minutes}} minuto(s)**.\n\nUse {{prefix}}247 para me manter no canal 24/7!",
+      "inactivityWarningFooter": "Toque uma música com {{prefix}}play para retomar"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Por favor, entre em um canal de voz primeiro ou especifique um: `{{prefix}}leave <#channel>`",

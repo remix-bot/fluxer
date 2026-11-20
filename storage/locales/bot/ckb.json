@@ -370,7 +370,10 @@
       "autoLeaveFooter": "بۆتەکە لە دەنگدا بهێڵەرەوە 24/7 بە {{prefix}}247",
       "joinFailedAuthor": "🔊 هەڵەی پەیوەستبوونی دەنگ",
       "joinFailedTitle": "پەیوەستبوون سەرکەوتوو نەبوو",
-      "joinFailedFooter": "مۆڵەتەکانی کەناڵی دەنگی بپشکنە و دووبارە تاقی بکەرەوە بە {{prefix}}join"
+      "joinFailedFooter": "مۆڵەتەکانی کەناڵی دەنگی بپشکنە و دووبارە تاقی بکەرەوە بە {{prefix}}join",
+      "inactivityWarningTitle": "بەمنزیکانە جێهێشتنی کەناڵی دەنگی",
+      "inactivityWarningDesc": "کەناڵی دەنگی لە ئێستادا ناچالاکە. دابڕان لە <#{{channel}}> لە ماوەی **{{minutes}} خولەکدا**.\n\nبۆ مانەوەی ٢٤/٧ فەرمانی {{prefix}}247 بەکاربهێنە!",
+      "inactivityWarningFooter": "گۆرانییەک لێبدە بە {{prefix}}play بۆ بەردەوامبوون"
     },
     "leave": {
       "noVoiceChannel": "⚠️ تکایە سەرەتا بەشداری کەناڵێکی دەنگی بکە، یان یەکێک دیاریبکە: `{{prefix}}leave <#channel>`",

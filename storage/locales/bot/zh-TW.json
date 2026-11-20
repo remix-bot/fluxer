@@ -373,7 +373,10 @@
       "autoLeaveFooter": "使用 {{prefix}}247 讓機器人全天候保持在語音中",
       "joinFailedAuthor": "🔊 語音連線錯誤",
       "joinFailedTitle": "連線失敗",
-      "joinFailedFooter": "檢查語音頻道權限並使用 {{prefix}}join 重試"
+      "joinFailedFooter": "檢查語音頻道權限並使用 {{prefix}}join 重試",
+      "inactivityWarningTitle": "即將退出語音頻道",
+      "inactivityWarningDesc": "語音通話目前處於閒置狀態。將在 **{{minutes}} 分鐘** 後從 <#{{channel}}> 斷開連線。\n\n使用 {{prefix}}247 讓我保持全天候連線！",
+      "inactivityWarningFooter": "使用 {{prefix}}play 播放歌曲以繼續"
     },
     "leave": {
       "noVoiceChannel": "⚠️ 我未在語音頻道中找到你。請加入一個頻道；如果你已經在頻道中，請確保我擁有**檢視頻道**與**連線**權限。你也可以指定頻道：`{{prefix}}leave <#頻道>`",

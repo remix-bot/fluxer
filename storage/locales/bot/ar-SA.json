@@ -370,7 +370,10 @@
       "autoLeaveFooter": "إبقاء البوت في القناة الصوتية 24/7 باستخدام {{prefix}}247",
       "joinFailedAuthor": "🔊 خطأ في الاتصال الصوتي",
       "joinFailedTitle": "فشل في الاتصال",
-      "joinFailedFooter": "تحقق من أذونات القناة الصوتية وأعد المحاولة باستخدام {{prefix}}join"
+      "joinFailedFooter": "تحقق من أذونات القناة الصوتية وأعد المحاولة باستخدام {{prefix}}join",
+      "inactivityWarningTitle": "مغادرة القناة الصوتية قريباً",
+      "inactivityWarningDesc": "الجلسة الصوتية غير نشطة حالياً. سيتم قطع الاتصال من <#{{channel}}> خلال **{{minutes}} دقيقة**.\n\nاستخدم {{prefix}}247 للإبقاء في القناة 24/7!",
+      "inactivityWarningFooter": "قم بتشغيل أغنية باستخدام {{prefix}}play للاستئناف"
     },
     "leave": {
       "noVoiceChannel": "⚠️ يرجى الانضمام إلى قناة صوتية أولاً، أو حدد واحدة: `{{prefix}}leave <#channel>`",

@@ -370,7 +370,10 @@
       "autoLeaveFooter": "Botu {{prefix}}247 ile 7/24 seste tutun",
       "joinFailedAuthor": "🔊 Ses Bağlantısı Hatası",
       "joinFailedTitle": "Bağlantı Başarısız",
-      "joinFailedFooter": "Ses kanalı izinlerini kontrol edin ve {{prefix}}join ile tekrar deneyin"
+      "joinFailedFooter": "Ses kanalı izinlerini kontrol edin ve {{prefix}}join ile tekrar deneyin",
+      "inactivityWarningTitle": "Yakında Ses Kanalından Ayrılıyor",
+      "inactivityWarningDesc": "Ses oturumu şu anda etkin değil. **{{minutes}} dakika** içinde <#{{channel}}> kanalından bağlantı kesilecek.\n\nBeni 7/24 seste tutmak için {{prefix}}247 kullanın!",
+      "inactivityWarningFooter": "Devam etmek için {{prefix}}play ile bir şarkı çalın"
     },
     "leave": {
       "noVoiceChannel": "⚠️ Lütfen önce bir ses kanalına katılın veya bir tane belirtin: `{{prefix}}leave <#kanal>`",
