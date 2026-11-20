@@ -107,7 +107,8 @@
     "skipto": "Direkt zu einem bestimmten Titel in der Warteschlange springen.",
     "statustest": "Öffentliche Statuskanal-Aktualisierungen, Live-Karten und Vorfälle testen.",
     "top": "Zeige die meistgespielten Songs und Top-Künstler dieses Servers an.",
-    "wrapped": "Erstelle einen Community-Musikrückblick und Hörstatistiken."
+    "wrapped": "Erstelle einen Community-Musikrückblick und Hörstatistiken.",
+    "mywrapped": "Sieh dir deinen persönlichen Musik-Rückblick, Top-Tracks und Server-DJ-Rang an."
   },
   "options": {
     "debug": {
@@ -213,6 +214,9 @@
     },
     "wrapped": {
       "scope": "Rückblick-Bereich: server oder global."
+    },
+    "mywrapped": {
+      "user": "Der Benutzer, dessen Musik-Rückblick du sehen möchtest."
     }
   },
   "pagination": {
@@ -1421,6 +1425,23 @@
       "globalTitle": "Globale Musik-Persönlichkeit",
       "activeServers": "Aktive Communities",
       "globalFooter": "Remix Globales Netzwerk • Tippe {{prefix}}wrapped für deinen Server-Rückblick"
+    },
+    "mywrapped": {
+      "authorSelf": "Dein persönlicher Musik-Rückblick",
+      "authorOther": "Persönlicher Musik-Rückblick • {{username}}",
+      "titleSelf": "Deine Server-Höridentität",
+      "titleOther": "Server-Höridentität von {{username}}",
+      "totalStreamed": "Gesamte Streamingzeit",
+      "tracksQueued": "Gespielte Tracks",
+      "peakHour": "Aktivste Hörzeit",
+      "djRank": "Community-DJ-Rang",
+      "djRankValue": "Platz #{{rank}} von {{total}} DJs",
+      "topArtist": "Lieblingskünstler",
+      "topSongs": "Persönliche Top-Songs",
+      "noDataSelf": "Du hast auf diesem Server noch keine Songs abgespielt. Starte mit {{prefix}}play <Song>!",
+      "noDataOther": "{{username}} hat auf diesem Server noch keine Songs abgespielt.",
+      "globalNotice": "🌐 Globale Statistiken • Noch keine Songs auf diesem Server",
+      "footer": "Unterstützt von Remix Music • {{prefix}}top für Server-Charts"
     }
   }
 }

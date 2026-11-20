@@ -8,6 +8,7 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { GuildStats } from "../src/music/GuildStats.mjs";
 import { cleanId, Utils } from "../src/utils/Utils.mjs";
 import { getGlobalColor } from "../src/ui/index.mjs";
+import { run as runMyWrapped } from "./mywrapped.mjs";
 
 /** @type {CommandBuilder} */
 export const command = new CommandBuilder()
@@ -37,6 +38,10 @@ export async function run(message, data) {
     (message.message?.content || message.content || "").split(/\s+/)[1] ??
     ""
   ).trim().toLowerCase();
+
+  if (rawArg === "me" || rawArg === "self" || rawArg === "user") {
+    return runMyWrapped.call(this, message, data);
+  }
 
   const isGlobal = rawArg === "global" || rawArg === "all" || rawArg === "network";
 

@@ -649,6 +649,152 @@ class GuildStatsManager {
   }
 
   /**
+   * Get personal listening statistics for a specific user in a guild (or global network).
+   * @param {string} guildId
+   * @param {string} userId
+   * @returns {Promise<object|null>}
+   */
+  async getUserStats(guildId, userId) {
+    if (!userId) return null;
+
+    if (this._pool) {
+      try {
+        const isGlobalScope = guildId === "global";
+        const sumSql = isGlobalScope
+          ? "SELECT COUNT(*) as totalTracks, COALESCE(SUM(`duration_ms`), 0) as totalDurationMs FROM `guild_track_stats` WHERE `user_id` = ?;"
+          : "SELECT COUNT(*) as totalTracks, COALESCE(SUM(`duration_ms`), 0) as totalDurationMs FROM `guild_track_stats` WHERE `guild_id` = ? AND `user_id` = ?;";
+        const sumParams = isGlobalScope ? [userId] : [guildId, userId];
+
+        const [sumRows] = await this._pool.execute(sumSql, sumParams);
+        const totalTracks = Number(sumRows?.[0]?.totalTracks) || 0;
+
+        if (totalTracks > 0) {
+          const totalDurationMs = Number(sumRows?.[0]?.totalDurationMs) || 0;
+          const totalHours = Math.round((totalDurationMs / 3_600_000) * 10) / 10;
+
+          const hourSql = isGlobalScope
+            ? "SELECT `hour_played`, COUNT(*) as count FROM `guild_track_stats` WHERE `user_id` = ? GROUP BY `hour_played` ORDER BY count DESC LIMIT 1;"
+            : "SELECT `hour_played`, COUNT(*) as count FROM `guild_track_stats` WHERE `guild_id` = ? AND `user_id` = ? GROUP BY `hour_played` ORDER BY count DESC LIMIT 1;";
+          const hourParams = isGlobalScope ? [userId] : [guildId, userId];
+
+          const [hourRows] = await this._pool.execute(hourSql, hourParams);
+          const peakHour = hourRows?.[0] ? formatHour(hourRows[0].hour_played) : "12:00 PM";
+
+          const trackSql = isGlobalScope
+            ? "SELECT `title`, `artist`, COUNT(*) as count, MAX(`duration_ms`) as durationMs FROM `guild_track_stats` WHERE `user_id` = ? GROUP BY `title`, `artist` ORDER BY count DESC LIMIT 5;"
+            : "SELECT `title`, `artist`, COUNT(*) as count, MAX(`duration_ms`) as durationMs FROM `guild_track_stats` WHERE `guild_id` = ? AND `user_id` = ? GROUP BY `title`, `artist` ORDER BY count DESC LIMIT 5;";
+          const trackParams = isGlobalScope ? [userId] : [guildId, userId];
+
+          const [trackRows] = await this._pool.execute(trackSql, trackParams);
+          const topTracks = (trackRows || []).map((r) => ({
+            title: r.title,
+            artist: r.artist,
+            count: Number(r.count) || 0,
+            durationMs: Number(r.durationMs) || 0,
+          }));
+
+          const artistMap = {};
+          for (const t of topTracks) {
+            if (t.artist && t.artist !== "Unknown Artist") {
+              artistMap[t.artist] = (artistMap[t.artist] || 0) + t.count;
+            }
+          }
+          const sortedArtists = Object.entries(artistMap).sort((a, b) => b[1] - a[1]);
+          const topArtist = sortedArtists.length > 0 ? { name: sortedArtists[0][0], count: sortedArtists[0][1] } : null;
+
+          const lbSql = isGlobalScope
+            ? "SELECT `user_id`, COUNT(*) as plays FROM `guild_track_stats` WHERE `user_id` IS NOT NULL AND `user_id` != 'system' GROUP BY `user_id` ORDER BY plays DESC;"
+            : "SELECT `user_id`, COUNT(*) as plays FROM `guild_track_stats` WHERE `guild_id` = ? AND `user_id` IS NOT NULL AND `user_id` != 'system' GROUP BY `user_id` ORDER BY plays DESC;";
+          const lbParams = isGlobalScope ? [] : [guildId];
+
+          const [leaderboardRows] = await this._pool.execute(lbSql, lbParams);
+          let djRank = 1;
+          let totalDjs = 1;
+          if (leaderboardRows && leaderboardRows.length > 0) {
+            totalDjs = leaderboardRows.length;
+            const idx = leaderboardRows.findIndex((r) => String(r.user_id) === String(userId));
+            if (idx !== -1) {
+              djRank = idx + 1;
+            }
+          }
+
+          return {
+            totalTracks,
+            totalHours,
+            peakHour,
+            topTracks,
+            topArtist,
+            djRank,
+            totalDjs,
+          };
+        }
+      } catch (err) {
+        logger.warn("[GuildStats] MySQL getUserStats error:", err?.message);
+      }
+    }
+
+    /* Fallback to local memory/file cache */
+    const data = this._getGuildData(guildId);
+    if (!data) return null;
+
+    const totalTracks = Number(data.users?.[userId]) || 0;
+    if (totalTracks === 0) return null;
+
+    const userTracks = (data.recent || []).filter((r) => String(r.userId) === String(userId));
+    let totalDurationMs = 0;
+    const songMap = {};
+    const artistMap = {};
+    const hourMap = {};
+
+    for (const item of userTracks) {
+      totalDurationMs += Number(item.durationMs) || 0;
+      const k = `${item.title}:::${item.artist}`;
+      if (!songMap[k]) {
+        songMap[k] = { title: item.title, artist: item.artist, count: 0 };
+      }
+      songMap[k].count += 1;
+      if (item.artist && item.artist !== "Unknown Artist") {
+        artistMap[item.artist] = (artistMap[item.artist] || 0) + 1;
+      }
+      const hr = new Date(item.ts || Date.now()).getHours();
+      hourMap[hr] = (hourMap[hr] || 0) + 1;
+    }
+
+    const totalHours = Math.round((totalDurationMs / 3_600_000) * 10) / 10;
+    const topTracks = Object.values(songMap)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    const sortedArtists = Object.entries(artistMap).sort((a, b) => b[1] - a[1]);
+    const topArtist = sortedArtists.length > 0 ? { name: sortedArtists[0][0], count: sortedArtists[0][1] } : null;
+
+    let peakHourIndex = 12;
+    let peakHourCount = 0;
+    for (const [hr, cnt] of Object.entries(hourMap)) {
+      if (cnt > peakHourCount) {
+        peakHourCount = cnt;
+        peakHourIndex = Number(hr);
+      }
+    }
+    const peakHour = formatHour(peakHourIndex);
+
+    const sortedUsers = Object.entries(data.users || {}).sort((a, b) => b[1] - a[1]);
+    const totalDjs = Math.max(1, sortedUsers.length);
+    const userIndex = sortedUsers.findIndex((u) => String(u[0]) === String(userId));
+    const djRank = userIndex !== -1 ? userIndex + 1 : 1;
+
+    return {
+      totalTracks,
+      totalHours,
+      peakHour,
+      topTracks,
+      topArtist,
+      djRank,
+      totalDjs,
+    };
+  }
+
+  /**
    * Schedule a debounced file save for a guild.
    * @param {string} guildId
    * @private

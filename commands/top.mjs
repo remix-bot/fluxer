@@ -8,6 +8,7 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { GuildStats } from "../src/music/GuildStats.mjs";
 import { cleanId, Utils } from "../src/utils/Utils.mjs";
 import { getGlobalColor } from "../src/ui/index.mjs";
+import { run as runMyWrapped } from "./mywrapped.mjs";
 
 const PAGE_SIZE = 10;
 const MAX_TRACKS = 50;
@@ -47,6 +48,10 @@ export async function run(message, data) {
   ).trim().toLowerCase();
 
   const tokens = rawArg.split(/\s+/).filter(Boolean);
+
+  if (tokens.includes("me") || tokens.includes("self") || tokens.includes("my")) {
+    return runMyWrapped.call(this, message, data);
+  }
 
   let isGlobal = false;
   let timeframe = "month";

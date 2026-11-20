@@ -107,7 +107,8 @@
     "skipto": "Skip directly to a specific track in the queue.",
     "statustest": "Test public status channel updates, live cards, and incidents.",
     "top": "View the most played songs and top artists in this server.",
-    "wrapped": "Generate a community music recap and listening statistics."
+    "wrapped": "Generate a community music recap and listening statistics.",
+    "mywrapped": "View your personal music listening recap, top tracks, and server DJ rank."
   },
   "options": {
     "debug": {
@@ -213,6 +214,9 @@
     },
     "wrapped": {
       "scope": "Recap scope: server or global."
+    },
+    "mywrapped": {
+      "user": "The user whose listening recap you want to view."
     }
   },
   "pagination": {
@@ -1421,6 +1425,23 @@
       "globalTitle": "Global Music Personality",
       "activeServers": "Active Communities",
       "globalFooter": "Remix Global Network • Type {{prefix}}wrapped for your server's recap"
+    },
+    "mywrapped": {
+      "authorSelf": "Your Personal Music Recap",
+      "authorOther": "Personal Music Recap • {{username}}",
+      "titleSelf": "Your Server Listening Identity",
+      "titleOther": "{{username}}'s Server Listening Identity",
+      "totalStreamed": "Total Streamed",
+      "tracksQueued": "Tracks Queued",
+      "peakHour": "Peak Listening Time",
+      "djRank": "Community DJ Rank",
+      "djRankValue": "#{{rank}} of {{total}} DJs",
+      "topArtist": "Favorite Artist",
+      "topSongs": "Personal Top Songs",
+      "noDataSelf": "You haven't queued any songs in this server yet. Start playing with {{prefix}}play <song>!",
+      "noDataOther": "{{username}} hasn't queued any songs in this server yet.",
+      "globalNotice": "🌐 Global Stats • No songs queued on this server yet",
+      "footer": "Powered by Remix Music • {{prefix}}top for server charts"
     }
   }
 }

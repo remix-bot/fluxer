@@ -107,7 +107,8 @@
     "skipto": "直接跳转到队列中的指定曲目播放。",
     "statustest": "测试公开状态频道更新、实时卡片和事件报告。",
     "top": "查看此服务器中播放次数最多的歌曲和热门艺术家。",
-    "wrapped": "生成社区音乐回顾和收听统计数据。"
+    "wrapped": "生成社区音乐回顾和收听统计数据。",
+    "mywrapped": "查看您的个人音乐回顾、最爱曲目和服务器 DJ 排名。"
   },
   "options": {
     "debug": {
@@ -213,6 +214,9 @@
     },
     "wrapped": {
       "scope": "回顾范围：server 或 global。"
+    },
+    "mywrapped": {
+      "user": "要查看其音乐回顾的用户。"
     }
   },
   "pagination": {
@@ -1421,6 +1425,23 @@
       "globalTitle": "全球音乐个性",
       "activeServers": "活跃社区数",
       "globalFooter": "Remix 全球网络 • 输入 {{prefix}}wrapped 查看本服务器回顾"
+    },
+    "mywrapped": {
+      "authorSelf": "您的个人音乐回顾",
+      "authorOther": "个人音乐回顾 • {{username}}",
+      "titleSelf": "您的服务器听歌身份",
+      "titleOther": "{{username}} 的服务器听歌身份",
+      "totalStreamed": "总播放时长",
+      "tracksQueued": "点播曲目数",
+      "peakHour": "听歌高峰时段",
+      "djRank": "社区 DJ 排名",
+      "djRankValue": "第 #{{rank}} 名 (共 {{total}} 位 DJ)",
+      "topArtist": "最爱歌手",
+      "topSongs": "个人热门单曲",
+      "noDataSelf": "您在此服务器上尚未播放过歌曲。使用 {{prefix}}play <歌曲> 开始点歌！",
+      "noDataOther": "{{username}} 在此服务器上尚未播放过歌曲。",
+      "globalNotice": "🌐 全球统计 • 此服务器上尚未播放过歌曲",
+      "footer": "由 Remix Music 提供支持 • 输入 {{prefix}}top 查看服务器排行榜"
     }
   }
 }

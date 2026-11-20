@@ -107,7 +107,8 @@
     "skipto": "Pular diretamente para uma faixa específica na fila.",
     "statustest": "Testar atualizações do canal de status público, cartões ao vivo e incidentes.",
     "top": "Veja as músicas e os artistas mais tocados neste servidor.",
-    "wrapped": "Gere uma retrospectiva musical e estatísticas da comunidade."
+    "wrapped": "Gere uma retrospectiva musical e estatísticas da comunidade.",
+    "mywrapped": "Veja sua retrospectiva musical pessoal, melhores faixas e classificação de DJ no servidor."
   },
   "options": {
     "debug": {
@@ -213,6 +214,9 @@
     },
     "wrapped": {
       "scope": "Escopo da retrospectiva: server ou global."
+    },
+    "mywrapped": {
+      "user": "O usuário cuja retrospectiva musical você deseja ver."
     }
   },
   "pagination": {
@@ -1421,6 +1425,23 @@
       "globalTitle": "Personalidade Musical Global",
       "activeServers": "Comunidades Ativas",
       "globalFooter": "Rede Global Remix • Digite {{prefix}}wrapped para o resumo do seu servidor"
+    },
+    "mywrapped": {
+      "authorSelf": "Sua Retrospectiva Musical Pessoal",
+      "authorOther": "Retrospectiva Musical Pessoal • {{username}}",
+      "titleSelf": "Sua Identidade Musical no Servidor",
+      "titleOther": "Identidade Musical de {{username}} no Servidor",
+      "totalStreamed": "Total Transmitido",
+      "tracksQueued": "Faixas na Fila",
+      "peakHour": "Horário de Pico",
+      "djRank": "Classificação de DJ da Comunidade",
+      "djRankValue": "Top #{{rank}} de {{total}} DJs",
+      "topArtist": "Artista Favorito",
+      "topSongs": "Músicas Mais Tocadas",
+      "noDataSelf": "Você ainda não colocou músicas na fila neste servidor. Comece com {{prefix}}play <música>!",
+      "noDataOther": "{{username}} ainda não colocou músicas na fila neste servidor.",
+      "globalNotice": "🌐 Estatísticas Globais • Nenhuma música tocada neste servidor ainda",
+      "footer": "Desenvolvido por Remix Music • {{prefix}}top para paradas do servidor"
     }
   }
 }

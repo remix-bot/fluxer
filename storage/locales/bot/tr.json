@@ -107,7 +107,8 @@
     "skipto": "Kuyruktaki belirli bir şarkıya doğrudan atla.",
     "statustest": "Herkese açık durum kanalı güncellemelerini, canlı kartları ve olayları test edin.",
     "top": "Bu sunucuda en çok çalınan şarkıları ve en popüler sanatçıları görüntüleyin.",
-    "wrapped": "Bir topluluk müzik özeti ve dinleme istatistikleri oluşturun."
+    "wrapped": "Bir topluluk müzik özeti ve dinleme istatistikleri oluşturun.",
+    "mywrapped": "Kişisel müzik özetinizi, en çok dinlenen parçalarınızı ve sunucu DJ sıralamanızı görüntüleyin."
   },
   "options": {
     "debug": {
@@ -213,6 +214,9 @@
     },
     "wrapped": {
       "scope": "Özet kapsamı: server veya global."
+    },
+    "mywrapped": {
+      "user": "Müzik özetini görüntülemek istediğiniz kullanıcı."
     }
   },
   "pagination": {
@@ -1421,6 +1425,23 @@
       "globalTitle": "Küresel Müzik Kişiliği",
       "activeServers": "Aktif Topluluklar",
       "globalFooter": "Remix Küresel Ağı • Sunucunuzun özeti için {{prefix}}wrapped yazın"
+    },
+    "mywrapped": {
+      "authorSelf": "Kişisel Müzik Özetiniz",
+      "authorOther": "Kişisel Müzik Özeti • {{username}}",
+      "titleSelf": "Sunucu Dinleme Kimliğiniz",
+      "titleOther": "{{username}} Kullanıcısının Sunucu Dinleme Kimliği",
+      "totalStreamed": "Toplam Yayınlanan",
+      "tracksQueued": "Sıraya Eklenen Parçalar",
+      "peakHour": "En Çok Dinlenen Saat",
+      "djRank": "Topluluk DJ Sıralaması",
+      "djRankValue": "{{total}} DJ arasından #{{rank}}.",
+      "topArtist": "En Sevilen Sanatçı",
+      "topSongs": "Kişisel En İyi Şarkılar",
+      "noDataSelf": "Bu sunucuda henüz şarkı çalmadınız. {{prefix}}play <şarkı> ile başlayın!",
+      "noDataOther": "{{username}} bu sunucuda henüz şarkı çalmadı.",
+      "globalNotice": "🌐 Küresel İstatistikler • Bu sunucuda henüz şarkı çalınmadı",
+      "footer": "Remix Music tarafından desteklenmektedir • Sunucu listeleri için {{prefix}}top"
     }
   }
 }
