@@ -7,7 +7,7 @@ import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { GuildStats } from "../src/music/GuildStats.mjs";
 import { cleanId, Utils } from "../src/utils/Utils.mjs";
-import { getGlobalColor, QueuePaginator } from "../src/ui/index.mjs";
+import { getGlobalColor } from "../src/ui/index.mjs";
 
 const PAGE_SIZE = 10;
 const MAX_TRACKS = 50;
@@ -22,13 +22,7 @@ export const command = new CommandBuilder()
   .addTextOption((o) =>
     o
       .setName("timeframe")
-      .setDescription("Filter timeframe: week, month, all, or global.", "options.top.timeframe")
-      .setRequired(false)
-  )
-  .addNumberOption((o) =>
-    o
-      .setName("page")
-      .setDescription("Page number to jump to.", "options.top.page")
+      .setDescription("Filter timeframe: week, month, all, or global, or page number.", "options.top.timeframe")
       .setRequired(false)
   );
 
@@ -42,36 +36,36 @@ export async function run(message, data) {
   const guildId = cleanId(message.message?.guildId ?? message.channel?.guildId);
   const prefix = this.handler.getPrefix(guildId) || "%";
 
-  let requestedPage = data?.get?.("page")?.value;
-  let rawTimeframe = data?.get?.("timeframe")?.value;
-
-  if (!rawTimeframe || !requestedPage) {
-    const rawTokens = (message.message?.content || message.content || "")
+  const rawArg = (
+    data?.get?.("timeframe")?.value ??
+    (message.message?.content || message.content || "")
       .trim()
       .split(/\s+/)
-      .slice(1);
+      .slice(1)
+      .join(" ") ??
+    ""
+  ).trim().toLowerCase();
 
-    for (const token of rawTokens) {
-      const lower = token.toLowerCase();
-      const num = parseInt(lower, 10);
-      if (!isNaN(num) && num > 0 && !requestedPage) {
-        requestedPage = num;
-      } else if (!rawTimeframe) {
-        if (["global", "network", "week", "w", "7d", "all", "alltime", "total", "month", "m", "30d"].includes(lower)) {
-          rawTimeframe = lower;
-        }
-      }
-    }
-  }
+  const tokens = rawArg.split(/\s+/).filter(Boolean);
 
-  const isGlobal = rawTimeframe === "global" || rawTimeframe === "network";
+  let isGlobal = false;
   let timeframe = "month";
-  if (isGlobal) {
-    timeframe = "global";
-  } else if (rawTimeframe === "week" || rawTimeframe === "w" || rawTimeframe === "7d") {
-    timeframe = "week";
-  } else if (rawTimeframe === "all" || rawTimeframe === "alltime" || rawTimeframe === "total") {
-    timeframe = "all";
+  let targetPage = 1;
+
+  for (const token of tokens) {
+    const num = parseInt(token, 10);
+    if (!isNaN(num) && num > 0) {
+      targetPage = num;
+    } else if (token === "global" || token === "network") {
+      isGlobal = true;
+      timeframe = "global";
+    } else if (token === "week" || token === "w" || token === "7d") {
+      timeframe = "week";
+    } else if (token === "all" || token === "alltime" || token === "total") {
+      timeframe = "all";
+    } else if (token === "month" || token === "m" || token === "30d") {
+      timeframe = "month";
+    }
   }
 
   const { tracks, topArtist } = isGlobal
@@ -107,14 +101,13 @@ export async function run(message, data) {
   }
 
   const totalPages = Math.max(1, Math.ceil(tracks.length / PAGE_SIZE));
-  const parsedPage = Number(requestedPage);
-  const startPage = Math.max(1, Math.min((!parsedPage || isNaN(parsedPage)) ? 1 : Math.floor(parsedPage), totalPages));
+  let currentPage = Math.max(1, Math.min(targetPage, totalPages));
 
   const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
   const playsLabel = this.t(message, "responses.top.plays");
 
-  const buildEmbed = (page) => {
-    const safePage = (isNaN(page) || page < 1) ? 1 : Math.min(Math.floor(page), totalPages);
+  const buildEmbed = (page, expired = false) => {
+    const safePage = Math.max(1, Math.min(page, totalPages));
     const startIdx = (safePage - 1) * PAGE_SIZE;
     const pageTracks = tracks.slice(startIdx, startIdx + PAGE_SIZE);
 
@@ -131,9 +124,14 @@ export async function run(message, data) {
       desc += `\n\n⭐ **Top Artist:** **${topArtist.name}** (\`${topArtist.count} ${playsLabel}\`)`;
     }
 
-    const footerText = totalPages > 1
+    let footerText = totalPages > 1
       ? `${this.t(message, "responses.top.pageFooter", { page: safePage, totalPages, timeframe: timeframeLabel })} • ${baseFooter}`
       : baseFooter;
+
+    if (expired) {
+      const closedLabel = this.handler?.locale?.translate(guildId, "pagination.embed.sclosedTitle") || "Session Closed";
+      footerText += ` • ${closedLabel}`;
+    }
 
     return new EmbedBuilder()
       .setColor(getGlobalColor())
@@ -143,12 +141,47 @@ export async function run(message, data) {
       .setFooter({ text: footerText });
   };
 
-  if (totalPages <= 1) {
-    return message.reply({ embeds: [buildEmbed(1)] });
+  const msg = await message.reply({ embeds: [buildEmbed(currentPage)] });
+  if (!msg || totalPages <= 1) return;
+
+  const rawMsg = msg.message ?? msg;
+  if (!rawMsg?.react) return;
+
+  const emojis = ["⬅️", "➡️"];
+  for (const emoji of emojis) {
+    await rawMsg.react(emoji).catch(() => {});
   }
 
-  new QueuePaginator(message, this.messages, this.client)
-    .setTimeout(SESSION_MS)
-    .send(buildEmbed, totalPages, startPage)
-    .catch(() => {});
+  const clearReactions = async () => {
+    try {
+      await rawMsg.removeAllReactions();
+    } catch {
+      for (const emoji of emojis) {
+        await rawMsg.removeReaction(emoji).catch(() => {});
+      }
+    }
+  };
+
+  let timer = null;
+  const resetTimer = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(async () => {
+      if (typeof unobserve === "function") unobserve();
+      await clearReactions().catch(() => {});
+      msg.edit({ embeds: [buildEmbed(currentPage, true)] }).catch(() => {});
+    }, SESSION_MS);
+  };
+
+  const unobserve = msg.onReaction(emojis, async (e) => {
+    resetTimer();
+    const emoji = e.emoji_id;
+    if (emoji === "⬅️") {
+      currentPage = currentPage <= 1 ? totalPages : currentPage - 1;
+    } else if (emoji === "➡️") {
+      currentPage = currentPage >= totalPages ? 1 : currentPage + 1;
+    }
+    msg.edit({ embeds: [buildEmbed(currentPage)] }).catch(() => {});
+  });
+
+  resetTimer();
 }
