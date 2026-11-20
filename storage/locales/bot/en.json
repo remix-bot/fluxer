@@ -208,7 +208,8 @@
       "position": "The track number in the queue to jump to."
     },
     "top": {
-      "timeframe": "Filter timeframe: week, month, all, or global."
+      "timeframe": "Filter timeframe: week, month, all, or global.",
+      "page": "Page number to jump to."
     },
     "wrapped": {
       "scope": "Recap scope: server or global."
@@ -1403,7 +1404,8 @@
       "plays": "plays",
       "globalAuthor": "Global Leaderboard • All Servers",
       "globalTitle": "Top Played Tracks Across All Servers",
-      "globalFooter": "Filter with: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global"
+      "globalFooter": "Filter with: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
+      "pageFooter": "Page {{page}}/{{totalPages}} • {{timeframe}}"
     },
     "wrapped": {
       "wrappedAuthor": "Community Music Wrapped",

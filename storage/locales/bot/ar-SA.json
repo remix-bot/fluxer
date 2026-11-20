@@ -208,7 +208,8 @@
       "position": "رقم الأغنية في قائمة الانتظار للانتقال إليها."
     },
     "top": {
-      "timeframe": "تصفية الإطار الزمني: week أو month أو all أو global."
+      "timeframe": "تصفية الإطار الزمني: week أو month أو all أو global.",
+      "page": "رقم الصفحة للانتقال إليها."
     },
     "wrapped": {
       "scope": "نطاق الملخص: server أو global."
@@ -1403,7 +1404,8 @@
       "plays": "تشغيلات",
       "globalAuthor": "لوحة المتصدرين العالمية • كل السيرفرات",
       "globalTitle": "أكثر الأغاني تشغيلاً عبر كل السيرفرات",
-      "globalFooter": "تصفية بـ: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global"
+      "globalFooter": "تصفية بـ: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
+      "pageFooter": "الصفحة {{page}}/{{totalPages}} • {{timeframe}}"
     },
     "wrapped": {
       "wrappedAuthor": "ملخص موسيقى المجتمع",

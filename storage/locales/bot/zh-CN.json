@@ -208,7 +208,8 @@
       "position": "要跳转到的队列曲目序号。"
     },
     "top": {
-      "timeframe": "筛选时间范围：week、month、all 或 global。"
+      "timeframe": "筛选时间范围：week、month、all 或 global。",
+      "page": "要跳转到的页码。"
     },
     "wrapped": {
       "scope": "回顾范围：server 或 global。"
@@ -1403,7 +1404,8 @@
       "plays": "次播放",
       "globalAuthor": "全球排行榜 • 所有服务器",
       "globalTitle": "所有服务器中最多播放的曲目",
-      "globalFooter": "筛选方式：{{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global"
+      "globalFooter": "筛选方式：{{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
+      "pageFooter": "第 {{page}}/{{totalPages}} 页 • {{timeframe}}"
     },
     "wrapped": {
       "wrappedAuthor": "社区年度音乐回顾",

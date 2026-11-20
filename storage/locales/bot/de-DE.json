@@ -208,7 +208,8 @@
       "position": "Die Nummer des Titels in der Warteschlange, zu dem gesprungen werden soll."
     },
     "top": {
-      "timeframe": "Zeitraum filtern: week, month, all oder global."
+      "timeframe": "Zeitraum filtern: week, month, all oder global.",
+      "page": "Seitennummer, zu der gesprungen werden soll."
     },
     "wrapped": {
       "scope": "Rückblick-Bereich: server oder global."
@@ -1403,7 +1404,8 @@
       "plays": "Wiedergaben",
       "globalAuthor": "Globale Bestenliste • Alle Server",
       "globalTitle": "Meistgespielte Songs auf allen Servern",
-      "globalFooter": "Filtern mit: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global"
+      "globalFooter": "Filtern mit: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
+      "pageFooter": "Seite {{page}}/{{totalPages}} • {{timeframe}}"
     },
     "wrapped": {
       "wrappedAuthor": "Community Music Wrapped",

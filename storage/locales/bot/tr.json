@@ -208,7 +208,8 @@
       "position": "Atlanacak şarkının kuyruktaki sıra numarası."
     },
     "top": {
-      "timeframe": "Zaman aralığını filtrele: week, month, all veya global."
+      "timeframe": "Zaman aralığını filtrele: week, month, all veya global.",
+      "page": "Atlanacak sayfa numarası."
     },
     "wrapped": {
       "scope": "Özet kapsamı: server veya global."
@@ -1403,7 +1404,8 @@
       "plays": "çalma",
       "globalAuthor": "Küresel Lider Tablosu • Tüm Sunucular",
       "globalTitle": "Tüm Sunucularda En Çok Çalınan Şarkılar",
-      "globalFooter": "Filtrele: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global"
+      "globalFooter": "Filtrele: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
+      "pageFooter": "Sayfa {{page}}/{{totalPages}} • {{timeframe}}"
     },
     "wrapped": {
       "wrappedAuthor": "Topluluk Müzik Özeti",

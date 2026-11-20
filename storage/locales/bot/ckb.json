@@ -208,7 +208,8 @@
       "position": "ژمارەی گۆرانییەکە لە ڕیزبەندی بۆ پەڕینەوە بۆی."
     },
     "top": {
-      "timeframe": "فلتەرکردنی کات: week، month، all، یان global."
+      "timeframe": "فلتەرکردنی کات: week، month، all، یان global.",
+      "page": "ژمارەی پەڕە بۆ بازدان."
     },
     "wrapped": {
       "scope": "مەودای پوختە: server یان global."
@@ -1403,7 +1404,8 @@
       "plays": "لێدان",
       "globalAuthor": "ڕیزبەندی جیهانی • هەموو سێرڤەرەکان",
       "globalTitle": "زۆرترین گۆرانی لێدراو لە هەموو سێرڤەرەکاندا",
-      "globalFooter": "فلتەر بکە بە: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global"
+      "globalFooter": "فلتەر بکە بە: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
+      "pageFooter": "پەڕەی {{page}}/{{totalPages}} • {{timeframe}}"
     },
     "wrapped": {
       "wrappedAuthor": "پوختەی مۆسیقای کۆمەڵگە",

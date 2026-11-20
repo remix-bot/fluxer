@@ -255,7 +255,7 @@ class GuildStatsManager {
    * @returns {Promise<{tracks: Array, topArtist: {name: string, count: number}|null}>}
    */
   async getTopTracks(guildId, timeframe = "month", limit = 10) {
-    const lim = Math.max(1, Math.min(25, Number(limit) || 10));
+    const lim = Math.max(1, Math.min(100, Number(limit) || 10));
 
     if (this._pool) {
       try {
@@ -366,7 +366,7 @@ class GuildStatsManager {
    * @returns {Promise<{tracks: Array, topArtist: {name: string, count: number}|null}>}
    */
   async getGlobalTopTracks(limit = 10) {
-    const lim = Math.max(1, Math.min(25, Number(limit) || 10));
+    const lim = Math.max(1, Math.min(100, Number(limit) || 10));
 
     if (this._pool) {
       try {
