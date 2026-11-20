@@ -413,6 +413,17 @@ const PlaybackMixin = {
 
     const myPlayGen = (this._playSessionGen = (this._playSessionGen ?? 0) + 1);
 
+    this._clearPrefetchTimer();
+    if (durationMs > 20_000) {
+      this._prefetchTimer = setTimeout(() => {
+        this._prefetchNextTrack().catch(() => {});
+      }, Math.max(2_000, durationMs - 15_000));
+    } else if (durationMs > 0) {
+      this._prefetchTimer = setTimeout(() => {
+        this._prefetchNextTrack().catch(() => {});
+      }, 1_000);
+    }
+
     const result = await this._audioBridge.play(this._voiceConn, {
       encoded: songData.encoded,
       url:     bridgeUrl,
@@ -424,6 +435,8 @@ const PlaybackMixin = {
       videoId: songData.videoId || null,
       filterPayload: this.activeFilterPayload || null,
     });
+
+    this._clearPrefetchTimer();
 
     if (myPlayGen !== this._playSessionGen) {
       /* Another track was started or stopped while this was playing — drop stale completion */
@@ -505,6 +518,89 @@ const PlaybackMixin = {
       this._trackEndTimer = null;
     }
     this._trackEndRemainingMs = null;
+    this._clearPrefetchTimer();
+  },
+
+  /**
+   * @private Clear the next-up pre-fetch timer.
+   * @this {import('./Player.mjs').Player}
+   */
+  _clearPrefetchTimer() {
+    if (this._prefetchTimer) {
+      clearTimeout(this._prefetchTimer);
+      this._prefetchTimer = null;
+    }
+  },
+
+  /**
+   * @private Pre-fetch the upcoming track in the queue: pre-resolves Lavalink
+   * encoded payload if missing, and queries NodeLink /v4/trackstream in advance
+   * so the next track begins with 0ms transition latency.
+   * @this {import('./Player.mjs').Player}
+   * @returns {Promise<void>}
+   */
+  async _prefetchNextTrack() {
+    this._clearPrefetchTimer();
+    if (this._destroyed || this.leaving || !this.queue) return;
+    const nextTrack = typeof this.queue.peek === "function" ? this.queue.peek() : (this.queue.data?.[0] || null);
+    if (!nextTrack || nextTrack.type === "radio" || nextTrack.type === "livestream") return;
+    if (nextTrack._prefetchedDirect && Date.now() - (nextTrack._prefetchedDirect.cachedAt || 0) < 60_000) return;
+
+    try {
+      if (!nextTrack.encoded && nextTrack.url && nextTrack.url.startsWith("http") && this._lavalink && nextTrack.type !== "external" && nextTrack.type !== "attachment") {
+        const nlInfo = this._lavalink.getNodeLinkInfo?.();
+        if (nlInfo) {
+          const protocol = nlInfo.secure ? "https" : "http";
+          const baseUrl = protocol + "://" + nlInfo.host + ":" + nlInfo.port;
+          const headers = { "Authorization": nlInfo.password };
+          if (nlInfo.sessionId) headers["Session-Id"] = nlInfo.sessionId;
+          if (this._guildId) headers["Guild-Id"] = this._guildId;
+
+          const loadtracksUrl = baseUrl + "/v4/loadtracks?identifier=" + encodeURIComponent(nextTrack.url);
+          const body = await this._request(loadtracksUrl, { headers }).catch(() => null);
+          const track = body?.data?.tracks?.[0] ?? body?.tracks?.[0] ?? body?.data;
+          const encoded = track?.encoded ?? track?.data;
+          if (encoded && typeof encoded === "string") {
+            nextTrack.encoded = encoded;
+            logger.player(`[Player] Next track pre-resolved encoded payload: ${nextTrack.title || nextTrack.url}`);
+          }
+        }
+      }
+
+      if (nextTrack.encoded && this._audioBridge && typeof this._audioBridge._getTrackstreamUrl === "function") {
+        const direct = await this._audioBridge._getTrackstreamUrl({
+          encoded: nextTrack.encoded,
+          guildId: this._guildId,
+        }).catch(() => null);
+
+        if (direct?.url) {
+          nextTrack._prefetchedDirect = {
+            url: direct.url,
+            format: direct.format || "",
+            cachedAt: Date.now(),
+          };
+          logger.player(`[Player] Next-up pre-fetch ready for: ${nextTrack.title || nextTrack.url} (format=${direct.format})`);
+        }
+      }
+    } catch (e) {
+      logger.player("[Player] Next-up pre-fetch ignored error: " + (e?.message || e));
+    }
+  },
+
+  /**
+   * @private Trigger pre-fetching if the current track is already near completion.
+   * @this {import('./Player.mjs').Player}
+   */
+  _maybePrefetchNext() {
+    if (!this.startedPlaying || this._paused || !this.queue?.getCurrent()) return;
+    const current = this.queue.getCurrent();
+    const totalMs = this._getTrackDurationMs(current);
+    if (totalMs <= 0) return;
+    const elapsedMs = Math.max(0, Date.now() - this.startedPlaying);
+    const remainingMs = totalMs - elapsedMs;
+    if (remainingMs <= 20_000) {
+      this._prefetchNextTrack().catch(() => {});
+    }
   },
 
   /**

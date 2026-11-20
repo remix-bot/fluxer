@@ -437,7 +437,13 @@ export class FluxerAudioBridge extends EventEmitter {
 
     let direct;
     try {
-      direct = await this._getTrackstreamUrl(trackInfo);
+      if (trackInfo._prefetchedDirect && (Date.now() - (trackInfo._prefetchedDirect.cachedAt || 0) < 60_000)) {
+        direct = trackInfo._prefetchedDirect;
+        trackInfo._prefetchedDirect = null;
+        logger.player("[AudioBridge] Using pre-fetched trackstream direct URL: " + (trackInfo.title || "unknown"));
+      } else {
+        direct = await this._getTrackstreamUrl(trackInfo);
+      }
       if (!direct?.url) throw new Error("trackstream returned no URL");
     } catch (e) {
       if (stale()) return "stopped";

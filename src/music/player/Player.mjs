@@ -74,6 +74,8 @@ class Player extends EventEmitter {
   _lastConnectedAt   = null;
   /** @private @type {string|null} The home channel of a 24/7 spawn. */
   _home247Channel    = null;
+  /** @private @type {NodeJS.Timeout|null} */
+  _prefetchTimer     = null;
 
   /** @private @type {Set<string>} User IDs who have voted to skip the current track. Reset whenever a new track starts. */
   _skipVotes         = new Set();
@@ -150,7 +152,13 @@ class Player extends EventEmitter {
     super();
 
     this.queue        = new Queue();
-    this.queue.on("queue", (...args) => this.emit("queue", ...args));
+    this.queue.on("queue", (...args) => {
+      this.emit("queue", ...args);
+      const ev = args[0];
+      if (ev?.type === "add" || ev?.type === "addMany") {
+        this._maybePrefetchNext?.();
+      }
+    });
     this.client       = opts.client;
     this.config       = opts.config ?? {};
     this.settings     = opts.settings ?? null;
@@ -1078,6 +1086,7 @@ class Player extends EventEmitter {
   /** @private Stop the audio bridge if currently playing. */
   _bridgeStop() {
     this._playSessionGen = (this._playSessionGen ?? 0) + 1;
+    this._clearPrefetchTimer?.();
     if (this._audioBridge) {
       try { this._audioBridge.stop(); } catch (_) {}
     }

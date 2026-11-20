@@ -42,6 +42,21 @@ export class Queue extends EventEmitter {
   size()    { return this.data.length; }
 
   /**
+   * Peek at the track that will play next without modifying the queue.
+   * @param {object} [options]
+   * @param {boolean} [options.ignoreSongLoop=false]
+   * @returns {object|null}
+   */
+  peek({ ignoreSongLoop = false } = {}) {
+    if (!ignoreSongLoop && this.songLoop && this.current) return this.current;
+    if (this.isEmpty()) {
+      if (this.loop && this.current) return this.current;
+      return null;
+    }
+    return this.data[0] ?? null;
+  }
+
+  /**
    * Advance to the next track in the queue. If songLoop is active, returns
    * the current track. If queue loop is active, re-appends the current track.
    * @param {object} [options]
