@@ -410,7 +410,7 @@ const PlayerLifecycleMixin = {
     }
     this.setupEvents(player, {
       channelId: cleanChannelId,
-      guildId: cleanId(channel.guildId ?? getMessageGuildId(message)),
+      guildId: cleanId(channel.guildId ?? channel.guild?.id ?? channel.serverId ?? channel.server_id ?? getMessageGuildId(message)),
     });
 
     player.on("inactivityWarning", ({ timeoutMs }) => {

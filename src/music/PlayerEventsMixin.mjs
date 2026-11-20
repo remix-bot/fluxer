@@ -98,18 +98,39 @@ const PlayerEventsMixin = {
       this.dashboard.playerUpdate({ type: "startplay" }, player);
 
       if (!player._radioReconnects) {
-        let userId = song?.requester ?? null;
+        let userId = null;
+        if (typeof song?.requester === "string") {
+          userId = cleanId(song.requester);
+        } else if (song?.requester && typeof song.requester === "object") {
+          userId = cleanId(song.requester.id ?? song.requester.requester ?? song.requester.userId ?? "");
+        } else if (song?.userId) {
+          userId = cleanId(song.userId);
+        }
         if (!userId) {
           const humans = player._getHumanParticipantIdentities?.() ?? [];
-          if (humans.length === 1) userId = humans[0];
+          if (humans.length === 1) userId = cleanId(humans[0]);
         }
-        TrackStats.increment(userId);
-        const resolvedGuildId = player._resolveGuildId?.() ?? cleanId(player._guildId ?? player.channel?.guildId ?? "");
+
+        TrackStats.increment(userId || null);
+
+        const resolvedGuildId = cleanId(
+          player._resolveGuildId?.() ??
+          player._guildId ??
+          context.guildId ??
+          getMessageGuildId({ channel: player.channel }) ??
+          getMessageGuildId({ channel: player.textChannel }) ??
+          player.channel?.guildId ??
+          player.channel?.guild?.id ??
+          player.channel?.serverId ??
+          player.channel?.server_id ??
+          ""
+        );
+
         if (resolvedGuildId && song) {
           GuildStats.recordPlay({
             guildId: resolvedGuildId,
             track: song,
-            userId,
+            userId: userId || null,
           });
         }
       }

@@ -209,7 +209,7 @@
       "position": "O número da faixa na fila para onde pular."
     },
     "top": {
-      "timeframe": "Filtrar período: week, month, all ou global.",
+      "timeframe": "Filtrar período: 24h, week, month, year, all ou global, ou número da página.",
       "page": "Número da página para pular."
     },
     "wrapped": {
@@ -1404,13 +1404,15 @@
       "timeframeWeek": "Esta Semana",
       "timeframeMonth": "Este Mês",
       "timeframeAll": "Todo o Período",
-      "topFooter": "Filtrar com: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
+      "topFooter": "Filtrar com: {{prefix}}top 24h • {{prefix}}top week • {{prefix}}top month • {{prefix}}top year • {{prefix}}top all",
       "plays": "reproduções",
       "globalAuthor": "Classificação Global • Todos os Servidores",
       "globalTitle": "Músicas Mais Tocadas em Todos os Servidores",
-      "globalFooter": "Filtrar com: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
+      "globalFooter": "Filtrar com: {{prefix}}top 24h • {{prefix}}top week • {{prefix}}top month • {{prefix}}top year • {{prefix}}top all • {{prefix}}top global",
       "pageFooter": "Página {{page}}/{{totalPages}} • {{timeframe}}",
-      "serverFallbackNote": "ℹ️ _Nenhuma música tocada neste servidor ainda — exibindo paradas globais da rede:_"
+      "serverFallbackNote": "ℹ️ _Nenhuma música tocada neste servidor ainda — exibindo paradas globais da rede:_",
+      "timeframeDay": "Últimas 24 Horas",
+      "timeframeYear": "Este Ano"
     },
     "wrapped": {
       "wrappedAuthor": "Retrospectiva Musical da Comunidade",

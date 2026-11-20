@@ -209,7 +209,7 @@
       "position": "要跳转到的队列曲目序号。"
     },
     "top": {
-      "timeframe": "筛选时间范围：week、month、all 或 global。",
+      "timeframe": "过滤时间范围：24h、week、month、year、all 或 global，或页码。",
       "page": "要跳转到的页码。"
     },
     "wrapped": {
@@ -1404,13 +1404,15 @@
       "timeframeWeek": "本周",
       "timeframeMonth": "本月",
       "timeframeAll": "全部时间",
-      "topFooter": "筛选方式：{{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
+      "topFooter": "筛选命令：{{prefix}}top 24h • {{prefix}}top week • {{prefix}}top month • {{prefix}}top year • {{prefix}}top all",
       "plays": "次播放",
       "globalAuthor": "全球排行榜 • 所有服务器",
       "globalTitle": "所有服务器中最多播放的曲目",
-      "globalFooter": "筛选方式：{{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
+      "globalFooter": "筛选命令：{{prefix}}top 24h • {{prefix}}top week • {{prefix}}top month • {{prefix}}top year • {{prefix}}top all • {{prefix}}top global",
       "pageFooter": "第 {{page}}/{{totalPages}} 页 • {{timeframe}}",
-      "serverFallbackNote": "ℹ️ _此服务器尚未播放任何曲目 — 显示全球网络排行榜：_"
+      "serverFallbackNote": "ℹ️ _此服务器尚未播放任何曲目 — 显示全球网络排行榜：_",
+      "timeframeDay": "过去 24 小时",
+      "timeframeYear": "今年"
     },
     "wrapped": {
       "wrappedAuthor": "社区年度音乐回顾",

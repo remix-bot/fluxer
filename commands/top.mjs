@@ -7,7 +7,7 @@ import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { GuildStats } from "../src/music/GuildStats.mjs";
 import { cleanId, Utils } from "../src/utils/Utils.mjs";
-import { getGlobalColor } from "../src/ui/index.mjs";
+import { getGlobalColor, getMessageGuildId } from "../src/ui/index.mjs";
 import { run as runMyWrapped } from "./mywrapped.mjs";
 
 const PAGE_SIZE = 10;
@@ -23,7 +23,7 @@ export const command = new CommandBuilder()
   .addTextOption((o) =>
     o
       .setName("timeframe")
-      .setDescription("Filter timeframe: week, month, all, or global, or page number.", "options.top.timeframe")
+      .setDescription("Filter timeframe: 24h, week, month, year, all, or global, or page number.", "options.top.timeframe")
       .setRequired(false)
   );
 
@@ -34,7 +34,7 @@ export const command = new CommandBuilder()
  * @returns {Promise<void>}
  */
 export async function run(message, data) {
-  const guildId = cleanId(message.message?.guildId ?? message.channel?.guildId);
+  const guildId = cleanId(getMessageGuildId(message));
   const prefix = this.handler.getPrefix(guildId) || "%";
 
   const rawArg = (
@@ -55,6 +55,7 @@ export async function run(message, data) {
 
   let isGlobal = false;
   let timeframe = "month";
+  let explicitTimeframe = false;
   let targetPage = 1;
 
   for (const token of tokens) {
@@ -64,21 +65,52 @@ export async function run(message, data) {
     } else if (token === "global" || token === "network") {
       isGlobal = true;
       timeframe = "global";
+      explicitTimeframe = true;
+    } else if (token === "day" || token === "today" || token === "24h" || token === "d" || token === "1d") {
+      timeframe = "day";
+      explicitTimeframe = true;
     } else if (token === "week" || token === "w" || token === "7d") {
       timeframe = "week";
-    } else if (token === "all" || token === "alltime" || token === "total") {
-      timeframe = "all";
+      explicitTimeframe = true;
     } else if (token === "month" || token === "m" || token === "30d") {
       timeframe = "month";
+      explicitTimeframe = true;
+    } else if (token === "year" || token === "y" || token === "1y" || token === "365d") {
+      timeframe = "year";
+      explicitTimeframe = true;
+    } else if (token === "all" || token === "alltime" || token === "total") {
+      timeframe = "all";
+      explicitTimeframe = true;
     }
   }
 
-  let { tracks, topArtist } = isGlobal
-    ? await GuildStats.getGlobalTopTracks(MAX_TRACKS)
-    : await GuildStats.getTopTracks(guildId, timeframe, MAX_TRACKS);
+  let tracks = [];
+  let topArtist = null;
+
+  if (isGlobal) {
+    const res = await GuildStats.getGlobalTopTracks(MAX_TRACKS);
+    tracks = res.tracks || [];
+    topArtist = res.topArtist;
+  } else if (explicitTimeframe) {
+    const res = await GuildStats.getTopTracks(guildId, timeframe, MAX_TRACKS);
+    tracks = res.tracks || [];
+    topArtist = res.topArtist;
+  } else {
+    /* If no explicit timeframe passed, cascade: day -> week -> month -> year -> all */
+    const tfList = ["day", "week", "month", "year", "all"];
+    for (const tf of tfList) {
+      const res = await GuildStats.getTopTracks(guildId, tf, MAX_TRACKS);
+      if (res?.tracks && res.tracks.length > 0) {
+        tracks = res.tracks;
+        topArtist = res.topArtist;
+        timeframe = tf;
+        break;
+      }
+    }
+  }
 
   let fallbackGlobal = false;
-  if ((!tracks || tracks.length === 0) && !isGlobal) {
+  if ((!tracks || tracks.length === 0) && !isGlobal && !explicitTimeframe) {
     const globalRes = await GuildStats.getGlobalTopTracks(MAX_TRACKS);
     if (globalRes?.tracks && globalRes.tracks.length > 0) {
       tracks = globalRes.tracks;
@@ -91,11 +123,16 @@ export async function run(message, data) {
     ? `🌐 ${this.t(message, "responses.top.globalAuthor")}`
     : `🏆 ${this.t(message, "responses.top.topAuthor")}`;
 
-  const timeframeLabel = (isGlobal || fallbackGlobal)
-    ? "Global"
-    : (timeframe === "week"
-      ? this.t(message, "responses.top.timeframeWeek")
-      : (timeframe === "all" ? this.t(message, "responses.top.timeframeAll") : this.t(message, "responses.top.timeframeMonth")));
+  const getTimeframeLabel = (tf) => {
+    if (isGlobal || fallbackGlobal) return "Global";
+    if (tf === "day") return this.t(message, "responses.top.timeframeDay");
+    if (tf === "week") return this.t(message, "responses.top.timeframeWeek");
+    if (tf === "month") return this.t(message, "responses.top.timeframeMonth");
+    if (tf === "year") return this.t(message, "responses.top.timeframeYear");
+    return this.t(message, "responses.top.timeframeAll");
+  };
+
+  const timeframeLabel = getTimeframeLabel(timeframe);
 
   const titleName = (isGlobal || fallbackGlobal)
     ? this.t(message, "responses.top.globalTitle")

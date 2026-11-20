@@ -7,7 +7,7 @@ import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { GuildStats } from "../src/music/GuildStats.mjs";
 import { cleanId, Utils } from "../src/utils/Utils.mjs";
-import { getGlobalColor } from "../src/ui/index.mjs";
+import { getGlobalColor, getMessageGuildId } from "../src/ui/index.mjs";
 import { run as runMyWrapped } from "./mywrapped.mjs";
 
 /** @type {CommandBuilder} */
@@ -30,7 +30,7 @@ export const command = new CommandBuilder()
  * @returns {Promise<void>}
  */
 export async function run(message, data) {
-  const guildId = cleanId(message.message?.guildId ?? message.channel?.guildId);
+  const guildId = cleanId(getMessageGuildId(message));
   const prefix = this.handler.getPrefix(guildId) || "%";
 
   const rawArg = (

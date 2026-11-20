@@ -1,15 +1,11 @@
 /**
  * @module src/music/GuildStats
  * @description Persistent per-guild and global music analytics engine.
- * Backed by MySQL relational tables, Redis atomic counters/sorted sets, and
- * debounced local JSON storage as a zero-downtime fallback.
+ * Backed by MySQL relational tables and Redis atomic counters/sorted sets.
  */
 
-import fs from "node:fs";
-import path from "node:path";
 import { logger } from "../core/Logger.mjs";
 
-const STATS_DIR = path.join(process.cwd(), "storage", "guild_stats");
 const REDIS_GUILD_PREFIX = "fluxer:stats:guild:";
 const REDIS_GLOBAL_PLAYS = "fluxer:stats:global:plays";
 const REDIS_GLOBAL_SONGS = "fluxer:stats:global:songs";
@@ -30,8 +26,6 @@ class GuildStatsManager {
   constructor() {
     /** @type {Map<string, object>} */
     this._cache = new Map();
-    /** @type {Map<string, NodeJS.Timeout>} */
-    this._saveTimers = new Map();
     this._pool = null;
     this._redis = null;
   }
@@ -73,7 +67,9 @@ class GuildStatsManager {
           \`hour_played\` TINYINT NOT NULL DEFAULT 0,
           \`played_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           INDEX \`idx_guild_time\` (\`guild_id\`, \`played_at\`),
-          INDEX \`idx_global_time\` (\`played_at\`)
+          INDEX \`idx_global_time\` (\`played_at\`),
+          INDEX \`idx_guild_user\` (\`guild_id\`, \`user_id\`),
+          INDEX \`idx_user_time\` (\`user_id\`, \`played_at\`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
       `);
 
@@ -90,13 +86,21 @@ class GuildStatsManager {
           INDEX \`idx_guild_plays\` (\`guild_id\`, \`play_count\` DESC)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
       `);
+
+      /* Add supplementary indexes if tables already exist */
+      try {
+        await this._pool.execute("CREATE INDEX `idx_guild_user` ON `guild_track_stats` (`guild_id`, `user_id`);");
+      } catch (_) {}
+      try {
+        await this._pool.execute("CREATE INDEX `idx_user_time` ON `guild_track_stats` (`user_id`, `played_at`);");
+      } catch (_) {}
     } catch (e) {
       logger.warn("[GuildStats] Failed to initialize MySQL tables:", e?.message);
     }
   }
 
   /**
-   * Get or load guild stats object from cache or disk.
+   * Get or load in-memory guild stats object.
    * @param {string} guildId
    * @returns {object}
    */
@@ -115,31 +119,6 @@ class GuildStatsManager {
       songs: {},
       recent: [],
     };
-
-    try {
-      const filePath = path.join(STATS_DIR, `${guildId}.json`);
-      if (fs.existsSync(filePath)) {
-        const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-        if (parsed && typeof parsed === "object") {
-          data.totalPlays = Number(parsed.totalPlays) || 0;
-          data.totalDurationMs = Number(parsed.totalDurationMs) || 0;
-          if (Array.isArray(parsed.hourly) && parsed.hourly.length === 24) {
-            data.hourly = parsed.hourly;
-          }
-          if (parsed.users && typeof parsed.users === "object") {
-            data.users = parsed.users;
-          }
-          if (parsed.songs && typeof parsed.songs === "object") {
-            data.songs = parsed.songs;
-          }
-          if (Array.isArray(parsed.recent)) {
-            data.recent = parsed.recent;
-          }
-        }
-      }
-    } catch (e) {
-      logger.warn(`[GuildStats] Failed to load stats for ${guildId}:`, e?.message);
-    }
 
     this._cache.set(guildId, data);
     return data;
@@ -195,8 +174,6 @@ class GuildStatsManager {
       data.recent.length = 1000;
     }
 
-    this._scheduleSave(guildId);
-
     if (guildId !== "global") {
       const globalData = this._getGuildData("global");
       if (globalData) {
@@ -205,33 +182,52 @@ class GuildStatsManager {
         globalData.hourly[currentHour] = (globalData.hourly[currentHour] || 0) + 1;
         if (!globalData.guilds) globalData.guilds = {};
         globalData.guilds[guildId] = (globalData.guilds[guildId] || 0) + 1;
+        if (userId && typeof userId === "string" && userId !== "system") {
+          if (!globalData.users) globalData.users = {};
+          globalData.users[userId] = (globalData.users[userId] || 0) + 1;
+        }
         if (!globalData.songs[songKey]) {
           globalData.songs[songKey] = { title, artist, count: 0, durationMs };
         }
         globalData.songs[songKey].count += 1;
-        this._scheduleSave("global");
+        globalData.recent.unshift({
+          title,
+          artist,
+          durationMs,
+          userId: userId || null,
+          guildId,
+          ts: Date.now(),
+        });
+        if (globalData.recent.length > 2000) {
+          globalData.recent.length = 2000;
+        }
       }
     }
 
     /* Asynchronous MySQL persistence */
     if (this._pool) {
       this._pool.execute(`
-        INSERT INTO \`guild_track_stats\` (\`guild_id\`, \`title\`, \`artist\`, \`duration_ms\`, \`user_id\`, \`hour_played\`)
-        VALUES (?, ?, ?, ?, ?, ?);
+        INSERT INTO \`guild_track_stats\` (\`guild_id\`, \`title\`, \`artist\`, \`duration_ms\`, \`user_id\`, \`hour_played\`, \`played_at\`)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
       `, [guildId, title.slice(0, 255), artist.slice(0, 255), durationMs, userId || null, currentHour]).catch((err) => {
         logger.warn("[GuildStats] MySQL insert error:", err?.message);
       });
 
       this._pool.execute(`
-        INSERT INTO \`guild_song_counts\` (\`guild_id\`, \`song_key\`, \`title\`, \`artist\`, \`play_count\`, \`duration_ms\`)
-        VALUES (?, ?, ?, ?, 1, ?)
+        INSERT INTO \`guild_song_counts\` (\`guild_id\`, \`song_key\`, \`title\`, \`artist\`, \`play_count\`, \`duration_ms\`, \`last_played\`)
+        VALUES (?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP)
         ON DUPLICATE KEY UPDATE \`play_count\` = \`play_count\` + 1, \`last_played\` = CURRENT_TIMESTAMP;
       `, [guildId, songKey.slice(0, 255), title.slice(0, 255), artist.slice(0, 255), durationMs]).catch(() => {});
 
       if (guildId !== "global") {
         this._pool.execute(`
-          INSERT INTO \`guild_song_counts\` (\`guild_id\`, \`song_key\`, \`title\`, \`artist\`, \`play_count\`, \`duration_ms\`)
-          VALUES ('global', ?, ?, ?, 1, ?)
+          INSERT INTO \`guild_track_stats\` (\`guild_id\`, \`title\`, \`artist\`, \`duration_ms\`, \`user_id\`, \`hour_played\`, \`played_at\`)
+          VALUES ('global', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
+        `, [title.slice(0, 255), artist.slice(0, 255), durationMs, userId || null, currentHour]).catch(() => {});
+
+        this._pool.execute(`
+          INSERT INTO \`guild_song_counts\` (\`guild_id\`, \`song_key\`, \`title\`, \`artist\`, \`play_count\`, \`duration_ms\`, \`last_played\`)
+          VALUES ('global', ?, ?, ?, 1, ?, CURRENT_TIMESTAMP)
           ON DUPLICATE KEY UPDATE \`play_count\` = \`play_count\` + 1, \`last_played\` = CURRENT_TIMESTAMP;
         `, [songKey.slice(0, 255), title.slice(0, 255), artist.slice(0, 255), durationMs]).catch(() => {});
       }
@@ -261,7 +257,17 @@ class GuildStatsManager {
       try {
         let sql = "";
         let params = [];
-        if (timeframe === "week") {
+        if (timeframe === "day") {
+          sql = `
+            SELECT \`title\`, \`artist\`, COUNT(*) as count, MAX(\`duration_ms\`) as durationMs
+            FROM \`guild_track_stats\`
+            WHERE \`guild_id\` = ? AND \`played_at\` >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+            GROUP BY \`title\`, \`artist\`
+            ORDER BY count DESC
+            LIMIT ?;
+          `;
+          params = [guildId, lim];
+        } else if (timeframe === "week") {
           sql = `
             SELECT \`title\`, \`artist\`, COUNT(*) as count, MAX(\`duration_ms\`) as durationMs
             FROM \`guild_track_stats\`
@@ -281,6 +287,16 @@ class GuildStatsManager {
             LIMIT ?;
           `;
           params = [guildId, lim];
+        } else if (timeframe === "year") {
+          sql = `
+            SELECT \`title\`, \`artist\`, COUNT(*) as count, MAX(\`duration_ms\`) as durationMs
+            FROM \`guild_track_stats\`
+            WHERE \`guild_id\` = ? AND \`played_at\` >= DATE_SUB(NOW(), INTERVAL 365 DAY)
+            GROUP BY \`title\`, \`artist\`
+            ORDER BY count DESC
+            LIMIT ?;
+          `;
+          params = [guildId, lim];
         } else {
           sql = `
             SELECT \`title\`, \`artist\`, \`play_count\` as count, \`duration_ms\` as durationMs
@@ -293,18 +309,6 @@ class GuildStatsManager {
         }
 
         let [rows] = await this._pool.execute(sql, params);
-        if ((!rows || rows.length === 0) && (timeframe === "month" || timeframe === "week")) {
-          const [allRows] = await this._pool.execute(`
-            SELECT \`title\`, \`artist\`, \`play_count\` as count, \`duration_ms\` as durationMs
-            FROM \`guild_song_counts\`
-            WHERE \`guild_id\` = ?
-            ORDER BY count DESC
-            LIMIT ?;
-          `, [guildId, lim]);
-          if (allRows && allRows.length > 0) {
-            rows = allRows;
-          }
-        }
         if (rows && rows.length > 0) {
           const artistMap = {};
           const tracks = rows.map((r) => {
@@ -346,7 +350,14 @@ class GuildStatsManager {
       }
     } else {
       const now = Date.now();
-      const cutoff = timeframe === "week" ? now - 7 * 86_400_000 : now - 30 * 86_400_000;
+      let cutoff = now - 30 * 86_400_000;
+      if (timeframe === "day") {
+        cutoff = now - 86_400_000;
+      } else if (timeframe === "week") {
+        cutoff = now - 7 * 86_400_000;
+      } else if (timeframe === "year") {
+        cutoff = now - 365 * 86_400_000;
+      }
       for (const p of data.recent) {
         if (p.ts >= cutoff) {
           const k = `${p.title}:::${p.artist}`;
@@ -392,13 +403,27 @@ class GuildStatsManager {
 
     if (this._pool) {
       try {
-        const [rows] = await this._pool.execute(`
+        let [rows] = await this._pool.execute(`
           SELECT \`title\`, \`artist\`, \`play_count\` as count, \`duration_ms\` as durationMs
           FROM \`guild_song_counts\`
           WHERE \`guild_id\` = 'global'
           ORDER BY count DESC
           LIMIT ?;
         `, [lim]);
+
+        if (!rows || rows.length === 0) {
+          const [aggRows] = await this._pool.execute(`
+            SELECT \`title\`, \`artist\`, SUM(\`play_count\`) as count, MAX(\`duration_ms\`) as durationMs
+            FROM \`guild_song_counts\`
+            WHERE \`guild_id\` != 'global'
+            GROUP BY \`title\`, \`artist\`
+            ORDER BY count DESC
+            LIMIT ?;
+          `, [lim]);
+          if (aggRows && aggRows.length > 0) {
+            rows = aggRows;
+          }
+        }
 
         if (rows && rows.length > 0) {
           const artistMap = {};
@@ -584,13 +609,26 @@ class GuildStatsManager {
           `);
           const peakHour = hourRows?.[0] ? formatHour(hourRows[0].hour_played) : "12:00 PM";
 
-          const [trackRows] = await this._pool.execute(`
+          let [trackRows] = await this._pool.execute(`
             SELECT \`title\`, \`artist\`, \`play_count\` as count, \`duration_ms\` as durationMs
             FROM \`guild_song_counts\`
             WHERE \`guild_id\` = 'global'
             ORDER BY count DESC
             LIMIT 5;
           `);
+          if (!trackRows || trackRows.length === 0) {
+            const [aggRows] = await this._pool.execute(`
+              SELECT \`title\`, \`artist\`, SUM(\`play_count\`) as count, MAX(\`duration_ms\`) as durationMs
+              FROM \`guild_song_counts\`
+              WHERE \`guild_id\` != 'global'
+              GROUP BY \`title\`, \`artist\`
+              ORDER BY count DESC
+              LIMIT 5;
+            `);
+            if (aggRows && aggRows.length > 0) {
+              trackRows = aggRows;
+            }
+          }
 
           const topTracks = (trackRows || []).map((r) => ({
             title: r.title,
@@ -665,25 +703,39 @@ class GuildStatsManager {
           : "SELECT COUNT(*) as totalTracks, COALESCE(SUM(`duration_ms`), 0) as totalDurationMs FROM `guild_track_stats` WHERE `guild_id` = ? AND `user_id` = ?;";
         const sumParams = isGlobalScope ? [userId] : [guildId, userId];
 
-        const [sumRows] = await this._pool.execute(sumSql, sumParams);
-        const totalTracks = Number(sumRows?.[0]?.totalTracks) || 0;
+        let [sumRows] = await this._pool.execute(sumSql, sumParams);
+        let totalTracks = Number(sumRows?.[0]?.totalTracks) || 0;
+        let isGlobalFallback = false;
+
+        if (totalTracks === 0 && !isGlobalScope) {
+          const [globalSumRows] = await this._pool.execute(
+            "SELECT COUNT(*) as totalTracks, COALESCE(SUM(`duration_ms`), 0) as totalDurationMs FROM `guild_track_stats` WHERE `user_id` = ?;",
+            [userId]
+          );
+          if (Number(globalSumRows?.[0]?.totalTracks) > 0) {
+            sumRows = globalSumRows;
+            totalTracks = Number(globalSumRows[0].totalTracks);
+            isGlobalFallback = true;
+          }
+        }
 
         if (totalTracks > 0) {
           const totalDurationMs = Number(sumRows?.[0]?.totalDurationMs) || 0;
           const totalHours = Math.round((totalDurationMs / 3_600_000) * 10) / 10;
+          const effectiveGlobal = isGlobalScope || isGlobalFallback;
 
-          const hourSql = isGlobalScope
+          const hourSql = effectiveGlobal
             ? "SELECT `hour_played`, COUNT(*) as count FROM `guild_track_stats` WHERE `user_id` = ? GROUP BY `hour_played` ORDER BY count DESC LIMIT 1;"
             : "SELECT `hour_played`, COUNT(*) as count FROM `guild_track_stats` WHERE `guild_id` = ? AND `user_id` = ? GROUP BY `hour_played` ORDER BY count DESC LIMIT 1;";
-          const hourParams = isGlobalScope ? [userId] : [guildId, userId];
+          const hourParams = effectiveGlobal ? [userId] : [guildId, userId];
 
           const [hourRows] = await this._pool.execute(hourSql, hourParams);
           const peakHour = hourRows?.[0] ? formatHour(hourRows[0].hour_played) : "12:00 PM";
 
-          const trackSql = isGlobalScope
+          const trackSql = effectiveGlobal
             ? "SELECT `title`, `artist`, COUNT(*) as count, MAX(`duration_ms`) as durationMs FROM `guild_track_stats` WHERE `user_id` = ? GROUP BY `title`, `artist` ORDER BY count DESC LIMIT 5;"
             : "SELECT `title`, `artist`, COUNT(*) as count, MAX(`duration_ms`) as durationMs FROM `guild_track_stats` WHERE `guild_id` = ? AND `user_id` = ? GROUP BY `title`, `artist` ORDER BY count DESC LIMIT 5;";
-          const trackParams = isGlobalScope ? [userId] : [guildId, userId];
+          const trackParams = effectiveGlobal ? [userId] : [guildId, userId];
 
           const [trackRows] = await this._pool.execute(trackSql, trackParams);
           const topTracks = (trackRows || []).map((r) => ({
@@ -702,10 +754,10 @@ class GuildStatsManager {
           const sortedArtists = Object.entries(artistMap).sort((a, b) => b[1] - a[1]);
           const topArtist = sortedArtists.length > 0 ? { name: sortedArtists[0][0], count: sortedArtists[0][1] } : null;
 
-          const lbSql = isGlobalScope
+          const lbSql = effectiveGlobal
             ? "SELECT `user_id`, COUNT(*) as plays FROM `guild_track_stats` WHERE `user_id` IS NOT NULL AND `user_id` != 'system' GROUP BY `user_id` ORDER BY plays DESC;"
             : "SELECT `user_id`, COUNT(*) as plays FROM `guild_track_stats` WHERE `guild_id` = ? AND `user_id` IS NOT NULL AND `user_id` != 'system' GROUP BY `user_id` ORDER BY plays DESC;";
-          const lbParams = isGlobalScope ? [] : [guildId];
+          const lbParams = effectiveGlobal ? [] : [guildId];
 
           const [leaderboardRows] = await this._pool.execute(lbSql, lbParams);
           let djRank = 1;
@@ -726,6 +778,7 @@ class GuildStatsManager {
             topArtist,
             djRank,
             totalDjs,
+            isGlobalFallback,
           };
         }
       } catch (err) {
@@ -734,11 +787,20 @@ class GuildStatsManager {
     }
 
     /* Fallback to local memory/file cache */
-    const data = this._getGuildData(guildId);
-    if (!data) return null;
+    let data = this._getGuildData(guildId);
+    let totalTracks = Number(data?.users?.[userId]) || 0;
+    let isGlobalFallback = false;
 
-    const totalTracks = Number(data.users?.[userId]) || 0;
-    if (totalTracks === 0) return null;
+    if (totalTracks === 0 && guildId !== "global") {
+      const globalData = this._getGuildData("global");
+      if (Number(globalData?.users?.[userId]) > 0) {
+        data = globalData;
+        totalTracks = Number(globalData.users[userId]);
+        isGlobalFallback = true;
+      }
+    }
+
+    if (!data || totalTracks === 0) return null;
 
     const userTracks = (data.recent || []).filter((r) => String(r.userId) === String(userId));
     let totalDurationMs = 0;
@@ -791,53 +853,23 @@ class GuildStatsManager {
       topArtist,
       djRank,
       totalDjs,
+      isGlobalFallback,
     };
   }
 
   /**
-   * Schedule a debounced file save for a guild.
-   * @param {string} guildId
-   * @private
-   */
-  _scheduleSave(guildId) {
-    if (this._saveTimers.has(guildId)) return;
-    const timer = setTimeout(() => {
-      this._saveTimers.delete(guildId);
-      this.save(guildId);
-    }, 5000);
-    timer.unref?.();
-    this._saveTimers.set(guildId, timer);
-  }
-
-  /**
-   * Flush guild data to disk.
-   * @param {string} guildId
+   * Flush guild data (no-op: data is stored in MySQL).
+   * @param {string} [guildId]
    */
   save(guildId) {
-    const data = this._cache.get(guildId);
-    if (!data) return;
-    try {
-      if (!fs.existsSync(STATS_DIR)) {
-        fs.mkdirSync(STATS_DIR, { recursive: true });
-      }
-      const filePath = path.join(STATS_DIR, `${guildId}.json`);
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-    } catch (e) {
-      logger.warn(`[GuildStats] Failed to save stats for ${guildId}:`, e?.message);
-    }
+    /* No-op: Data is stored permanently in MySQL relational tables */
   }
 
   /**
-   * Flush all active guild caches to disk immediately.
+   * Flush all active guild caches (no-op: data is stored in MySQL).
    */
   flushAll() {
-    for (const [guildId, timer] of this._saveTimers) {
-      clearTimeout(timer);
-    }
-    this._saveTimers.clear();
-    for (const guildId of this._cache.keys()) {
-      this.save(guildId);
-    }
+    /* No-op: Data is stored permanently in MySQL relational tables */
   }
 }
 

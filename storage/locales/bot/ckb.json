@@ -209,7 +209,7 @@
       "position": "ژمارەی گۆرانییەکە لە ڕیزبەندی بۆ پەڕینەوە بۆی."
     },
     "top": {
-      "timeframe": "فلتەرکردنی کات: week، month، all، یان global.",
+      "timeframe": "فلتەرکردنی کات: 24h یان week یان month یان year یان all یان global، یان ژمارەی پەڕە.",
       "page": "ژمارەی پەڕە بۆ بازدان."
     },
     "wrapped": {
@@ -1404,13 +1404,15 @@
       "timeframeWeek": "ئەم هەفتەیە",
       "timeframeMonth": "ئەم مانگە",
       "timeframeAll": "هەموو کاتێک",
-      "topFooter": "فلتەر بکە بە: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
+      "topFooter": "فلتەرکردن بە: {{prefix}}top 24h • {{prefix}}top week • {{prefix}}top month • {{prefix}}top year • {{prefix}}top all",
       "plays": "لێدان",
       "globalAuthor": "ڕیزبەندی جیهانی • هەموو سێرڤەرەکان",
       "globalTitle": "زۆرترین گۆرانی لێدراو لە هەموو سێرڤەرەکاندا",
-      "globalFooter": "فلتەر بکە بە: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
+      "globalFooter": "فلتەرکردن بە: {{prefix}}top 24h • {{prefix}}top week • {{prefix}}top month • {{prefix}}top year • {{prefix}}top all • {{prefix}}top global",
       "pageFooter": "پەڕەی {{page}}/{{totalPages}} • {{timeframe}}",
-      "serverFallbackNote": "ℹ️ _تا ئێستا هیچ گۆرانییەک لەم سێرڤەرە لێنەدراوە — پیشاندانی ڕیزبەندیی تۆڕی جیهانی:_"
+      "serverFallbackNote": "ℹ️ _تا ئێستا هیچ گۆرانییەک لەم سێرڤەرە لێنەدراوە — پیشاندانی ڕیزبەندیی تۆڕی جیهانی:_",
+      "timeframeDay": "٢٤ کاتژمێری ڕابردوو",
+      "timeframeYear": "ئەمساڵ"
     },
     "wrapped": {
       "wrappedAuthor": "پوختەی مۆسیقای کۆمەڵگە",

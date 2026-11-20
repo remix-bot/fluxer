@@ -266,7 +266,7 @@ class Player extends EventEmitter {
       const channelId = this._channelId ?? this._home247Channel;
       if (channelId) {
         const ch = this.client?.channels?.get?.(channelId);
-        const fromChannel = ch?.guildId ?? ch?.guild?.id ?? null;
+        const fromChannel = ch?.guildId ?? ch?.guild?.id ?? ch?.serverId ?? ch?.server_id ?? null;
         if (fromChannel) return cleanId(fromChannel);
       }
     } catch(e) { logger.warn("[Player] Guild resolution failed:", e?.message); }
@@ -525,7 +525,7 @@ class Player extends EventEmitter {
       }
 
       this._channelId = channelId;
-      this._guildId   = cleanId(channel.guildId);
+      this._guildId   = cleanId(channel.guildId ?? channel.guild?.id ?? channel.serverId ?? channel.server_id ?? "");
       this._lastConnectedAt = Date.now();
       this.leaving    = false;
 

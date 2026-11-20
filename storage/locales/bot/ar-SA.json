@@ -209,7 +209,7 @@
       "position": "رقم الأغنية في قائمة الانتظار للانتقال إليها."
     },
     "top": {
-      "timeframe": "تصفية الإطار الزمني: week أو month أو all أو global.",
+      "timeframe": "تصفية الإطار الزمني: 24h أو week أو month أو year أو all أو global، أو رقم الصفحة.",
       "page": "رقم الصفحة للانتقال إليها."
     },
     "wrapped": {
@@ -1404,13 +1404,15 @@
       "timeframeWeek": "هذا الأسبوع",
       "timeframeMonth": "هذا الشهر",
       "timeframeAll": "كل الأوقات",
-      "topFooter": "تصفية بـ: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
+      "topFooter": "تصفية عبر: {{prefix}}top 24h • {{prefix}}top week • {{prefix}}top month • {{prefix}}top year • {{prefix}}top all",
       "plays": "تشغيلات",
       "globalAuthor": "لوحة المتصدرين العالمية • كل السيرفرات",
       "globalTitle": "أكثر الأغاني تشغيلاً عبر كل السيرفرات",
-      "globalFooter": "تصفية بـ: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
+      "globalFooter": "تصفية عبر: {{prefix}}top 24h • {{prefix}}top week • {{prefix}}top month • {{prefix}}top year • {{prefix}}top all • {{prefix}}top global",
       "pageFooter": "الصفحة {{page}}/{{totalPages}} • {{timeframe}}",
-      "serverFallbackNote": "ℹ️ _لم يتم تشغيل أي أغانٍ في هذا السيرفر بعد — عرض مخططات الشبكة العالمية:_"
+      "serverFallbackNote": "ℹ️ _لم يتم تشغيل أي أغانٍ في هذا السيرفر بعد — عرض مخططات الشبكة العالمية:_",
+      "timeframeDay": "آخر 24 ساعة",
+      "timeframeYear": "هذه السنة"
     },
     "wrapped": {
       "wrappedAuthor": "ملخص موسيقى المجتمع",

@@ -209,7 +209,7 @@
       "position": "The track number in the queue to jump to."
     },
     "top": {
-      "timeframe": "Filter timeframe: week, month, all, or global.",
+      "timeframe": "Filter timeframe: 24h, week, month, year, all, or global, or page number.",
       "page": "Page number to jump to."
     },
     "wrapped": {
@@ -1404,13 +1404,15 @@
       "timeframeWeek": "This Week",
       "timeframeMonth": "This Month",
       "timeframeAll": "All Time",
-      "topFooter": "Filter with: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
+      "topFooter": "Filter with: {{prefix}}top 24h • {{prefix}}top week • {{prefix}}top month • {{prefix}}top year • {{prefix}}top all",
       "plays": "plays",
       "globalAuthor": "Global Leaderboard • All Servers",
       "globalTitle": "Top Played Tracks Across All Servers",
-      "globalFooter": "Filter with: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
+      "globalFooter": "Filter with: {{prefix}}top 24h • {{prefix}}top week • {{prefix}}top month • {{prefix}}top year • {{prefix}}top all • {{prefix}}top global",
       "pageFooter": "Page {{page}}/{{totalPages}} • {{timeframe}}",
-      "serverFallbackNote": "ℹ️ _No tracks played in this server yet — showing Global Network charts:_"
+      "serverFallbackNote": "ℹ️ _No tracks played in this server yet — showing Global Network charts:_",
+      "timeframeDay": "Past 24 Hours",
+      "timeframeYear": "This Year"
     },
     "wrapped": {
       "wrappedAuthor": "Community Music Wrapped",

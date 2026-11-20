@@ -209,7 +209,7 @@
       "position": "Die Nummer des Titels in der Warteschlange, zu dem gesprungen werden soll."
     },
     "top": {
-      "timeframe": "Zeitraum filtern: week, month, all oder global.",
+      "timeframe": "Zeitraum filtern: 24h, week, month, year, all oder global, oder Seitenzahl.",
       "page": "Seitennummer, zu der gesprungen werden soll."
     },
     "wrapped": {
@@ -1404,13 +1404,15 @@
       "timeframeWeek": "Diese Woche",
       "timeframeMonth": "Dieser Monat",
       "timeframeAll": "Gesamte Zeit",
-      "topFooter": "Filtern mit: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
+      "topFooter": "Filtern mit: {{prefix}}top 24h • {{prefix}}top week • {{prefix}}top month • {{prefix}}top year • {{prefix}}top all",
       "plays": "Wiedergaben",
       "globalAuthor": "Globale Bestenliste • Alle Server",
       "globalTitle": "Meistgespielte Songs auf allen Servern",
-      "globalFooter": "Filtern mit: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global",
+      "globalFooter": "Filtern mit: {{prefix}}top 24h • {{prefix}}top week • {{prefix}}top month • {{prefix}}top year • {{prefix}}top all • {{prefix}}top global",
       "pageFooter": "Seite {{page}}/{{totalPages}} • {{timeframe}}",
-      "serverFallbackNote": "ℹ️ _Noch keine Tracks auf diesem Server gespielt — globale Charts werden angezeigt:_"
+      "serverFallbackNote": "ℹ️ _Noch keine Tracks auf diesem Server gespielt — globale Charts werden angezeigt:_",
+      "timeframeDay": "Letzte 24 Stunden",
+      "timeframeYear": "Dieses Jahr"
     },
     "wrapped": {
       "wrappedAuthor": "Community Music Wrapped",
