@@ -327,10 +327,8 @@ export class StreamPositioner extends Transform {
 
     // Emit: cluster header (+ Timecode) then from the first surviving block on.
     const skipped = firstKeptOffset - firstBlockRegionStart;
-    this._consume(firstKeptOffset); // buffer now starts at the surviving block
     if (skipped > 0) {
-      // Blocks were trimmed — the original size vint would now overstate the
-      // payload and desync the demuxer. Rebuild the header with the real size.
+      this._consume(firstKeptOffset);
       const keptPayload =
           (firstBlockRegionStart - headerLen) + (cluster.length - firstKeptOffset);
       this.push(Buffer.concat([
@@ -451,19 +449,18 @@ export class StreamPositioner extends Transform {
       if (pageLen > MAX_OGG_PAGE_BYTES) { this._startPassthrough(); return; }
       if (this._buf.length < pageLen) return;
 
-      const granule = Number(this._buf.readBigUInt64LE(6));
+      const rawGranule = this._buf.readBigUInt64LE(6);
       const page = Buffer.from(this._buf.subarray(0, pageLen));
       this._consume(pageLen);
 
       if (this._oggPagesKept < 2) {
-        // OpusHead (BOS) + OpusTags pages must survive for the demuxer.
         this._oggPagesKept++;
         this.push(page);
         continue;
       }
 
-      const isFiller = granule === -1n || granule === 0xffffffffffffffffn;
-      if (!isFiller && granule >= this._targetMs * OPUS_SAMPLE_RATE) {
+      const isFiller = rawGranule === 0xffffffffffffffffn;
+      if (!isFiller && Number(rawGranule) >= this._targetMs * OPUS_SAMPLE_RATE) {
         for (const p of this._oggReplay) this.push(p);
         this._oggReplay = [];
         this._startPassthrough(page);
