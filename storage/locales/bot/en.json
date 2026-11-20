@@ -208,7 +208,10 @@
       "position": "The track number in the queue to jump to."
     },
     "top": {
-      "timeframe": "Filter timeframe: week, month, or all."
+      "timeframe": "Filter timeframe: week, month, all, or global."
+    },
+    "wrapped": {
+      "scope": "Recap scope: server or global."
     }
   },
   "pagination": {
@@ -1397,7 +1400,10 @@
       "timeframeMonth": "This Month",
       "timeframeAll": "All Time",
       "topFooter": "Filter with: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
-      "plays": "plays"
+      "plays": "plays",
+      "globalAuthor": "Global Leaderboard • All Servers",
+      "globalTitle": "Top Played Tracks Across All Servers",
+      "globalFooter": "Filter with: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global"
     },
     "wrapped": {
       "wrappedAuthor": "Community Music Wrapped",
@@ -1407,7 +1413,11 @@
       "peakHour": "Peak Listening Hour",
       "topDJ": "Top Community DJ",
       "topSongs": "Top Songs",
-      "wrappedFooter": "Powered by Remix Music • Play music with {{prefix}}play"
+      "wrappedFooter": "Powered by Remix Music • Play music with {{prefix}}play",
+      "globalAuthor": "Remix Network Wrapped • All Servers",
+      "globalTitle": "Global Music Personality",
+      "activeServers": "Active Communities",
+      "globalFooter": "Remix Global Network • Type {{prefix}}wrapped for your server's recap"
     }
   }
 }

@@ -208,7 +208,10 @@
       "position": "ژمارەی گۆرانییەکە لە ڕیزبەندی بۆ پەڕینەوە بۆی."
     },
     "top": {
-      "timeframe": "فلتەرکردنی کات: week، month، یان all."
+      "timeframe": "فلتەرکردنی کات: week، month، all، یان global."
+    },
+    "wrapped": {
+      "scope": "مەودای پوختە: server یان global."
     }
   },
   "pagination": {
@@ -1397,7 +1400,10 @@
       "timeframeMonth": "ئەم مانگە",
       "timeframeAll": "هەموو کاتێک",
       "topFooter": "فلتەر بکە بە: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
-      "plays": "لێدان"
+      "plays": "لێدان",
+      "globalAuthor": "ڕیزبەندی جیهانی • هەموو سێرڤەرەکان",
+      "globalTitle": "زۆرترین گۆرانی لێدراو لە هەموو سێرڤەرەکاندا",
+      "globalFooter": "فلتەر بکە بە: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global"
     },
     "wrapped": {
       "wrappedAuthor": "پوختەی مۆسیقای کۆمەڵگە",
@@ -1407,7 +1413,11 @@
       "peakHour": "کاتژمێری لوتکەی گوێگرتن",
       "topDJ": "باشترین دیجیی کۆمەڵگە",
       "topSongs": "باشترین گۆرانییەکان",
-      "wrappedFooter": "بەهێزکراوە لەلایەن Remix Music • مۆسیقا لێبدە بە {{prefix}}play"
+      "wrappedFooter": "بەهێزکراوە لەلایەن Remix Music • مۆسیقا لێبدە بە {{prefix}}play",
+      "globalAuthor": "پوختەی تۆڕی ریمیکس • هەموو سێرڤەرەکان",
+      "globalTitle": "کەسایەتی مۆسیقی جیهانی",
+      "activeServers": "کۆمەڵگە چالاکەکان",
+      "globalFooter": "تۆڕی جیهانی ریمیکس • بنووسە {{prefix}}wrapped بۆ پوختەی سێرڤەرەکەت"
     }
   }
 }

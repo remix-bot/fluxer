@@ -208,7 +208,10 @@
       "position": "要跳轉到的佇列曲目序號。"
     },
     "top": {
-      "timeframe": "篩選時間範圍：week、month 或 all。"
+      "timeframe": "篩選時間範圍：week、month、all 或 global。"
+    },
+    "wrapped": {
+      "scope": "回顧範圍：server 或 global。"
     }
   },
   "pagination": {
@@ -1397,7 +1400,10 @@
       "timeframeMonth": "本月",
       "timeframeAll": "全部時間",
       "topFooter": "篩選方式：{{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
-      "plays": "次播放"
+      "plays": "次播放",
+      "globalAuthor": "全球排行榜 • 所有伺服器",
+      "globalTitle": "所有伺服器中最多播放的曲目",
+      "globalFooter": "篩選方式：{{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global"
     },
     "wrapped": {
       "wrappedAuthor": "社區年度音樂回顧",
@@ -1407,7 +1413,11 @@
       "peakHour": "最高峰收聽時段",
       "topDJ": "最活躍點歌達人",
       "topSongs": "最熱曲目",
-      "wrappedFooter": "由 Remix Music 驅動 • 使用 {{prefix}}play 暢享音樂"
+      "wrappedFooter": "由 Remix Music 驅動 • 使用 {{prefix}}play 暢享音樂",
+      "globalAuthor": "Remix 全球網絡音樂回顧 • 所有伺服器",
+      "globalTitle": "全球音樂個性",
+      "activeServers": "活躍社群數",
+      "globalFooter": "Remix 全球網絡 • 輸入 {{prefix}}wrapped 查看本伺服器回顧"
     }
   }
 }

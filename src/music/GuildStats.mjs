@@ -131,6 +131,22 @@ class GuildStatsManager {
     }
 
     this._scheduleSave(guildId);
+
+    if (guildId !== "global") {
+      const globalData = this._getGuildData("global");
+      if (globalData) {
+        globalData.totalPlays += 1;
+        globalData.totalDurationMs += durationMs;
+        globalData.hourly[currentHour] = (globalData.hourly[currentHour] || 0) + 1;
+        if (!globalData.guilds) globalData.guilds = {};
+        globalData.guilds[guildId] = (globalData.guilds[guildId] || 0) + 1;
+        if (!globalData.songs[songKey]) {
+          globalData.songs[songKey] = { title, artist, count: 0, durationMs };
+        }
+        globalData.songs[songKey].count += 1;
+        this._scheduleSave("global");
+      }
+    }
   }
 
   /**
@@ -223,6 +239,73 @@ class GuildStatsManager {
       peakHour: formatHour(peakHourIndex),
       topUserId,
       topUserPlays,
+      topTracks,
+    };
+  }
+
+  /**
+   * Get global top tracks across all servers.
+   * @param {number} [limit=10]
+   * @returns {{tracks: Array, topArtist: {name: string, count: number}|null}}
+   */
+  getGlobalTopTracks(limit = 10) {
+    const globalData = this._getGuildData("global");
+    if (!globalData || globalData.totalPlays === 0) {
+      return { tracks: [], topArtist: null };
+    }
+    const tracks = Object.values(globalData.songs || {})
+      .sort((a, b) => b.count - a.count)
+      .slice(0, Math.max(1, Math.min(25, limit)));
+
+    const artistMap = {};
+    for (const item of Object.values(globalData.songs || {})) {
+      if (item.artist && item.artist !== "Unknown Artist") {
+        artistMap[item.artist] = (artistMap[item.artist] || 0) + item.count;
+      }
+    }
+    const sortedArtists = Object.entries(artistMap).sort((a, b) => b[1] - a[1]);
+    const topArtist = sortedArtists.length > 0 ? { name: sortedArtists[0][0], count: sortedArtists[0][1] } : null;
+
+    return { tracks, topArtist };
+  }
+
+  /**
+   * Get global wrapped recap across all servers.
+   * @param {number} [fallbackServerCount=0]
+   * @returns {object|null}
+   */
+  getGlobalWrapped(fallbackServerCount = 0) {
+    const globalData = this._getGuildData("global");
+    if (!globalData || globalData.totalPlays === 0) {
+      return null;
+    }
+
+    const totalHours = Math.round((globalData.totalDurationMs / 3_600_000) * 10) / 10;
+
+    let peakHourIndex = 0;
+    let peakHourCount = 0;
+    for (let i = 0; i < 24; i++) {
+      if ((globalData.hourly[i] || 0) > peakHourCount) {
+        peakHourCount = globalData.hourly[i];
+        peakHourIndex = i;
+      }
+    }
+
+    const totalGuilds = Math.max(
+      fallbackServerCount,
+      Object.keys(globalData.guilds || {}).length,
+      1
+    );
+
+    const topTracks = Object.values(globalData.songs || {})
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    return {
+      totalHours,
+      totalTracks: globalData.totalPlays,
+      peakHour: formatHour(peakHourIndex),
+      totalGuilds,
       topTracks,
     };
   }

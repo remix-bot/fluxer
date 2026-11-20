@@ -1,6 +1,6 @@
 /**
  * @module commands/top
- * @description Display the most played tracks and top artists for the server.
+ * @description Display the most played tracks and top artists for the server or global network.
  */
 
 import { CommandBuilder } from "../src/commands/index.mjs";
@@ -18,7 +18,7 @@ export const command = new CommandBuilder()
   .addTextOption((o) =>
     o
       .setName("timeframe")
-      .setDescription("Filter timeframe: week, month, or all.", "options.top.timeframe")
+      .setDescription("Filter timeframe: week, month, all, or global.", "options.top.timeframe")
       .setRequired(false)
   );
 
@@ -32,27 +32,51 @@ export async function run(message, data) {
   const guildId = cleanId(message.message?.guildId ?? message.channel?.guildId);
   const prefix = this.handler.getPrefix(guildId) || "%";
 
-  const rawArg = (data?.get?.("timeframe")?.value ?? "").trim().toLowerCase();
+  const rawArg = (
+    data?.get?.("timeframe")?.value ??
+    (message.message?.content || message.content || "").split(/\s+/)[1] ??
+    ""
+  ).trim().toLowerCase();
+
+  const isGlobal = rawArg === "global" || rawArg === "network";
   let timeframe = "month";
-  if (rawArg === "week" || rawArg === "w" || rawArg === "7d") {
+  if (isGlobal) {
+    timeframe = "global";
+  } else if (rawArg === "week" || rawArg === "w" || rawArg === "7d") {
     timeframe = "week";
   } else if (rawArg === "all" || rawArg === "alltime" || rawArg === "total") {
     timeframe = "all";
   }
 
-  const { tracks, topArtist } = GuildStats.getTopTracks(guildId, timeframe, 10);
+  const { tracks, topArtist } = isGlobal
+    ? GuildStats.getGlobalTopTracks(10)
+    : GuildStats.getTopTracks(guildId, timeframe, 10);
 
-  const timeframeLabel = timeframe === "week"
-    ? this.t(message, "responses.top.timeframeWeek")
-    : (timeframe === "all" ? this.t(message, "responses.top.timeframeAll") : this.t(message, "responses.top.timeframeMonth"));
+  const authorName = isGlobal
+    ? `🌐 ${this.t(message, "responses.top.globalAuthor")}`
+    : `🏆 ${this.t(message, "responses.top.topAuthor")}`;
+
+  const timeframeLabel = isGlobal
+    ? "Global"
+    : (timeframe === "week"
+      ? this.t(message, "responses.top.timeframeWeek")
+      : (timeframe === "all" ? this.t(message, "responses.top.timeframeAll") : this.t(message, "responses.top.timeframeMonth")));
+
+  const titleName = isGlobal
+    ? this.t(message, "responses.top.globalTitle")
+    : this.t(message, "responses.top.topTitle", { timeframe: timeframeLabel });
+
+  const footerText = isGlobal
+    ? this.t(message, "responses.top.globalFooter", { prefix })
+    : this.t(message, "responses.top.topFooter", { prefix });
 
   if (!tracks || tracks.length === 0) {
     const emptyEmbed = new EmbedBuilder()
       .setColor(getGlobalColor())
-      .setAuthor({ name: `🏆 ${this.t(message, "responses.top.topAuthor")}` })
-      .setTitle(this.t(message, "responses.top.topTitle", { timeframe: timeframeLabel }))
+      .setAuthor({ name: authorName })
+      .setTitle(titleName)
       .setDescription(this.t(message, "responses.top.noData", { prefix }))
-      .setFooter({ text: this.t(message, "responses.top.topFooter", { prefix }) });
+      .setFooter({ text: footerText });
     return message.reply({ embeds: [emptyEmbed] });
   }
 
@@ -73,10 +97,10 @@ export async function run(message, data) {
 
   const embed = new EmbedBuilder()
     .setColor(getGlobalColor())
-    .setAuthor({ name: `🏆 ${this.t(message, "responses.top.topAuthor")}` })
-    .setTitle(this.t(message, "responses.top.topTitle", { timeframe: timeframeLabel }))
+    .setAuthor({ name: authorName })
+    .setTitle(titleName)
     .setDescription(desc)
-    .setFooter({ text: this.t(message, "responses.top.topFooter", { prefix }) });
+    .setFooter({ text: footerText });
 
   return message.reply({ embeds: [embed] });
 }

@@ -208,7 +208,10 @@
       "position": "Atlanacak şarkının kuyruktaki sıra numarası."
     },
     "top": {
-      "timeframe": "Zaman aralığını filtrele: week, month veya all."
+      "timeframe": "Zaman aralığını filtrele: week, month, all veya global."
+    },
+    "wrapped": {
+      "scope": "Özet kapsamı: server veya global."
     }
   },
   "pagination": {
@@ -1397,7 +1400,10 @@
       "timeframeMonth": "Bu Ay",
       "timeframeAll": "Tüm Zamanlar",
       "topFooter": "Filtrele: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
-      "plays": "çalma"
+      "plays": "çalma",
+      "globalAuthor": "Küresel Lider Tablosu • Tüm Sunucular",
+      "globalTitle": "Tüm Sunucularda En Çok Çalınan Şarkılar",
+      "globalFooter": "Filtrele: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global"
     },
     "wrapped": {
       "wrappedAuthor": "Topluluk Müzik Özeti",
@@ -1407,7 +1413,11 @@
       "peakHour": "En Çok Dinlenen Saat",
       "topDJ": "En İyi Topluluk DJ'i",
       "topSongs": "En İyi Şarkılar",
-      "wrappedFooter": "Remix Music ile güçlendirilmiştir • {{prefix}}play ile müzik çalın"
+      "wrappedFooter": "Remix Music ile güçlendirilmiştir • {{prefix}}play ile müzik çalın",
+      "globalAuthor": "Remix Ağı Özeti • Tüm Sunucular",
+      "globalTitle": "Küresel Müzik Kişiliği",
+      "activeServers": "Aktif Topluluklar",
+      "globalFooter": "Remix Küresel Ağı • Sunucunuzun özeti için {{prefix}}wrapped yazın"
     }
   }
 }

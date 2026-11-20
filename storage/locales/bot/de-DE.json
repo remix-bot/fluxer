@@ -208,7 +208,10 @@
       "position": "Die Nummer des Titels in der Warteschlange, zu dem gesprungen werden soll."
     },
     "top": {
-      "timeframe": "Zeitraum filtern: week, month oder all."
+      "timeframe": "Zeitraum filtern: week, month, all oder global."
+    },
+    "wrapped": {
+      "scope": "Rückblick-Bereich: server oder global."
     }
   },
   "pagination": {
@@ -1397,7 +1400,10 @@
       "timeframeMonth": "Dieser Monat",
       "timeframeAll": "Gesamte Zeit",
       "topFooter": "Filtern mit: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
-      "plays": "Wiedergaben"
+      "plays": "Wiedergaben",
+      "globalAuthor": "Globale Bestenliste • Alle Server",
+      "globalTitle": "Meistgespielte Songs auf allen Servern",
+      "globalFooter": "Filtern mit: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global"
     },
     "wrapped": {
       "wrappedAuthor": "Community Music Wrapped",
@@ -1407,7 +1413,11 @@
       "peakHour": "Spitzen-Hörzeit",
       "topDJ": "Bester Community-DJ",
       "topSongs": "Top-Songs",
-      "wrappedFooter": "Bereitgestellt von Remix Music • Spiele Musik mit {{prefix}}play"
+      "wrappedFooter": "Bereitgestellt von Remix Music • Spiele Musik mit {{prefix}}play",
+      "globalAuthor": "Remix-Netzwerk Wrapped • Alle Server",
+      "globalTitle": "Globale Musik-Persönlichkeit",
+      "activeServers": "Aktive Communities",
+      "globalFooter": "Remix Globales Netzwerk • Tippe {{prefix}}wrapped für deinen Server-Rückblick"
     }
   }
 }

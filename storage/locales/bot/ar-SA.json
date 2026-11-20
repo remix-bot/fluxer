@@ -208,7 +208,10 @@
       "position": "رقم الأغنية في قائمة الانتظار للانتقال إليها."
     },
     "top": {
-      "timeframe": "تصفية الإطار الزمني: week أو month أو all."
+      "timeframe": "تصفية الإطار الزمني: week أو month أو all أو global."
+    },
+    "wrapped": {
+      "scope": "نطاق الملخص: server أو global."
     }
   },
   "pagination": {
@@ -1397,7 +1400,10 @@
       "timeframeMonth": "هذا الشهر",
       "timeframeAll": "كل الأوقات",
       "topFooter": "تصفية بـ: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
-      "plays": "تشغيلات"
+      "plays": "تشغيلات",
+      "globalAuthor": "لوحة المتصدرين العالمية • كل السيرفرات",
+      "globalTitle": "أكثر الأغاني تشغيلاً عبر كل السيرفرات",
+      "globalFooter": "تصفية بـ: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global"
     },
     "wrapped": {
       "wrappedAuthor": "ملخص موسيقى المجتمع",
@@ -1407,7 +1413,11 @@
       "peakHour": "ساعة الذروة للاستماع",
       "topDJ": "أفضل دي جي في المجتمع",
       "topSongs": "أفضل الأغاني",
-      "wrappedFooter": "مشغل بواسطة Remix Music • شغل الموسيقى بـ {{prefix}}play"
+      "wrappedFooter": "مشغل بواسطة Remix Music • شغل الموسيقى بـ {{prefix}}play",
+      "globalAuthor": "ملخص شبكة ريمكس • كل السيرفرات",
+      "globalTitle": "شخصية الموسيقى العالمية",
+      "activeServers": "المجتمعات النشطة",
+      "globalFooter": "شبكة ريمكس العالمية • اكتب {{prefix}}wrapped لملخص سيرفرك"
     }
   }
 }

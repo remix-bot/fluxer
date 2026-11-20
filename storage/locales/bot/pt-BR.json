@@ -208,7 +208,10 @@
       "position": "O número da faixa na fila para onde pular."
     },
     "top": {
-      "timeframe": "Filtrar período: week, month ou all."
+      "timeframe": "Filtrar período: week, month, all ou global."
+    },
+    "wrapped": {
+      "scope": "Escopo da retrospectiva: server ou global."
     }
   },
   "pagination": {
@@ -1397,7 +1400,10 @@
       "timeframeMonth": "Este Mês",
       "timeframeAll": "Todo o Período",
       "topFooter": "Filtrar com: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all",
-      "plays": "reproduções"
+      "plays": "reproduções",
+      "globalAuthor": "Classificação Global • Todos os Servidores",
+      "globalTitle": "Músicas Mais Tocadas em Todos os Servidores",
+      "globalFooter": "Filtrar com: {{prefix}}top week • {{prefix}}top month • {{prefix}}top all • {{prefix}}top global"
     },
     "wrapped": {
       "wrappedAuthor": "Retrospectiva Musical da Comunidade",
@@ -1407,7 +1413,11 @@
       "peakHour": "Horário de Pico",
       "topDJ": "Principal DJ da Comunidade",
       "topSongs": "Melhores Músicas",
-      "wrappedFooter": "Desenvolvido por Remix Music • Toque música com {{prefix}}play"
+      "wrappedFooter": "Desenvolvido por Remix Music • Toque música com {{prefix}}play",
+      "globalAuthor": "Retrospectiva da Rede Remix • Todos os Servidores",
+      "globalTitle": "Personalidade Musical Global",
+      "activeServers": "Comunidades Ativas",
+      "globalFooter": "Rede Global Remix • Digite {{prefix}}wrapped para o resumo do seu servidor"
     }
   }
 }
