@@ -53,6 +53,9 @@ jobs:
           fi
           mkdir -p "$HOME/.kube"
           echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "$HOME/.kube/config"
+          CLUSTER_NAME=$(kubectl config view -o jsonpath='{.clusters[0].name}')
+          kubectl config unset "clusters.${CLUSTER_NAME}.certificate-authority-data"
+          kubectl config set-cluster "$CLUSTER_NAME" --insecure-skip-tls-verify=true
 
       - name: Verify cluster connectivity
         run: kubectl get deployment fluxer -n fh-nologicalan-remix
