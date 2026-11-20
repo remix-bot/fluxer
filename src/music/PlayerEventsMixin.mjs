@@ -104,9 +104,10 @@ const PlayerEventsMixin = {
           if (humans.length === 1) userId = humans[0];
         }
         TrackStats.increment(userId);
-        if (player._guildId && song) {
+        const resolvedGuildId = player._resolveGuildId?.() ?? cleanId(player._guildId ?? player.channel?.guildId ?? "");
+        if (resolvedGuildId && song) {
           GuildStats.recordPlay({
-            guildId: cleanId(player._guildId),
+            guildId: resolvedGuildId,
             track: song,
             userId,
           });
