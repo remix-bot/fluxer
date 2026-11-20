@@ -33,6 +33,7 @@ import { FluxerListManager } from "../services/FluxerListManager.mjs";
 import { TrackOptionsManager } from "../services/TrackOptionsManager.mjs";
 import { StatusChannelManager } from "../services/StatusChannelManager.mjs";
 import { TrackStats } from "../music/TrackStats.mjs";
+import { GuildStats } from "../music/GuildStats.mjs";
 import { configureBilibili } from "../music/bilibili/index.mjs";
 import { configureAudio } from "../music/audio/AudioSettings.mjs";
 import { applyMixins } from "../utils/mixins.mjs";
@@ -144,6 +145,7 @@ class Remix {
     const sharedPromisePool = getSharedPromisePool(config.mysql);
 
     TrackStats.setPool(sharedPromisePool);
+    GuildStats.setPool(sharedPromisePool);
 
     const redisConfig = config.redis ?? (config.dashboard?.enabled ? config.dashboard?.redis : null);
     this.redis = new RedisManager(this, redisConfig);
@@ -152,6 +154,7 @@ class Remix {
         logger.warn("[Redis] Startup connection error:", err?.message);
       });
       TrackStats.setRedis(this.redis);
+      GuildStats.setRedis(this.redis);
     }
 
     this.dashboard = new Dashboard(this, {
@@ -161,6 +164,7 @@ class Remix {
     });
     if (!this.redis.enabled && this.dashboard?.redis) {
       TrackStats.setRedis(this.dashboard.redis);
+      GuildStats.setRedis(this.dashboard.redis);
     }
 
     const presenceContents = config.presenceContents ?? [];
@@ -837,6 +841,7 @@ class Remix {
 
     try {
       TrackStats.save();
+      GuildStats.flushAll();
     } catch (_) {}
 
     /* 4. Close Redis */

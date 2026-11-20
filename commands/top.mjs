@@ -49,8 +49,8 @@ export async function run(message, data) {
   }
 
   const { tracks, topArtist } = isGlobal
-    ? GuildStats.getGlobalTopTracks(10)
-    : GuildStats.getTopTracks(guildId, timeframe, 10);
+    ? await GuildStats.getGlobalTopTracks(10)
+    : await GuildStats.getTopTracks(guildId, timeframe, 10);
 
   const authorName = isGlobal
     ? `🌐 ${this.t(message, "responses.top.globalAuthor")}`

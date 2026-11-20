@@ -42,7 +42,7 @@ export async function run(message, data) {
 
   if (isGlobal) {
     const serverCount = this.client?.guilds?.size ?? 1300;
-    const stats = GuildStats.getGlobalWrapped(serverCount);
+    const stats = await GuildStats.getGlobalWrapped(serverCount);
 
     if (!stats) {
       const emptyEmbed = new EmbedBuilder()
@@ -102,7 +102,7 @@ export async function run(message, data) {
     return message.reply({ embeds: [embed] });
   }
 
-  const stats = GuildStats.getWrapped(guildId);
+  const stats = await GuildStats.getWrapped(guildId);
 
   if (!stats) {
     const emptyEmbed = new EmbedBuilder()
