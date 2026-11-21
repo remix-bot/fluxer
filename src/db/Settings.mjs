@@ -179,6 +179,9 @@ export class RemoteSettingsManager extends SettingsManager {
   /** @private @type {boolean} True after shutdown() is called. */
   _shuttingDown = false;
 
+  /** @private @type {boolean} Whether the settings table has been verified/created. */
+  _tableChecked = false;
+
   /**
    * Create a new RemoteSettingsManager backed by a MySQL pool.
    * @param {object} config - mysql2 pool or configuration (host, user, password, database).
@@ -244,6 +247,25 @@ export class RemoteSettingsManager extends SettingsManager {
   }
 
   /**
+   * Ensure the settings table exists in MySQL.
+   * Auto-creates the table on fresh databases.
+   * @returns {Promise<void>}
+   * @private
+   */
+  async _ensureTable() {
+    if (this._tableChecked) return;
+    await this.query(`
+      CREATE TABLE IF NOT EXISTS \`settings\` (
+        \`id\` VARCHAR(32) NOT NULL,
+        \`data\` JSON NOT NULL,
+        \`bot_id\` VARCHAR(32) NOT NULL DEFAULT '',
+        PRIMARY KEY (\`id\`, \`bot_id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+    this._tableChecked = true;
+  }
+
+  /**
    * Ensure the `bot_id` column exists in the settings table and is part of the primary key.
    * Auto-migrates legacy tables that lack the column.
    * @returns {Promise<void>}
@@ -251,6 +273,7 @@ export class RemoteSettingsManager extends SettingsManager {
    */
   async _ensureBotIdColumn() {
     if (this._hasBotIdColumn) return;
+    await this._ensureTable();
     const res = await this.query(
       `SELECT COLUMN_NAME, IS_NULLABLE, COLUMN_KEY FROM information_schema.COLUMNS `
       + `WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'settings' AND COLUMN_NAME = 'bot_id'`
@@ -351,6 +374,7 @@ export class RemoteSettingsManager extends SettingsManager {
    * @returns {Promise<{error: Error|null, results: any[], fields: any}>}
    */
   async selectGuild(guildId) {
+    await this._ensureTable();
     const escapedId = mysql.escape(String(guildId));
     return this.query(`SELECT * FROM settings WHERE id=${escapedId}${this._botIdWhere()}`);
   }
@@ -361,6 +385,7 @@ export class RemoteSettingsManager extends SettingsManager {
    * @returns {Promise<void>}
    */
   async load() {
+    await this._ensureTable();
     const res = await this.query(`SELECT * FROM settings WHERE 1=1${this._botIdWhere()}`);
     if (res.error) {
       this._loadAttempts++;
@@ -461,6 +486,7 @@ export class RemoteSettingsManager extends SettingsManager {
    */
   async create(id, server) {
     if (this._shuttingDown) return;
+    await this._ensureTable();
     const escapedId = mysql.escape(id);
     const escapedData = mysql.escape(JSON.stringify(server.data));
     const bi = this._botIdInsert();
