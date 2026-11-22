@@ -48,6 +48,7 @@ We believe essential music features should never be locked behind a paywall — 
 * 📈 **Comprehensive Last.fm Suite** — Real-time scrobbling, loved tracks synchronization, artist crowns, server leaderboards, profile cards, and automated similar-track autoplay.
 * 📑 **Massive Playlist Ingestion** — Asynchronous chunked ingestion for large Spotify and SoundCloud playlists (>100 tracks) with instant playback start on song #1.
 * 🌐 **Full 8-Language Localization** — English, Arabic, Kurdish (Sorani), Turkish, German, Brazilian Portuguese, Simplified Chinese, and Traditional Chinese.
+* 💾 **Personal Saved Playlists & Favorites** — Bookmark favorite tracks (`%fav`) and save custom queue snapshots (`%playlist save <name>`) stored per-user in MySQL for seamless playback across all servers.
 * 📊 **Community & Personal Music Analytics** — Server leaderboards (`%top`) with custom timeframes (`24h`, `week`, `month`, `year`, `all`, `global`), Server Music Wrapped (`%wrapped`), and personal listening recap profiles (`%mywrapped` / `%top me`) backed by permanent MySQL analytics.
 * 🛡️ **Hardened Security & Reliability** — Built-in SSRF protection with DNS-rebinding guards (`SafeHttp`) and automated credential redaction (`[REDACTED]`) in owner diagnostics.
 
@@ -96,6 +97,13 @@ The default prefix is `%`. Server administrators can customize the prefix at any
 | `clear` | `c` | Clear upcoming tracks or a range | `%clear` / `%clear 2 10` |
 | `loop` | — | Toggle repeat mode (`song`, `queue`, or `off`) | `%loop queue` |
 | `trackopt` | `to` | Configure custom start/end timestamps | `%trackopt set 0:30 3:15` |
+
+### 💾 Personal Playlists & Favorites
+
+| Command | Aliases | Description | Example |
+| :--- | :--- | :--- | :--- |
+| `fav` | `favorite`, `favorites`, `bookmark` | Save or remove playing track from personal favorites, list, or play | `%fav` / `%fav play` / `%fav list` |
+| `playlist` | `pl`, `playlists` | Save active queue as a named playlist, play, list, or manage personal playlists | `%playlist save chill` / `%playlist play chill` / `%playlist list` |
 
 ### 🎛️ Audio Effects & Filters
 

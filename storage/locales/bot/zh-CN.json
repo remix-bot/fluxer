@@ -108,7 +108,9 @@
     "statustest": "测试公开状态频道更新、实时卡片和事件报告。",
     "top": "查看此服务器中播放次数最多的歌曲和热门艺术家。",
     "wrapped": "生成社区音乐回顾和收听统计数据。",
-    "mywrapped": "查看您的个人音乐回顾、最爱曲目和服务器 DJ 排名。"
+    "mywrapped": "查看您的个人音乐回顾、最爱曲目和服务器 DJ 排名。",
+    "fav": "收藏您喜爱的音乐并在语音频道中播放。",
+    "playlist": "保存当前队列或管理您的个人自定义歌单。"
   },
   "options": {
     "debug": {
@@ -1444,6 +1446,50 @@
       "noDataOther": "{{username}} 在此服务器上尚未播放过歌曲。",
       "globalNotice": "🌐 全球统计 • 此服务器上尚未播放过歌曲",
       "footer": "由 Remix Music 提供支持 • 输入 {{prefix}}top 查看服务器排行榜"
+    },
+    "fav": {
+      "notAvailable": "个人收藏暂不可用（数据库未连接）。",
+      "empty": "您还没有收藏任何歌曲！在歌曲播放时使用 `{prefix}fav` 即可收藏。",
+      "invalidIndex": "无效的歌曲编号。请选择 1 到 {max} 之间的数字。",
+      "queuedOne": "已将收藏歌曲加入队列：**[{title}]({url})**",
+      "queuedAll": "已将 **{count} 首收藏歌曲**加入队列！",
+      "removeUsage": "用法：`{prefix}fav remove <编号|歌名>`",
+      "notFound": "在您的收藏中未找到该歌曲。",
+      "removed": "已从收藏中移除 **[{title}]({url})**。",
+      "cleared": "已清空收藏中的全部 **{count} 首歌曲**。",
+      "listTitle": "{user} 的收藏音乐",
+      "listFooter": "第 {page}/{totalPages} 页 • 已收藏 {total} 首 • 使用 {prefix}fav play 播放全部",
+      "limitReached": "您已达到 {max} 首收藏歌曲的上限。",
+      "added": "⭐ 已将 **[{title}]({url})** 添加到您的收藏！(总计：{count})"
+    },
+    "playlist": {
+      "notAvailable": "个人歌单暂不可用（数据库未连接）。",
+      "saveUsage": "用法：`{prefix}playlist save <名称>`",
+      "playUsage": "用法：`{prefix}playlist play <名称>`",
+      "showUsage": "用法：`{prefix}playlist show <名称> [页码]`",
+      "addUsage": "用法：`{prefix}playlist add <名称>`",
+      "removeUsage": "用法：`{prefix}playlist remove <名称> <序号>`",
+      "deleteUsage": "用法：`{prefix}playlist delete <名称>`",
+      "emptyQueue": "当前没有正在播放或排队的歌曲可供保存！请先使用 `{prefix}play` 播放音乐。",
+      "limitReached": "您已达到 {max} 个自定义歌单的上限。",
+      "invalidName": "无效的歌单名称。名称长度必须在 1–32 个字符之间且不能包含斜杠。",
+      "saveFailed": "保存歌单失败，请重试。",
+      "saved": "💾 已将 **{count} 首歌曲**保存到歌单 **{name}**！随时使用 `{prefix}playlist play {name}` 播放。",
+      "notFound": "未找到歌单 **{name}**。使用 `{prefix}playlist list` 查看您的所有歌单。",
+      "playlistEmpty": "歌单 **{name}** 是空的。",
+      "queued": "▶️ 已将歌单 **{name}**（**{count} 首歌曲**）加载到播放队列！",
+      "listTitle": "{user} 的自定义歌单",
+      "noPlaylists": "您还没有保存任何歌单！使用 `{prefix}playlist save <名称>` 保存当前队列。",
+      "listFooter": "第 {page}/{totalPages} 页 • {total}/{max} 个歌单 • 播放：{prefix}playlist play <名称>",
+      "showTitle": "歌单：{name}",
+      "showFooter": "第 {page}/{totalPages} 页 • {name} 共有 {total} 首歌曲 • 播放：{prefix}playlist play {name}",
+      "nothingPlaying": "当前没有正在播放的歌曲可供添加。",
+      "playlistFull": "该歌单已达到 {max} 首歌曲的上限。",
+      "addFailed": "添加歌曲到歌单失败。",
+      "trackAdded": "已将 **{title}** 添加到歌单 **{name}**！（共 {count} 首）",
+      "invalidIndex": "无效的歌曲编号。",
+      "trackRemoved": "已从歌单 **{name}** 移除 **{title}**！（剩余 {count} 首）",
+      "deleted": "🗑️ 已删除歌单 **{name}**。"
     }
   }
 }

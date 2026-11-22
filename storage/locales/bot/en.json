@@ -108,7 +108,9 @@
     "statustest": "Test public status channel updates, live cards, and incidents.",
     "top": "View the most played songs and top artists in this server.",
     "wrapped": "Generate a community music recap and listening statistics.",
-    "mywrapped": "View your personal music listening recap, top tracks, and server DJ rank."
+    "mywrapped": "View your personal music listening recap, top tracks, and server DJ rank.",
+    "fav": "Bookmark your favorite tracks and load them into voice channels.",
+    "playlist": "Save the current queue or manage your personal custom playlists."
   },
   "options": {
     "debug": {
@@ -1444,6 +1446,50 @@
       "noDataOther": "{{username}} hasn't queued any songs in this server yet.",
       "globalNotice": "🌐 Global Stats • No songs queued on this server yet",
       "footer": "Powered by Remix Music • {{prefix}}top for server charts"
+    },
+    "fav": {
+      "notAvailable": "Personal favorites are not available (database disconnected).",
+      "empty": "You have no saved favorites yet! Use `{prefix}fav` while a song is playing to bookmark it.",
+      "invalidIndex": "Invalid track number. Please choose a number between 1 and {max}.",
+      "queuedOne": "Added favorite track to the queue: **[{title}]({url})**",
+      "queuedAll": "Added **{count} favorite track(s)** to the queue!",
+      "removeUsage": "Usage: `{prefix}fav remove <number|title>`",
+      "notFound": "Could not find that track in your favorites.",
+      "removed": "Removed **[{title}]({url})** from your favorites.",
+      "cleared": "Cleared all **{count} track(s)** from your favorites.",
+      "listTitle": "{user}'s Favorite Tracks",
+      "listFooter": "Page {page}/{totalPages} • {total} saved • Use {prefix}fav play to queue all",
+      "limitReached": "You have reached the maximum limit of {max} favorite tracks.",
+      "added": "⭐ Added **[{title}]({url})** to your favorites! (Total: {count})"
+    },
+    "playlist": {
+      "notAvailable": "Personal playlists are not available (database disconnected).",
+      "saveUsage": "Usage: `{prefix}playlist save <name>`",
+      "playUsage": "Usage: `{prefix}playlist play <name>`",
+      "showUsage": "Usage: `{prefix}playlist show <name> [page]`",
+      "addUsage": "Usage: `{prefix}playlist add <name>`",
+      "removeUsage": "Usage: `{prefix}playlist remove <name> <track_number>`",
+      "deleteUsage": "Usage: `{prefix}playlist delete <name>`",
+      "emptyQueue": "There is nothing playing or in the queue to save! Start playing music first with `{prefix}play`.",
+      "limitReached": "You have reached the limit of {max} custom playlists.",
+      "invalidName": "Invalid playlist name. Names must be 1–32 characters and cannot contain slashes.",
+      "saveFailed": "Failed to save playlist. Please try again.",
+      "saved": "💾 Saved **{count} track(s)** to playlist **{name}**! Play it anytime with `{prefix}playlist play {name}`.",
+      "notFound": "Playlist **{name}** was not found. Use `{prefix}playlist list` to see your playlists.",
+      "playlistEmpty": "Playlist **{name}** is empty.",
+      "queued": "▶️ Loaded playlist **{name}** (**{count} tracks**) into the queue!",
+      "listTitle": "{user}'s Custom Playlists",
+      "noPlaylists": "You have no saved playlists yet! Use `{prefix}playlist save <name>` to save your current queue.",
+      "listFooter": "Page {page}/{totalPages} • {total}/{max} playlists • Play with {prefix}playlist play <name>",
+      "showTitle": "Playlist: {name}",
+      "showFooter": "Page {page}/{totalPages} • {total} tracks in {name} • Play with {prefix}playlist play {name}",
+      "nothingPlaying": "There is no track currently playing to add.",
+      "playlistFull": "This playlist has reached the maximum cap of {max} tracks.",
+      "addFailed": "Failed to add track to playlist.",
+      "trackAdded": "Added **{title}** to playlist **{name}**! (Total: {count} tracks)",
+      "invalidIndex": "Invalid track index.",
+      "trackRemoved": "Removed **{title}** from playlist **{name}**! ({count} tracks remaining)",
+      "deleted": "🗑️ Deleted playlist **{name}**."
     }
   }
 }

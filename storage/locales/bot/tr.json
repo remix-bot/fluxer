@@ -108,7 +108,9 @@
     "statustest": "Herkese açık durum kanalı güncellemelerini, canlı kartları ve olayları test edin.",
     "top": "Bu sunucuda en çok çalınan şarkıları ve en popüler sanatçıları görüntüleyin.",
     "wrapped": "Bir topluluk müzik özeti ve dinleme istatistikleri oluşturun.",
-    "mywrapped": "Kişisel müzik özetinizi, en çok dinlenen parçalarınızı ve sunucu DJ sıralamanızı görüntüleyin."
+    "mywrapped": "Kişisel müzik özetinizi, en çok dinlenen parçalarınızı ve sunucu DJ sıralamanızı görüntüleyin.",
+    "fav": "Favori parçalarınızı kaydedin ve ses kanallarına yükleyin.",
+    "playlist": "Mevcut sırayı kaydedin veya kişisel çalma listelerinizi yönetin."
   },
   "options": {
     "debug": {
@@ -1444,6 +1446,50 @@
       "noDataOther": "{{username}} bu sunucuda henüz şarkı çalmadı.",
       "globalNotice": "🌐 Küresel İstatistikler • Bu sunucuda henüz şarkı çalınmadı",
       "footer": "Remix Music tarafından desteklenmektedir • Sunucu listeleri için {{prefix}}top"
+    },
+    "fav": {
+      "notAvailable": "Kişisel favoriler kullanılamıyor (veritabanı bağlantısı kesildi).",
+      "empty": "Henüz kayıtlı favoriniz yok! Çalmakta olan bir şarkıyı favorilere eklemek için `{prefix}fav` kullanın.",
+      "invalidIndex": "Geçersiz parça numarası. Lütfen 1 ile {max} arasında bir sayı seçin.",
+      "queuedOne": "Favori parça sıraya eklendi: **[{title}]({url})**",
+      "queuedAll": "**{count} favori parça** sıraya eklendi!",
+      "removeUsage": "Kullanım: `{prefix}fav remove <numara|başlık>`",
+      "notFound": "Bu parça favorilerinizde bulunamadı.",
+      "removed": "**[{title}]({url})** favorilerinizden kaldırıldı.",
+      "cleared": "Tüm **{count} parça** favorilerinizden temizlendi.",
+      "listTitle": "{user} kullanıcısının Favori Parçaları",
+      "listFooter": "Sayfa {page}/{totalPages} • {total} kayıtlı • Hepsini çalmak için {prefix}fav play kullanın",
+      "limitReached": "Maksimum {max} favori parça sınırına ulaştınız.",
+      "added": "⭐ **[{title}]({url})** favorilerinize eklendi! (Toplam: {count})"
+    },
+    "playlist": {
+      "notAvailable": "Kişisel çalma listeleri kullanılamıyor (veritabanı bağlantısı kesildi).",
+      "saveUsage": "Kullanım: `{prefix}playlist save <isim>`",
+      "playUsage": "Kullanım: `{prefix}playlist play <isim>`",
+      "showUsage": "Kullanım: `{prefix}playlist show <isim> [sayfa]`",
+      "addUsage": "Kullanım: `{prefix}playlist add <isim>`",
+      "removeUsage": "Kullanım: `{prefix}playlist remove <isim> <parça_numarası>`",
+      "deleteUsage": "Kullanım: `{prefix}playlist delete <isim>`",
+      "emptyQueue": "Kaydedilecek hiçbir şey çalmıyor veya sırada parça yok! Önce `{prefix}play` ile müzik başlatın.",
+      "limitReached": "Maksimum {max} özel çalma listesi sınırına ulaştınız.",
+      "invalidName": "Geçersiz çalma listesi adı. İsimler 1-32 karakter olmalı ve eğik çizgi içermemelidir.",
+      "saveFailed": "Çalma listesi kaydedilemedi. Lütfen tekrar deneyin.",
+      "saved": "💾 **{count} parça** **{name}** listesine kaydedildi! `{prefix}playlist play {name}` ile dilediğiniz zaman çalın.",
+      "notFound": "**{name}** isimli çalma listesi bulunamadı. Listelerinizi görmek için `{prefix}playlist list` kullanın.",
+      "playlistEmpty": "**{name}** çalma listesi boş.",
+      "queued": "▶️ **{name}** listesinden **{count} parça** sıraya yüklendi!",
+      "listTitle": "{user} kullanıcısının Özel Çalma Listeleri",
+      "noPlaylists": "Henüz kayıtlı çalma listeniz yok! Mevcut sırayı kaydetmek için `{prefix}playlist save <isim>` kullanın.",
+      "listFooter": "Sayfa {page}/{totalPages} • {total}/{max} liste • Çalmak için: {prefix}playlist play <isim>",
+      "showTitle": "Çalma Listesi: {name}",
+      "showFooter": "Sayfa {page}/{totalPages} • {name} içinde {total} parça • Çalmak için: {prefix}playlist play {name}",
+      "nothingPlaying": "Eklemek için şu anda çalan bir parça yok.",
+      "playlistFull": "Bu çalma listesi maksimum {max} parça sınırına ulaştı.",
+      "addFailed": "Parça çalma listesine eklenemedi.",
+      "trackAdded": "**{title}**, **{name}** listesine eklendi! (Toplam: {count} parça)",
+      "invalidIndex": "Geçersiz parça indeksi.",
+      "trackRemoved": "**{title}**, **{name}** listesinden kaldırıldı! ({count} parça kaldı)",
+      "deleted": "🗑️ **{name}** çalma listesi silindi."
     }
   }
 }

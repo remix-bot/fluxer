@@ -31,6 +31,7 @@ import { GatewayHandler } from "../voice/gateway/GatewayHandler.mjs";
 import { LastFmManager } from "../services/lastfm/LastFmManager.mjs";
 import { FluxerListManager } from "../services/FluxerListManager.mjs";
 import { TrackOptionsManager } from "../services/TrackOptionsManager.mjs";
+import { PlaylistManager } from "../services/PlaylistManager.mjs";
 import { StatusChannelManager } from "../services/StatusChannelManager.mjs";
 import { TrackStats } from "../music/TrackStats.mjs";
 import { GuildStats } from "../music/GuildStats.mjs";
@@ -288,6 +289,7 @@ class Remix {
     this.lastfm = new LastFmManager(config.lastfm, sharedPromisePool);
     this.fluxerlist = new FluxerListManager(config.fluxerlist);
     this.trackOptions = new TrackOptionsManager(sharedPool);
+    this.playlists = new PlaylistManager(sharedPromisePool);
     this.statusChannel = new StatusChannelManager(this, config.statusChannel);
 
     /* Gateway activity timestamps and status tracking */
