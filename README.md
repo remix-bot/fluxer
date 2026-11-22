@@ -21,7 +21,7 @@
   <img src="https://img.shields.io/badge/Node.js-%3E%3D22.13.0-339933.svg" alt="Node.js">
   <img src="https://img.shields.io/badge/Voice-LiveKit%20%2B%20NodeLink-orange.svg" alt="Audio Engine">
   <img src="https://img.shields.io/badge/Database-MySQL-4479A1.svg" alt="Database">
-  <img src="https://img.shields.io/badge/Languages-6%20Locales-9b59b6.svg" alt="Localization">
+  <img src="https://img.shields.io/badge/Languages-8%20Locales-9b59b6.svg" alt="Localization">
   <img src="https://img.shields.io/badge/Maintained%3F-Yes-green.svg" alt="Maintained">
 </p>
 
@@ -47,7 +47,8 @@ We believe essential music features should never be locked behind a paywall — 
 * 📊 **Loudness Normalization** — Built-in EBU R128 / ReplayGain leveling (`%normalize`) to eliminate volume jumps between quiet acoustic songs and loud EDM tracks.
 * 📈 **Comprehensive Last.fm Suite** — Real-time scrobbling, loved tracks synchronization, artist crowns, server leaderboards, profile cards, and automated similar-track autoplay.
 * 📑 **Massive Playlist Ingestion** — Asynchronous chunked ingestion for large Spotify and SoundCloud playlists (>100 tracks) with instant playback start on song #1.
-* 🌐 **Full 6-Language Localization** — English, Arabic, Kurdish (Sorani), Turkish, German, and Brazilian Portuguese.
+* 🌐 **Full 8-Language Localization** — English, Arabic, Kurdish (Sorani), Turkish, German, Brazilian Portuguese, Simplified Chinese, and Traditional Chinese.
+* 📊 **Community & Personal Music Analytics** — Server leaderboards (`%top`) with custom timeframes (`24h`, `week`, `month`, `year`, `all`, `global`), Server Music Wrapped (`%wrapped`), and personal listening recap profiles (`%mywrapped` / `%top me`) backed by permanent MySQL analytics.
 * 🛡️ **Hardened Security & Reliability** — Built-in SSRF protection with DNS-rebinding guards (`SafeHttp`) and automated credential redaction (`[REDACTED]`) in owner diagnostics.
 
 ---
@@ -117,6 +118,14 @@ The default prefix is `%`. Server administrators can customize the prefix at any
 | `lastfm top` | — | View your top tracks, artists, or albums | `%lastfm top artists` |
 | `lastfm lb` | — | View server-wide scrobble leaderboard | `%lastfm lb` |
 
+### 🏆 Leaderboards & Community Stats
+
+| Command | Aliases | Description | Example |
+| :--- | :--- | :--- | :--- |
+| `top` | `leaderboard`, `chart`, `toptracks` | Most played tracks and top artists with interactive pagination and timeframes (`24h`, `week`, `month`, `year`, `all`, `global`) | `%top` / `%top 24h` / `%top global` |
+| `wrapped` | `recap`, `summary` | Server or network-wide music listening recap and personality card | `%wrapped` / `%wrapped global` |
+| `mywrapped` | `myrecap`, `personalwrapped`, `me`, `djstats` | Personal listening recap, personal top 5 tracks, favorite artist, and server DJ rank | `%mywrapped` / `%top me` |
+
 ### ⚙️ Server & Voice Settings
 
 | Command | Aliases | Description | Example |
@@ -159,6 +168,7 @@ Open `docker/config.json` and insert your bot token:
 ```json
 {
   "token": "YOUR_FLUXER_BOT_TOKEN",
+  "instanceUrl": null,
   "prefix": "%",
   "owners": ["YOUR_USER_ID"],
   "mysql": {
@@ -175,6 +185,9 @@ Open `docker/config.json` and insert your bot token:
   }
 }
 ```
+
+> [!NOTE]
+> Set `"instanceUrl": "https://chat.example.com"` if connecting Remix to a self-hosted Fluxer instance instead of the official platform.
 
 ### 3. Start the Stack
 ```bash
