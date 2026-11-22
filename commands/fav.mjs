@@ -7,6 +7,7 @@ import { CommandBuilder } from "../src/commands/index.mjs";
 import { EmbedBuilder } from "@fluxerjs/core";
 import { Utils, cleanId } from "../src/utils/Utils.mjs";
 import { getGlobalColor, getMessageGuildId } from "../src/ui/index.mjs";
+import { logger } from "../src/core/Logger.mjs";
 
 const PAGE_SIZE = 10;
 const COLOR_PRIMARY = 0xe9196c;
@@ -19,44 +20,17 @@ export const command = new CommandBuilder()
   .setDescription("Bookmark your favorite tracks and load them into voice channels.", "commands.fav")
   .addAliases("favorite", "favorites", "bookmark", "bookmarks")
   .setCategory("music")
-  .addSubcommand((s) =>
-    s
-      .setName("toggle")
-      .setId("fav_toggle")
-      .setDescription("Save or remove the currently playing song from your favorites.")
+  .addTextOption((o) =>
+    o
+      .setName("action")
+      .setDescription("Action to perform: play, list, remove, clear, or toggle favorite if omitted.")
+      .setRequired(false)
   )
-  .addSubcommand((s) =>
-    s
-      .setName("list")
-      .setId("fav_list")
-      .setDescription("View your list of saved favorite tracks.")
-      .addNumberOption((o) =>
-        o.setName("page").setDescription("Page number to view.").setRequired(false)
-      )
-  )
-  .addSubcommand((s) =>
-    s
-      .setName("play")
-      .setId("fav_play")
-      .setDescription("Play all your favorites or a specific track number.")
-      .addNumberOption((o) =>
-        o.setName("track").setDescription("Track number to play.").setRequired(false)
-      )
-  )
-  .addSubcommand((s) =>
-    s
-      .setName("remove")
-      .setId("fav_remove")
-      .setDescription("Remove a track from your favorites by number or title.")
-      .addTextOption((o) =>
-        o.setName("target").setDescription("Track number or title to remove.").setRequired(true)
-      )
-  )
-  .addSubcommand((s) =>
-    s
-      .setName("clear")
-      .setId("fav_clear")
-      .setDescription("Clear all tracks from your personal favorites.")
+  .addTextOption((o) =>
+    o
+      .setName("target")
+      .setDescription("Track number, search query, or page number.")
+      .setRequired(false)
   );
 
 /**
@@ -85,21 +59,28 @@ export async function run(msg, data) {
   const rawParts = rawContent.split(/\s+/).slice(1);
   const firstToken = (rawParts[0] || "").toLowerCase();
 
-  let sub = data?.command?.name || data?.commandId || "";
+  let sub = data?.get?.("action")?.value || "";
+  if (sub) sub = sub.toLowerCase();
+
   if (!sub || sub === "fav") {
     if (["list", "view", "all"].includes(firstToken)) sub = "list";
     else if (["play", "p", "queue"].includes(firstToken)) sub = "play";
     else if (["remove", "delete", "rm", "del"].includes(firstToken)) sub = "remove";
     else if (["clear", "reset"].includes(firstToken)) sub = "clear";
     else if (["add", "save"].includes(firstToken)) sub = "add";
-    else sub = "toggle";
+    else if (firstToken && !isNaN(parseInt(firstToken, 10))) {
+      /* If user typed %fav 2 or %fav <page>, route to list or play */
+      sub = "list";
+    } else {
+      sub = "toggle";
+    }
   }
 
   /* -------------------------------------------------------------------------
      SUBCOMMAND: PLAY
      ------------------------------------------------------------------------- */
-  if (sub === "play") {
-    const p = await this.getPlayer(msg);
+  if (sub === "play" || sub === "p" || sub === "queue") {
+    const p = await this.getPlayer(msg, true, true, true);
     if (!p) return;
 
     const favs = await pm.getFavorites(userId, 250, 0);
@@ -111,7 +92,7 @@ export async function run(msg, data) {
     }
 
     /* Check if a specific track number was requested */
-    let trackNum = data?.get?.("track")?.value;
+    let trackNum = data?.get?.("target")?.value;
     if (!trackNum && rawParts.length > 1) {
       const parsedNum = parseInt(rawParts[1], 10);
       if (!isNaN(parsedNum)) trackNum = parsedNum;
@@ -204,7 +185,7 @@ export async function run(msg, data) {
   /* -------------------------------------------------------------------------
      SUBCOMMAND: REMOVE
      ------------------------------------------------------------------------- */
-  if (sub === "remove") {
+  if (sub === "remove" || sub === "delete" || sub === "rm" || sub === "del") {
     let target = data?.get?.("target")?.value;
     if (!target && rawParts.length > 1) {
       target = rawParts.slice(1).join(" ");
@@ -237,7 +218,7 @@ export async function run(msg, data) {
   /* -------------------------------------------------------------------------
      SUBCOMMAND: CLEAR
      ------------------------------------------------------------------------- */
-  if (sub === "clear") {
+  if (sub === "clear" || sub === "reset") {
     const count = await pm.clearFavorites(userId);
     const embed = new EmbedBuilder()
       .setColor(COLOR_SUCCESS)
@@ -248,7 +229,7 @@ export async function run(msg, data) {
   /* -------------------------------------------------------------------------
      SUBCOMMAND: LIST
      ------------------------------------------------------------------------- */
-  if (sub === "list") {
+  if (sub === "list" || sub === "view" || sub === "all") {
     const totalCount = await pm.getFavoriteCount(userId);
     if (totalCount === 0) {
       const embed = new EmbedBuilder()
@@ -259,11 +240,14 @@ export async function run(msg, data) {
     }
 
     const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-    let page = data?.get?.("page")?.value;
+    let page = data?.get?.("target")?.value;
     if (!page && rawParts.length > 1) {
       const parsed = parseInt(rawParts[1], 10);
       if (!isNaN(parsed)) page = parsed;
+    } else if (!page && rawParts.length === 1 && !isNaN(parseInt(rawParts[0], 10))) {
+      page = parseInt(rawParts[0], 10);
     }
+
     const safePage = Math.max(1, Math.min(parseInt(page, 10) || 1, totalPages));
     const offset = (safePage - 1) * PAGE_SIZE;
 
@@ -296,7 +280,7 @@ export async function run(msg, data) {
   /* -------------------------------------------------------------------------
      SUBCOMMAND: TOGGLE / DEFAULT
      ------------------------------------------------------------------------- */
-  const p = await this.getPlayer(msg, false);
+  const p = await this.getPlayer(msg, false, false, false);
   const current = p?.queue?.getCurrent();
 
   /* If no track is currently playing and user typed plain %fav, show the list */
@@ -308,7 +292,7 @@ export async function run(msg, data) {
         .setDescription(this.t(msg, "responses.fav.empty", { prefix }));
       return msg.reply({ embeds: [embed] });
     }
-    return run.call(this, msg, { command: { name: "list" } });
+    return run.call(this, msg, { get: (k) => (k === "action" ? { value: "list" } : null) });
   }
 
   /* Toggle the currently playing track in favorites */

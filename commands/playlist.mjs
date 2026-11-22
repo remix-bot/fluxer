@@ -8,6 +8,7 @@ import { EmbedBuilder } from "@fluxerjs/core";
 import { Utils, cleanId } from "../src/utils/Utils.mjs";
 import { getGlobalColor, getMessageGuildId } from "../src/ui/index.mjs";
 import { MAX_PLAYLISTS_PER_USER, MAX_TRACKS_PER_PLAYLIST } from "../src/services/PlaylistManager.mjs";
+import { logger } from "../src/core/Logger.mjs";
 
 const PAGE_SIZE = 10;
 const COLOR_PRIMARY = 0xe9196c;
@@ -20,74 +21,23 @@ export const command = new CommandBuilder()
   .setDescription("Save the current queue or manage your personal custom playlists.", "commands.playlist")
   .addAliases("pl", "playlists")
   .setCategory("music")
-  .addSubcommand((s) =>
-    s
-      .setName("save")
-      .setId("playlist_save")
-      .setDescription("Save the current queue as a named personal playlist.")
-      .addTextOption((o) =>
-        o.setName("name").setDescription("Name for your playlist.").setRequired(true)
-      )
+  .addTextOption((o) =>
+    o
+      .setName("action")
+      .setDescription("Action to perform: save, play, list, show, add, remove, delete.")
+      .setRequired(false)
   )
-  .addSubcommand((s) =>
-    s
-      .setName("play")
-      .setId("playlist_play")
-      .setDescription("Queue a previously saved personal playlist.")
-      .addTextOption((o) =>
-        o.setName("name").setDescription("Name of the playlist to play.").setRequired(true)
-      )
+  .addTextOption((o) =>
+    o
+      .setName("name")
+      .setDescription("Playlist name or target.")
+      .setRequired(false)
   )
-  .addSubcommand((s) =>
-    s
-      .setName("list")
-      .setId("playlist_list")
-      .setDescription("List all your saved personal playlists.")
-      .addNumberOption((o) =>
-        o.setName("page").setDescription("Page number to view.").setRequired(false)
-      )
-  )
-  .addSubcommand((s) =>
-    s
-      .setName("show")
-      .setId("playlist_show")
-      .setDescription("View the tracks inside a specific playlist.")
-      .addTextOption((o) =>
-        o.setName("name").setDescription("Name of the playlist to view.").setRequired(true)
-      )
-      .addNumberOption((o) =>
-        o.setName("page").setDescription("Page number of tracks.").setRequired(false)
-      )
-  )
-  .addSubcommand((s) =>
-    s
-      .setName("add")
-      .setId("playlist_add")
-      .setDescription("Add the currently playing track to an existing playlist.")
-      .addTextOption((o) =>
-        o.setName("name").setDescription("Name of the target playlist.").setRequired(true)
-      )
-  )
-  .addSubcommand((s) =>
-    s
-      .setName("remove")
-      .setId("playlist_remove")
-      .setDescription("Remove a track from a playlist by its track number.")
-      .addTextOption((o) =>
-        o.setName("name").setDescription("Name of the playlist.").setRequired(true)
-      )
-      .addNumberOption((o) =>
-        o.setName("index").setDescription("Track number (1-based) to remove.").setRequired(true)
-      )
-  )
-  .addSubcommand((s) =>
-    s
-      .setName("delete")
-      .setId("playlist_delete")
-      .setDescription("Delete a saved personal playlist.")
-      .addTextOption((o) =>
-        o.setName("name").setDescription("Name of the playlist to delete.").setRequired(true)
-      )
+  .addTextOption((o) =>
+    o
+      .setName("extra")
+      .setDescription("Track index or page number.")
+      .setRequired(false)
   );
 
 /**
@@ -116,8 +66,10 @@ export async function run(msg, data) {
   const rawParts = rawContent.split(/\s+/).slice(1);
   const firstToken = (rawParts[0] || "").toLowerCase();
 
-  let sub = data?.command?.name || data?.commandId || "";
-  if (!sub || sub === "playlist") {
+  let sub = data?.get?.("action")?.value || "";
+  if (sub) sub = sub.toLowerCase();
+
+  if (!sub || sub === "playlist" || sub === "pl" || sub === "playlists") {
     if (["save", "create", "new"].includes(firstToken)) sub = "save";
     else if (["play", "p", "load"].includes(firstToken)) sub = "play";
     else if (["list", "all"].includes(firstToken)) sub = "list";
@@ -125,14 +77,18 @@ export async function run(msg, data) {
     else if (["add"].includes(firstToken)) sub = "add";
     else if (["remove", "rm"].includes(firstToken)) sub = "remove";
     else if (["delete", "del", "destroy"].includes(firstToken)) sub = "delete";
-    else if (rawParts.length > 0) sub = "play";
-    else sub = "list";
+    else if (rawParts.length > 0 && !["list", "play"].includes(firstToken)) {
+      /* If user typed %playlist <name>, interpret as play */
+      sub = "play";
+    } else {
+      sub = "list";
+    }
   }
 
   /* -------------------------------------------------------------------------
      SUBCOMMAND: SAVE
      ------------------------------------------------------------------------- */
-  if (sub === "save") {
+  if (sub === "save" || sub === "create" || sub === "new") {
     let name = data?.get?.("name")?.value;
     if (!name && rawParts.length > 1) {
       name = rawParts[1];
@@ -145,7 +101,7 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [embed] });
     }
 
-    const p = await this.getPlayer(msg, false);
+    const p = await this.getPlayer(msg, false, false, false);
     const current = p?.queue?.getCurrent();
     const queued = p?.queue?.data || [];
 
@@ -193,11 +149,11 @@ export async function run(msg, data) {
   /* -------------------------------------------------------------------------
      SUBCOMMAND: PLAY
      ------------------------------------------------------------------------- */
-  if (sub === "play") {
+  if (sub === "play" || sub === "p" || sub === "load") {
     let name = data?.get?.("name")?.value;
     if (!name && rawParts.length > 1) {
       name = rawParts[1];
-    } else if (!name && rawParts.length === 1 && !["play", "list"].includes(firstToken)) {
+    } else if (!name && rawParts.length === 1 && !["play", "list", "p", "load"].includes(firstToken)) {
       name = rawParts[0];
     }
 
@@ -223,7 +179,7 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [embed] });
     }
 
-    const p = await this.getPlayer(msg);
+    const p = await this.getPlayer(msg, true, true, true);
     if (!p) return;
 
     const videos = playlist.tracks.map((t) => ({
@@ -267,7 +223,7 @@ export async function run(msg, data) {
   /* -------------------------------------------------------------------------
      SUBCOMMAND: LIST
      ------------------------------------------------------------------------- */
-  if (sub === "list") {
+  if (sub === "list" || sub === "all") {
     const playlists = await pm.listPlaylists(userId);
     if (playlists.length === 0) {
       const embed = new EmbedBuilder()
@@ -278,7 +234,7 @@ export async function run(msg, data) {
     }
 
     const totalPages = Math.max(1, Math.ceil(playlists.length / PAGE_SIZE));
-    let page = data?.get?.("page")?.value;
+    let page = data?.get?.("name")?.value;
     if (!page && rawParts.length > 1) {
       const parsed = parseInt(rawParts[1], 10);
       if (!isNaN(parsed)) page = parsed;
@@ -314,7 +270,7 @@ export async function run(msg, data) {
   /* -------------------------------------------------------------------------
      SUBCOMMAND: SHOW / VIEW
      ------------------------------------------------------------------------- */
-  if (sub === "show") {
+  if (sub === "show" || sub === "view" || sub === "info") {
     let name = data?.get?.("name")?.value;
     if (!name && rawParts.length > 1) {
       name = rawParts[1];
@@ -344,7 +300,7 @@ export async function run(msg, data) {
     }
 
     const totalPages = Math.max(1, Math.ceil(tracks.length / PAGE_SIZE));
-    let page = data?.get?.("page")?.value;
+    let page = data?.get?.("extra")?.value;
     if (!page && rawParts.length > 2) {
       const parsed = parseInt(rawParts[2], 10);
       if (!isNaN(parsed)) page = parsed;
@@ -395,7 +351,7 @@ export async function run(msg, data) {
       return msg.reply({ embeds: [embed] });
     }
 
-    const p = await this.getPlayer(msg, false);
+    const p = await this.getPlayer(msg, false, false, false);
     const current = p?.queue?.getCurrent();
 
     if (!current) {
@@ -438,9 +394,9 @@ export async function run(msg, data) {
   /* -------------------------------------------------------------------------
      SUBCOMMAND: REMOVE
      ------------------------------------------------------------------------- */
-  if (sub === "remove") {
+  if (sub === "remove" || sub === "rm") {
     let name = data?.get?.("name")?.value;
-    let index = data?.get?.("index")?.value;
+    let index = data?.get?.("extra")?.value;
 
     if (!name && rawParts.length > 1) name = rawParts[1];
     if (index == null && rawParts.length > 2) index = parseInt(rawParts[2], 10);
@@ -479,7 +435,7 @@ export async function run(msg, data) {
   /* -------------------------------------------------------------------------
      SUBCOMMAND: DELETE
      ------------------------------------------------------------------------- */
-  if (sub === "delete") {
+  if (sub === "delete" || sub === "del" || sub === "destroy") {
     let name = data?.get?.("name")?.value;
     if (!name && rawParts.length > 1) {
       name = rawParts[1];
