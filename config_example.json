@@ -2,7 +2,7 @@
   "Comment": "Fluxer music bot configuration. Requires Node.js >= 22.13.0. Run 'node --version' to verify.",
   "token": "your bot token",
   "instanceUrl": null,
-  "instanceUrl-Comment": "Optional base URL of a self-hosted Fluxer instance (e.g. 'https://chat.example.com'). Leave null or omit to connect to the official fluxer.com.",
+  "instanceUrl-Comment": "Optional base API URL of a self-hosted Fluxer instance (e.g. 'https://chat.example.com/api'). Include '/api' if your instance serves REST endpoints under /api. Leave null or omit to connect to official fluxer.com.",
   "fluxer.js": {
     "rest": {
       "Comment": "REST client options. 'timeout' is ms before a request to fluxer.com/api is aborted (default: 15000). Raise if you see DOMException AbortError in logs.",

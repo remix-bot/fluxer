@@ -187,7 +187,7 @@ Open `docker/config.json` and insert your bot token:
 ```
 
 > [!NOTE]
-> Set `"instanceUrl": "https://chat.example.com"` if connecting Remix to a self-hosted Fluxer instance instead of the official platform.
+> Set `"instanceUrl": "https://chat.example.com/api"` if connecting Remix to a self-hosted Fluxer instance instead of the official platform (include `/api` if your instance mounts REST endpoints under `/api`).
 
 ### 3. Start the Stack
 ```bash

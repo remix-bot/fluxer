@@ -1,5 +1,6 @@
 {
   "token": "YOUR_BOT_TOKEN_HERE",
+  "instanceUrl": null,
   "prefix": "%",
   "embedColor": "0xe9196c",
   "owners": [],
