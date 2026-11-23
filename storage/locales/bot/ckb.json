@@ -219,6 +219,12 @@
     },
     "mywrapped": {
       "user": "ئەو بەکارهێنەرەی دەتەوێت پوختەی مۆسیقاکەی ببینیت."
+    },
+    "fav": {
+      "args": "فەرمانی لاوەکی یان تراک: play, list, remove, clear, یان بە بەتاڵی جێی بهێڵە بۆ گۆڕین."
+    },
+    "playlist": {
+      "args": "فەرمانی لاوەکی و ئارگۆمێنتەکان: save, play, list, show, add, remove, delete."
     }
   },
   "pagination": {

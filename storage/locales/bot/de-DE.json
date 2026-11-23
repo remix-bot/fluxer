@@ -219,6 +219,12 @@
     },
     "mywrapped": {
       "user": "Der Benutzer, dessen Musik-Rückblick du sehen möchtest."
+    },
+    "fav": {
+      "args": "Unterbefehl oder Track: play, list, remove, clear oder leer lassen zum Umschalten."
+    },
+    "playlist": {
+      "args": "Unterbefehl und Argumente: save, play, list, show, add, remove, delete."
     }
   },
   "pagination": {

@@ -22,14 +22,8 @@ export const command = new CommandBuilder()
   .setCategory("music")
   .addTextOption((o) =>
     o
-      .setName("action")
-      .setDescription("Action to perform: play, list, remove, clear, or toggle favorite if omitted.")
-      .setRequired(false)
-  )
-  .addTextOption((o) =>
-    o
-      .setName("target")
-      .setDescription("Track number, search query, or page number.")
+      .setName("args")
+      .setDescription("Subcommand or track: play, list, remove, clear, or leave empty to toggle favorite.", "options.fav.args")
       .setRequired(false)
   );
 
@@ -59,21 +53,16 @@ export async function run(msg, data) {
   const rawParts = rawContent.split(/\s+/).slice(1);
   const firstToken = (rawParts[0] || "").toLowerCase();
 
-  let sub = data?.get?.("action")?.value || "";
-  if (sub) sub = sub.toLowerCase();
-
-  if (!sub || sub === "fav") {
+  let sub = data?.action || "";
+  if (!sub) {
     if (["list", "view", "all"].includes(firstToken)) sub = "list";
     else if (["play", "p", "queue"].includes(firstToken)) sub = "play";
     else if (["remove", "delete", "rm", "del"].includes(firstToken)) sub = "remove";
     else if (["clear", "reset"].includes(firstToken)) sub = "clear";
     else if (["add", "save"].includes(firstToken)) sub = "add";
-    else if (firstToken && !isNaN(parseInt(firstToken, 10))) {
-      /* If user typed %fav 2 or %fav <page>, route to list or play */
-      sub = "list";
-    } else {
-      sub = "toggle";
-    }
+    else if (firstToken && !isNaN(parseInt(firstToken, 10))) sub = "list";
+    else if (!firstToken) sub = "toggle";
+    else sub = "toggle";
   }
 
   /* -------------------------------------------------------------------------
@@ -92,8 +81,8 @@ export async function run(msg, data) {
     }
 
     /* Check if a specific track number was requested */
-    let trackNum = data?.get?.("target")?.value;
-    if (!trackNum && rawParts.length > 1) {
+    let trackNum = null;
+    if (rawParts.length > 1) {
       const parsedNum = parseInt(rawParts[1], 10);
       if (!isNaN(parsedNum)) trackNum = parsedNum;
     }
@@ -186,8 +175,8 @@ export async function run(msg, data) {
      SUBCOMMAND: REMOVE
      ------------------------------------------------------------------------- */
   if (sub === "remove" || sub === "delete" || sub === "rm" || sub === "del") {
-    let target = data?.get?.("target")?.value;
-    if (!target && rawParts.length > 1) {
+    let target = null;
+    if (rawParts.length > 1) {
       target = rawParts.slice(1).join(" ");
     }
 
@@ -240,11 +229,11 @@ export async function run(msg, data) {
     }
 
     const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-    let page = data?.get?.("target")?.value;
-    if (!page && rawParts.length > 1) {
+    let page = null;
+    if (rawParts.length > 1) {
       const parsed = parseInt(rawParts[1], 10);
       if (!isNaN(parsed)) page = parsed;
-    } else if (!page && rawParts.length === 1 && !isNaN(parseInt(rawParts[0], 10))) {
+    } else if (rawParts.length === 1 && !isNaN(parseInt(rawParts[0], 10))) {
       page = parseInt(rawParts[0], 10);
     }
 
@@ -292,7 +281,7 @@ export async function run(msg, data) {
         .setDescription(this.t(msg, "responses.fav.empty", { prefix }));
       return msg.reply({ embeds: [embed] });
     }
-    return run.call(this, msg, { get: (k) => (k === "action" ? { value: "list" } : null) });
+    return run.call(this, msg, { action: "list" });
   }
 
   /* Toggle the currently playing track in favorites */

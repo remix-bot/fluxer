@@ -23,20 +23,8 @@ export const command = new CommandBuilder()
   .setCategory("music")
   .addTextOption((o) =>
     o
-      .setName("action")
-      .setDescription("Action to perform: save, play, list, show, add, remove, delete.")
-      .setRequired(false)
-  )
-  .addTextOption((o) =>
-    o
-      .setName("name")
-      .setDescription("Playlist name or target.")
-      .setRequired(false)
-  )
-  .addTextOption((o) =>
-    o
-      .setName("extra")
-      .setDescription("Track index or page number.")
+      .setName("args")
+      .setDescription("Subcommand and arguments: save, play, list, show, add, remove, delete.", "options.playlist.args")
       .setRequired(false)
   );
 
@@ -66,10 +54,8 @@ export async function run(msg, data) {
   const rawParts = rawContent.split(/\s+/).slice(1);
   const firstToken = (rawParts[0] || "").toLowerCase();
 
-  let sub = data?.get?.("action")?.value || "";
-  if (sub) sub = sub.toLowerCase();
-
-  if (!sub || sub === "playlist" || sub === "pl" || sub === "playlists") {
+  let sub = data?.action || "";
+  if (!sub) {
     if (["save", "create", "new"].includes(firstToken)) sub = "save";
     else if (["play", "p", "load"].includes(firstToken)) sub = "play";
     else if (["list", "all"].includes(firstToken)) sub = "list";
@@ -89,10 +75,7 @@ export async function run(msg, data) {
      SUBCOMMAND: SAVE
      ------------------------------------------------------------------------- */
   if (sub === "save" || sub === "create" || sub === "new") {
-    let name = data?.get?.("name")?.value;
-    if (!name && rawParts.length > 1) {
-      name = rawParts[1];
-    }
+    let name = rawParts.length > 1 ? rawParts[1] : null;
 
     if (!name) {
       const embed = new EmbedBuilder()
@@ -150,10 +133,10 @@ export async function run(msg, data) {
      SUBCOMMAND: PLAY
      ------------------------------------------------------------------------- */
   if (sub === "play" || sub === "p" || sub === "load") {
-    let name = data?.get?.("name")?.value;
-    if (!name && rawParts.length > 1) {
+    let name = null;
+    if (rawParts.length > 1) {
       name = rawParts[1];
-    } else if (!name && rawParts.length === 1 && !["play", "list", "p", "load"].includes(firstToken)) {
+    } else if (rawParts.length === 1 && !["play", "list", "p", "load"].includes(firstToken)) {
       name = rawParts[0];
     }
 
@@ -234,8 +217,8 @@ export async function run(msg, data) {
     }
 
     const totalPages = Math.max(1, Math.ceil(playlists.length / PAGE_SIZE));
-    let page = data?.get?.("name")?.value;
-    if (!page && rawParts.length > 1) {
+    let page = null;
+    if (rawParts.length > 1) {
       const parsed = parseInt(rawParts[1], 10);
       if (!isNaN(parsed)) page = parsed;
     }
@@ -271,10 +254,7 @@ export async function run(msg, data) {
      SUBCOMMAND: SHOW / VIEW
      ------------------------------------------------------------------------- */
   if (sub === "show" || sub === "view" || sub === "info") {
-    let name = data?.get?.("name")?.value;
-    if (!name && rawParts.length > 1) {
-      name = rawParts[1];
-    }
+    let name = rawParts.length > 1 ? rawParts[1] : null;
 
     if (!name) {
       const embed = new EmbedBuilder()
@@ -300,8 +280,8 @@ export async function run(msg, data) {
     }
 
     const totalPages = Math.max(1, Math.ceil(tracks.length / PAGE_SIZE));
-    let page = data?.get?.("extra")?.value;
-    if (!page && rawParts.length > 2) {
+    let page = null;
+    if (rawParts.length > 2) {
       const parsed = parseInt(rawParts[2], 10);
       if (!isNaN(parsed)) page = parsed;
     }
@@ -339,10 +319,7 @@ export async function run(msg, data) {
      SUBCOMMAND: ADD
      ------------------------------------------------------------------------- */
   if (sub === "add") {
-    let name = data?.get?.("name")?.value;
-    if (!name && rawParts.length > 1) {
-      name = rawParts[1];
-    }
+    let name = rawParts.length > 1 ? rawParts[1] : null;
 
     if (!name) {
       const embed = new EmbedBuilder()
@@ -395,11 +372,8 @@ export async function run(msg, data) {
      SUBCOMMAND: REMOVE
      ------------------------------------------------------------------------- */
   if (sub === "remove" || sub === "rm") {
-    let name = data?.get?.("name")?.value;
-    let index = data?.get?.("extra")?.value;
-
-    if (!name && rawParts.length > 1) name = rawParts[1];
-    if (index == null && rawParts.length > 2) index = parseInt(rawParts[2], 10);
+    let name = rawParts.length > 1 ? rawParts[1] : null;
+    let index = rawParts.length > 2 ? parseInt(rawParts[2], 10) : null;
 
     if (!name || index == null || isNaN(index)) {
       const embed = new EmbedBuilder()
@@ -436,10 +410,7 @@ export async function run(msg, data) {
      SUBCOMMAND: DELETE
      ------------------------------------------------------------------------- */
   if (sub === "delete" || sub === "del" || sub === "destroy") {
-    let name = data?.get?.("name")?.value;
-    if (!name && rawParts.length > 1) {
-      name = rawParts[1];
-    }
+    let name = rawParts.length > 1 ? rawParts[1] : null;
 
     if (!name) {
       const embed = new EmbedBuilder()

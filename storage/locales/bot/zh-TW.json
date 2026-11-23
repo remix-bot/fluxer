@@ -219,6 +219,12 @@
     },
     "mywrapped": {
       "user": "要查看其音樂回顧的使用者。"
+    },
+    "fav": {
+      "args": "子指令或曲目：play、list、remove、clear，留空以收藏/取消收藏當前歌曲。"
+    },
+    "playlist": {
+      "args": "子指令與參數：save、play、list、show、add、remove、delete。"
     }
   },
   "pagination": {

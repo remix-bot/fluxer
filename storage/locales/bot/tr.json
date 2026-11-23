@@ -219,6 +219,12 @@
     },
     "mywrapped": {
       "user": "Müzik özetini görüntülemek istediğiniz kullanıcı."
+    },
+    "fav": {
+      "args": "Alt komut veya parça: play, list, remove, clear veya değiştirmek için boş bırakın."
+    },
+    "playlist": {
+      "args": "Alt komut ve bağımsız değişkenler: save, play, list, show, add, remove, delete."
     }
   },
   "pagination": {

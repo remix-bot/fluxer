@@ -219,6 +219,12 @@
     },
     "mywrapped": {
       "user": "O usuário cuja retrospectiva musical você deseja ver."
+    },
+    "fav": {
+      "args": "Subcomando ou faixa: play, list, remove, clear, ou deixe vazio para alternar."
+    },
+    "playlist": {
+      "args": "Subcomando e argumentos: save, play, list, show, add, remove, delete."
     }
   },
   "pagination": {

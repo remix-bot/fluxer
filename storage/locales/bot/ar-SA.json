@@ -219,6 +219,12 @@
     },
     "mywrapped": {
       "user": "المستخدم الذي تريد عرض ملخصه الموسيقي."
+    },
+    "fav": {
+      "args": "أمر فرعي أو مسار: play، list، remove، clear، أو اتركه فارغاً للتبديل."
+    },
+    "playlist": {
+      "args": "أمر فرعي ومعاملات: save، play، list، show، add، remove، delete."
     }
   },
   "pagination": {

@@ -219,6 +219,12 @@
     },
     "mywrapped": {
       "user": "The user whose listening recap you want to view."
+    },
+    "fav": {
+      "args": "Subcommand or track: play, list, remove, clear, or leave empty to toggle favorite."
+    },
+    "playlist": {
+      "args": "Subcommand and arguments: save, play, list, show, add, remove, delete."
     }
   },
   "pagination": {
