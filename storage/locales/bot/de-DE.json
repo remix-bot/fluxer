@@ -1470,10 +1470,10 @@
     },
     "playlist": {
       "notAvailable": "Eigene Playlists sind nicht verfügbar (Datenbank getrennt).",
-      "saveUsage": "Verwendung: `{{prefix}}playlist save <Name>`",
+      "saveUsage": "Verwendung: `{{prefix}}playlist save <Name> [URL]`",
       "playUsage": "Verwendung: `{{prefix}}playlist play <Name>`",
       "showUsage": "Verwendung: `{{prefix}}playlist show <Name> [Seite]`",
-      "addUsage": "Verwendung: `{{prefix}}playlist add <Name>`",
+      "addUsage": "Verwendung: `{{prefix}}playlist add <Name> [URL]`",
       "removeUsage": "Verwendung: `{{prefix}}playlist remove <Name> <Titelnummer>`",
       "deleteUsage": "Verwendung: `{{prefix}}playlist delete <Name>`",
       "emptyQueue": "Es wird nichts abgespielt und die Warteschlange ist leer! Starte zuerst Musik mit `{{prefix}}play`.",
@@ -1495,7 +1495,11 @@
       "trackAdded": "**{{title}}** zur Playlist **{{name}}** hinzugefügt! (Gesamt: {{count}} Titel)",
       "invalidIndex": "Ungültiger Titel-Index.",
       "trackRemoved": "**{{title}}** aus Playlist **{{name}}** entfernt! ({{count}} Titel verbleibend)",
-      "deleted": "🗑️ Playlist **{{name}}** gelöscht."
+      "deleted": "🗑️ Playlist **{{name}}** gelöscht.",
+      "resolving": "🔎 Lade Titel von **{{source}}**...",
+      "savedFromSource": "💾 **{{count}} Titel** von **{{source}}** in Playlist **{{name}}** gespeichert! Spiele sie jederzeit mit `{{prefix}}playlist play {{name}}`.",
+      "noTracksFromSource": "Unter diesem Link konnten keine abspielbaren Titel gefunden oder geladen werden.",
+      "tracksAdded": "**{{addedCount}} Titel** zu Playlist **{{name}}** hinzugefügt! (Insgesamt: {{count}} Titel)"
     }
   }
 }

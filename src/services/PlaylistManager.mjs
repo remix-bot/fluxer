@@ -6,8 +6,8 @@
 
 import { logger } from "../core/Logger.mjs";
 
-export const MAX_PLAYLISTS_PER_USER = 25;
-export const MAX_TRACKS_PER_PLAYLIST = 100;
+export const MAX_PLAYLISTS_PER_USER = 50;
+export const MAX_TRACKS_PER_PLAYLIST = 250;
 export const MAX_FAVORITES_PER_USER = 250;
 export const MAX_NAME_LENGTH = 32;
 
@@ -493,6 +493,57 @@ export class PlaylistManager {
     } catch (err) {
       logger.error("[PlaylistManager] Error adding to playlist:", err?.message);
       return { success: false, name, count: playlist.tracks.length, error: "DB_ERROR" };
+    }
+  }
+
+  /**
+   * Add multiple tracks to an existing playlist up to MAX_TRACKS_PER_PLAYLIST.
+   * @param {string} userId
+   * @param {string} rawName
+   * @param {Array<object>} newTracks
+   * @returns {Promise<{success: boolean, name: string, addedCount: number, count: number, error?: string}>}
+   */
+  async addTracksToPlaylist(userId, rawName, newTracks) {
+    await this.ready();
+    const name = sanitizePlaylistName(rawName);
+    if (!name || !Array.isArray(newTracks) || newTracks.length === 0) {
+      return { success: false, name, addedCount: 0, count: 0, error: "INVALID_ARG" };
+    }
+
+    const playlist = await this.getPlaylist(userId, name);
+    if (!playlist) {
+      return { success: false, name, addedCount: 0, count: 0, error: "NOT_FOUND" };
+    }
+
+    const availableSlots = MAX_TRACKS_PER_PLAYLIST - playlist.tracks.length;
+    if (availableSlots <= 0) {
+      return { success: false, name, addedCount: 0, count: playlist.tracks.length, error: "PLAYLIST_FULL" };
+    }
+
+    const sanitized = newTracks.slice(0, availableSlots).map(t => ({
+      title: String(t.title || "Unknown").slice(0, 512),
+      author: String(t.author?.name || t.author || "").slice(0, 255),
+      uri: String(t.url || t.uri || ""),
+      durationMs: Number(t._durationMs || t.durationMs || t.duration?.seconds * 1000 || 0) || 0,
+      sourceName: String(t.sourceName || "unknown").slice(0, 64),
+      thumbnail: String(t.thumbnail || "").slice(0, 1024),
+    })).filter(t => t.uri.length > 0);
+
+    if (sanitized.length === 0) {
+      return { success: false, name, addedCount: 0, count: playlist.tracks.length, error: "NO_VALID_TRACKS" };
+    }
+
+    playlist.tracks.push(...sanitized);
+
+    try {
+      await this._pool.execute(
+        "UPDATE `user_playlists` SET `tracks` = ?, `updated_at` = CURRENT_TIMESTAMP WHERE `user_id` = ? AND `name` = ?",
+        [JSON.stringify(playlist.tracks), userId, name]
+      );
+      return { success: true, name, addedCount: sanitized.length, count: playlist.tracks.length };
+    } catch (err) {
+      logger.error("[PlaylistManager] Error adding tracks to playlist:", err?.message);
+      return { success: false, name, addedCount: 0, count: playlist.tracks.length, error: "DB_ERROR" };
     }
   }
 

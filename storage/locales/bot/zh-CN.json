@@ -1470,10 +1470,10 @@
     },
     "playlist": {
       "notAvailable": "个人歌单暂不可用（数据库未连接）。",
-      "saveUsage": "用法：`{{prefix}}playlist save <名称>`",
+      "saveUsage": "用法：`{{prefix}}playlist save <名称> [链接]`",
       "playUsage": "用法：`{{prefix}}playlist play <名称>`",
       "showUsage": "用法：`{{prefix}}playlist show <名称> [页码]`",
-      "addUsage": "用法：`{{prefix}}playlist add <名称>`",
+      "addUsage": "用法：`{{prefix}}playlist add <名称> [链接]`",
       "removeUsage": "用法：`{{prefix}}playlist remove <名称> <序号>`",
       "deleteUsage": "用法：`{{prefix}}playlist delete <名称>`",
       "emptyQueue": "当前没有正在播放或排队的歌曲可供保存！请先使用 `{{prefix}}play` 播放音乐。",
@@ -1495,7 +1495,11 @@
       "trackAdded": "已将 **{{title}}** 添加到歌单 **{{name}}**！（共 {{count}} 首）",
       "invalidIndex": "无效的歌曲编号。",
       "trackRemoved": "已从歌单 **{{name}}** 移除 **{{title}}**！（剩余 {{count}} 首）",
-      "deleted": "🗑️ 已删除歌单 **{{name}}**。"
+      "deleted": "🗑️ 已删除歌单 **{{name}}**。",
+      "resolving": "🔎 正在从 **{{source}}** 解析曲目...",
+      "savedFromSource": "💾 已从 **{{source}}** 保存 **{{count}} 首曲目** 到歌单 **{{name}}**！随时使用 `{{prefix}}playlist play {{name}}` 播放。",
+      "noTracksFromSource": "未能从该链接找到或加载可播放的曲目。",
+      "tracksAdded": "已将 **{{addedCount}} 首曲目** 添加到歌单 **{{name}}**！（总计：{{count}} 首曲目）"
     }
   }
 }

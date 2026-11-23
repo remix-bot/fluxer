@@ -1470,10 +1470,10 @@
     },
     "playlist": {
       "notAvailable": "Kişisel çalma listeleri kullanılamıyor (veritabanı bağlantısı kesildi).",
-      "saveUsage": "Kullanım: `{{prefix}}playlist save <isim>`",
+      "saveUsage": "Kullanım: `{{prefix}}playlist save <isim> [url]`",
       "playUsage": "Kullanım: `{{prefix}}playlist play <isim>`",
       "showUsage": "Kullanım: `{{prefix}}playlist show <isim> [sayfa]`",
-      "addUsage": "Kullanım: `{{prefix}}playlist add <isim>`",
+      "addUsage": "Kullanım: `{{prefix}}playlist add <isim> [url]`",
       "removeUsage": "Kullanım: `{{prefix}}playlist remove <isim> <parça_numarası>`",
       "deleteUsage": "Kullanım: `{{prefix}}playlist delete <isim>`",
       "emptyQueue": "Kaydedilecek hiçbir şey çalmıyor veya sırada parça yok! Önce `{{prefix}}play` ile müzik başlatın.",
@@ -1495,7 +1495,11 @@
       "trackAdded": "**{{title}}**, **{{name}}** listesine eklendi! (Toplam: {{count}} parça)",
       "invalidIndex": "Geçersiz parça indeksi.",
       "trackRemoved": "**{{title}}**, **{{name}}** listesinden kaldırıldı! ({{count}} parça kaldı)",
-      "deleted": "🗑️ **{{name}}** çalma listesi silindi."
+      "deleted": "🗑️ **{{name}}** çalma listesi silindi.",
+      "resolving": "🔎 Parçalar **{{source}}** üzerinden yükleniyor...",
+      "savedFromSource": "💾 **{{source}}** kaynağından **{{count}} parça** **{{name}}** çalma listesine kaydedildi! `{{prefix}}playlist play {{name}}` ile istediğiniz zaman oynatın.",
+      "noTracksFromSource": "Bu bağlantıdan çalınabilir hiçbir parça bulunamadı veya yüklenemedi.",
+      "tracksAdded": "**{{name}}** çalma listesine **{{addedCount}} parça** eklendi! (Toplam: {{count}} parça)"
     }
   }
 }

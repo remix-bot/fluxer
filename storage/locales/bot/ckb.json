@@ -1470,10 +1470,10 @@
     },
     "playlist": {
       "notAvailable": "لیستە کەسییەکان بەردەست نین (داتابەیس پەیوەست نەکراوە).",
-      "saveUsage": "بەکارهێنان: `{{prefix}}playlist save <ناو>`",
+      "saveUsage": "بەکارهێنان: `{{prefix}}playlist save <ناو> [بەستەر]`",
       "playUsage": "بەکارهێنان: `{{prefix}}playlist play <ناو>`",
       "showUsage": "بەکارهێنان: `{{prefix}}playlist show <ناو> [پەڕە]`",
-      "addUsage": "بەکارهێنان: `{{prefix}}playlist add <ناو>`",
+      "addUsage": "بەکارهێنان: `{{prefix}}playlist add <ناو> [بەستەر]`",
       "removeUsage": "بەکارهێنان: `{{prefix}}playlist remove <ناو> <ژمارەی_تراک>`",
       "deleteUsage": "بەکارهێنان: `{{prefix}}playlist delete <ناو>`",
       "emptyQueue": "هیچ گۆرانییەک لێنادرێت یان لە ڕیزدا نییە بۆ پاشەکەوتکردن! سەرەتا بە `{{prefix}}play` گۆرانی لێبدە.",
@@ -1495,7 +1495,11 @@
       "trackAdded": "**{{title}}** زیادکرا بۆ لیستی **{{name}}**! (کۆی گشتی: {{count}} تراک)",
       "invalidIndex": "ژمارەی تراک هەڵەیە.",
       "trackRemoved": "**{{title}}** لە لیستی **{{name}}** سڕایەوە! ({{count}} تراک ماوەتەوە)",
-      "deleted": "🗑️ لیستی **{{name}}** سڕایەوە."
+      "deleted": "🗑️ لیستی **{{name}}** سڕایەوە.",
+      "resolving": "🔎 هێنانی تراکەکان لە **{{source}}**...",
+      "savedFromSource": "💾 **{{count}} تراک** لە **{{source}}** پاشەکەوت کران بۆ لیستی **{{name}}**! لە هەر کاتێک لێی بدە بە `{{prefix}}playlist play {{name}}`.",
+      "noTracksFromSource": "هیچ تراکێکی شیاوی لێدان لەم بەستەرە نەدۆزرایەوە.",
+      "tracksAdded": "**{{addedCount}} تراک** زیادکران بۆ لیستی **{{name}}**! (سەرجەم: {{count}} تراک)"
     }
   }
 }

@@ -1470,10 +1470,10 @@
     },
     "playlist": {
       "notAvailable": "قوائم التشغيل الشخصية غير متوفرة (قاعدة البيانات غير متصلة).",
-      "saveUsage": "الاستخدام: `{{prefix}}playlist save <الاسم>`",
+      "saveUsage": "الاستخدام: `{{prefix}}playlist save <الاسم> [الرابط]`",
       "playUsage": "الاستخدام: `{{prefix}}playlist play <الاسم>`",
       "showUsage": "الاستخدام: `{{prefix}}playlist show <الاسم> [الصفحة]`",
-      "addUsage": "الاستخدام: `{{prefix}}playlist add <الاسم>`",
+      "addUsage": "الاستخدام: `{{prefix}}playlist add <الاسم> [الرابط]`",
       "removeUsage": "الاستخدام: `{{prefix}}playlist remove <الاسم> <رقم_المسار>`",
       "deleteUsage": "الاستخدام: `{{prefix}}playlist delete <الاسم>`",
       "emptyQueue": "لا يوجد شيء يتم تشغيله أو في قائمة الانتظار لحفظه! ابدأ بتشغيل الموسيقى أولاً باستخدام `{{prefix}}play`.",
@@ -1495,7 +1495,11 @@
       "trackAdded": "تمت إضافة **{{title}}** إلى قائمة التشغيل **{{name}}**! (المجموع: {{count}} مسار)",
       "invalidIndex": "فهرس المسار غير صالح.",
       "trackRemoved": "تمت إزالة **{{title}}** من قائمة التشغيل **{{name}}**! (المتبقي: {{count}} مسار)",
-      "deleted": "🗑️ تم حذف قائمة التشغيل **{{name}}**."
+      "deleted": "🗑️ تم حذف قائمة التشغيل **{{name}}**.",
+      "resolving": "🔎 جاري جلب المسارات من **{{source}}**...",
+      "savedFromSource": "💾 تم حفظ **{{count}} مسار(ات)** من **{{source}}** في قائمة **{{name}}**! شغّلها في أي وقت باستخدام `{{prefix}}playlist play {{name}}`.",
+      "noTracksFromSource": "تعذر العثور على أي مسارات قابلة للتشغيل من هذا الرابط.",
+      "tracksAdded": "تمت إضافة **{{addedCount}} مسار(ات)** إلى قائمة **{{name}}**! (الإجمالي: {{count}} مسار)"
     }
   }
 }

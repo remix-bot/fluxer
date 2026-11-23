@@ -1470,10 +1470,10 @@
     },
     "playlist": {
       "notAvailable": "Personal playlists are not available (database disconnected).",
-      "saveUsage": "Usage: `{{prefix}}playlist save <name>`",
+      "saveUsage": "Usage: `{{prefix}}playlist save <name> [url]`",
       "playUsage": "Usage: `{{prefix}}playlist play <name>`",
       "showUsage": "Usage: `{{prefix}}playlist show <name> [page]`",
-      "addUsage": "Usage: `{{prefix}}playlist add <name>`",
+      "addUsage": "Usage: `{{prefix}}playlist add <name> [url]`",
       "removeUsage": "Usage: `{{prefix}}playlist remove <name> <track_number>`",
       "deleteUsage": "Usage: `{{prefix}}playlist delete <name>`",
       "emptyQueue": "There is nothing playing or in the queue to save! Start playing music first with `{{prefix}}play`.",
@@ -1495,7 +1495,11 @@
       "trackAdded": "Added **{{title}}** to playlist **{{name}}**! (Total: {{count}} tracks)",
       "invalidIndex": "Invalid track index.",
       "trackRemoved": "Removed **{{title}}** from playlist **{{name}}**! ({{count}} tracks remaining)",
-      "deleted": "🗑️ Deleted playlist **{{name}}**."
+      "deleted": "🗑️ Deleted playlist **{{name}}**.",
+      "resolving": "🔎 Resolving tracks from **{{source}}**...",
+      "savedFromSource": "💾 Saved **{{count}} track(s)** from **{{source}}** to playlist **{{name}}**! Play it anytime with `{{prefix}}playlist play {{name}}`.",
+      "noTracksFromSource": "Could not find or load any playable tracks from that link.",
+      "tracksAdded": "Added **{{addedCount}} track(s)** to playlist **{{name}}**! (Total: {{count}} tracks)"
     }
   }
 }

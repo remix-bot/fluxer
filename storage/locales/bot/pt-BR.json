@@ -1470,10 +1470,10 @@
     },
     "playlist": {
       "notAvailable": "Playlists pessoais indisponíveis (banco de dados desconectado).",
-      "saveUsage": "Uso: `{{prefix}}playlist save <nome>`",
+      "saveUsage": "Uso: `{{prefix}}playlist save <nome> [url]`",
       "playUsage": "Uso: `{{prefix}}playlist play <nome>`",
       "showUsage": "Uso: `{{prefix}}playlist show <nome> [página]`",
-      "addUsage": "Uso: `{{prefix}}playlist add <nome>`",
+      "addUsage": "Uso: `{{prefix}}playlist add <nome> [url]`",
       "removeUsage": "Uso: `{{prefix}}playlist remove <nome> <número_faixa>`",
       "deleteUsage": "Uso: `{{prefix}}playlist delete <nome>`",
       "emptyQueue": "Nada está tocando ou na fila para salvar! Toque alguma música primeiro com `{{prefix}}play`.",
@@ -1495,7 +1495,11 @@
       "trackAdded": "**{{title}}** adicionada à playlist **{{name}}**! (Total: {{count}} faixas)",
       "invalidIndex": "Índice de faixa inválido.",
       "trackRemoved": "**{{title}}** removida da playlist **{{name}}**! ({{count}} faixas restantes)",
-      "deleted": "🗑️ Playlist **{{name}}** excluída."
+      "deleted": "🗑️ Playlist **{{name}}** excluída.",
+      "resolving": "🔎 Carregando faixas de **{{source}}**...",
+      "savedFromSource": "💾 Salvou **{{count}} faixa(s)** de **{{source}}** na playlist **{{name}}**! Toque a qualquer momento com `{{prefix}}playlist play {{name}}`.",
+      "noTracksFromSource": "Não foi possível encontrar ou carregar faixas reproduzíveis desse link.",
+      "tracksAdded": "Adicionou **{{addedCount}} faixa(s)** à playlist **{{name}}**! (Total: {{count}} faixas)"
     }
   }
 }
